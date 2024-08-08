@@ -1,6 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.content.types;
 
-import dev.vfyjxf.calculatorcirrus.api.content.IContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
 import dev.vfyjxf.calculatorcirrus.content.renderer.FluidStackContentRenderer;
 import net.minecraft.core.component.DataComponentMap;
@@ -20,13 +21,15 @@ import java.util.stream.Stream;
 
 public class FluidStackType extends AbstractContentType<FluidStack> {
 
+    private static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(namespace, "fluid_stack");
+
     public FluidStackType() {
         super(FluidStack.class, new FluidStackContentRenderer());
     }
 
     @Override
     public ResourceLocation getId() {
-        return null;
+        return ID;
     }
 
     @Override
@@ -35,7 +38,7 @@ public class FluidStackType extends AbstractContentType<FluidStack> {
     }
 
     @Override
-    public @Nullable String getUid(IContentStack<FluidStack> content, FluidStack value) {
+    public @Nullable String getUid(ContentStack<FluidStack> content, FluidStack value) {
         return BuiltInRegistries.FLUID.getResourceKey(value.getFluid())
                 .map(ResourceKey::location)
                 .map(ResourceLocation::toString)
@@ -43,7 +46,7 @@ public class FluidStackType extends AbstractContentType<FluidStack> {
     }
 
     @Override
-    public @Nullable String getModid(IContentStack<FluidStack> content, FluidStack value) {
+    public @Nullable String getModid(ContentStack<FluidStack> content, FluidStack value) {
         Fluid fluid = value.getFluid();
         return BuiltInRegistries.FLUID.getResourceKey(fluid)
                 .map(ResourceKey::location)
@@ -52,27 +55,27 @@ public class FluidStackType extends AbstractContentType<FluidStack> {
     }
 
     @Override
-    public boolean isEmpty(IContentStack<FluidStack> content, FluidStack value) {
+    public boolean isEmpty(ContentStack<FluidStack> content, FluidStack value) {
         return value.isEmpty();
     }
 
     @Override
-    public FluidStack copy(IContentStack<FluidStack> content, FluidStack value) {
+    public FluidStack copy(ContentStack<FluidStack> content, FluidStack value) {
         return value.copy();
     }
 
     @Override
-    public FluidStack normalize(IContentStack<FluidStack> content, FluidStack value) {
+    public FluidStack normalize(ContentStack<FluidStack> content, FluidStack value) {
         return value.copyWithAmount(1000);
     }
 
     @Override
-    public FluidStack wildcard(IContentStack<FluidStack> entry, FluidStack value) {
+    public FluidStack wildcard(ContentStack<FluidStack> entry, FluidStack value) {
         return value.copyWithAmount(1000);
     }
 
     @Override
-    public long getAmount(IContentStack<FluidStack> content, FluidStack value) {
+    public long getAmount(ContentStack<FluidStack> content, FluidStack value) {
         return value.getAmount();
     }
 
@@ -102,23 +105,23 @@ public class FluidStackType extends AbstractContentType<FluidStack> {
     }
 
     @Override
-    public long hash(IContentStack<FluidStack> content, FluidStack value, boolean fuzzy) {
+    public long hash(ContentStack<FluidStack> content, FluidStack value, boolean fuzzy) {
         if (fuzzy) return value.getFluid().hashCode();
         else return value.hashCode();
     }
 
     @Override
-    public Stream<? extends TagKey<?>> getTagsFor(IContentStack<FluidStack> content, FluidStack value) {
+    public Stream<? extends TagKey<?>> getTagsFor(ContentStack<FluidStack> content, FluidStack value) {
         return value.getFluid().defaultFluidState().getTags();
     }
 
     @Override
-    public @Nullable DataComponentMap getComponents(IContentStack<FluidStack> content, FluidStack value) {
+    public @Nullable DataComponentMap getComponents(ContentStack<FluidStack> content, FluidStack value) {
         return value.getComponents();
     }
 
     @Override
-    public CompoundTag save(IContentStack<FluidStack> stack, FluidStack value) {
+    public CompoundTag save(ContentStack<FluidStack> stack, FluidStack value) {
         return (CompoundTag) FluidStack.CODEC.encodeStart(NbtOps.INSTANCE, value).getOrThrow();
     }
 
@@ -128,7 +131,7 @@ public class FluidStackType extends AbstractContentType<FluidStack> {
     }
 
     @Override
-    public @Nullable ItemStack cheatStack(IContentStack<FluidStack> content, FluidStack value) {
+    public @Nullable ItemStack cheatStack(ContentStack<FluidStack> content, FluidStack value) {
         if (value.isEmpty()) return ItemStack.EMPTY;
         Item bucket = value.getFluid().getBucket();
         return new ItemStack(bucket);
@@ -138,8 +141,8 @@ public class FluidStackType extends AbstractContentType<FluidStack> {
 
         private final static ResourceLocation IDENTIFIER = ResourceLocation.parse("tag:fluid");
 
-        public FluidTagType(IContentDefinition<FluidStack> definition) {
-            super(definition, Fluid.class, BuiltInRegistries.FLUID);
+        public FluidTagType(ContentType<FluidStack> type) {
+            super(type, Fluid.class, BuiltInRegistries.FLUID);
         }
 
         @Override

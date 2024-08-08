@@ -1,9 +1,9 @@
 package dev.vfyjxf.calculatorcirrus.content.renderer;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import dev.vfyjxf.calculatorcirrus.api.content.IContentRenderer;
-import dev.vfyjxf.calculatorcirrus.api.content.IContentStack;
-import dev.vfyjxf.calculatorcirrus.api.ui.ITooltip;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentRenderer;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.helper.LocalizationHelper;
 import dev.vfyjxf.calculatorcirrus.utils.ErrorUtils;
@@ -27,7 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-public class ItemStackContentRenderer implements IContentRenderer<ItemStack> {
+public class ItemStackContentRenderer implements ContentRenderer<ItemStack> {
 
     private static final Logger LOGGER = LogManager.getLogger();
 
@@ -50,7 +50,7 @@ public class ItemStackContentRenderer implements IContentRenderer<ItemStack> {
     }
 
     @Override
-    public void render(IContentStack<ItemStack> content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY, float delta) {
+    public void render(ContentStack<ItemStack> content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY, float delta) {
         ItemStack itemStack = content.value();
         if (itemStack.isEmpty())
             return;
@@ -78,10 +78,10 @@ public class ItemStackContentRenderer implements IContentRenderer<ItemStack> {
     }
 
     @Override
-    public @Nullable ITooltip getTooltip(ItemStack content, TooltipContext context) {
+    public @Nullable Tooltip getTooltip(ItemStack content, TooltipContext context) {
         if (content.isEmpty())
             return null;
-        ITooltip tooltip = ITooltip.create();
+        Tooltip tooltip = Tooltip.create();
         Optional<TooltipComponent> component = content.getTooltipImage();
         List<Component> components = tooltipHelper(content, context.flag());
         if (!components.isEmpty()) {

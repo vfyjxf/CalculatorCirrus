@@ -3,7 +3,7 @@ package dev.vfyjxf.calculatorcirrus.api.content;
 import net.minecraft.nbt.CompoundTag;
 import org.jetbrains.annotations.Nullable;
 
-public interface IContentSerializer<T> {
+public interface ContentSerializer<T> {
 
     default boolean isValid(CompoundTag tag) {
         return true;
@@ -12,7 +12,7 @@ public interface IContentSerializer<T> {
     /**
      * Serializes the given object into a {@link CompoundTag}.
      */
-    CompoundTag save(IContentStack<T> stack, T value);
+    CompoundTag save(ContentStack<T> stack, T value);
 
     /**
      * Deserializes the given tag into an object.

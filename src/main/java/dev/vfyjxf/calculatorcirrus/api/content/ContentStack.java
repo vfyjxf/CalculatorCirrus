@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.content;
 
-import dev.vfyjxf.calculatorcirrus.api.ui.ITooltip;
+import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.content.EmptyContentStack;
 import dev.vfyjxf.calculatorcirrus.content.TypedContentStack;
@@ -14,34 +14,34 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Arrays;
 import java.util.List;
 
-public interface IContentStack<T> {
+public interface ContentStack<T> {
 
-    static IContentStack<Unit> empty() {
+    static ContentStack<Unit> empty() {
         return EmptyContentStack.INSTANCE;
     }
 
-    static <T> IContentStack<T> of(IContentType<T> type, T value) {
+    static <T> ContentStack<T> of(ContentType<T> type, T value) {
         return new TypedContentStack<>(type, value);
     }
 
-    static IContentStack<ItemStack> of( ItemStack stack) {
+    static ContentStack<ItemStack> of(ItemStack stack) {
         return of(CirrusContentTypes.ITEM, stack);
     }
 
-    static IContentStack<FluidStack> of(FluidStack stack) {
+    static ContentStack<FluidStack> of(FluidStack stack) {
         return of(CirrusContentTypes.FLUID, stack);
     }
 
     T value();
 
-    IContentType<T> type();
+    ContentType<T> contentType();
 
     default boolean isEmpty() {
-        return type().isEmpty(this, value());
+        return contentType().isEmpty(this, value());
     }
 
     default Class<T> getTypeClass() {
-        return type().getTypeClass();
+        return contentType().getTypeClass();
     }
 
     @SuppressWarnings("unchecked")
@@ -51,37 +51,37 @@ public interface IContentStack<T> {
 
     default CompoundTag save() {
         if (supportSaving()) {
-            IContentSerializer<T> serializer = type().getSerializer();
+            ContentSerializer<T> serializer = contentType().getSerializer();
             assert serializer != null;
             return serializer.save(this, value());
         }
-        throw new UnsupportedOperationException(type() + " does not support saving");
+        throw new UnsupportedOperationException(contentType() + " does not support saving");
     }
 
     default boolean supportSaving() {
-        IContentSerializer<T> serializer = type().getSerializer();
+        ContentSerializer<T> serializer = contentType().getSerializer();
         return serializer != null;
     }
 
     @Nullable
-    ITooltip getTooltip(TooltipContext context);
+    Tooltip getTooltip(TooltipContext context);
 
-    default IContentStack<T> appendTooltip(String... tooltips) {
+    default ContentStack<T> appendTooltip(String... tooltips) {
         return appendTooltip(Arrays.stream(tooltips).map(Component::translatable).toArray(Component[]::new));
     }
 
-    default IContentStack<T> appendTooltip(Component... tooltips) {
-        return appendTooltip(Arrays.stream(tooltips).map(ITooltip::entry).toList());
+    default ContentStack<T> appendTooltip(Component... tooltips) {
+        return appendTooltip(Arrays.stream(tooltips).map(Tooltip::entry).toList());
     }
 
-    IContentStack<T> appendTooltip(List<ITooltip.Entry> tooltips);
+    ContentStack<T> appendTooltip(List<Tooltip.Entry> tooltips);
 
-    IContentStack<T> tooltip(ITooltip tooltip);
+    ContentStack<T> tooltip(Tooltip tooltip);
 
-    IContentStack<ItemStack> cheatsStack();
+    ContentStack<ItemStack> cheatsStack();
 
-    default <O> IContentStack<O> cast() {
-        return (IContentStack<O>) this;
+    default <O> ContentStack<O> cast() {
+        return (ContentStack<O>) this;
     }
 
 }

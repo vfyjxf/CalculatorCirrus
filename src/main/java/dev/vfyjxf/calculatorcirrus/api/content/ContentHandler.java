@@ -3,7 +3,7 @@ package dev.vfyjxf.calculatorcirrus.api.content;
 import net.minecraft.nbt.CompoundTag;
 import org.jetbrains.annotations.Nullable;
 
-public interface IContentHandler<T> {
+public interface ContentHandler<T> {
 
     /**
      * @return null if the content is not serializable

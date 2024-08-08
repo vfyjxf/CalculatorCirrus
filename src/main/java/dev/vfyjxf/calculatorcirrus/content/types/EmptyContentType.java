@@ -1,11 +1,11 @@
 package dev.vfyjxf.calculatorcirrus.content.types;
 
-import dev.vfyjxf.calculatorcirrus.api.content.IContentRenderer;
-import dev.vfyjxf.calculatorcirrus.api.content.IContentSerializer;
-import dev.vfyjxf.calculatorcirrus.api.content.IContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.IContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentRenderer;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentSerializer;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
-import dev.vfyjxf.calculatorcirrus.api.ui.ITooltip;
+import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
 import net.minecraft.client.gui.GuiGraphics;
@@ -18,7 +18,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.stream.Stream;
 
-public class EmptyContentType implements IContentType<Unit>, IContentSerializer<Unit> {
+public class EmptyContentType implements ContentType<Unit>, ContentSerializer<Unit> {
 
     private static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(namespace, "empty");
 
@@ -32,15 +32,15 @@ public class EmptyContentType implements IContentType<Unit>, IContentSerializer<
         return Unit.class;
     }
 
-    private IContentType<Unit> getType() {
+    private ContentType<Unit> getType() {
         return CirrusContentTypes.EMPTY;
     }
 
     @Override
-    public IContentRenderer<Unit> getRenderer() {
-        return new IContentRenderer<>() {
+    public ContentRenderer<Unit> getRenderer() {
+        return new ContentRenderer<>() {
             @Override
-            public void render(IContentStack<Unit> content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY, float delta) {
+            public void render(ContentStack<Unit> content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY, float delta) {
 
             }
 
@@ -55,39 +55,39 @@ public class EmptyContentType implements IContentType<Unit>, IContentSerializer<
             }
 
             @Override
-            public @Nullable ITooltip getTooltip(Unit content, TooltipContext context) {
+            public @Nullable Tooltip getTooltip(Unit content, TooltipContext context) {
                 return null;
             }
         };
     }
 
     @Override
-    public @Nullable String getUid(IContentStack<Unit> content, Unit value) {
+    public @Nullable String getUid(ContentStack<Unit> content, Unit value) {
         return "empty";
     }
 
     @Override
-    public @Nullable String getModid(IContentStack<Unit> content, Unit value) {
+    public @Nullable String getModid(ContentStack<Unit> content, Unit value) {
         return null;
     }
 
     @Override
-    public boolean isEmpty(IContentStack<Unit> content, Unit value) {
+    public boolean isEmpty(ContentStack<Unit> content, Unit value) {
         return true;
     }
 
     @Override
-    public Unit copy(IContentStack<Unit> content, Unit value) {
+    public Unit copy(ContentStack<Unit> content, Unit value) {
         return Unit.INSTANCE;
     }
 
     @Override
-    public Unit normalize(IContentStack<Unit> content, Unit value) {
+    public Unit normalize(ContentStack<Unit> content, Unit value) {
         return Unit.INSTANCE;
     }
 
     @Override
-    public Unit wildcard(IContentStack<Unit> entry, Unit value) {
+    public Unit wildcard(ContentStack<Unit> entry, Unit value) {
         return Unit.INSTANCE;
     }
 
@@ -97,7 +97,7 @@ public class EmptyContentType implements IContentType<Unit>, IContentSerializer<
     }
 
     @Override
-    public DataComponentMap getComponents(IContentStack<Unit> content, Unit value) {
+    public DataComponentMap getComponents(ContentStack<Unit> content, Unit value) {
         return null;
     }
 
@@ -112,22 +112,22 @@ public class EmptyContentType implements IContentType<Unit>, IContentSerializer<
     }
 
     @Override
-    public @Nullable IContentSerializer<Unit> getSerializer() {
+    public @Nullable ContentSerializer<Unit> getSerializer() {
         return this;
     }
 
     @Override
-    public long hash(IContentStack<Unit> content, Unit value, boolean fuzzy) {
+    public long hash(ContentStack<Unit> content, Unit value, boolean fuzzy) {
         return 0;
     }
 
     @Override
-    public Stream<? extends TagKey<?>> getTagsFor(IContentStack<Unit> content, Unit value) {
+    public Stream<? extends TagKey<?>> getTagsFor(ContentStack<Unit> content, Unit value) {
         return Stream.empty();
     }
 
     @Override
-    public CompoundTag save(IContentStack<Unit> stack, Unit value) {
+    public CompoundTag save(ContentStack<Unit> stack, Unit value) {
         CompoundTag tag = new CompoundTag();
         tag.putString("type", getType().getId().toString());
         tag.putString("content", "empty");

@@ -1,8 +1,8 @@
 package dev.vfyjxf.calculatorcirrus.content.types;
 
 import com.mojang.datafixers.util.Pair;
-import dev.vfyjxf.calculatorcirrus.api.content.IContentType;
-import dev.vfyjxf.calculatorcirrus.api.content.ITagType;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.TagType;
 import net.minecraft.core.HolderSet;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
@@ -16,21 +16,21 @@ import java.util.Map;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-public abstract class AbstractTagType<STACK, VALUE> implements ITagType<STACK, VALUE> {
+public abstract class AbstractTagType<STACK, VALUE> implements TagType<STACK, VALUE> {
 
-    protected final IContentType<STACK> stackDefinition;
+    protected final ContentType<STACK> stackType;
     protected final Class<VALUE> valueClass;
     protected final Registry<VALUE> registry;
 
-    public AbstractTagType(IContentType<STACK> stackDefinition, Class<VALUE> valueClass, Registry<VALUE> registry) {
-        this.stackDefinition = stackDefinition;
+    public AbstractTagType(ContentType<STACK> stackType, Class<VALUE> valueClass, Registry<VALUE> registry) {
+        this.stackType = stackType;
         this.valueClass = valueClass;
         this.registry = registry;
     }
 
     @Override
-    public IContentType<STACK> getStackType() {
-        return stackDefinition;
+    public ContentType<STACK> getStackType() {
+        return stackType;
     }
 
     @Override

@@ -11,11 +11,11 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.stream.Stream;
 
-public interface ITagType<STACK, VALUE> {
+public interface TagType<STACK, VALUE> {
 
     ResourceLocation getId();
 
-    IContentType<STACK> getStackType();
+    ContentType<STACK> getStackType();
 
 
     Stream<Pair<TagKey<VALUE>, Named<VALUE>>> getTags();
@@ -54,8 +54,8 @@ public interface ITagType<STACK, VALUE> {
     Stream<? extends TagKey<VALUE>> getTags(Collection<STACK> collection);
 
     @SuppressWarnings("unchecked")
-    default <S, V> ITagType<S, V> cast() {
-        return (ITagType<S, V>) this;
+    default <S, V> TagType<S, V> cast() {
+        return (TagType<S, V>) this;
     }
 
 }

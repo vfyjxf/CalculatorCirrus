@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.ui;
 
 import dev.vfyjxf.calculatorcirrus.api.math.Point;
-import dev.vfyjxf.calculatorcirrus.api.ui.ITooltip;
+import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipEntry;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipStack;
 import dev.vfyjxf.calculatorcirrus.utils.ScreenUtil;
@@ -14,10 +14,10 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 import java.util.function.Supplier;
 
-public class ListTooltip implements ITooltip {
+public class ListTooltip implements Tooltip {
 
     private Point mousePos;
-    private MutableList<ITooltip.Entry> entries;
+    private final MutableList<Tooltip.Entry> entries;
     private TooltipStack<?> stack = null;
 
     public ListTooltip(@Nullable Point mousePos, List<? extends Entry> entries) {
@@ -41,36 +41,36 @@ public class ListTooltip implements ITooltip {
 
     @Override
     public MutableList<Entry> entries() {
-        return entries;
+        return Lists.mutable.withAll(entries);
     }
 
     @Override
-    public ITooltip add(Component text) {
+    public Tooltip add(Component text) {
         entries.add(new TooltipEntry(text));
         return this;
     }
 
     @Override
-    public ITooltip add(TooltipComponent component) {
+    public Tooltip add(TooltipComponent component) {
         entries.add(new TooltipEntry(component));
         return this;
     }
 
     @Override
-    public ITooltip add(Supplier<Component> supplier) {
+    public Tooltip add(Supplier<Component> supplier) {
         entries.add(new SupplierTooltipEntry(supplier));
         return this;
     }
 
     @Override
-    public ITooltip ofAll(ITooltip other) {
+    public Tooltip ofAll(Tooltip other) {
         entries.addAll(other.entries());
         return this;
     }
 
 
     @Override
-    public ITooltip copy() {
+    public Tooltip copy() {
         ListTooltip tooltip = new ListTooltip(mousePos, entries);
         tooltip.setContextStack(stack);
         return tooltip;
@@ -82,7 +82,7 @@ public class ListTooltip implements ITooltip {
     }
 
     @Override
-    public ITooltip setContextStack(@Nullable TooltipStack<?> stack) {
+    public Tooltip setContextStack(@Nullable TooltipStack<?> stack) {
         this.stack = stack;
         return this;
     }

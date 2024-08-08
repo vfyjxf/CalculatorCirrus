@@ -5,9 +5,11 @@ import net.minecraft.resources.ResourceLocation;
 
 import javax.annotation.Nullable;
 
-public interface IRecipeSystem<T> {
+public interface RecipeSystem<T> {
 
-    String modSource();
+    default String modId() {
+        return systemId().getNamespace();
+    }
 
     ResourceLocation systemId();
 
@@ -23,9 +25,12 @@ public interface IRecipeSystem<T> {
 
     @Nullable
     default String getUniqueId(T recipe) {
-        return getRegistryName(recipe).toString();
+        ResourceLocation registryName = getRegistryName(recipe);
+        if (registryName == null) return null;
+        else return registryName.toString();
     }
 
+    @Nullable
     ResourceLocation getRegistryName(T recipe);
 
     @Nullable
@@ -34,6 +39,6 @@ public interface IRecipeSystem<T> {
     @Nullable
     T getRecipe(ResourceLocation registryName);
 
-    IRecipeData parseRecipe(T recipe);
+    RecipeData parseRecipe(T recipe);
 
 }

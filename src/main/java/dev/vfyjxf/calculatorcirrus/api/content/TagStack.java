@@ -7,9 +7,9 @@ import java.util.List;
 /**
  * When handling recipe,only a tag with amount is useful for us.
  */
-public interface ITagStack<STACK, VALUE> extends IContentStack<STACK> {
+public interface TagStack<STACK, VALUE> extends ContentStack<STACK> {
 
-    ITagType<STACK, VALUE> tagType();
+    TagType<STACK, VALUE> tagType();
 
     int getAmount();
 

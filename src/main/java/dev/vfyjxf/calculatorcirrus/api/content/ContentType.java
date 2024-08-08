@@ -14,7 +14,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.stream.Stream;
 
-public interface IContentType<T> {
+public interface ContentType<T> {
 
     String namespace = "content_type";
 
@@ -30,7 +30,7 @@ public interface IContentType<T> {
     Class<T> getTypeClass();
 
     @OnlyIn(Dist.CLIENT)
-    IContentRenderer<T> getRenderer();
+    ContentRenderer<T> getRenderer();
 
     default boolean supportTag() {
         return false;
@@ -40,21 +40,21 @@ public interface IContentType<T> {
      * @return the uid from the content.
      */
     @Nullable
-    String getUid(IContentStack<T> content, T value);
+    String getUid(ContentStack<T> content, T value);
 
     /**
      * @return the owner modid from the content
      */
     @Nullable
-    String getModid(IContentStack<T> content, T value);
+    String getModid(ContentStack<T> content, T value);
 
-    boolean isEmpty(IContentStack<T> content, T value);
+    boolean isEmpty(ContentStack<T> content, T value);
 
-    T copy(IContentStack<T> content, T value);
+    T copy(ContentStack<T> content, T value);
 
-    T normalize(IContentStack<T> content, T value);
+    T normalize(ContentStack<T> content, T value);
 
-    T wildcard(IContentStack<T> entry, T value);
+    T wildcard(ContentStack<T> entry, T value);
 
     default boolean stackable() {
         return true;
@@ -65,7 +65,7 @@ public interface IContentType<T> {
      * @param value   the value
      * @return the amount from the value,return -1 if this tagType is not stackable
      */
-    default long getAmount(IContentStack<T> content, T value) {
+    default long getAmount(ContentStack<T> content, T value) {
         if (!stackable()) throw new UnsupportedOperationException("This tagType is not stackable");
         return getAmount(value);
     }
@@ -73,12 +73,12 @@ public interface IContentType<T> {
     long getAmount(T value);
 
     @Nullable
-    default DataComponentMap getComponents(IContentStack<T> content, T value) {
+    default DataComponentMap getComponents(ContentStack<T> content, T value) {
         return null;
     }
 
     @Nullable
-    default ItemStack cheatStack(IContentStack<T> content, T value) {
+    default ItemStack cheatStack(ContentStack<T> content, T value) {
         return null;
     }
 
@@ -90,20 +90,20 @@ public interface IContentType<T> {
      */
     boolean matches(T value1, T value2, MatchContext matchContext);
 
-    default boolean matches(IContentStack<T> stack1, IContentStack<T> stack2, MatchContext matchContext) {
+    default boolean matches(ContentStack<T> stack1, ContentStack<T> stack2, MatchContext matchContext) {
         return matches(stack1.value(), stack2.value(), matchContext);
     }
 
     @Nullable
-    IContentSerializer<T> getSerializer();
+    ContentSerializer<T> getSerializer();
 
-    long hash(IContentStack<T> content, T value, boolean fuzzy);
+    long hash(ContentStack<T> content, T value, boolean fuzzy);
 
-    Stream<? extends TagKey<?>> getTagsFor(IContentStack<T> content, T value);
+    Stream<? extends TagKey<?>> getTagsFor(ContentStack<T> content, T value);
 
     @SuppressWarnings("unchecked")
-    default <O> IContentType<O> cast() {
-        return (IContentType<O>) this;
+    default <O> ContentType<O> cast() {
+        return (ContentType<O>) this;
     }
 
     default boolean acceptsNull() {

@@ -1,17 +1,17 @@
 package dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients;
 
-import dev.vfyjxf.calculatorcirrus.api.content.IContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.IContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
 
-public interface IIngredientStack<T> {
+public interface IngredientStack<T> {
 
     float MAX_CHANCE = -1.0f;
 
     /**
      * @return the getId of the ingredient.
      */
-    IContentStack<T> getStack();
+    ContentStack<T> getStack();
 
     /**
      * Because from the specificity from floats, we use negative numbers to represent the maximum probability (100%)
@@ -20,7 +20,7 @@ public interface IIngredientStack<T> {
         return MAX_CHANCE;
     }
 
-    IIngredientStack<T> setChance(float chance);
+    IngredientStack<T> setChance(float chance);
 
     default boolean isChanced() {
         return getChance() >= 0;
@@ -35,10 +35,15 @@ public interface IIngredientStack<T> {
 
     long getCurrentAmount();
 
-    IIngredientStack<T> recalculate();
+    default IngredientStack<T> multiply(double multiplier) {
+        setRequiredAmount((long) (getRequiredAmount() * multiplier));
+        return this;
+    }
 
-    default boolean merge(IIngredientStack<T> other) {
-        IContentType<T> def = getStack().type();
+    IngredientStack<T> recalculate();
+
+    default boolean merge(IngredientStack<T> other) {
+        ContentType<T> def = getStack().contentType();
         if (def.matches(getStack(), other.getStack(), MatchContext.FUZZY)) {
             setRequiredAmount(getRequiredAmount() + other.getRequiredAmount());
             addCurrent(other.getCurrentAmount());
@@ -47,12 +52,12 @@ public interface IIngredientStack<T> {
         return false;
     }
 
-    IIngredientStack<T> addCurrent(long amount);
+    IngredientStack<T> addCurrent(long amount);
 
-    default IIngredientStack<T> addCurrent(IContentStack<?> stack) {
-        IContentType<T> selfDef = getStack().type();
-        if (selfDef != stack.type()) return this;
-        IContentStack<T> casted = stack.cast();
+    default IngredientStack<T> addCurrent(ContentStack<?> stack) {
+        ContentType<T> selfDef = getStack().contentType();
+        if (selfDef != stack.contentType()) return this;
+        ContentStack<T> casted = stack.cast();
         if (selfDef.matches(getStack(), casted, MatchContext.FUZZY)) {
             long amount = selfDef.getAmount(casted, casted.value());
             addCurrent(amount);
@@ -61,18 +66,19 @@ public interface IIngredientStack<T> {
     }
 
 
-    default IIngredientStack<T> addCurrent(IIngredientStack<?> stack) {
-        boolean sameType = getStack().type() == stack.getStack().type();
-        if (sameType) merge((IIngredientStack<T>) stack);
+    @SuppressWarnings("unchecked")
+    default IngredientStack<T> addCurrent(IngredientStack<?> stack) {
+        boolean sameType = getStack().contentType() == stack.getStack().contentType();
+        if (sameType) merge((IngredientStack<T>) stack);
         return this;
     }
 
 
-    IIngredientStack<T> setRequiredAmount(long amount);
+    IngredientStack<T> setRequiredAmount(long amount);
 
     default long getExpectation() {
-        IContentStack<T> getContent = getStack();
-        long amount = getContent.type().getAmount(getContent, getContent.value());
+        ContentStack<T> getContent = getStack();
+        long amount = getContent.contentType().getAmount(getContent, getContent.value());
         return isChanced() ? Math.max(getRequiredAmount(), Math.round(amount * getChance())) : amount;
     }
 

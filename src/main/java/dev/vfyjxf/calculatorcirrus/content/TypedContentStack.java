@@ -1,17 +1,17 @@
 package dev.vfyjxf.calculatorcirrus.content;
 
-import dev.vfyjxf.calculatorcirrus.api.content.IContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 
 public class TypedContentStack<T> extends AbstractContentStack<T> {
-    private final IContentType<T> definition;
+    private final ContentType<T> type;
 
-    public TypedContentStack(IContentType<T> definition, T value) {
+    public TypedContentStack(ContentType<T> type, T value) {
         super(value);
-        this.definition = definition;
+        this.type = type;
     }
 
     @Override
-    public IContentType<T> type() {
-        return definition;
+    public ContentType<T> contentType() {
+        return type;
     }
 }

@@ -16,11 +16,12 @@ import org.slf4j.Logger;
 import java.lang.annotation.ElementType;
 
 @Mod(value = Constants.MOD_ID, dist = Dist.CLIENT)
-public class CalculatorCirrusClient {
+public class CalculatorCirrusClient extends CalculatorCirrus{
 
     public static final Logger logger = LogUtils.getLogger();
 
     public CalculatorCirrusClient(IEventBus modEventBus, ModContainer modContainer) {
+        super(modEventBus, modContainer);
         modEventBus.addListener(this::onClientTooltipComponentRegister);
     }
 

@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.content.types;
 
-import dev.vfyjxf.calculatorcirrus.api.content.IContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.IContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
 import dev.vfyjxf.calculatorcirrus.content.renderer.ItemStackContentRenderer;
 import net.minecraft.core.component.DataComponentMap;
@@ -38,7 +38,7 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
     }
 
     @Override
-    public @Nullable String getUid(IContentStack<ItemStack> content, ItemStack value) {
+    public @Nullable String getUid(ContentStack<ItemStack> content, ItemStack value) {
         return BuiltInRegistries.ITEM.getResourceKey(value.getItem())
                 .map(ResourceKey::location)
                 .map(ResourceLocation::toString)
@@ -46,7 +46,7 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
     }
 
     @Override
-    public @Nullable String getModid(IContentStack<ItemStack> content, ItemStack value) {
+    public @Nullable String getModid(ContentStack<ItemStack> content, ItemStack value) {
         Item item = value.getItem();
         String modId = item.getCreatorModId(value);
         if (modId == null) {
@@ -59,29 +59,29 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
     }
 
     @Override
-    public boolean isEmpty(IContentStack<ItemStack> content, ItemStack value) {
+    public boolean isEmpty(ContentStack<ItemStack> content, ItemStack value) {
         return value.isEmpty();
     }
 
     @Override
-    public ItemStack copy(IContentStack<ItemStack> content, ItemStack value) {
+    public ItemStack copy(ContentStack<ItemStack> content, ItemStack value) {
         return value.copy();
     }
 
     @Override
-    public ItemStack normalize(IContentStack<ItemStack> content, ItemStack value) {
+    public ItemStack normalize(ContentStack<ItemStack> content, ItemStack value) {
         ItemStack result = value.copy();
         result.setCount(1);
         return result;
     }
 
     @Override
-    public ItemStack wildcard(IContentStack<ItemStack> entry, ItemStack value) {
+    public ItemStack wildcard(ContentStack<ItemStack> entry, ItemStack value) {
         return new ItemStack(value.getItem(), 1);
     }
 
     @Override
-    public long getAmount(IContentStack<ItemStack> content, ItemStack value) {
+    public long getAmount(ContentStack<ItemStack> content, ItemStack value) {
         return value.getCount();
     }
 
@@ -91,7 +91,7 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
     }
 
     @Override
-    public @Nullable DataComponentMap getComponents(IContentStack<ItemStack> content, ItemStack value) {
+    public @Nullable DataComponentMap getComponents(ContentStack<ItemStack> content, ItemStack value) {
         return value.getComponents();
     }
 
@@ -117,7 +117,7 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
     }
 
     @Override
-    public long hash(IContentStack<ItemStack> content, ItemStack value, boolean fuzzy) {
+    public long hash(ContentStack<ItemStack> content, ItemStack value, boolean fuzzy) {
         if (fuzzy) {
             CompoundTag serialized = save(content, value).getCompound("tag");
             serialized.remove("tag");
@@ -127,7 +127,7 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
     }
 
     @Override
-    public Stream<? extends TagKey<?>> getTagsFor(IContentStack<ItemStack> content, ItemStack value) {
+    public Stream<? extends TagKey<?>> getTagsFor(ContentStack<ItemStack> content, ItemStack value) {
         Stream<? extends TagKey<?>> tags = value.getTags();
         if (value.getItem() instanceof BlockItem blockItem) {
             tags = Stream.concat(tags, blockItem.getBlock().builtInRegistryHolder().tags());
@@ -136,7 +136,7 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
     }
 
     @Override
-    public CompoundTag save(IContentStack<ItemStack> stack, ItemStack value) {
+    public CompoundTag save(ContentStack<ItemStack> stack, ItemStack value) {
         return (CompoundTag) ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, value).getOrThrow();
     }
 
@@ -146,7 +146,7 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
     }
 
     @Override
-    public @Nullable ItemStack cheatStack(IContentStack<ItemStack> content, ItemStack value) {
+    public @Nullable ItemStack cheatStack(ContentStack<ItemStack> content, ItemStack value) {
         return value.copy();
     }
 
@@ -154,7 +154,7 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
 
         private final static ResourceLocation IDENTIFIER = ResourceLocation.parse("tag:item");
 
-        public ItemTagType(IContentType<ItemStack> type) {
+        public ItemTagType(ContentType<ItemStack> type) {
             super(type, Item.class, BuiltInRegistries.ITEM);
         }
 

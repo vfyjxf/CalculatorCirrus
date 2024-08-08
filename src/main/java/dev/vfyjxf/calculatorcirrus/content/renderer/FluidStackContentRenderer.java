@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.content.renderer;
 
-import dev.vfyjxf.calculatorcirrus.api.content.IContentRenderer;
-import dev.vfyjxf.calculatorcirrus.api.ui.ITooltip;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentRenderer;
+import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.helper.LocalizationHelper;
 import net.minecraft.ChatFormatting;
@@ -23,7 +23,7 @@ import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FluidStackContentRenderer implements IContentRenderer<FluidStack> {
+public class FluidStackContentRenderer implements ContentRenderer<FluidStack> {
 
     public static final Logger LOGGER = LogManager.getLogger();
     private static final NumberFormat FORMAT = NumberFormat.getIntegerInstance();
@@ -42,7 +42,7 @@ public class FluidStackContentRenderer implements IContentRenderer<FluidStack> {
 
     @Nullable
     @Override
-    public ITooltip getTooltip(FluidStack content, TooltipContext context) {
+    public Tooltip getTooltip(FluidStack content, TooltipContext context) {
         Fluid fluid = content.getFluid();
         try {
             if (fluid.isSame(Fluids.EMPTY)) {
@@ -55,7 +55,7 @@ public class FluidStackContentRenderer implements IContentRenderer<FluidStack> {
 
             MutableComponent amountString = LocalizationHelper.translatable("tooltip.liquid.amount.with.capacity", FORMAT.format(milliBuckets), FORMAT.format(FluidType.BUCKET_VOLUME));
             tooltip.add(amountString.withStyle(ChatFormatting.GRAY));
-            return ITooltip.create(tooltip);
+            return Tooltip.create(tooltip);
         } catch (RuntimeException e) {
             Component displayName = content.getHoverName();
             LOGGER.error("Failed to get tooltip for fluid: " + displayName.getString(), e);

@@ -1,10 +1,9 @@
 package dev.vfyjxf.calculatorcirrus.content;
 
-import dev.vfyjxf.calculatorcirrus.api.content.IContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.IContentType;
-import dev.vfyjxf.calculatorcirrus.api.content.ITagStack;
-import dev.vfyjxf.calculatorcirrus.api.content.ITagType;
-import dev.vfyjxf.calculatorcirrus.api.ui.ITooltip;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.TagType;
+import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import net.minecraft.core.Holder;
 import net.minecraft.tags.TagKey;
@@ -15,47 +14,47 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class TagStack<STACK, VALUE> implements ITagStack<STACK, VALUE> {
+public class TagStack<STACK, VALUE> implements dev.vfyjxf.calculatorcirrus.api.content.TagStack<STACK, VALUE> {
 
-    private final IContentType<STACK> stackType;
-    private final ITagType<STACK, VALUE> tagType;
+    private final ContentType<STACK> stackType;
+    private final TagType<STACK, VALUE> tagType;
     private final TagKey<VALUE> tagKey;
     private int amount = 0;
 
-    public TagStack(ITagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey) {
+    public TagStack(TagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey) {
         this.stackType = tagType.getStackType();
         this.tagType = tagType;
         this.tagKey = tagKey;
     }
 
-    public TagStack(ITagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey, long amount) {
+    public TagStack(TagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey, long amount) {
         this.stackType = tagType.getStackType();
         this.tagType = tagType;
         this.tagKey = tagKey;
     }
 
     @Override
-    public @Nullable ITooltip getTooltip(TooltipContext context) {
+    public @Nullable Tooltip getTooltip(TooltipContext context) {
         return null;
     }
 
     @Override
-    public IContentStack<STACK> appendTooltip(List<ITooltip.Entry> tooltips) {
+    public ContentStack<STACK> appendTooltip(List<Tooltip.Entry> tooltips) {
         return null;
     }
 
     @Override
-    public IContentStack<STACK> tooltip(ITooltip tooltip) {
+    public ContentStack<STACK> tooltip(Tooltip tooltip) {
         return null;
     }
 
     @Override
-    public IContentStack<ItemStack> cheatsStack() {
+    public ContentStack<ItemStack> cheatsStack() {
         return null;
     }
 
     @Override
-    public ITagType<STACK, VALUE> tagType() {
+    public TagType<STACK, VALUE> tagType() {
         return tagType;
     }
 
@@ -91,7 +90,7 @@ public class TagStack<STACK, VALUE> implements ITagStack<STACK, VALUE> {
     }
 
     @Override
-    public IContentType<STACK> type() {
+    public ContentType<STACK> contentType() {
         return stackType;
     }
 }

@@ -11,6 +11,6 @@ public abstract class CalculatorCirrus {
     private static final Logger logger = LogUtils.getLogger();
 
     public CalculatorCirrus(IEventBus modEventBus, ModContainer modContainer) {
-
+        modEventBus.register(this);
     }
 }

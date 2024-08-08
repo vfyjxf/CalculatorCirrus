@@ -1,16 +1,16 @@
 package dev.vfyjxf.calculatorcirrus.content.types;
 
-import dev.vfyjxf.calculatorcirrus.api.content.IContentRenderer;
-import dev.vfyjxf.calculatorcirrus.api.content.IContentSerializer;
-import dev.vfyjxf.calculatorcirrus.api.content.IContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentRenderer;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentSerializer;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import org.jetbrains.annotations.Nullable;
 
-public abstract class AbstractContentType<T> implements IContentType<T>, IContentSerializer<T> {
+public abstract class AbstractContentType<T> implements ContentType<T>, ContentSerializer<T> {
 
     private final Class<T> typeClass;
-    private final IContentRenderer<T> renderer;
+    private final ContentRenderer<T> renderer;
 
-    public AbstractContentType(Class<T> typeClass, IContentRenderer<T> renderer) {
+    public AbstractContentType(Class<T> typeClass, ContentRenderer<T> renderer) {
         this.typeClass = typeClass;
         this.renderer = renderer;
     }
@@ -21,13 +21,13 @@ public abstract class AbstractContentType<T> implements IContentType<T>, IConten
     }
 
     @Override
-    public IContentRenderer<T> getRenderer() {
+    public ContentRenderer<T> getRenderer() {
         return renderer;
     }
 
 
     @Override
-    public @Nullable IContentSerializer<T> getSerializer() {
+    public @Nullable ContentSerializer<T> getSerializer() {
         return this;
     }
 
