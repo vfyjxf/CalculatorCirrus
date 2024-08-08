@@ -3,7 +3,7 @@ package dev.vfyjxf.calculatorcirrus.api.ui;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
 
-public record TooltipEntry(Object tooltip) implements ITooltip.Entry {
+public record TooltipEntry(Object tooltip) implements Tooltip.Entry {
     public TooltipEntry(Object tooltip) {
         this.tooltip = tooltip;
 

@@ -14,7 +14,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 import java.util.function.Supplier;
 
-public interface ITooltip {
+public interface Tooltip {
 
     static Entry entry(Component text) {
         return new TooltipEntry(text);
@@ -24,35 +24,35 @@ public interface ITooltip {
         return new TooltipEntry(text);
     }
 
-    static ITooltip create(@Nullable Point mousePos, List<Component> texts) {
-        return from(mousePos, texts.stream().map(ITooltip::entry).toList());
+    static Tooltip create(@Nullable Point mousePos, List<Component> texts) {
+        return from(mousePos, texts.stream().map(Tooltip::entry).toList());
     }
 
-    static ITooltip create(@Nullable Point mousePos, Component... texts) {
+    static Tooltip create(@Nullable Point mousePos, Component... texts) {
         return create(mousePos, List.of(texts));
     }
 
-    static ITooltip create(List<Component> texts) {
+    static Tooltip create(List<Component> texts) {
         return create(null, texts);
     }
 
-    static ITooltip create(Component... texts) {
+    static Tooltip create(Component... texts) {
         return create(List.of(texts));
     }
 
-    static ITooltip from(@Nullable Point mousePos, List<Entry> entries) {
+    static Tooltip from(@Nullable Point mousePos, List<Entry> entries) {
         return new ListTooltip(mousePos, entries);
     }
 
-    static ITooltip from(@Nullable Point mousePos, Entry... entries) {
+    static Tooltip from(@Nullable Point mousePos, Entry... entries) {
         return from(mousePos, List.of(entries));
     }
 
-    static ITooltip from(List<Entry> entries) {
+    static Tooltip from(List<Entry> entries) {
         return from(null, entries);
     }
 
-    static ITooltip from(Entry... entries) {
+    static Tooltip from(Entry... entries) {
         return from(List.of(entries));
     }
 
@@ -71,49 +71,49 @@ public interface ITooltip {
         return result;
     }
 
-    ITooltip add(Component text);
+    Tooltip add(Component text);
 
-    ITooltip add(TooltipComponent component);
+    Tooltip add(TooltipComponent component);
 
-    ITooltip add(Supplier<Component> supplier);
+    Tooltip add(Supplier<Component> supplier);
 
-    default ITooltip addAll(TooltipComponent... components) {
+    default Tooltip addAll(TooltipComponent... components) {
         for (TooltipComponent component : components) {
             add(component);
         }
         return this;
     }
 
-    default ITooltip addAll(Component... text) {
+    default Tooltip addAll(Component... text) {
         for (Component component : text) {
             add(component);
         }
         return this;
     }
 
-    default ITooltip addAllTooltipComponents(Iterable<TooltipComponent> text) {
+    default Tooltip addAllTooltipComponents(Iterable<TooltipComponent> text) {
         for (TooltipComponent component : text) {
             add(component);
         }
         return this;
     }
 
-    default ITooltip addAllTexts(Iterable<Component> text) {
+    default Tooltip addAllTexts(Iterable<Component> text) {
         for (Component component : text) {
             add(component);
         }
         return this;
     }
 
-    ITooltip ofAll(ITooltip other);
+    Tooltip ofAll(Tooltip other);
 
-    ITooltip copy();
+    Tooltip copy();
 
     @Nullable
     TooltipStack<?> stack();
 
     @Contract("_ -> this")
-    ITooltip setContextStack(@Nullable TooltipStack<?> stack);
+    Tooltip setContextStack(@Nullable TooltipStack<?> stack);
 
     interface Entry {
         boolean isText();
