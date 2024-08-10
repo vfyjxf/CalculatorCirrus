@@ -3,11 +3,10 @@ package dev.vfyjxf.calculatorcirrus.api.content;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.component.DataComponentMap;
+import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import org.jetbrains.annotations.Nullable;
@@ -29,12 +28,14 @@ public interface ContentType<T> {
 
     Class<T> getTypeClass();
 
-    @OnlyIn(Dist.CLIENT)
-    ContentRenderer<T> getRenderer();
+    Class<?> getBaseClass();
 
-    default boolean supportTag() {
-        return false;
-    }
+    /**
+     * @return the item of ItemStack, the fluid of FluidStack, etc.
+     */
+    Object getBase(T content);
+
+    ContentRenderer<T> getRenderer();
 
     /**
      * @return the uid from the content.
@@ -49,6 +50,8 @@ public interface ContentType<T> {
     String getModid(ContentStack<T> content, T value);
 
     boolean isEmpty(ContentStack<T> content, T value);
+
+    T create(ContentStack<T> content, DataComponentPatch components, long amount);
 
     T copy(ContentStack<T> content, T value);
 
@@ -66,7 +69,7 @@ public interface ContentType<T> {
      * @return the amount from the value,return -1 if this tagType is not stackable
      */
     default long getAmount(ContentStack<T> content, T value) {
-        if (!stackable()) throw new UnsupportedOperationException("This tagType is not stackable");
+        if (!stackable()) throw new UnsupportedOperationException("This ContentType is not stackable");
         return getAmount(value);
     }
 
@@ -85,9 +88,6 @@ public interface ContentType<T> {
     @Nullable
     T merge(T value1, T value2, MatchContext matchContext);
 
-    /**
-     *
-     */
     boolean matches(T value1, T value2, MatchContext matchContext);
 
     default boolean matches(ContentStack<T> stack1, ContentStack<T> stack2, MatchContext matchContext) {

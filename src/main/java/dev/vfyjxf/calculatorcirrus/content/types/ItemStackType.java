@@ -1,10 +1,10 @@
 package dev.vfyjxf.calculatorcirrus.content.types;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
 import dev.vfyjxf.calculatorcirrus.content.renderer.ItemStackContentRenderer;
 import net.minecraft.core.component.DataComponentMap;
+import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
@@ -14,17 +14,17 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.material.Fluid;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
 import java.util.stream.Stream;
 
-public class ItemStackType extends AbstractContentType<ItemStack> {
+public class ItemStackType extends BasicContentType<ItemStack> {
 
     private static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(namespace, "item_stack");
 
     public ItemStackType() {
-        super(ItemStack.class, new ItemStackContentRenderer());
+        super(ItemStack.class, Item.class, new ItemStackContentRenderer());
     }
 
     @Override
@@ -32,9 +32,10 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
         return ID;
     }
 
+
     @Override
-    public boolean supportTag() {
-        return true;
+    public Object getBase(ItemStack content) {
+        return content.getItem();
     }
 
     @Override
@@ -61,6 +62,11 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
     @Override
     public boolean isEmpty(ContentStack<ItemStack> content, ItemStack value) {
         return value.isEmpty();
+    }
+
+    @Override
+    public ItemStack create(ContentStack<ItemStack> content, DataComponentPatch components, long amount) {
+        return new ItemStack(content.value().getItemHolder(), (int) amount, components);
     }
 
     @Override
@@ -118,6 +124,7 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
 
     @Override
     public long hash(ContentStack<ItemStack> content, ItemStack value, boolean fuzzy) {
+        //TODO:Rewrite this
         if (fuzzy) {
             CompoundTag serialized = save(content, value).getCompound("tag");
             serialized.remove("tag");
@@ -126,6 +133,7 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
         return this.save(content, value).hashCode();
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public Stream<? extends TagKey<?>> getTagsFor(ContentStack<ItemStack> content, ItemStack value) {
         Stream<? extends TagKey<?>> tags = value.getTags();
@@ -148,40 +156,6 @@ public class ItemStackType extends AbstractContentType<ItemStack> {
     @Override
     public @Nullable ItemStack cheatStack(ContentStack<ItemStack> content, ItemStack value) {
         return value.copy();
-    }
-
-    public static class ItemTagType extends AbstractTagType<ItemStack, Item> {
-
-        private final static ResourceLocation IDENTIFIER = ResourceLocation.parse("tag:item");
-
-        public ItemTagType(ContentType<ItemStack> type) {
-            super(type, Item.class, BuiltInRegistries.ITEM);
-        }
-
-        @Override
-        public ResourceLocation getId() {
-            return IDENTIFIER;
-        }
-
-        @Override
-        public Item getValue(ItemStack itemStack) {
-            return itemStack.getItem();
-        }
-
-        @Override
-        public ItemStack makeStack(Item item) {
-            return new ItemStack(item);
-        }
-
-        @Override
-        public ItemStack makeStackWithAmount(Item item, int amount) {
-            return new ItemStack(item, amount);
-        }
-
-        @Override
-        public Stream<? extends TagKey<Item>> getTags(Collection<ItemStack> collection) {
-            return null;
-        }
     }
 
 }

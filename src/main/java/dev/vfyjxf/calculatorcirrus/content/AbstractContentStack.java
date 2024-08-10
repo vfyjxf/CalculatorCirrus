@@ -4,7 +4,6 @@ import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import net.minecraft.world.item.ItemStack;
-import org.eclipse.collections.impl.list.mutable.FastList;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -12,8 +11,7 @@ import java.util.List;
 public abstract class AbstractContentStack<T> implements ContentStack<T> {
 
     protected final T value;
-    protected Tooltip append;
-    protected List<Tooltip.Entry> appendTooltips = new FastList<>();
+    protected Tooltip tooltip;
 
     protected AbstractContentStack(T value) {
         this.value = value;
@@ -27,18 +25,18 @@ public abstract class AbstractContentStack<T> implements ContentStack<T> {
     @Nullable
     @Override
     public Tooltip getTooltip(TooltipContext context) {
-        return null;
+        return tooltip;
     }
 
     @Override
     public ContentStack<T> appendTooltip(List<Tooltip.Entry> tooltips) {
-        appendTooltips.addAll(tooltips);
+        tooltip.addEntries(tooltips);
         return this;
     }
 
     @Override
     public ContentStack<T> tooltip(Tooltip tooltip) {
-        append = tooltip;
+        this.tooltip = tooltip;
         return this;
     }
 

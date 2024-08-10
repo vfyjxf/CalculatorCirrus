@@ -15,6 +15,8 @@ public interface ContentRenderer<T> {
 
     void render(T content, GuiGraphics graphics, int mouseX, int mouseY, float delta);
 
+    void decorate(ContentStack<T> content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY);
+
     @Nullable
     Tooltip getTooltip(T content, TooltipContext context);
 

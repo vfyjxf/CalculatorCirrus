@@ -3,12 +3,16 @@ package dev.vfyjxf.calculatorcirrus.api.content;
 import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.content.EmptyContentStack;
+import dev.vfyjxf.calculatorcirrus.content.TagContentStack;
 import dev.vfyjxf.calculatorcirrus.content.TypedContentStack;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Unit;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
@@ -16,25 +20,87 @@ import java.util.List;
 
 public interface ContentStack<T> {
 
-    static ContentStack<Unit> empty() {
+    @SuppressWarnings("unchecked")
+    static <T> ContentStack<T> empty() {
         return EmptyContentStack.INSTANCE;
     }
 
-    static <T> ContentStack<T> of(ContentType<T> type, T value) {
-        return new TypedContentStack<>(type, value);
+    static <T> ContentStack<T> create(ContentType<T> type, T value) {
+        return new TypedContentStack<>(type, value, 1);
     }
 
-    static ContentStack<ItemStack> of(ItemStack stack) {
-        return of(CirrusContentTypes.ITEM, stack);
+    static <T> ContentStack<T> create(ContentType<T> type, T value, long amount) {
+        return new TypedContentStack<>(type, value, amount);
     }
 
-    static ContentStack<FluidStack> of(FluidStack stack) {
-        return of(CirrusContentTypes.FLUID, stack);
+    static ContentStack<ItemStack> create(@Nullable ItemStack stack) {
+        if (stack == null) stack = ItemStack.EMPTY;
+        return create(CirrusContentTypes.ITEM, stack, stack.getCount());
+    }
+
+    static ContentStack<ItemStack> create(@Nullable ItemStack stack, long amount) {
+        if (stack == null) stack = ItemStack.EMPTY;
+        return create(CirrusContentTypes.ITEM, stack, amount);
+    }
+
+    static ContentStack<FluidStack> create(@Nullable FluidStack stack) {
+        if (stack == null) stack = FluidStack.EMPTY;
+        return create(CirrusContentTypes.FLUID, stack);
+    }
+
+    static ContentStack<FluidStack> create(@Nullable FluidStack stack, long amount) {
+        if (stack == null) stack = FluidStack.EMPTY;
+        return create(CirrusContentTypes.FLUID, stack, amount);
+    }
+
+    static <STACK, VALUE> TagStack<STACK, VALUE> create(TagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey) {
+        return new TagContentStack<>(tagType, tagKey, 1);
+    }
+
+    static <STACK, VALUE> TagStack<STACK, VALUE> create(TagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey, long amount) {
+        return new TagContentStack<>(tagType, tagKey, amount);
+    }
+
+    static TagStack<ItemStack, Item> createItemTag(TagKey<Item> tagKey) {
+        return create(CirrusContentTypes.ITEM_TAG, tagKey);
+    }
+
+    static TagStack<ItemStack, Item> createItemTag(TagKey<Item> tagKey, long amount) {
+        return create(CirrusContentTypes.ITEM_TAG, tagKey, amount);
+    }
+
+    static TagStack<FluidStack, Fluid> createFluidTag(TagKey<Fluid> tagKey) {
+        return create(CirrusContentTypes.FLUID_TAG, tagKey, 1);
+    }
+
+    static TagStack<FluidStack, Fluid> createFluidTag(TagKey<Fluid> tagKey, long amount) {
+        return create(CirrusContentTypes.FLUID_TAG, tagKey, amount);
     }
 
     T value();
 
     ContentType<T> contentType();
+
+    default Object getBase() {
+        return contentType().getBase(value());
+    }
+
+    default long getAmount() {
+        return contentType().getAmount(this, value());
+    }
+
+    @Contract("_ -> this")
+    ContentStack<T> setAmount(long amount);
+
+    default ContentStack<T> copy() {
+        var type = contentType();
+        return create(type, type.copy(this, value()));
+    }
+
+    default ContentStack<T> copyWithAmount(long amount) {
+        var type = contentType();
+        return create(type, type.copy(this, value()), amount);
+    }
 
     default boolean isEmpty() {
         return contentType().isEmpty(this, value());
@@ -80,6 +146,7 @@ public interface ContentStack<T> {
 
     ContentStack<ItemStack> cheatsStack();
 
+    @SuppressWarnings("unchecked")
     default <O> ContentStack<O> cast() {
         return (ContentStack<O>) this;
     }

@@ -1,27 +1,33 @@
 package dev.vfyjxf.calculatorcirrus.content;
 
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
-import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
-import net.minecraft.util.Unit;
+import dev.vfyjxf.calculatorcirrus.content.types.EmptyType;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-public class EmptyContentStack implements ContentStack<Unit> {
+@SuppressWarnings("rawtypes")
+public class EmptyContentStack implements ContentStack {
     public static final EmptyContentStack INSTANCE = new EmptyContentStack();
 
     @Override
-    public Unit value() {
-        return Unit.INSTANCE;
+    public Object value() {
+        return EmptyType.EMPTY;
     }
 
     @Override
-    public ContentType<Unit> contentType() {
+    public ContentType contentType() {
         return CirrusContentTypes.EMPTY;
+    }
+
+    @Override
+    public ContentStack setAmount(long amount) {
+        return this;
     }
 
     @Override
@@ -30,17 +36,17 @@ public class EmptyContentStack implements ContentStack<Unit> {
     }
 
     @Override
-    public ContentStack<Unit> appendTooltip(List<Tooltip.Entry> tooltips) {
-        return this;
-    }
-
-    @Override
-    public ContentStack<Unit> tooltip(Tooltip tooltip) {
+    public ContentStack tooltip(Tooltip tooltip) {
         return this;
     }
 
     @Override
     public ContentStack<ItemStack> cheatsStack() {
         return ContentStack.of(ItemStack.EMPTY);
+    }
+
+    @Override
+    public ContentStack appendTooltip(List tooltips) {
+        return this;
     }
 }

@@ -7,6 +7,10 @@ import javax.annotation.Nullable;
 
 public interface RecipeSystem<T> {
 
+    static ResourceLocation createId(String namespace, String path) {
+        return ResourceLocation.fromNamespaceAndPath(namespace, "recipe_system/" + path);
+    }
+
     default String modId() {
         return systemId().getNamespace();
     }
@@ -15,12 +19,16 @@ public interface RecipeSystem<T> {
 
     Class<? extends T> basicRecipeType();
 
-    default boolean containsRecipe(T recipe) {
-        return basicRecipeType().isInstance(recipe);
+    default boolean supportsRecipe(T recipe) {
+        return containsRecipe(recipe);
     }
 
-    default boolean containsRecipe(Class<T> recipeType) {
+    default boolean supportsRecipe(Class<?> recipeType) {
         return basicRecipeType().isAssignableFrom(recipeType);
+    }
+
+    default boolean containsRecipe(T recipe) {
+        return basicRecipeType().isInstance(recipe);
     }
 
     @Nullable

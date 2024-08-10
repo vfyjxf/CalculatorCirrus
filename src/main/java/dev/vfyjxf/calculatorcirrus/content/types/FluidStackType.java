@@ -1,10 +1,10 @@
 package dev.vfyjxf.calculatorcirrus.content.types;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
 import dev.vfyjxf.calculatorcirrus.content.renderer.FluidStackContentRenderer;
 import net.minecraft.core.component.DataComponentMap;
+import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
@@ -19,12 +19,12 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.stream.Stream;
 
-public class FluidStackType extends AbstractContentType<FluidStack> {
+public class FluidStackType extends BasicContentType<FluidStack> {
 
     private static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(namespace, "fluid_stack");
 
     public FluidStackType() {
-        super(FluidStack.class, new FluidStackContentRenderer());
+        super(FluidStack.class, Fluid.class, new FluidStackContentRenderer());
     }
 
     @Override
@@ -33,8 +33,8 @@ public class FluidStackType extends AbstractContentType<FluidStack> {
     }
 
     @Override
-    public boolean supportTag() {
-        return true;
+    public Object getBase(FluidStack content) {
+        return content.getFluid();
     }
 
     @Override
@@ -57,6 +57,11 @@ public class FluidStackType extends AbstractContentType<FluidStack> {
     @Override
     public boolean isEmpty(ContentStack<FluidStack> content, FluidStack value) {
         return value.isEmpty();
+    }
+
+    @Override
+    public FluidStack create(ContentStack<FluidStack> content, DataComponentPatch components, long amount) {
+        return new FluidStack(content.value().getFluidHolder(), (int) amount, components);
     }
 
     @Override
@@ -106,6 +111,7 @@ public class FluidStackType extends AbstractContentType<FluidStack> {
 
     @Override
     public long hash(ContentStack<FluidStack> content, FluidStack value, boolean fuzzy) {
+        //TODO:Rewrite this
         if (fuzzy) return value.getFluid().hashCode();
         else return value.hashCode();
     }
@@ -135,35 +141,6 @@ public class FluidStackType extends AbstractContentType<FluidStack> {
         if (value.isEmpty()) return ItemStack.EMPTY;
         Item bucket = value.getFluid().getBucket();
         return new ItemStack(bucket);
-    }
-
-    public static class FluidTagType extends AbstractTagType<FluidStack, Fluid> {
-
-        private final static ResourceLocation IDENTIFIER = ResourceLocation.parse("tag:fluid");
-
-        public FluidTagType(ContentType<FluidStack> type) {
-            super(type, Fluid.class, BuiltInRegistries.FLUID);
-        }
-
-        @Override
-        public ResourceLocation getId() {
-            return IDENTIFIER;
-        }
-
-        @Override
-        public Fluid getValue(FluidStack fluidStack) {
-            return fluidStack.getFluid();
-        }
-
-        @Override
-        public FluidStack makeStack(Fluid fluid) {
-            return new FluidStack(fluid, 1000);
-        }
-
-        @Override
-        public FluidStack makeStackWithAmount(Fluid fluid, int amount) {
-            return new FluidStack(fluid, amount);
-        }
     }
 
 }

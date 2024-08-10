@@ -52,8 +52,7 @@ public class ItemStackContentRenderer implements ContentRenderer<ItemStack> {
     @Override
     public void render(ContentStack<ItemStack> content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY, float delta) {
         ItemStack itemStack = content.value();
-        if (itemStack.isEmpty())
-            return;
+        if (itemStack.isEmpty()) return;
         int count = itemStack.getCount();
         String amount = count == 1 ? null : NumberUtils.toSuffix(count);
         renderItemStack(graphics, itemStack, width, height, amount);
@@ -61,8 +60,7 @@ public class ItemStackContentRenderer implements ContentRenderer<ItemStack> {
 
     @Override
     public void render(ItemStack content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY, float delta) {
-        if (content.isEmpty())
-            return;
+        if (content.isEmpty()) return;
         int count = content.getCount();
         String amount = count == 1 ? null : NumberUtils.toSuffix(count);
         renderItemStack(graphics, content, width, height, amount);
@@ -75,6 +73,11 @@ public class ItemStackContentRenderer implements ContentRenderer<ItemStack> {
         int count = content.getCount();
         String amount = count == 1 ? null : NumberUtils.toSuffix(count);
         renderItemStack(graphics, content, 16, 16, amount);
+    }
+
+    @Override
+    public void decorate(ContentStack<ItemStack> content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY) {
+
     }
 
     @Override

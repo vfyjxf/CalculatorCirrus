@@ -3,29 +3,45 @@ package dev.vfyjxf.calculatorcirrus.content.types;
 import com.mojang.datafixers.util.Pair;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.TagType;
+import net.minecraft.core.Holder;
 import net.minecraft.core.HolderSet;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
+import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.impl.collector.Collectors2;
+import org.eclipse.collections.impl.utility.LazyIterate;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-public abstract class AbstractTagType<STACK, VALUE> implements TagType<STACK, VALUE> {
+public abstract class BasicTagType<STACK, VALUE> implements TagType<STACK, VALUE> {
 
+    protected final ResourceLocation id;
     protected final ContentType<STACK> stackType;
-    protected final Class<VALUE> valueClass;
+    protected final Class<VALUE> valueType;
     protected final Registry<VALUE> registry;
 
-    public AbstractTagType(ContentType<STACK> stackType, Class<VALUE> valueClass, Registry<VALUE> registry) {
+    public BasicTagType(ResourceLocation id, ContentType<STACK> stackType, Class<VALUE> valueType, Registry<VALUE> registry) {
+        this.id = id;
         this.stackType = stackType;
-        this.valueClass = valueClass;
+        this.valueType = valueType;
         this.registry = registry;
+    }
+
+    @Override
+    public ResourceLocation getId() {
+        return id;
+    }
+
+    @Override
+    public Class<VALUE> getValueType() {
+        return valueType;
     }
 
     @Override
@@ -73,8 +89,13 @@ public abstract class AbstractTagType<STACK, VALUE> implements TagType<STACK, VA
     }
 
     @Override
-    public HolderSet.Named<VALUE> getTag(TagKey<VALUE> tagKey) {
-        return registry.getOrCreateTag(tagKey);
+    public Optional<HolderSet.Named<VALUE>> getTag(TagKey<VALUE> tagKey) {
+        return registry.getTag(tagKey);
+    }
+
+    @Override
+    public RichIterable<Holder<VALUE>> getTagOrEmpty(TagKey<VALUE> key) {
+        return LazyIterate.adapt(registry.getTagOrEmpty(key));
     }
 
     @Override
