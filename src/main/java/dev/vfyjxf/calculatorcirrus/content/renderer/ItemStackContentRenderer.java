@@ -97,6 +97,11 @@ public class ItemStackContentRenderer implements ContentRenderer<ItemStack> {
         return tooltip;
     }
 
+    @Override
+    public Component getName(ItemStack content) {
+        return content.getDisplayName();
+    }
+
     private static List<Component> tooltipHelper(ItemStack itemStack, TooltipFlag tooltipFlag) {
         Minecraft minecraft = Minecraft.getInstance();
         Player player = minecraft.player;

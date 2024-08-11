@@ -11,14 +11,11 @@ import dev.vfyjxf.calculatorcirrus.recipes.BasicRecipeData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeManager;
 import net.minecraft.world.item.crafting.RecipeType;
-import org.eclipse.collections.api.factory.Lists;
-import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.multimap.MutableMultimap;
 import org.eclipse.collections.impl.multimap.list.FastListMultimap;
 import org.jetbrains.annotations.Nullable;
@@ -76,9 +73,9 @@ public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe>
     @Override
     public RecipeData parseRecipe(RecipeHolder<CraftingRecipe> recipeHolder) {
         CraftingRecipe recipe = recipeHolder.value();
-        MutableMultimap<IngredientType, IngredientStack<?>> recipeStableData = FastListMultimap.newMultimap();
+        MutableMultimap<IngredientType, IngredientStack> recipeStableData = FastListMultimap.newMultimap();
         for (Ingredient ingredient : recipe.getIngredients()) {
-            IngredientStack<ItemStack> stack = IngredientStack.create(ingredient);
+            IngredientStack stack = IngredientStack.create(ingredient);
             recipeStableData.put(IngredientType.INPUT, stack);
         }
         recipeStableData.put(IngredientType.OUTPUT, IngredientStack.create(RecipeHelper.getOutput(recipe)));

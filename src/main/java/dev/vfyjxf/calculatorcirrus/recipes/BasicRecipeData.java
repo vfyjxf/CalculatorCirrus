@@ -12,19 +12,19 @@ import org.jetbrains.annotations.Nullable;
 
 public class BasicRecipeData implements RecipeData {
 
-    private final ImmutableMultimap<IngredientType, ? extends IngredientStack<?>> stableData;
+    private final ImmutableMultimap<IngredientType, ? extends IngredientStack> stableData;
     private final ImmutableMultimap<MutableData.Key<?>, ? extends MutableData<?>> mutableData;
     private final String uid;
 
     public static BasicRecipeData create(
-            ImmutableMultimap<IngredientType, ? extends IngredientStack<?>> stableData,
+            ImmutableMultimap<IngredientType, ? extends IngredientStack> stableData,
             @Nullable String uid
     ) {
         return new BasicRecipeData(stableData, CollectionHelper.emptyMultimap(), uid);
     }
 
     public static BasicRecipeData create(
-            ImmutableMultimap<IngredientType, ? extends IngredientStack<?>> stableData,
+            ImmutableMultimap<IngredientType, ? extends IngredientStack> stableData,
             ImmutableMultimap<MutableData.Key<?>, ? extends MutableData<?>> mutableData,
             @Nullable String uid
     ) {
@@ -32,7 +32,7 @@ public class BasicRecipeData implements RecipeData {
     }
 
     private BasicRecipeData(
-            ImmutableMultimap<IngredientType, ? extends IngredientStack<?>> stableData,
+            ImmutableMultimap<IngredientType, ? extends IngredientStack> stableData,
             ImmutableMultimap<MutableData.Key<?>, ? extends MutableData<?>> mutableData,
             @Nullable String uid
     ) {
@@ -42,7 +42,7 @@ public class BasicRecipeData implements RecipeData {
     }
 
     @Override
-    public MutableMultimap<IngredientType, ? extends IngredientStack<?>> getStableData() {
+    public MutableMultimap<IngredientType, ? extends IngredientStack> getStableData() {
         return stableData.toMutable();
     }
 

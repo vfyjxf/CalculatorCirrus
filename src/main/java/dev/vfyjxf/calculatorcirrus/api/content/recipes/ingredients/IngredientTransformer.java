@@ -14,5 +14,5 @@ public interface IngredientTransformer {
      * @param ingredient the ingredient to transform
      * @return the transformed ingredient
      */
-    List<IngredientStack<?>> transform(IngredientStack<?> ingredient);
+    List<IngredientStack> transform(IngredientStack ingredient);
 }

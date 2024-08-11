@@ -71,6 +71,11 @@ public class FluidStackContentRenderer implements ContentRenderer<FluidStack> {
         return null;
     }
 
+    @Override
+    public Component getName(FluidStack content) {
+        return content.getHoverName();
+    }
+
     private static List<Component> tooltipHelper(FluidStack content, TooltipFlag tooltipFlag) {
         List<Component> tooltip = new ArrayList<>();
         Fluid fluid = content.getFluid();

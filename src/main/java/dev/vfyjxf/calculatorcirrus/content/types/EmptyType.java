@@ -12,6 +12,7 @@ import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.Unit;
@@ -70,6 +71,11 @@ public class EmptyType implements ContentType, ContentSerializer {
             @Override
             public @Nullable Tooltip getTooltip(Object content, TooltipContext context) {
                 return null;
+            }
+
+            @Override
+            public Component getName(Object content) {
+                return Component.empty();
             }
         };
     }
