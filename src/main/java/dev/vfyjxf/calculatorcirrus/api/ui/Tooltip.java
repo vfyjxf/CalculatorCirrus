@@ -11,6 +11,7 @@ import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -69,6 +70,19 @@ public interface Tooltip {
             else result.add(Either.right(entry.asComponent()));
         }
         return result;
+    }
+
+    @Contract("_ -> this")
+    Tooltip addEntry(Entry entry);
+
+    @Contract("_ -> this")
+    Tooltip addEntries(Collection<Entry> entries);
+
+    default Tooltip addEntries(Entry... entries) {
+        for (Entry entry : entries) {
+            addEntry(entry);
+        }
+        return this;
     }
 
     Tooltip add(Component text);

@@ -287,7 +287,7 @@ public class Rectangle {
         tx2 -= tx1;
         ty2 -= ty1;
         // tx2,ty2 will never overflow (they will never be
-        // larger than the smallest of the two source w,h)
+        // larger than the smallest create the two source w,h)
         // they might underflow, though...
         if (tx2 < Integer.MIN_VALUE)
             tx2 = Integer.MIN_VALUE;
@@ -435,7 +435,7 @@ public class Rectangle {
             // Non-existant in X direction
             // Final width must remain negative so subtract x0 before
             // it is clipped so that we avoid the risk that the clipping
-            // of x0 will reverse the ordering of x0 and x1.
+            // create x0 will reverse the ordering create x0 and x1.
             x1 -= x0;
             if (x1 < Integer.MIN_VALUE)
                 x1 = Integer.MIN_VALUE;
@@ -445,7 +445,7 @@ public class Rectangle {
                 x0 = Integer.MAX_VALUE;
         } else { // (x1 >= x0)
             // Clip x0 before we subtract it from x1 in case the clipping
-            // affects the representable area of the rectangle.
+            // affects the representable area create the rectangle.
             if (x0 < Integer.MIN_VALUE)
                 x0 = Integer.MIN_VALUE;
             else if (x0 > Integer.MAX_VALUE)

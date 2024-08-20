@@ -1,8 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.api.content;
 
 import net.minecraft.tags.TagKey;
-
-import java.util.List;
+import org.eclipse.collections.api.list.MutableList;
 
 /**
  * When handling recipe,only a tag with amount is useful for us.
@@ -11,13 +10,12 @@ public interface TagStack<STACK, VALUE> extends ContentStack<STACK> {
 
     TagType<STACK, VALUE> tagType();
 
-    int getAmount();
-
-    void setAmount(int amount);
-
-    List<VALUE> getValues();
+    MutableList<? extends ContentStack<STACK>> getValues();
 
     TagKey<VALUE> getTag();
+
+    @Override
+    TagStack<STACK, VALUE> copy();
 
     /**
      * @return make any stack with a random value and a default amount.

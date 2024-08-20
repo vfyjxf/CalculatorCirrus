@@ -1,9 +1,11 @@
 package dev.vfyjxf.calculatorcirrus.content.renderer;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentRenderer;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.helper.LocalizationHelper;
+import dev.vfyjxf.calculatorcirrus.helper.RenderHelper;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -40,6 +42,11 @@ public class FluidStackContentRenderer implements ContentRenderer<FluidStack> {
         RenderHelper.drawFluidForGui(graphics, content, 1000, 0, 0, 16, 16);
     }
 
+    @Override
+    public void decorate(ContentStack<FluidStack> content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY) {
+
+    }
+
     @Nullable
     @Override
     public Tooltip getTooltip(FluidStack content, TooltipContext context) {
@@ -62,6 +69,11 @@ public class FluidStackContentRenderer implements ContentRenderer<FluidStack> {
         }
 
         return null;
+    }
+
+    @Override
+    public Component getName(FluidStack content) {
+        return content.getHoverName();
     }
 
     private static List<Component> tooltipHelper(FluidStack content, TooltipFlag tooltipFlag) {

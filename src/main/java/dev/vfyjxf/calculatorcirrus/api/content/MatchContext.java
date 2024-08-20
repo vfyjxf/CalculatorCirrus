@@ -1,19 +1,18 @@
 package dev.vfyjxf.calculatorcirrus.api.content;
 
-public enum MatchContext {
-    EXACT(true, false, true),
-    FUZZY(false, false, false),
-    EXACT_WITH_COUNT(true, true, true),
-    FUZZY_WITH_COUNT(false, true, false),
-    RECIPE(true, true, false);
+public class MatchContext {
+    public static final MatchContext EXACT = create(true, false);
+    public static final MatchContext FUZZY = create(false, false);
+
+    public static MatchContext create(boolean exact, boolean withNbt) {
+        return new MatchContext(exact, withNbt);
+    }
 
     private final boolean exact;
-    private final boolean withCount;
     private final boolean withNbt;
 
-    MatchContext(boolean exact, boolean withCount, boolean withNbt) {
+    private MatchContext(boolean exact, boolean withNbt) {
         this.exact = exact;
-        this.withCount = withCount;
         this.withNbt = withNbt;
     }
 
@@ -23,14 +22,6 @@ public enum MatchContext {
 
     public boolean fuzzy() {
         return !exact;
-    }
-
-    public boolean withCount() {
-        return withCount;
-    }
-
-    public boolean withoutCount() {
-        return !withCount;
     }
 
     public boolean withNbt() {

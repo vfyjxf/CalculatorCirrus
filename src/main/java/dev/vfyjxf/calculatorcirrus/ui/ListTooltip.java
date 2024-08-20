@@ -11,6 +11,7 @@ import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -42,6 +43,18 @@ public class ListTooltip implements Tooltip {
     @Override
     public MutableList<Entry> entries() {
         return Lists.mutable.withAll(entries);
+    }
+
+    @Override
+    public Tooltip addEntry(Entry entry) {
+        entries.add(entry);
+        return this;
+    }
+
+    @Override
+    public Tooltip addEntries(Collection<Entry> entries) {
+        this.entries.addAll(entries);
+        return this;
     }
 
     @Override
