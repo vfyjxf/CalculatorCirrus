@@ -1,6 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.api.event;
 
 import org.jetbrains.annotations.ApiStatus;
+import org.jetbrains.annotations.Nullable;
 
 public sealed interface EventContext permits EventContext.Common, EventContext.Cancelable, EventContext.Interruptible {
 
@@ -8,8 +9,17 @@ public sealed interface EventContext permits EventContext.Common, EventContext.C
     EventChannel<?> getChannel();
 
     @SuppressWarnings("unchecked")
-    default <T> T holder() {
+    default <T> T poster() {
         return (T) getChannel().handler();
+    }
+
+    @Nullable
+    default <T> T poster(Class<T> type) {
+        EventHandler<?> handler = getChannel().handler();
+        if (type.isInstance(handler)) {
+            return type.cast(handler);
+        }
+        return null;
     }
 
     boolean cancelled();

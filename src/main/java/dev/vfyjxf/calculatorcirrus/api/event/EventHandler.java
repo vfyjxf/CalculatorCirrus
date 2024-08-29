@@ -3,38 +3,38 @@ package dev.vfyjxf.calculatorcirrus.api.event;
 
 public interface EventHandler<T> {
 
-    EventChannel<T> channel();
+    EventChannel<T> events();
 
     default EventContext.Common common() {
-        return channel().context();
+        return events().context();
     }
 
     default EventContext.Cancelable cancelable() {
-        return channel().cancelable();
+        return events().cancelable();
     }
 
     default EventContext.Interruptible interruptible() {
-        return channel().interruptible();
+        return events().interruptible();
     }
 
     default <E extends T> E listeners(EventDefinition<E> definition) {
-        return channel().get(definition).invoker();
+        return events().get(definition).invoker();
     }
 
     default <E extends T> E register(EventDefinition<E> definition, E listener) {
-        return channel().get(definition).register(listener);
+        return events().get(definition).register(listener);
     }
 
     default <E extends T> void unregister(EventDefinition<E> definition, E listener) {
-        channel().get(definition).unregister(listener);
+        events().get(definition).unregister(listener);
     }
 
     default <E extends T> void clear(EventDefinition<E> definition) {
-        channel().get(definition).clearListeners();
+        events().get(definition).clearListeners();
     }
 
     default void clearAll() {
-        channel().clearAllListeners();
+        events().clearAllListeners();
     }
 
 }

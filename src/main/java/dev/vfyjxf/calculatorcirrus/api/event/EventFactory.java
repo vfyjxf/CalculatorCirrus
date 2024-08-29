@@ -9,9 +9,9 @@ import java.util.function.Function;
  * <p>
  * Some basic promises:
  * <p>
- * 1. The naming define channel follows the lowercase hump naming
+ * 1. The naming define events follows the lowercase hump naming
  * <p>
- * 2. Pre-phase channel do not need to add the Pre suffix, but Post-phase channel need to add the Post suffix.
+ * 2. Pre-phase events do not need to add the Pre suffix, but Post-phase events need to add the Post suffix.
  * <p>
  * 3. Usually, an event is defined in an interface with its listeners.
  */
@@ -21,24 +21,24 @@ public final class EventFactory {
     private EventFactory() {
     }
 
-    public static <T> dev.vfyjxf.calculatorcirrus.api.event.EventDefinition<T> define(Class<T> type, Function<List<T>, T> invokerFactory) {
-        return new EventDefinition<>(type, invokerFactory);
+    public static <T> EventDefinition<T> define(Class<T> type, Function<List<T>, T> invokerFactory) {
+        return new EventDefinitionImpl<>(type, invokerFactory);
     }
 
-    public static <T> dev.vfyjxf.calculatorcirrus.api.event.Event<T> createEvent(Function<List<T>, T> invokerFactory) {
-        return new Event<>(invokerFactory);
+    public static <T> Event<T> createEvent(Function<List<T>, T> invokerFactory) {
+        return new EventImpl<>(invokerFactory);
     }
 
-    private static class EventDefinition<T> implements dev.vfyjxf.calculatorcirrus.api.event.EventDefinition<T> {
+    private static class EventDefinitionImpl<T> implements EventDefinition<T> {
 
         private final Class<T> type;
         private final Function<List<T>, T> function;
-        private final dev.vfyjxf.calculatorcirrus.api.event.Event<T> global;
+        private final Event<T> global;
 
-        private EventDefinition(Class<T> type, Function<List<T>, T> function) {
+        private EventDefinitionImpl(Class<T> type, Function<List<T>, T> function) {
             this.type = type;
             this.function = function;
-            this.global = new Event<>(function);
+            this.global = new EventImpl<>(function);
         }
 
         @Override
@@ -47,22 +47,22 @@ public final class EventFactory {
         }
 
         @Override
-        public dev.vfyjxf.calculatorcirrus.api.event.Event<T> create() {
-            return new Event<>(function);
+        public Event<T> create() {
+            return new EventImpl<>(function);
         }
 
         @Override
-        public dev.vfyjxf.calculatorcirrus.api.event.Event<T> global() {
+        public Event<T> global() {
             return global;
         }
     }
 
-    private static class Event<T> implements dev.vfyjxf.calculatorcirrus.api.event.Event<T> {
+    private static class EventImpl<T> implements Event<T> {
         private final Function<List<T>, T> function;
         private T invoker = null;
         private final FastList<T> listeners;
 
-        private Event(Function<List<T>, T> function) {
+        private EventImpl(Function<List<T>, T> function) {
             this.function = function;
             listeners = FastList.newList();
         }

@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
 
-public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent> {
+public interface IWidget extends IRenderable, Draggable, EventHandler<WidgetEvent> {
 
     //////////////////////////////////////
     //********       Basic     *********//
@@ -37,17 +37,17 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
     /**
      * maybe itself.
      */
-    WidgetGroup<? extends Widget> root();
+    IWidgetGroup<? extends IWidget> root();
 
     @ApiStatus.Internal
-    void setRoot(WidgetGroup<? super Widget> root);
+    void setRoot(IWidgetGroup<? super IWidget> root);
 
     @Nullable
-    WidgetGroup<? extends Widget> parent();
+    IWidgetGroup<? extends IWidget> parent();
 
     @Contract("_ -> this")
     @CanIgnoreReturnValue
-    Widget setParent(@Nullable WidgetGroup<? super Widget> parent);
+    IWidget setParent(@Nullable IWidgetGroup<? super IWidget> parent);
 
     /**
      * Construct the widget
@@ -59,8 +59,8 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
     }
 
     @ApiStatus.NonExtendable
-    default Widget onInit(WidgetEvent.OnInit listener) {
-        channel().register(WidgetEvent.onInit, listener);
+    default IWidget onInit(WidgetEvent.OnInit listener) {
+        events().register(WidgetEvent.onInit, listener);
         return this;
     }
 
@@ -78,16 +78,10 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
     }
 
     @ApiStatus.NonExtendable
-    default Widget onUpdate(WidgetEvent.OnUpdate listener) {
-        channel().register(WidgetEvent.onUpdate, listener);
+    default IWidget onUpdate(WidgetEvent.OnUpdate listener) {
+        events().register(WidgetEvent.onUpdate, listener);
         return this;
     }
-
-    /**
-     * Only for debugging.
-     */
-    @ApiStatus.Internal
-    void rebuild();
 
     /**
      * Call every tick.
@@ -97,14 +91,14 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
     }
 
     @ApiStatus.NonExtendable
-    default Widget onTick(WidgetEvent.OnTick listener) {
-        channel().register(WidgetEvent.onTick, listener);
+    default IWidget onTick(WidgetEvent.OnTick listener) {
+        events().register(WidgetEvent.onTick, listener);
         return this;
     }
 
     String getId();
 
-    Widget setId(String id);
+    IWidget setId(String id);
 
     /**
      * @return Relative coordinates relative to the upper left corner of the parent.
@@ -124,25 +118,25 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
      */
     Point getAbsolute();
 
-    Widget setPos(Point position);
+    IWidget setPos(Point position);
 
 
-    default Widget setPos(int x, int y) {
+    default IWidget setPos(int x, int y) {
         return setPos(new Point(x, y));
     }
 
 
-    default Widget setX(int x) {
+    default IWidget setX(int x) {
         return setPos(x, getY());
     }
 
 
-    default Widget setY(int y) {
+    default IWidget setY(int y) {
         return setPos(getX(), y);
     }
 
 
-    default Widget translate(int dx, int dy) {
+    default IWidget translate(int dx, int dy) {
         return setPos(getPos().x + dx, getPos().y + dy);
     }
 
@@ -156,9 +150,9 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
         return getSize().height;
     }
 
-    Widget setSize(Dimension size);
+    IWidget setSize(Dimension size);
 
-    default Widget setSize(int width, int height) {
+    default IWidget setSize(int width, int height) {
         return setSize(new Dimension(width, height));
     }
 
@@ -166,17 +160,17 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
         return new Rectangle(getPos().x, getPos().y, getSize().width, getSize().height);
     }
 
-    default Widget setWidth(int width) {
+    default IWidget setWidth(int width) {
         return setSize(width, getSize().height);
     }
 
-    default Widget setHeight(int height) {
+    default IWidget setHeight(int height) {
         return setSize(getSize().width, height);
     }
 
-    Widget setBackground(IRenderableTexture background);
+    IWidget setBackground(IRenderableTexture background);
 
-    Widget setIcon(IRenderableTexture icon);
+    IWidget setIcon(IRenderableTexture icon);
 
     boolean active();
 
@@ -214,7 +208,7 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
 
     }
 
-    default Widget onMeasure(WidgetEvent.OnMeasure listener) {
+    default IWidget onMeasure(WidgetEvent.OnMeasure listener) {
         return onEvent(WidgetEvent.onMeasure, listener);
     }
 
@@ -222,7 +216,7 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
 
     }
 
-    default Widget onLayout(WidgetEvent.OnLayout listener) {
+    default IWidget onLayout(WidgetEvent.OnLayout listener) {
         return onEvent(WidgetEvent.onLayout, listener);
     }
 
@@ -251,14 +245,14 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
      * Top-down search
      */
     @Nullable
-    default <T extends Widget> T getWidgetOfType(Class<T> type) {
+    default <T extends IWidget> T getWidgetOfType(Class<T> type) {
         if (type.isInstance(this)) {
             return type.cast(this);
         }
         return null;
     }
 
-    default <T extends Widget> void getWidgetsOfType(Class<T> type, List<T> result) {
+    default <T extends IWidget> void getWidgetsOfType(Class<T> type, List<T> result) {
         if (type.isInstance(this)) {
             result.add(type.cast(this));
         }
@@ -268,7 +262,7 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
      * down to top search.
      */
     @Nullable
-    default <T extends Widget> T findWidgetsOfType(Class<T> type) {
+    default <T extends IWidget> T findWidgetsOfType(Class<T> type) {
         if (type.isInstance(this)) {
             return type.cast(this);
         }
@@ -279,7 +273,7 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
         return null;
     }
 
-    default <T extends Widget> void findWidgetsOfType(Class<T> type, List<T> result) {
+    default <T extends IWidget> void findWidgetsOfType(Class<T> type, List<T> result) {
         if (type.isInstance(this)) {
             result.add(type.cast(this));
         }
@@ -290,7 +284,7 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
     }
 
     @Nullable
-    default Widget getHoveredWidget(double mouseX, double mouseY) {
+    default IWidget getHoveredWidget(double mouseX, double mouseY) {
         if (isMouseOver(mouseX, mouseY)) {
             return this;
         }
@@ -298,7 +292,7 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
     }
 
     @SuppressWarnings("unchecked")
-    default <O extends Widget> O cast() {
+    default <O extends IWidget> O cast() {
         return (O) this;
     }
 
@@ -310,34 +304,34 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
     Tooltip getTooltip();
 
     @Contract("_ -> this")
-    Widget setTooltip(@Nullable Tooltip tooltip);
+    IWidget setTooltip(@Nullable Tooltip tooltip);
 
     /**
      * Add single line tooltip
      */
-    Widget tooltip(String text);
+    IWidget tooltip(String text);
 
-    Widget tooltip(LangEntry key);
+    IWidget tooltip(LangEntry entry);
 
-    Widget tooltip(Component component);
+    IWidget tooltip(Component component);
 
-    Widget tooltip(Supplier<Component> supplier);
+    IWidget tooltip(Supplier<Component> supplier);
 
-    default Widget tooltips(LangEntry... keys) {
+    default IWidget tooltips(LangEntry... keys) {
         for (LangEntry key : keys) {
             tooltip(key);
         }
         return this;
     }
 
-    default Widget tooltips(Component... components) {
+    default IWidget tooltips(Component... components) {
         for (Component component : components) {
             tooltip(component);
         }
         return this;
     }
 
-    Widget tooltip(Tooltip tooltip);
+    IWidget tooltip(Tooltip tooltip);
 
     default void renderOverlay(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
         Tooltip tooltip = getTooltip();
@@ -350,46 +344,47 @@ public interface Widget extends IRenderable, Draggable, EventHandler<WidgetEvent
     //////////////////////////////////////
 
     /**
-     * Note that this method should only be used when the WidgetGroup doesn't care about the consistency of children types,
+     * Note that this method should only be used when the IWidgetGroup doesn't care about the consistency of children types,
      * <p>
-     * it's only for WidgetGroup<Widget>, if you need to add a widget to the group, use {@link WidgetGroup#widget(Widget)}.
+     * it's only for IWidgetGroup<IWidget>, if you need to add a widget to the group, use {@link IWidgetGroup#widget(IWidget)}.
      */
-    <T extends Widget> Widget asChild(WidgetGroup<T> parent);
+    <T extends IWidget> IWidget asChild(IWidgetGroup<T> parent);
 
     //////////////////////////////////////
     //********     Events      *********//
     //////////////////////////////////////
 
-    @Override
-    EventChannel<WidgetEvent> channel();
 
-    default <T extends WidgetEvent> Widget onEvent(EventDefinition<T> definition, T listener) {
-        channel().register(definition, listener);
+    @Override
+    EventChannel<WidgetEvent> events();
+
+    default <T extends WidgetEvent> IWidget onEvent(EventDefinition<T> definition, T listener) {
+        events().register(definition, listener);
         return this;
     }
 
     @ApiStatus.NonExtendable
-    default Widget onRender(WidgetEvent.OnRender listener) {
+    default IWidget onRender(WidgetEvent.OnRender listener) {
         return onEvent(WidgetEvent.onRender, listener);
     }
 
     @ApiStatus.NonExtendable
-    default Widget onMouseClicked(InputEvent.OnMouseClicked listener) {
+    default IWidget onMouseClicked(InputEvent.OnMouseClicked listener) {
         return onEvent(InputEvent.onMouseClicked, listener);
     }
 
     @ApiStatus.NonExtendable
-    default Widget onMouseReleased(InputEvent.OnMouseReleased listener) {
+    default IWidget onMouseReleased(InputEvent.OnMouseReleased listener) {
         return onEvent(InputEvent.onMouseReleased, listener);
     }
 
     @ApiStatus.NonExtendable
-    default Widget onKeyReleased(InputEvent.OnKeyReleased listener) {
+    default IWidget onKeyReleased(InputEvent.OnKeyReleased listener) {
         return onEvent(InputEvent.onKeyReleased, listener);
     }
 
     @ApiStatus.NonExtendable
-    default Widget onKeyPressed(InputEvent.OnKeyPressed listener) {
+    default IWidget onKeyPressed(InputEvent.OnKeyPressed listener) {
         return onEvent(InputEvent.onKeyPressed, listener);
     }
 

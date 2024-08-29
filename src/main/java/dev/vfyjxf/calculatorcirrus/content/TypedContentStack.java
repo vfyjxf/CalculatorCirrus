@@ -3,7 +3,7 @@ package dev.vfyjxf.calculatorcirrus.content;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 
-public class TypedContentStack<T> extends AbstractContentStack<T> {
+public class TypedContentStack<T> extends BasicContentStack<T> {
     private final ContentType<T> type;
     private long amount = 1;
 

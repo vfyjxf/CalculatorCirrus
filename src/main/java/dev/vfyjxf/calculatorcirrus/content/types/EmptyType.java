@@ -2,17 +2,13 @@ package dev.vfyjxf.calculatorcirrus.content.types;
 
 import dev.vfyjxf.calculatorcirrus.Constants;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
-import dev.vfyjxf.calculatorcirrus.api.content.ContentRenderer;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentSerializer;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
-import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
-import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
-import net.minecraft.client.gui.GuiGraphics;
+import dev.vfyjxf.calculatorcirrus.api.content.TagType;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.Unit;
@@ -51,36 +47,6 @@ public class EmptyType implements ContentType, ContentSerializer {
     }
 
     @Override
-    public ContentRenderer getRenderer() {
-        return new ContentRenderer() {
-            @Override
-            public void render(Object content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY, float delta) {
-
-            }
-
-            @Override
-            public void render(Object content, GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-
-            }
-
-            @Override
-            public void decorate(ContentStack content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY) {
-
-            }
-
-            @Override
-            public @Nullable Tooltip getTooltip(Object content, TooltipContext context) {
-                return null;
-            }
-
-            @Override
-            public Component getName(Object content) {
-                return Component.empty();
-            }
-        };
-    }
-
-    @Override
     public @Nullable String getUid(ContentStack content, Object value) {
         return "empty";
     }
@@ -113,6 +79,11 @@ public class EmptyType implements ContentType, ContentSerializer {
     @Override
     public Object wildcard(ContentStack entry, Object value) {
         return EMPTY;
+    }
+
+    @Override
+    public @Nullable TagType getTagType() {
+        return null;
     }
 
     @Override

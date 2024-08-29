@@ -29,6 +29,14 @@ public final class CirrusContentTypes {
         return (ContentType<T>) EMPTY;
     }
 
+    public static ContentType<ItemStack> itemType() {
+        return ITEM;
+    }
+
+    public static ContentType<FluidStack> fluidType() {
+        return FLUID;
+    }
+
     private static ResourceLocation of(String path) {
         return fromNamespaceAndPath(Constants.MOD_ID, path);
     }

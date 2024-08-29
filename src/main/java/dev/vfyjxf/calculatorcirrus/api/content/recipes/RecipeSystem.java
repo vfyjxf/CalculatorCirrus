@@ -1,7 +1,18 @@
 package dev.vfyjxf.calculatorcirrus.api.content.recipes;
 
 
+import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.integration.jei.CirrusJeiPlugin;
+import mezz.jei.api.recipe.RecipeType;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
+import org.eclipse.collections.api.RichIterable;
+import org.eclipse.collections.api.collection.MutableCollection;
+import org.eclipse.collections.api.factory.Lists;
+import org.eclipse.collections.api.list.MutableList;
+import org.eclipse.collections.impl.collector.Collectors2;
+import org.jetbrains.annotations.Unmodifiable;
 
 import javax.annotation.Nullable;
 
@@ -17,14 +28,10 @@ public interface RecipeSystem<T> {
 
     ResourceLocation systemId();
 
-    Class<? extends T> basicRecipeType();
+    Class<?> basicRecipeType();
 
     default boolean supportsRecipe(T recipe) {
         return containsRecipe(recipe);
-    }
-
-    default boolean supportsRecipe(Class<?> recipeType) {
-        return basicRecipeType().isAssignableFrom(recipeType);
     }
 
     default boolean containsRecipe(T recipe) {
@@ -48,5 +55,20 @@ public interface RecipeSystem<T> {
     T getRecipe(ResourceLocation registryName);
 
     RecipeData parseRecipe(T recipe);
+
+    MutableList<ContentStack<ItemStack>> getMachines();
+
+    static MutableList<ContentStack<ItemStack>> getMachinesFromJei(RecipeType<?> recipeType) {
+        return CirrusJeiPlugin.recipeManager.createRecipeCatalystLookup(recipeType)
+                .get()
+                .flatMap(i -> i.getItemStack().stream())
+                .map(ContentStack::create)
+                .collect(Collectors2.toList());
+    }
+
+    RecipeLookup<T> createLookup();
+
+    @Unmodifiable
+    RichIterable<T> allRecipes();
 
 }

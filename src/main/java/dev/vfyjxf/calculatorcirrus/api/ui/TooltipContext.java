@@ -7,7 +7,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
 
-public record TooltipContext(Point mousePos, @Nullable TooltipFlag flag){
+public record TooltipContext(Point mousePos, @Nullable TooltipFlag flag) {
 
     public TooltipContext(Point mousePos, @Nullable TooltipFlag flag) {
         this.mousePos = Objects.requireNonNull(mousePos);

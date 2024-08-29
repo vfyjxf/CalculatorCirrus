@@ -2,7 +2,6 @@ package dev.vfyjxf.calculatorcirrus.content.types;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
-import dev.vfyjxf.calculatorcirrus.content.renderer.FluidStackContentRenderer;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -24,7 +23,7 @@ public class FluidStackType extends BasicContentType<FluidStack> {
     private static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(namespace, "fluid_stack");
 
     public FluidStackType() {
-        super(FluidStack.class, Fluid.class, new FluidStackContentRenderer());
+        super(FluidStack.class, Fluid.class);
     }
 
     @Override

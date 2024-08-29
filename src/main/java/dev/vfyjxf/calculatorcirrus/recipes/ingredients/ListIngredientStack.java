@@ -6,23 +6,43 @@ import org.eclipse.collections.api.list.MutableList;
 
 public class ListIngredientStack implements IngredientStack {
 
+    private final MutableList<? extends ContentStack<?>> stacks;
+    private long amount;
+    private float chance;
+
+    public ListIngredientStack(MutableList<? extends ContentStack<?>> stacks) {
+        this(stacks, 1);
+    }
+
+    public ListIngredientStack(MutableList<? extends ContentStack<?>> stacks, long amount) {
+        this(stacks, amount, MAX_CHANCE);
+    }
+
+    public ListIngredientStack(MutableList<? extends ContentStack<?>> stacks, long amount, float chance) {
+        this.stacks = stacks;
+        this.amount = amount;
+        this.chance = chance;
+    }
+
     @Override
     public MutableList<? extends ContentStack<?>> getStacks() {
-        return null;
+        return stacks;
     }
 
     @Override
     public IngredientStack setChance(float chance) {
-        return null;
+        this.chance = chance;
+        return this;
     }
 
     @Override
-    public long getRequired() {
-        return 0;
+    public long getAmount() {
+        return amount;
     }
 
     @Override
-    public IngredientStack setRequiredAmount(long amount) {
-        return null;
+    public IngredientStack setAmount(long amount) {
+        this.amount = amount;
+        return this;
     }
 }

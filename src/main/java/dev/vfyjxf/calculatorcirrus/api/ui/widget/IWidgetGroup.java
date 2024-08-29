@@ -2,42 +2,43 @@ package dev.vfyjxf.calculatorcirrus.api.ui.widget;
 
 import dev.vfyjxf.calculatorcirrus.api.ui.drag.DragConsumer;
 import dev.vfyjxf.calculatorcirrus.api.ui.event.WidgetEvent;
+import org.eclipse.collections.api.factory.Lists;
+import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
-public interface WidgetGroup<T extends Widget> extends Widget, DragConsumer<T>, Iterable<T> {
+public interface IWidgetGroup<T extends IWidget> extends IWidget, DragConsumer<T>{
 
     int size();
 
     /**
      * @return an immutable view of the children list.
      */
-    List<T> children();
+    MutableList<T> children();
 
-    WidgetGroup<T> add(T widget);
+    IWidgetGroup<T> add(T widget);
 
     boolean add(int index, T widget);
 
-    default WidgetGroup<T> onChildAdded(WidgetEvent.OnChildAdded onChildAdded) {
-        channel().register(WidgetEvent.OnChildAdded.onChildAdded, onChildAdded);
+    default IWidgetGroup<T> onChildAdded(WidgetEvent.OnChildAdded onChildAdded) {
+        events().register(WidgetEvent.OnChildAdded.onChildAdded, onChildAdded);
         return this;
     }
 
-    default WidgetGroup<T> onChildRemoved(WidgetEvent.OnChildRemoved onChildRemoved) {
-        channel().register(WidgetEvent.OnChildRemoved.onChildRemoved, onChildRemoved);
+    default IWidgetGroup<T> onChildRemoved(WidgetEvent.OnChildRemoved onChildRemoved) {
+        events().register(WidgetEvent.OnChildRemoved.onChildRemoved, onChildRemoved);
         return this;
     }
 
-    default WidgetGroup<T> widget(T widget) {
+    default IWidgetGroup<T> widget(T widget) {
         widget.asChild(this);
         return this;
     }
 
     @SuppressWarnings("unchecked")
-    default WidgetGroup<T> widgets(T... widgets) {
+    default IWidgetGroup<T> widgets(T... widgets) {
         for (T widget : widgets) {
             widget.asChild(this);
         }
@@ -53,8 +54,8 @@ public interface WidgetGroup<T extends Widget> extends Widget, DragConsumer<T>, 
     boolean contains(T widget);
 
     @Nullable
-    default Widget getById(String id) {
-        for (T child : this) {
+    default IWidget getById(String id) {
+        for (T child : children()) {
             if (child.getId().equals(id)) {
                 return child;
             }
@@ -62,25 +63,25 @@ public interface WidgetGroup<T extends Widget> extends Widget, DragConsumer<T>, 
         return null;
     }
 
-    List<Widget> getById(Pattern regex);
+    MutableList<IWidget> getById(Pattern regex);
 
     @Nullable
     @Override
-    default Widget getHoveredWidget(double mouseX, double mouseY) {
-        for (T child : this) {
+    default IWidget getHoveredWidget(double mouseX, double mouseY) {
+        for (T child : children()) {
             if (child.visible() && child.isMouseOver(mouseX, mouseY)) {
                 return child;
             }
         }
-        return Widget.super.getHoveredWidget(mouseX, mouseY);
+        return IWidget.super.getHoveredWidget(mouseX, mouseY);
     }
 
     @Override
-    default <W extends Widget> @Nullable W getWidgetOfType(Class<W> type) {
+    default <W extends IWidget> @Nullable W getWidgetOfType(Class<W> type) {
         if (type.isInstance(this)) {
             return type.cast(this);
         }
-        for (T child : this) {
+        for (T child : children()) {
             var result = child.getWidgetOfType(type);
             if (result != null) {
                 return result;
@@ -90,21 +91,21 @@ public interface WidgetGroup<T extends Widget> extends Widget, DragConsumer<T>, 
     }
 
     @Override
-    default <W extends Widget> void getWidgetsOfType(Class<W> type, List<W> result) {
+    default <W extends IWidget> void getWidgetsOfType(Class<W> type, List<W> result) {
         if (type.isInstance(this)) {
             result.add(type.cast(this));
         }
-        for (T child : this) {
+        for (T child : children()) {
             child.getWidgetsOfType(type, result);
         }
     }
 
     @Override
-    default <W extends Widget> @Nullable W findWidgetsOfType(Class<W> type) {
+    default <W extends IWidget> @Nullable W findWidgetsOfType(Class<W> type) {
         if (type.isInstance(this)) {
             return type.cast(this);
         }
-        for (T child : this) {
+        for (T child : children()) {
             var result = child.findWidgetsOfType(type);
             if (result != null) {
                 return result;
@@ -114,26 +115,26 @@ public interface WidgetGroup<T extends Widget> extends Widget, DragConsumer<T>, 
     }
 
     @Override
-    default <W extends Widget> void findWidgetsOfType(Class<W> type, List<W> result) {
+    default <W extends IWidget> void findWidgetsOfType(Class<W> type, List<W> result) {
         if (type.isInstance(this)) {
             result.add(type.cast(this));
         }
-        for (T child : this) {
+        for (T child : children()) {
             child.findWidgetsOfType(type, result);
         }
     }
 
-    default List<Widget> getContainedWidgets(boolean withInvisible) {
-        List<Widget> result = new ArrayList<>();
-        for (T child : this) {
+    default MutableList<IWidget> getContainedWidgets(boolean withInvisible) {
+        MutableList<IWidget> result = Lists.mutable.empty();
+        for (T child : children()) {
             if (child.visible() || withInvisible) {
                 result.add(child);
-                if (child instanceof WidgetGroup<?> group)
+                if (child instanceof IWidgetGroup<?> group)
                     result.addAll((group).getContainedWidgets(withInvisible));
             }
         }
         return result;
     }
 
-    List<Widget> getContainedWidgets(boolean withInvisible, int maxDepth);
+    MutableList<IWidget> getContainedWidgets(boolean withInvisible, int maxDepth);
 }

@@ -2,44 +2,56 @@ package dev.vfyjxf.calculatorcirrus.api.content.recipes;
 
 import mezz.jei.api.recipe.RecipeIngredientRole;
 
-public enum IngredientType {
+public interface IngredientType {
 
     /**
      * The ingredient is used as input such energy and item.
      */
-    INPUT,
+    IngredientType INPUT = new IngredientType() {
+        @Override
+        public String toString() {
+            return "input";
+        }
+    };
+
     /**
      * The ingredient is used as output.
      */
-    OUTPUT,
+    IngredientType OUTPUT = new IngredientType() {
+        @Override
+        public String toString() {
+            return "output";
+        }
+    };
+
     /**
      * The ingredient is used as catalyst,something like wrench in gregtech.
      */
-    CATALYST,
-    /**
-     * The recipe handler,something like machine or crafting table.
-     */
-    HANDLER,
-    /**
-     * The ingredient is used as condition.
-     */
-    OTHER;
+    IngredientType CATALYST = new IngredientType() {
+        @Override
+        public String toString() {
+            return "catalyst";
+        }
+    };
 
-    public static RecipeIngredientRole toJei(IngredientType type) {
-        return switch (type) {
-            case INPUT -> RecipeIngredientRole.INPUT;
-            case OUTPUT -> RecipeIngredientRole.OUTPUT;
-            case CATALYST -> RecipeIngredientRole.CATALYST;
-            default -> RecipeIngredientRole.RENDER_ONLY;
-        };
+    IngredientType UNKNOWN = new IngredientType() {
+        @Override
+        public String toString() {
+            return "unknown";
+        }
+    };
+
+    static RecipeIngredientRole toJei(IngredientType type) {
+        if (type == INPUT) return RecipeIngredientRole.INPUT;
+        if (type == OUTPUT) return RecipeIngredientRole.OUTPUT;
+        return RecipeIngredientRole.RENDER_ONLY;
     }
 
-    public static IngredientType fromJei(RecipeIngredientRole role) {
+    static IngredientType fromJei(RecipeIngredientRole role) {
         return switch (role) {
             case INPUT -> INPUT;
             case OUTPUT -> OUTPUT;
-            case CATALYST -> HANDLER;
-            default -> OTHER;
+            default -> UNKNOWN;
         };
     }
 

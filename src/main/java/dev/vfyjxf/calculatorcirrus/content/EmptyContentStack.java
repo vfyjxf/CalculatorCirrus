@@ -42,7 +42,7 @@ public class EmptyContentStack implements ContentStack {
 
     @Override
     public ContentStack<ItemStack> cheatsStack() {
-        return ContentStack.of(ItemStack.EMPTY);
+        return ContentStack.create(ItemStack.EMPTY);
     }
 
     @Override

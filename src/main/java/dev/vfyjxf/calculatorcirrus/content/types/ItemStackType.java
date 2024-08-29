@@ -2,7 +2,6 @@ package dev.vfyjxf.calculatorcirrus.content.types;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
-import dev.vfyjxf.calculatorcirrus.content.renderer.ItemStackContentRenderer;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -14,7 +13,6 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.material.Fluid;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.stream.Stream;
@@ -24,7 +22,7 @@ public class ItemStackType extends BasicContentType<ItemStack> {
     private static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(namespace, "item_stack");
 
     public ItemStackType() {
-        super(ItemStack.class, Item.class, new ItemStackContentRenderer());
+        super(ItemStack.class, Item.class);
     }
 
     @Override

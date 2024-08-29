@@ -129,6 +129,8 @@ public interface Tooltip {
     @Contract("_ -> this")
     Tooltip setContextStack(@Nullable TooltipStack<?> stack);
 
+    boolean isEmpty();
+
     interface Entry {
         boolean isText();
 

@@ -158,4 +158,16 @@ public interface ContentStack<T> {
         return (ContentStack<O>) this;
     }
 
+    default boolean isItem() {
+        return contentType() == CirrusContentTypes.ITEM;
+    }
+
+    default boolean isFluid() {
+        return contentType() == CirrusContentTypes.FLUID;
+    }
+
+    default boolean is(ContentType<?> type) {
+        return contentType() == type;
+    }
+
 }

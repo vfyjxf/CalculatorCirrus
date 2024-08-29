@@ -138,10 +138,12 @@ public final class Color {
         if (r > 0 && r < i) r = i;
         if (g > 0 && g < i) g = i;
         if (b > 0 && b < i) b = i;
-        return ofRGBA(Math.min((int) (r / (1 / factor)), 255),
+        return ofRGBA(
+                Math.min((int) (r / (1 / factor)), 255),
                 Math.min((int) (g / (1 / factor)), 255),
                 Math.min((int) (b / (1 / factor)), 255),
-                getAlpha());
+                getAlpha()
+        );
     }
 
     /**
@@ -151,10 +153,12 @@ public final class Color {
      * @return the darker color
      */
     public Color darker(double factor) {
-        return ofRGBA(Math.max((int) (getRed() * (1 / factor)), 0),
+        return ofRGBA(
+                Math.max((int) (getRed() * (1 / factor)), 0),
                 Math.max((int) (getGreen() * (1 / factor)), 0),
                 Math.max((int) (getBlue() * (1 / factor)), 0),
-                getAlpha());
+                getAlpha()
+        );
     }
 
     @Override

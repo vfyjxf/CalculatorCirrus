@@ -118,50 +118,59 @@ public interface IngredientStack {
      *
      * @return the required amount
      */
-    long getRequired();
+    long getAmount();
 
     default IngredientStack multiply(double multiplier) {
-        setRequiredAmount((long) (getRequired() * multiplier));
+        setAmount((long) (getAmount() * multiplier));
         return this;
     }
 
-    default boolean matches(IngredientStack stack) {
+    default boolean contains(ContentStack<?> contentStack) {
+        return contains(contentStack, MatchContext.EXACT);
+    }
+
+    default boolean contains(ContentStack<?> contentStack, MatchContext context) {
+        MutableList<? extends ContentStack<?>> selfStacks = this.getStacks();
+        return selfStacks.anySatisfy(stack -> stack.matches(contentStack, context));
+    }
+
+    default boolean contains(IngredientStack stack) {
+        return contains(stack, MatchContext.EXACT);
+    }
+
+    default boolean contains(IngredientStack stack, MatchContext context) {
         if (this == stack) return true;
         if (isEmpty() || stack.isEmpty()) return false;
-        if (isSingle() && stack.isSingle()) {
-            ContentStack<?> selfStack = getStacks().getOnly();
-            ContentStack<?> otherStack = stack.getStacks().getOnly();
-            return selfStack.matches(otherStack, MatchContext.EXACT);
-        } else {
-            return false;
+        MutableList<? extends ContentStack<?>> self = this.getStacks();
+        MutableList<? extends ContentStack<?>> other = stack.getStacks();
+        if (self.size() != other.size()) return false;
+        for (int i = 0; i < self.size(); i++) {
+            ContentStack<?> selfStack = self.get(i);
+            ContentStack<?> otherStack = other.get(i);
+            if (!selfStack.matches(otherStack, context)) return false;
         }
+        return true;
     }
 
     default boolean merge(IngredientStack other) {
-        MutableList<? extends ContentStack<?>> selfStacks = getStacks();
-        MutableList<? extends ContentStack<?>> otherStacks = other.getStacks();
-        if (this.isEmpty() || other.isEmpty()) return false;
-        if (selfStacks.size() != otherStacks.size()) return false;
-        if (this.isSingle() && other.isSingle()) {
-            ContentStack<?> selfStack = selfStacks.getOnly();
-            ContentStack<?> otherStack = otherStacks.getOnly();
-            if (selfStack.contentType() != otherStack.contentType()) return false;
-            setRequiredAmount(getRequired() + other.getRequired());
-            return true;
-        } else {
+        return merge(other, MatchContext.EXACT);
+    }
 
-        }
+    default boolean merge(IngredientStack other, MatchContext context) {
+        if (!contains(other, context)) return false;
+        setAmount(getAmount() + other.getAmount());
+        return true;
     }
 
     @Contract("_ -> this")
-    IngredientStack setRequiredAmount(long amount);
+    IngredientStack setAmount(long amount);
 
-    default boolean satisfies(long amount) {
-        return getRequired() <= amount;
+    default boolean satisfies(long requirement) {
+        return getAmount() <= requirement;
     }
 
-    default long getMissing(long amount) {
-        return Math.max(0, getRequired() - amount);
+    default long getMissing(long requirement) {
+        return Math.max(0, getAmount() - requirement);
     }
 
 }

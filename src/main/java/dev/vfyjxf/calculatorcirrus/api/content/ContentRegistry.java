@@ -1,20 +1,34 @@
 package dev.vfyjxf.calculatorcirrus.api.content;
 
-import org.eclipse.collections.api.list.ImmutableList;
+import dev.vfyjxf.calculatorcirrus.utils.Singletons;
+import net.minecraft.resources.ResourceLocation;
+import org.eclipse.collections.api.RichIterable;
+import org.jetbrains.annotations.ApiStatus;
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.UnmodifiableView;
 
+@ApiStatus.NonExtendable
 public interface ContentRegistry {
 
-    <T> void registerContent(ContentType<T> contentType, ContentRenderer<T> contentRenderer);
-
-    <STACK, VALUE> void registerTag(TagType<STACK, VALUE> tagType, ContentType<STACK> stackType);
-
-    default <STACK, VALUE> void registerContent(ContentType<STACK> stackType, TagType<STACK, VALUE> tagType, ContentRenderer<STACK> contentRenderer) {
-        registerContent(stackType, contentRenderer);
-        registerTag(tagType, stackType);
+    static ContentRegistry getInstance() {
+        return Singletons.get(ContentRegistry.class);
     }
 
-    ImmutableList<ContentType<?>> getContentTypes();
+    <T> ContentType<T> getContentType(ResourceLocation uniqueId);
 
-    ImmutableList<TagType<?, ?>> getTagTypes();
+    default @Nullable <T> ContentType<T> getContentType(String uniqueId) {
+        if (ResourceLocation.isValidPath(uniqueId)) {
+            return getContentType(ResourceLocation.fromNamespaceAndPath(ContentType.namespace, uniqueId));
+        }
+        return getContentType(ResourceLocation.parse(uniqueId));
+    }
+
+    <STACK, VALUE> TagType<STACK, VALUE> getTagType(ContentType<STACK> stackType);
+
+    @UnmodifiableView
+    RichIterable<? extends ContentType<?>> allContentTypes();
+
+    @UnmodifiableView
+    RichIterable<? extends TagType<?, ?>> allTagTypes();
 
 }

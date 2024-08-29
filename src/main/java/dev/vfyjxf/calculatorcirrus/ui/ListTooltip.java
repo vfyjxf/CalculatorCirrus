@@ -100,4 +100,9 @@ public class ListTooltip implements Tooltip {
         return this;
     }
 
+    @Override
+    public boolean isEmpty() {
+        return entries.isEmpty();
+    }
+
 }

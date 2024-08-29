@@ -6,6 +6,7 @@ import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeData;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.helper.CollectionHelper;
 import net.minecraft.nbt.CompoundTag;
+import org.eclipse.collections.api.collection.MutableCollection;
 import org.eclipse.collections.api.multimap.ImmutableMultimap;
 import org.eclipse.collections.api.multimap.MutableMultimap;
 import org.jetbrains.annotations.Nullable;
@@ -39,6 +40,26 @@ public class BasicRecipeData implements RecipeData {
         this.stableData = stableData;
         this.mutableData = mutableData;
         this.uid = uid;
+    }
+
+    @Override
+    public MutableCollection<? extends IngredientStack> get(IngredientType type) {
+        return stableData.get(type).toList();
+    }
+
+    @Override
+    public MutableCollection<? extends IngredientStack> getCatalysts() {
+        return stableData.get(IngredientType.CATALYST).toList();
+    }
+
+    @Override
+    public MutableCollection<? extends IngredientStack> getOutputs() {
+        return stableData.get(IngredientType.OUTPUT).toList();
+    }
+
+    @Override
+    public MutableCollection<? extends IngredientStack> getInputs() {
+        return stableData.get(IngredientType.INPUT).toList();
     }
 
     @Override

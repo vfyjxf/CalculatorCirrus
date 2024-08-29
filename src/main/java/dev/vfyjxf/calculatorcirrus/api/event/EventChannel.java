@@ -1,6 +1,12 @@
 package dev.vfyjxf.calculatorcirrus.api.event;
 
+import dev.vfyjxf.calculatorcirrus.event.EventChannelImpl;
+
 public interface EventChannel<T> {
+
+    static <T> EventChannel<T> create(EventHandler<T> handler) {
+        return new EventChannelImpl<>(handler);
+    }
 
     EventHandler<T> handler();
 
@@ -30,6 +36,7 @@ public interface EventChannel<T> {
 
     void checkEvent(Checker<T> checker);
 
+    @FunctionalInterface
     interface Checker<T> {
         boolean check(Class<? extends T> type);
     }

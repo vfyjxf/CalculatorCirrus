@@ -39,12 +39,12 @@ public class TypedIngredientStack<T> implements IngredientStack {
     }
 
     @Override
-    public long getRequired() {
+    public long getAmount() {
         return required;
     }
 
     @Override
-    public IngredientStack setRequiredAmount(long amount) {
+    public IngredientStack setAmount(long amount) {
         this.required = amount;
         return this;
     }

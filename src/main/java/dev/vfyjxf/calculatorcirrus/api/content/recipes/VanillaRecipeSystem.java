@@ -2,24 +2,19 @@ package dev.vfyjxf.calculatorcirrus.api.content.recipes;
 
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.RecipeType;
 
 public interface VanillaRecipeSystem<T extends Recipe<?>> extends RecipeSystem<RecipeHolder<T>> {
 
-    Class<? extends T> recipeType();
+    RecipeType<T> recipeType();
 
-    @SuppressWarnings("unchecked")
     @Override
-    default Class<? extends RecipeHolder<T>> basicRecipeType() {
-        return (Class<? extends RecipeHolder<T>>) RecipeHolder.class;
+    default Class<?> basicRecipeType() {
+        return RecipeHolder.class;
     }
 
     @Override
     default boolean supportsRecipe(RecipeHolder<T> recipe) {
-        return recipeType().isInstance(recipe.value());
-    }
-
-    @Override
-    default boolean supportsRecipe(Class<?> recipeType) {
-        return recipeType().isAssignableFrom(recipeType);
+        return recipeType() == recipe.value().getType();
     }
 }

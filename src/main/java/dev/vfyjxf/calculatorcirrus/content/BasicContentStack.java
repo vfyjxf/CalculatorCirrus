@@ -8,12 +8,12 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-public abstract class AbstractContentStack<T> implements ContentStack<T> {
+public abstract class BasicContentStack<T> implements ContentStack<T> {
 
     protected final T value;
     protected Tooltip tooltip;
 
-    protected AbstractContentStack(T value) {
+    protected BasicContentStack(T value) {
         this.value = value;
     }
 
@@ -43,6 +43,6 @@ public abstract class AbstractContentStack<T> implements ContentStack<T> {
     @Override
     public ContentStack<ItemStack> cheatsStack() {
         ItemStack itemStack = contentType().cheatStack(this, value);
-        return ContentStack.of(itemStack);
+        return ContentStack.create(itemStack);
     }
 }

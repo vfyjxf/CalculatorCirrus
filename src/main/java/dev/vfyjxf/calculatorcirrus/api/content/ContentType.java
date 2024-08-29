@@ -35,8 +35,6 @@ public interface ContentType<T> {
      */
     Object getBase(T content);
 
-    ContentRenderer<T> getRenderer();
-
     /**
      * @return the uid from the content.
      */
@@ -62,6 +60,12 @@ public interface ContentType<T> {
     default boolean stackable() {
         return true;
     }
+
+    default boolean supportTags() {
+        return getTagType() != null;
+    }
+
+    @Nullable TagType<T, ?> getTagType();
 
     /**
      * @param content the content

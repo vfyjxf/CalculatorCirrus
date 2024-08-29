@@ -17,12 +17,24 @@ public interface RecipeData {
         return getStableData().get(type);
     }
 
-    /**
-     * @return the immutable recipe getStableData;
-     */
-    MutableMultimap<IngredientType,? extends IngredientStack> getStableData();
+    default MutableCollection<? extends IngredientStack> getInputs() {
+        return getStableData().get(IngredientType.INPUT);
+    }
 
-    MutableMultimap<MutableData.Key<?>,? extends MutableData<?>> getMutableData();
+    default MutableCollection<? extends IngredientStack> getOutputs() {
+        return getStableData().get(IngredientType.OUTPUT);
+    }
+
+    default MutableCollection<? extends IngredientStack> getCatalysts() {
+        return getStableData().get(IngredientType.CATALYST);
+    }
+
+    /**
+     * @return the recipe getStableData;
+     */
+    MutableMultimap<IngredientType, ? extends IngredientStack> getStableData();
+
+    MutableMultimap<MutableData.Key<?>, ? extends MutableData<?>> getMutableData();
 
     @Nullable
     String uid();

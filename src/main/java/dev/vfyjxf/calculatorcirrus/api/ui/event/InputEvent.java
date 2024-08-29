@@ -5,7 +5,7 @@ import dev.vfyjxf.calculatorcirrus.api.event.EventDefinition;
 import dev.vfyjxf.calculatorcirrus.api.event.EventFactory;
 import dev.vfyjxf.calculatorcirrus.api.ui.InputContext;
 
-public interface InputEvent extends WidgetEvent{
+public interface InputEvent extends WidgetEvent {
 
     EventDefinition<OnKeyPressed> onKeyPressed = EventFactory.define(OnKeyPressed.class, listeners -> (context, input) -> {
         boolean result = false;
@@ -44,31 +44,31 @@ public interface InputEvent extends WidgetEvent{
     });
 
 
-    interface OnKeyPressed extends InputEvent{
+    interface OnKeyPressed extends InputEvent {
         boolean onKeyPressed(Common context, InputContext input);
     }
 
-    interface OnKeyReleased extends InputEvent{
+    interface OnKeyReleased extends InputEvent {
         boolean onKeyReleased(Common context, InputContext input);
     }
 
-    interface OnMouseClicked extends InputEvent{
+    interface OnMouseClicked extends InputEvent {
         boolean onClicked(Common context, InputContext input);
     }
 
-    interface OnMouseReleased extends InputEvent{
+    interface OnMouseReleased extends InputEvent {
         boolean onReleased(Common context, InputContext input);
     }
 
-    interface OnMouseDragged extends InputEvent{
+    interface OnMouseDragged extends InputEvent {
         void onDragged(Common context, InputContext input, double deltaX, double deltaY);
     }
 
-    interface OnMouseScrolled extends InputEvent{
+    interface OnMouseScrolled extends InputEvent {
         void onScrolled(Common context, InputContext input, double scrollDelta);
     }
 
-    interface OnMouseMoved extends InputEvent{
+    interface OnMouseMoved extends InputEvent {
         void onMoved(Common context, InputContext input);
     }
 }
