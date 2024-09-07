@@ -52,7 +52,6 @@ base {
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 neoForge {
-    // Specify the version of NeoForge to use.
     version = project.neo_version
 
     parchment {
@@ -97,10 +96,6 @@ neoForge {
         }
     }
 
-    unitTest {
-        enable()
-        testedMod = mods.calculator_cirrus
-    }
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
@@ -119,14 +114,8 @@ dependencies {
     compileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
 
-    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    testImplementation "net.neoforged:testframework:${neo_version}"
 }
 
-test {
-    useJUnitPlatform()
-}
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
     var replaceProperties = [

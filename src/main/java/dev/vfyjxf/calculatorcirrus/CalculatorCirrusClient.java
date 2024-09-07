@@ -3,6 +3,7 @@ package dev.vfyjxf.calculatorcirrus;
 import com.mojang.logging.LogUtils;
 import dev.vfyjxf.calculatorcirrus.api.ClientRegisterContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
+import dev.vfyjxf.calculatorcirrus.api.UnloadingContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.ui.annotations.ClientTooltip;
@@ -10,6 +11,7 @@ import dev.vfyjxf.calculatorcirrus.content.ClientContentApiImpl;
 import dev.vfyjxf.calculatorcirrus.content.renderer.FluidStackContentRenderer;
 import dev.vfyjxf.calculatorcirrus.content.renderer.ItemStackContentRenderer;
 import dev.vfyjxf.calculatorcirrus.utils.Singletons;
+import dev.vfyjxf.calculatorcirrus.utils.StartEventObserver;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
 import net.neoforged.api.distmarker.Dist;
@@ -30,6 +32,10 @@ public class CalculatorCirrusClient extends CalculatorCirrus {
 
     public CalculatorCirrusClient(IEventBus modEventBus) {
         super(modEventBus);
+        new StartEventObserver(
+                this::start,
+                () -> ModLoader.postEventWrapContainerInModOrder(new UnloadingContentEvent())
+        ).register();
         modEventBus.addListener(this::onClientTooltipComponentRegister);
         modEventBus.addListener(this::onClientRegisterContent);
     }

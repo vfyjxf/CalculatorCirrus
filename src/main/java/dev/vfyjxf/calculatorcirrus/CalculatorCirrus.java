@@ -3,7 +3,6 @@ package dev.vfyjxf.calculatorcirrus;
 import com.mojang.logging.LogUtils;
 import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
-import dev.vfyjxf.calculatorcirrus.api.UnloadingContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeApi;
 import dev.vfyjxf.calculatorcirrus.calculator.SimpleCalculator;
@@ -11,7 +10,6 @@ import dev.vfyjxf.calculatorcirrus.recipes.RecipeApiImpl;
 import dev.vfyjxf.calculatorcirrus.recipes.systems.CraftingRecipeSystem;
 import dev.vfyjxf.calculatorcirrus.utils.Locations;
 import dev.vfyjxf.calculatorcirrus.utils.Singletons;
-import dev.vfyjxf.calculatorcirrus.utils.StartEventObserver;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.neoforged.bus.api.IEventBus;
@@ -23,15 +21,11 @@ public abstract class CalculatorCirrus {
     private static final Logger logger = LogUtils.getLogger();
 
     public CalculatorCirrus(IEventBus modEventBus) {
-        new StartEventObserver(
-                this::start,
-                () -> ModLoader.postEventWrapContainerInModOrder(new UnloadingContentEvent())
-        ).register();
         modEventBus.addListener(this::onContentRegister);
         modEventBus.addListener(this::onRecipeSystemRegister);
     }
 
-    private void start() {
+    protected void start() {
         logger.info("Starting Calculator Cirrus");
         logger.info("Registering contents");
         fireContentRegisterEvent();
@@ -39,7 +33,6 @@ public abstract class CalculatorCirrus {
         RecipeApiImpl recipeRegistry = new RecipeApiImpl();
         Singletons.attachInstance(RecipeApi.class, recipeRegistry);
         ModLoader.postEventWrapContainerInModOrder(new RegisterRecipeSystemEvent(recipeRegistry));
-
 //        test();
     }
 

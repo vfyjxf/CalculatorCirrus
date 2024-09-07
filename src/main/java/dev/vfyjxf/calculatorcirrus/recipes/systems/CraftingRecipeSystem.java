@@ -49,6 +49,10 @@ public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe>
         this.recipeManager = minecraft.level.getRecipeManager();
     }
 
+    public CraftingRecipeSystem(RecipeManager manager) {
+        this.recipeManager = manager;
+    }
+
     @Override
     public RecipeType<CraftingRecipe> recipeType() {
         return RecipeType.CRAFTING;
