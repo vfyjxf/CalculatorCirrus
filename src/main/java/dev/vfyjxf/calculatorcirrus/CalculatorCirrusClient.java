@@ -4,9 +4,9 @@ import com.mojang.logging.LogUtils;
 import dev.vfyjxf.calculatorcirrus.api.ClientRegisterContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
-import dev.vfyjxf.calculatorcirrus.api.content.ContentRegistry;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.ui.annotations.ClientTooltip;
-import dev.vfyjxf.calculatorcirrus.content.ClientContentRegistryImpl;
+import dev.vfyjxf.calculatorcirrus.content.ClientContentApiImpl;
 import dev.vfyjxf.calculatorcirrus.content.renderer.FluidStackContentRenderer;
 import dev.vfyjxf.calculatorcirrus.content.renderer.ItemStackContentRenderer;
 import dev.vfyjxf.calculatorcirrus.utils.Singletons;
@@ -14,8 +14,6 @@ import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.ModLoader;
 import net.neoforged.fml.common.Mod;
@@ -30,17 +28,17 @@ public class CalculatorCirrusClient extends CalculatorCirrus {
 
     public static final Logger logger = LogUtils.getLogger();
 
-    public CalculatorCirrusClient(IEventBus modEventBus, ModContainer modContainer) {
-        super(modEventBus, modContainer);
+    public CalculatorCirrusClient(IEventBus modEventBus) {
+        super(modEventBus);
         modEventBus.addListener(this::onClientTooltipComponentRegister);
         modEventBus.addListener(this::onClientRegisterContent);
     }
 
     @Override
     protected void fireContentRegisterEvent() {
-        ClientContentRegistryImpl contentRegistry = new ClientContentRegistryImpl();
-        Singletons.attachInstance(ContentRegistry.class, contentRegistry);
-        Singletons.attachInstance(ClientContentRegistryImpl.class, contentRegistry);
+        ClientContentApiImpl contentRegistry = new ClientContentApiImpl();
+        Singletons.attachInstance(ContentApi.class, contentRegistry);
+        Singletons.attachInstance(ClientContentApiImpl.class, contentRegistry);
         ModLoader.postEventWrapContainerInModOrder(new RegisterContentEvent(contentRegistry));
         ModLoader.postEventWrapContainerInModOrder(new ClientRegisterContentEvent(contentRegistry));
     }

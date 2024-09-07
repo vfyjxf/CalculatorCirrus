@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.list.MutableList;
+import org.eclipse.collections.api.ordered.OrderedIterable;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Unmodifiable;
 
@@ -25,7 +26,7 @@ public class JeiRecipeSystem implements RecipeSystem<Object> {
     }
 
     @Override
-    public @Unmodifiable RichIterable<Object> allRecipes() {
+    public @Unmodifiable OrderedIterable<Object> allRecipes() {
         return null;
     }
 

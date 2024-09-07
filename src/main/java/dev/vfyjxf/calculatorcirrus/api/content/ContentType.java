@@ -36,7 +36,7 @@ public interface ContentType<T> {
     Object getBase(T content);
 
     /**
-     * @return the uid from the content.
+     * @return the id from the content.
      */
     @Nullable
     String getUid(ContentStack<T> content, T value);
@@ -112,5 +112,13 @@ public interface ContentType<T> {
 
     default boolean acceptsNull() {
         return false;
+    }
+
+    /**
+     * @param value the value
+     * @return the toString of the value
+     */
+    default String getAsString(T value) {
+        return value.toString();
     }
 }

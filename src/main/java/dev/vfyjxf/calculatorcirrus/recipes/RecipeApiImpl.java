@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.recipes;
 
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeRegistry;
+import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeApi;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeSystem;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.VanillaRecipeSystem;
 import net.minecraft.resources.ResourceLocation;
@@ -10,11 +10,11 @@ import org.eclipse.collections.api.map.MutableMap;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
-public class RecipeRegistryImpl implements RecipeRegistry {
+public class RecipeApiImpl implements RecipeApi {
 
     private final MutableMap<ResourceLocation, RecipeSystem<?>> systems = Maps.mutable.empty();
 
-    public RecipeRegistryImpl() {
+    public RecipeApiImpl() {
     }
 
     @ApiStatus.Internal

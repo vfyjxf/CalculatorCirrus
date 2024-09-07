@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.ui.drag;
 
-import dev.vfyjxf.calculatorcirrus.api.ui.widget.IWidget;
+import dev.vfyjxf.calculatorcirrus.api.ui.widget.Widget;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
@@ -8,7 +8,7 @@ import java.util.List;
 
 public interface Draggable {
 
-    IWidget self();
+    Widget self();
 
     default void onDragStart(int button) {
 
@@ -22,7 +22,7 @@ public interface Draggable {
 
     }
 
-    default boolean accepts(int x, int y, @Nullable IWidget IWidget) {
+    default boolean accepts(int x, int y, @Nullable Widget widget) {
         return true;
     }
 
@@ -30,7 +30,7 @@ public interface Draggable {
 
     void setMoving(boolean moving);
 
-    default List<DragConsumer<? super IWidget>> receivers() {
+    default List<DragConsumer<? super Widget>> receivers() {
         return Collections.emptyList();
     }
 

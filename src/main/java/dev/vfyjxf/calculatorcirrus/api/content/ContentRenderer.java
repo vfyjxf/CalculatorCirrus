@@ -2,7 +2,7 @@ package dev.vfyjxf.calculatorcirrus.api.content;
 
 import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
-import dev.vfyjxf.calculatorcirrus.content.ClientContentRegistryImpl;
+import dev.vfyjxf.calculatorcirrus.content.ClientContentApiImpl;
 import dev.vfyjxf.calculatorcirrus.utils.Singletons;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -11,7 +11,7 @@ import org.jetbrains.annotations.Nullable;
 public interface ContentRenderer<T> {
 
     static <T> ContentRenderer<T> getRenderer(ContentType<T> contentType) {
-        return Singletons.get(ClientContentRegistryImpl.class).getRenderer(contentType);
+        return Singletons.get(ClientContentApiImpl.class).getRenderer(contentType);
     }
 
     static <T> ContentRenderer<T> getRenderer(TagType<T, ?> tagType) {

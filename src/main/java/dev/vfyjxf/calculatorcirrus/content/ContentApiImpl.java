@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.content;
 
-import dev.vfyjxf.calculatorcirrus.api.content.ContentRegistry;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.TagType;
 import net.minecraft.resources.ResourceLocation;
@@ -11,7 +11,7 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.UnmodifiableView;
 
 @ApiStatus.Internal
-public class ContentRegistryImpl implements ContentRegistry {
+public class ContentApiImpl implements ContentApi {
 
     private final MutableMap<ResourceLocation, ContentType<?>> contentTypes = Maps.mutable.empty();
     private final MutableMap<ContentType<?>, TagType<?, ?>> tagTypes = Maps.mutable.empty();

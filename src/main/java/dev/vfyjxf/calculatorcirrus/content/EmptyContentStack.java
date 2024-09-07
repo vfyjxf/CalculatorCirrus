@@ -26,6 +26,11 @@ public class EmptyContentStack implements ContentStack {
     }
 
     @Override
+    public boolean isEmpty() {
+        return true;
+    }
+
+    @Override
     public ContentStack setAmount(long amount) {
         return this;
     }
@@ -48,5 +53,10 @@ public class EmptyContentStack implements ContentStack {
     @Override
     public ContentStack appendTooltip(List tooltips) {
         return this;
+    }
+
+    @Override
+    public String toString() {
+        return "empty";
     }
 }

@@ -2,7 +2,7 @@ package dev.vfyjxf.calculatorcirrus.mixins;
 
 import dev.vfyjxf.calculatorcirrus.api.ClientRegisterContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.UnloadingContentEvent;
-import dev.vfyjxf.calculatorcirrus.content.ClientContentRegistryImpl;
+import dev.vfyjxf.calculatorcirrus.content.ClientContentApiImpl;
 import net.minecraft.client.Minecraft;
 import net.neoforged.fml.ModLoader;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,7 +26,7 @@ public class MixinMinecraft {
             future.thenRunAsync(() -> {
                 Minecraft minecraft = Minecraft.getInstance();
                 if (minecraft.level != null) {
-                    ClientContentRegistryImpl contentRegistry = new ClientContentRegistryImpl();
+                    ClientContentApiImpl contentRegistry = new ClientContentApiImpl();
                     ClientRegisterContentEvent event = new ClientRegisterContentEvent(contentRegistry);
                     ModLoader.postEventWrapContainerInModOrder(event);
                 }

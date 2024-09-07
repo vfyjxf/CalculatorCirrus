@@ -136,4 +136,9 @@ public class EmptyType implements ContentType, ContentSerializer {
         }
         return null;
     }
+
+    @Override
+    public String toString() {
+        return "empty";
+    }
 }

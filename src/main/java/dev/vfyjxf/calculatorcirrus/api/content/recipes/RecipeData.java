@@ -2,8 +2,8 @@ package dev.vfyjxf.calculatorcirrus.api.content.recipes;
 
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
 import net.minecraft.nbt.CompoundTag;
-import org.eclipse.collections.api.collection.MutableCollection;
-import org.eclipse.collections.api.multimap.MutableMultimap;
+import org.eclipse.collections.api.list.MutableList;
+import org.eclipse.collections.api.multimap.list.MutableListMultimap;
 import org.jetbrains.annotations.Nullable;
 
 public interface RecipeData {
@@ -13,31 +13,33 @@ public interface RecipeData {
         throw new UnsupportedOperationException("Not implemented");
     }
 
-    default MutableCollection<? extends IngredientStack> get(IngredientType type) {
+    default MutableList<? extends IngredientStack> get(IngredientType type) {
         return getStableData().get(type);
     }
 
-    default MutableCollection<? extends IngredientStack> getInputs() {
+    default MutableList<? extends IngredientStack> getInputs() {
         return getStableData().get(IngredientType.INPUT);
     }
 
-    default MutableCollection<? extends IngredientStack> getOutputs() {
+    default MutableList<? extends IngredientStack> getOutputs() {
         return getStableData().get(IngredientType.OUTPUT);
     }
 
-    default MutableCollection<? extends IngredientStack> getCatalysts() {
+    default MutableList<? extends IngredientStack> getCatalysts() {
         return getStableData().get(IngredientType.CATALYST);
     }
 
     /**
      * @return the recipe getStableData;
      */
-    MutableMultimap<IngredientType, ? extends IngredientStack> getStableData();
+    MutableListMultimap<IngredientType, ? extends IngredientStack> getStableData();
 
-    MutableMultimap<MutableData.Key<?>, ? extends MutableData<?>> getMutableData();
+    MutableListMultimap<MutableData.Key<?>, ? extends MutableData<?>> getMutableData();
+
+    RecipeData mergeData();
 
     @Nullable
-    String uid();
+    String id();
 
     @Nullable
     CompoundTag serialize();

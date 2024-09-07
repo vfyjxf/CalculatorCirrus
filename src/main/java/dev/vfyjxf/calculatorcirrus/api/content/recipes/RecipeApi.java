@@ -3,15 +3,14 @@ package dev.vfyjxf.calculatorcirrus.api.content.recipes;
 import dev.vfyjxf.calculatorcirrus.utils.Singletons;
 import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
-import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
 @ApiStatus.NonExtendable
-public interface RecipeRegistry {
+public interface RecipeApi {
 
-    static RecipeRegistry getInstance() {
-        return Singletons.get(RecipeRegistry.class);
+    static RecipeApi getInstance() {
+        return Singletons.get(RecipeApi.class);
     }
 
     boolean hasSystem(ResourceLocation systemId);

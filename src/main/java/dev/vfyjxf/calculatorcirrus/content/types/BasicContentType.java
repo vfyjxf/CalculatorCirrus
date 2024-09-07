@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.content.types;
 
-import dev.vfyjxf.calculatorcirrus.api.content.ContentRegistry;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentSerializer;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.TagType;
@@ -31,7 +31,7 @@ public abstract class BasicContentType<T> implements ContentType<T>, ContentSeri
     @Override
     public @Nullable TagType<T, ?> getTagType() {
         if (tagType == null && this.supportTags()) {
-            ContentRegistry registry = ContentRegistry.getInstance();
+            ContentApi registry = ContentApi.getInstance();
             tagType = registry.getTagType(this);
         }
         return tagType;

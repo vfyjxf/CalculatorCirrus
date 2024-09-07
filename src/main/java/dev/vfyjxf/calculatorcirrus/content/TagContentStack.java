@@ -8,9 +8,9 @@ import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.ItemStack;
-import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.Unmodifiable;
 
 import java.util.List;
 
@@ -21,7 +21,7 @@ public class TagContentStack<STACK, VALUE> implements TagStack<STACK, VALUE> {
     private final TagKey<VALUE> tagKey;
     private Tooltip append;
     private long amount;
-    private ImmutableList<? extends ContentStack<STACK>> values;
+    private MutableList<? extends ContentStack<STACK>> values;
 
     public TagContentStack(TagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey) {
         this.stackType = tagType.getStackType();
@@ -78,11 +78,11 @@ public class TagContentStack<STACK, VALUE> implements TagStack<STACK, VALUE> {
     }
 
     @Override
-    public MutableList<? extends ContentStack<STACK>> getValues() {
+    public @Unmodifiable MutableList<? extends ContentStack<STACK>> getValues() {
         if (values == null) {
-            this.values = tagType.getValues(tagKey).toImmutable();
+            this.values = tagType.getValues(tagKey);
         }
-        return values.toList();
+        return values.asUnmodifiable();
     }
 
     @Override
@@ -107,5 +107,34 @@ public class TagContentStack<STACK, VALUE> implements TagStack<STACK, VALUE> {
     @Override
     public TagStack<STACK, VALUE> copy() {
         return new TagContentStack<>(tagType, tagKey, amount);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        TagContentStack<?, ?> that = (TagContentStack<?, ?>) o;
+        return amount == that.amount && stackType.equals(that.stackType) && tagType.equals(that.tagType) && tagKey.equals(that.tagKey);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = stackType.hashCode();
+        result = 31 * result + tagType.hashCode();
+        result = 31 * result + tagKey.hashCode();
+        result = 31 * result + Long.hashCode(amount);
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return "TagContentStack{" +
+                "stackType=" + stackType +
+                ", tagType=" + tagType +
+                ", values=" + values +
+                ", tagKey=" + tagKey +
+                ", amount=" + amount +
+                '}';
     }
 }

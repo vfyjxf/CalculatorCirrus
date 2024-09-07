@@ -1,17 +1,17 @@
 package dev.vfyjxf.calculatorcirrus.ui;
 
-import dev.vfyjxf.calculatorcirrus.api.ui.widget.IWidget;
-import dev.vfyjxf.calculatorcirrus.api.ui.widget.IWidgetGroup;
-import dev.vfyjxf.calculatorcirrus.ui.widget.WidgetGroup;
+import dev.vfyjxf.calculatorcirrus.api.ui.widget.Widget;
+import dev.vfyjxf.calculatorcirrus.api.ui.widget.WidgetGroup;
+import dev.vfyjxf.calculatorcirrus.api.ui.widget.Widgets;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-public abstract class ModularScreen<T extends IWidget> extends Screen {
+public abstract class ModularScreen<T extends Widget> extends Screen {
 
-    protected final IWidgetGroup<T> widgetGroup;
+    protected final WidgetGroup<T> widgetGroup;
 
     protected ModularScreen() {
         super(Component.empty());
-        this.widgetGroup = new WidgetGroup<>();
+        this.widgetGroup = Widgets.widgetGroup();
     }
 }

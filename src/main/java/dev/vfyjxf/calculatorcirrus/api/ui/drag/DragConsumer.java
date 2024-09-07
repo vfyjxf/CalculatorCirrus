@@ -1,11 +1,11 @@
 package dev.vfyjxf.calculatorcirrus.api.ui.drag;
 
-import dev.vfyjxf.calculatorcirrus.api.ui.widget.IWidget;
-import dev.vfyjxf.calculatorcirrus.api.ui.widget.IWidgetGroup;
+import dev.vfyjxf.calculatorcirrus.api.ui.widget.Widget;
+import dev.vfyjxf.calculatorcirrus.api.ui.widget.WidgetGroup;
 
-public interface DragConsumer<T extends IWidget> {
+public interface DragConsumer<T extends Widget> {
 
-    IWidgetGroup<T> self();
+    WidgetGroup<T> self();
 
     DragConsumer<T> add(T draggable, Runnable onEnter);
 

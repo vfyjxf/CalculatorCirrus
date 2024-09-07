@@ -5,24 +5,24 @@ import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
 import dev.vfyjxf.calculatorcirrus.api.UnloadingContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeData;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeRegistry;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeSystem;
-import dev.vfyjxf.calculatorcirrus.recipes.RecipeRegistryImpl;
+import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeApi;
+import dev.vfyjxf.calculatorcirrus.calculator.SimpleCalculator;
+import dev.vfyjxf.calculatorcirrus.recipes.RecipeApiImpl;
 import dev.vfyjxf.calculatorcirrus.recipes.systems.CraftingRecipeSystem;
+import dev.vfyjxf.calculatorcirrus.utils.Locations;
 import dev.vfyjxf.calculatorcirrus.utils.Singletons;
 import dev.vfyjxf.calculatorcirrus.utils.StartEventObserver;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.ModLoader;
-import org.eclipse.collections.api.list.MutableList;
 import org.slf4j.Logger;
 
 public abstract class CalculatorCirrus {
     private static final Logger logger = LogUtils.getLogger();
 
-    public CalculatorCirrus(IEventBus modEventBus, ModContainer modContainer) {
+    public CalculatorCirrus(IEventBus modEventBus) {
         new StartEventObserver(
                 this::start,
                 () -> ModLoader.postEventWrapContainerInModOrder(new UnloadingContentEvent())
@@ -36,18 +36,11 @@ public abstract class CalculatorCirrus {
         logger.info("Registering contents");
         fireContentRegisterEvent();
         logger.info("Registering recipe systems");
-        RecipeRegistryImpl recipeRegistry = new RecipeRegistryImpl();
-        Singletons.attachInstance(RecipeRegistry.class, recipeRegistry);
+        RecipeApiImpl recipeRegistry = new RecipeApiImpl();
+        Singletons.attachInstance(RecipeApi.class, recipeRegistry);
         ModLoader.postEventWrapContainerInModOrder(new RegisterRecipeSystemEvent(recipeRegistry));
 
-        for (RecipeSystem<?> system : recipeRegistry.allSystems()) {
-            MutableList<RecipeData> recipes = parseRecipe(system);
-            System.out.println(recipes);
-        }
-    }
-
-    private static <T> MutableList<RecipeData> parseRecipe(RecipeSystem<T> system) {
-        return system.allRecipes().collect(system::parseRecipe).toList();
+//        test();
     }
 
     protected abstract void fireContentRegisterEvent();
@@ -64,5 +57,19 @@ public abstract class CalculatorCirrus {
         logger.info("Registering builtin recipe systems");
         CraftingRecipeSystem craftingRecipeSystem = new CraftingRecipeSystem();
         event.registerSystem(craftingRecipeSystem);
+    }
+
+    @SuppressWarnings("ConstantConditions")
+    private static void test() {
+        RecipeApi recipeApi = RecipeApi.getInstance();
+        CraftingRecipeSystem recipeSystem = (CraftingRecipeSystem) recipeApi.allSystems().getAny();
+        RecipeHolder<CraftingRecipe> target = recipeSystem.getRecipe(Locations.ofDefault("gray_candle"));
+
+        SimpleCalculator calculator = new SimpleCalculator();
+        calculator.setRecipe(recipeSystem, target);
+
+        calculator.setAmount(2);
+        calculator.calculate();
+        System.out.println(calculator.getResults());
     }
 }

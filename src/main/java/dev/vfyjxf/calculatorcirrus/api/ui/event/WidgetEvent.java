@@ -5,7 +5,7 @@ import dev.vfyjxf.calculatorcirrus.api.event.EventDefinition;
 import dev.vfyjxf.calculatorcirrus.api.event.EventFactory;
 import dev.vfyjxf.calculatorcirrus.api.math.Dimension;
 import dev.vfyjxf.calculatorcirrus.api.math.Point;
-import dev.vfyjxf.calculatorcirrus.api.ui.widget.IWidget;
+import dev.vfyjxf.calculatorcirrus.api.ui.widget.Widget;
 import net.minecraft.client.gui.GuiGraphics;
 
 public interface WidgetEvent {
@@ -133,12 +133,12 @@ public interface WidgetEvent {
 
     @FunctionalInterface
     interface OnInit extends WidgetEvent {
-        void onInit(IWidget IWidget);
+        void onInit(Widget Widget);
     }
 
     @FunctionalInterface
     interface OnUpdate extends WidgetEvent {
-        void onUpdate(IWidget IWidget);
+        void onUpdate(Widget Widget);
     }
 
     @FunctionalInterface
@@ -148,27 +148,27 @@ public interface WidgetEvent {
 
     @FunctionalInterface
     interface OnDelete extends WidgetEvent {
-        void onDeleted(IWidget self);
+        void onDeleted(Widget self);
     }
 
     @FunctionalInterface
     interface OnChildAdded extends WidgetEvent {
-        void onChildAdded(Common context, IWidget IWidget);
+        void onChildAdded(Common context, Widget Widget);
     }
 
     @FunctionalInterface
     interface OnChildAddedPost extends WidgetEvent {
-        void onChildAdded(Common context, IWidget IWidget);
+        void onChildAdded(Common context, Widget Widget);
     }
 
     @FunctionalInterface
     interface OnChildRemoved extends WidgetEvent {
-        void onChildRemoved(Common context, IWidget IWidget);
+        void onChildRemoved(Common context, Widget Widget);
     }
 
     @FunctionalInterface
     interface OnChildRemovedPost extends WidgetEvent {
-        void onChildRemoved(Common context, IWidget widget);
+        void onChildRemoved(Common context, Widget widget);
     }
 
     @FunctionalInterface
@@ -178,15 +178,15 @@ public interface WidgetEvent {
 
     @FunctionalInterface
     interface OnTooltip extends WidgetEvent {
-        void onTooltip(Common context, IWidget tooltip);
+        void onTooltip(Common context, Widget tooltip);
     }
 
     interface OnMeasure extends WidgetEvent {
-        void onMeasure(IWidget widget, Dimension size);
+        void onMeasure(Widget widget, Dimension size);
     }
 
     interface OnLayout extends WidgetEvent {
-        void onLayout(IWidget widget);
+        void onLayout(Widget widget);
     }
 
     interface OnThemeUpdate extends WidgetEvent {

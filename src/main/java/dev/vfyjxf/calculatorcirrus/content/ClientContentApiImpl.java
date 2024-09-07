@@ -7,7 +7,7 @@ import org.eclipse.collections.api.map.MutableMap;
 import org.jetbrains.annotations.ApiStatus;
 
 @ApiStatus.Internal
-public class ClientContentRegistryImpl extends ContentRegistryImpl {
+public class ClientContentApiImpl extends ContentApiImpl {
 
     private final MutableMap<ContentType<?>, ContentRenderer<?>> contentRenderers = Maps.mutable.empty();
 

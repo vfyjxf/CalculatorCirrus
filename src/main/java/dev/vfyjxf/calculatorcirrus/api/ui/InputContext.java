@@ -3,8 +3,8 @@ package dev.vfyjxf.calculatorcirrus.api.ui;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.vfyjxf.calculatorcirrus.api.math.FloatingPoint;
 import dev.vfyjxf.calculatorcirrus.api.math.Point;
-import dev.vfyjxf.calculatorcirrus.api.ui.widget.IWidget;
-import dev.vfyjxf.calculatorcirrus.api.ui.widget.IWidgetGroup;
+import dev.vfyjxf.calculatorcirrus.api.ui.widget.Widget;
+import dev.vfyjxf.calculatorcirrus.api.ui.widget.WidgetGroup;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.util.StringUtil;
@@ -56,10 +56,10 @@ public record InputContext(
         return keyMapping.isActiveAndMatches(this.key);
     }
 
-    public FloatingPoint getRelative(IWidget IWidget) {
-        IWidgetGroup<?> parent = IWidget.parent();
+    public FloatingPoint getRelative(Widget widget) {
+        WidgetGroup<?> parent = widget.parent();
         if (parent == null) return new FloatingPoint(mouseX(), mouseY());
-        Point absolute = IWidget.getAbsolute();
+        Point absolute = widget.getAbsolute();
         return new FloatingPoint(mouseX() - absolute.x, mouseY() - absolute.y);
     }
 }

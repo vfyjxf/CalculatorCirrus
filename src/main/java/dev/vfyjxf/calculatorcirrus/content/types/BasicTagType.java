@@ -14,7 +14,6 @@ import org.eclipse.collections.impl.collector.Collectors2;
 import org.eclipse.collections.impl.utility.LazyIterate;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.IntStream;
@@ -99,21 +98,40 @@ public abstract class BasicTagType<STACK, VALUE> implements TagType<STACK, VALUE
     }
 
     @Override
-    public Stream<? extends TagKey<VALUE>> getTags(Collection<STACK> collection) {
-        if (collection.size() < 2) return Stream.empty();
-        ImmutableList<VALUE> values = collection.stream().map(this::getValue).collect(Collectors2.toImmutableList());
+    public @Nullable TagKey<VALUE> getTag(RichIterable<VALUE> richIterable) {
+        if (richIterable.size() < 2) return null;
+        ImmutableList<VALUE> values = richIterable.toImmutableList();
         return getTags().filter(it -> {
-            HolderSet.Named<VALUE> tag = it.getSecond();
-            int count = tag.size();
-            if (count == values.size()) {
-                return IntStream.range(0, count).allMatch(i -> {
-                    VALUE tagValue = tag.get(i).value();
-                    VALUE value = values.get(i);
-                    return value.equals(tagValue);
-                });
-            }
-            return false;
-        }).map(Pair::getFirst);
+                    HolderSet.Named<VALUE> tag = it.getSecond();
+                    int count = tag.size();
+                    if (count == richIterable.size()) {
+                        return IntStream.range(0, count).allMatch(i -> {
+                            VALUE tagValue = tag.get(i).value();
+                            VALUE value = values.get(i);
+                            return tagValue.equals(value);
+                        });
+                    }
+                    return false;
+                }).findFirst()
+                .map(Pair::getFirst)
+                .orElse(null);
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        BasicTagType<?, ?> that = (BasicTagType<?, ?>) o;
+        return id.equals(that.id) && stackType.equals(that.stackType) && valueType.equals(that.valueType) && registry.equals(that.registry);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = id.hashCode();
+        result = 31 * result + stackType.hashCode();
+        result = 31 * result + valueType.hashCode();
+        result = 31 * result + registry.hashCode();
+        return result;
+    }
 }

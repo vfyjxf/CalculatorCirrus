@@ -155,4 +155,8 @@ public class ItemStackType extends BasicContentType<ItemStack> {
         return value.copy();
     }
 
+    @Override
+    public String toString() {
+        return "item_stack";
+    }
 }

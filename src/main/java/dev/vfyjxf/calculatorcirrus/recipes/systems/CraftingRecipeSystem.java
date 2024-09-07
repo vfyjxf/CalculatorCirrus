@@ -24,7 +24,8 @@ import net.minecraft.world.item.crafting.RecipeType;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
-import org.eclipse.collections.api.multimap.MutableMultimap;
+import org.eclipse.collections.api.multimap.list.MutableListMultimap;
+import org.eclipse.collections.api.ordered.OrderedIterable;
 import org.eclipse.collections.impl.multimap.list.FastListMultimap;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Unmodifiable;
@@ -89,7 +90,7 @@ public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe>
     @Override
     public RecipeData parseRecipe(RecipeHolder<CraftingRecipe> recipeHolder) {
         CraftingRecipe recipe = recipeHolder.value();
-        MutableMultimap<IngredientType, IngredientStack> recipeStableData = FastListMultimap.newMultimap();
+        MutableListMultimap<IngredientType, IngredientStack> recipeStableData = FastListMultimap.newMultimap();
         for (Ingredient ingredient : recipe.getIngredients()) {
             IngredientStack stack = IngredientStack.create(ingredient);
             recipeStableData.put(IngredientType.INPUT, stack);
@@ -109,9 +110,14 @@ public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe>
     }
 
     @Override
-    public @Unmodifiable RichIterable<RecipeHolder<CraftingRecipe>> allRecipes() {
+    public @Unmodifiable OrderedIterable<RecipeHolder<CraftingRecipe>> allRecipes() {
         List<RecipeHolder<CraftingRecipe>> allRecipesFor = recipeManager.getAllRecipesFor(RecipeType.CRAFTING);
         return Lists.immutable.ofAll(allRecipesFor);
+    }
+
+    @Override
+    public String toString() {
+        return "CraftingRecipeSystem";
     }
 
     private class CraftingRecipeLookup implements RecipeLookup<RecipeHolder<CraftingRecipe>> {

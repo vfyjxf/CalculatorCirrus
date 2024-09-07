@@ -92,6 +92,13 @@ public interface ContentStack<T> {
     @Contract("_ -> this")
     ContentStack<T> setAmount(long amount);
 
+    @Contract(" -> new")
+    default ContentStack<T> normalize() {
+        if (isNormalized()) return this;
+        ContentType<T> contentType = contentType();
+        return create(contentType, contentType.normalize(this, value()));
+    }
+
     default ContentStack<T> copy() {
         var type = contentType();
         return create(type, type.copy(this, value()));
@@ -104,6 +111,14 @@ public interface ContentStack<T> {
 
     default boolean isEmpty() {
         return contentType().isEmpty(this, value());
+    }
+
+    default boolean isNormalized() {
+        return getAmount() == 1;
+    }
+
+    default <C> boolean matches(ContentStack<C> other) {
+        return matches(other, MatchContext.EXACT);
     }
 
     default <C> boolean matches(ContentStack<C> other, MatchContext matchContext) {

@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.list.MutableList;
+import org.eclipse.collections.impl.collection.mutable.CollectionAdapter;
 import org.eclipse.collections.impl.collector.Collectors2;
 import org.jetbrains.annotations.Nullable;
 
@@ -105,7 +106,18 @@ public interface TagType<STACK, VALUE> {
 
     STACK makeStack(VALUE value, long amount);
 
-    Stream<? extends TagKey<VALUE>> getTags(Collection<STACK> collection);
+    @Nullable
+    default TagKey<VALUE> getTag(Collection<VALUE> collection) {
+        return getTag((RichIterable<VALUE>) new CollectionAdapter<>(collection));
+    }
+
+    @Nullable
+    TagKey<VALUE> getTag(RichIterable<VALUE> richIterable);
+
+    @Nullable
+    default TagKey<VALUE> getTagFrom(RichIterable<? extends ContentStack<STACK>> stacks) {
+        return getTag(stacks.collect(c -> getValue(c.value())));
+    }
 
     @SuppressWarnings("unchecked")
     default <S, V> TagType<S, V> cast() {

@@ -141,4 +141,8 @@ public class FluidStackType extends BasicContentType<FluidStack> {
         return new ItemStack(bucket);
     }
 
+    @Override
+    public String toString() {
+        return "fluid_stack";
+    }
 }

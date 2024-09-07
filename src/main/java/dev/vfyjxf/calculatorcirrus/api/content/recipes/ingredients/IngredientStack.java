@@ -1,49 +1,60 @@
 package dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients;
 
+import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
+import dev.vfyjxf.calculatorcirrus.recipes.ingredients.ListIngredientStack;
+import dev.vfyjxf.calculatorcirrus.recipes.ingredients.TagIngredientStack;
 import dev.vfyjxf.calculatorcirrus.recipes.ingredients.TypedIngredientStack;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.impl.list.fixed.ArrayAdapter;
 import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.Unmodifiable;
 
 import java.util.Arrays;
 
 public interface IngredientStack {
 
-    static <T> IngredientStack empty() {
-        return new TypedIngredientStack<>(ContentStack.empty(), 0, IngredientStack.MAX_CHANCE);
+    float MAX_CHANCE = 1f;
+
+    IngredientStack EMPTY = new TypedIngredientStack<>(ContentStack.empty(), 0, MAX_CHANCE);
+
+    static IngredientStack empty() {
+        return EMPTY;
     }
 
     static <T> IngredientStack create(ContentStack<T> stack) {
-        return new TypedIngredientStack<>(stack, stack.getAmount(), IngredientStack.MAX_CHANCE);
+        long amount = stack.getAmount() <= 0 ? 1 : stack.getAmount();
+        return create(stack, amount);
     }
 
-    static <T> IngredientStack create(ContentStack<T> stack, long requiredAmount) {
-        return new TypedIngredientStack<>(stack, requiredAmount, IngredientStack.MAX_CHANCE);
+    static <T> IngredientStack create(ContentStack<T> stack, long amount) {
+        return create(stack, amount, IngredientStack.MAX_CHANCE);
     }
 
-    static <T> IngredientStack create(ContentStack<T> stack, long requiredAmount, float chance) {
+    static <T> IngredientStack create(ContentStack<T> stack, long amount, float chance) {
         ContentType<T> contentType = stack.contentType();
         T normalized = contentType.normalize(stack, stack.value());
         ContentStack<T> normalizedStack = ContentStack.create(contentType, normalized);
-        return new TypedIngredientStack<>(normalizedStack, requiredAmount, chance);
+        return new TypedIngredientStack<>(normalizedStack, amount, chance);
     }
 
     static IngredientStack create(ItemStack itemStack) {
         return create(ContentStack.create(itemStack), itemStack.getCount(), IngredientStack.MAX_CHANCE);
     }
 
-    static IngredientStack create(ItemStack itemStack, long requiredAmount) {
-        return create(ContentStack.create(itemStack), requiredAmount, IngredientStack.MAX_CHANCE);
+    static IngredientStack create(ItemStack itemStack, long amount) {
+        return create(ContentStack.create(itemStack), amount, IngredientStack.MAX_CHANCE);
     }
 
-    static IngredientStack create(ItemStack itemStack, long requiredAmount, float chance) {
-        return create(ContentStack.create(itemStack), requiredAmount, chance);
+    static IngredientStack create(ItemStack itemStack, long amount, float chance) {
+        return create(ContentStack.create(itemStack), amount, chance);
     }
 
     static IngredientStack create(Ingredient ingredient) {
@@ -61,43 +72,86 @@ public interface IngredientStack {
         return create(ingredient, amount);
     }
 
-    static IngredientStack create(Ingredient ingredient, long requiredAmount) {
+    static IngredientStack create(Ingredient ingredient, long amount) {
         if (ingredient.isEmpty()) return create(ItemStack.EMPTY);
-        return create(ingredient, requiredAmount, IngredientStack.MAX_CHANCE);
+        return create(ingredient, amount, IngredientStack.MAX_CHANCE);
     }
 
-    static IngredientStack create(Ingredient ingredient, long requiredAmount, float chance) {
+    static IngredientStack create(Ingredient ingredient, long amount, float chance) {
         if (ingredient.isEmpty()) return create(ItemStack.EMPTY);
-        //TODO:
         MutableList<ContentStack<ItemStack>> stacks = ArrayAdapter.adapt(ingredient.getItems()).collect(ContentStack::create).toList();
         if (stacks.size() == 1) {
-            return create(stacks.getFirst(), requiredAmount, chance);
+            return create(stacks.getFirst(), amount, chance);
+        } else {
+            TagKey<Item> tag = CirrusContentTypes.ITEM_TAG.getTagFrom(stacks);
+            if (tag == null) return new ListIngredientStack(stacks, amount, chance);
+            return new TagIngredientStack(CirrusContentTypes.ITEM_TAG, tag, amount, chance);
         }
-        return null;
     }
 
     static IngredientStack create(FluidStack fluidStack) {
         return create(ContentStack.create(fluidStack), fluidStack.getAmount(), IngredientStack.MAX_CHANCE);
     }
 
-    static IngredientStack create(FluidStack fluidStack, long requiredAmount) {
-        return create(ContentStack.create(fluidStack), requiredAmount, IngredientStack.MAX_CHANCE);
+    static IngredientStack create(FluidStack fluidStack, long amount) {
+        return create(ContentStack.create(fluidStack), amount, IngredientStack.MAX_CHANCE);
     }
 
-    static IngredientStack create(FluidStack fluidStack, long requiredAmount, float chance) {
-        return create(ContentStack.create(fluidStack), requiredAmount, chance);
+    static IngredientStack create(FluidStack fluidStack, long amount, float chance) {
+        return create(ContentStack.create(fluidStack), amount, chance);
     }
 
-    float MAX_CHANCE = -1.0f;
+    @Contract(" -> new")
+    IngredientStack copy();
 
+    @Contract(" -> new")
+    default IngredientStack normalize() {
+        if (isNormalized()) return this;
+        return copy()
+                .setAmount(1)
+                .setChance(MAX_CHANCE);
+    }
+
+    @Unmodifiable
     MutableList<? extends ContentStack<?>> getStacks();
+
+    default ContentStack<?> getAny() {
+        return getStacks().getAny();
+    }
+
+    default ContentStack<?> getOnly() {
+        return getStacks().getOnly();
+    }
+
+    default ContentStack<?> getFirst() {
+        return getStacks().getFirst();
+    }
+
+    default boolean isTag() {
+        return this instanceof TagIngredientStack;
+    }
 
     default boolean isSingle() {
         return getStacks().size() == 1 && !isEmpty();
     }
 
+    /**
+     * @return true if this is a list ingredient
+     */
+    default boolean isList() {
+        return this instanceof ListIngredientStack;
+    }
+
     default boolean isEmpty() {
-        return getStacks().allSatisfy(ContentStack::isEmpty);
+        return this == EMPTY || getStacks().allSatisfy(ContentStack::isEmpty);
+    }
+
+    default boolean notEmpty() {
+        return !isEmpty();
+    }
+
+    default boolean isNormalized() {
+        return getAmount() == 1 && getChance() == MAX_CHANCE;
     }
 
     /**
@@ -121,8 +175,30 @@ public interface IngredientStack {
     long getAmount();
 
     default IngredientStack multiply(double multiplier) {
-        setAmount((long) (getAmount() * multiplier));
+        double result = getAmount() * multiplier;
+        if (result > Long.MAX_VALUE) {
+            throw new ArithmeticException("The result of the multiplication is too large to be stored in a long.");
+        }
+        setAmount((long) result);
         return this;
+    }
+
+    default IngredientStack multiply(long multiplier) {
+        return multiply((double) multiplier);
+    }
+
+    default IngredientStack reverse() {
+        return multiply(-1);
+    }
+
+    static boolean contains(IngredientStack first, IngredientStack second) {
+        MutableList<? extends ContentStack<?>> firstStacks = first.getStacks();
+        MutableList<? extends ContentStack<?>> secondStacks = second.getStacks();
+        if (firstStacks.size() > secondStacks.size()) {
+            return secondStacks.allSatisfy(stack -> firstStacks.anySatisfyWith(ContentStack::matches, stack));
+        } else {
+            return firstStacks.allSatisfy(stack -> secondStacks.anySatisfyWith(ContentStack::matches, stack));
+        }
     }
 
     default boolean contains(ContentStack<?> contentStack) {
@@ -134,11 +210,11 @@ public interface IngredientStack {
         return selfStacks.anySatisfy(stack -> stack.matches(contentStack, context));
     }
 
-    default boolean contains(IngredientStack stack) {
-        return contains(stack, MatchContext.EXACT);
+    default boolean matches(IngredientStack stack) {
+        return matches(stack, MatchContext.EXACT);
     }
 
-    default boolean contains(IngredientStack stack, MatchContext context) {
+    default boolean matches(IngredientStack stack, MatchContext context) {
         if (this == stack) return true;
         if (isEmpty() || stack.isEmpty()) return false;
         MutableList<? extends ContentStack<?>> self = this.getStacks();
@@ -157,7 +233,7 @@ public interface IngredientStack {
     }
 
     default boolean merge(IngredientStack other, MatchContext context) {
-        if (!contains(other, context)) return false;
+        if (!matches(other, context)) return false;
         setAmount(getAmount() + other.getAmount());
         return true;
     }

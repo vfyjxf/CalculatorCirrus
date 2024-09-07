@@ -2,14 +2,14 @@ package dev.vfyjxf.calculatorcirrus.api;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.TagType;
-import dev.vfyjxf.calculatorcirrus.content.ContentRegistryImpl;
+import dev.vfyjxf.calculatorcirrus.content.ContentApiImpl;
 import net.neoforged.bus.api.Event;
 import net.neoforged.fml.event.IModBusEvent;
 
 public class RegisterContentEvent extends Event implements IModBusEvent {
-    private final ContentRegistryImpl registry;
+    private final ContentApiImpl registry;
 
-    public RegisterContentEvent(ContentRegistryImpl registry) {
+    public RegisterContentEvent(ContentApiImpl registry) {
         this.registry = registry;
     }
 

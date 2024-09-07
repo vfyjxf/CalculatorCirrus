@@ -2,15 +2,12 @@ package dev.vfyjxf.calculatorcirrus.api.content.recipes;
 
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.integration.jei.CirrusJeiPlugin;
 import mezz.jei.api.recipe.RecipeType;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
-import org.eclipse.collections.api.RichIterable;
-import org.eclipse.collections.api.collection.MutableCollection;
-import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
+import org.eclipse.collections.api.ordered.OrderedIterable;
 import org.eclipse.collections.impl.collector.Collectors2;
 import org.jetbrains.annotations.Unmodifiable;
 
@@ -39,7 +36,7 @@ public interface RecipeSystem<T> {
     }
 
     @Nullable
-    default String getUniqueId(T recipe) {
+    default String getId(T recipe) {
         ResourceLocation registryName = getRegistryName(recipe);
         if (registryName == null) return null;
         else return registryName.toString();
@@ -69,6 +66,6 @@ public interface RecipeSystem<T> {
     RecipeLookup<T> createLookup();
 
     @Unmodifiable
-    RichIterable<T> allRecipes();
+    OrderedIterable<T> allRecipes();
 
 }
