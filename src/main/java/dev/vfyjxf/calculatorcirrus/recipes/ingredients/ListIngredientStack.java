@@ -88,4 +88,13 @@ public class ListIngredientStack implements IngredientStack {
         result = 31 * result + Float.hashCode(chance);
         return result;
     }
+
+    @Override
+    public String toString() {
+        return "ListIngredientStack{" +
+                "stacks=" + stacks.collect(ContentStack::getAsString).makeString() +
+                ", amount=" + amount +
+                ", chance=" + chance +
+                '}';
+    }
 }

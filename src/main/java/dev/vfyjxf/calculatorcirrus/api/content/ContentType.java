@@ -65,7 +65,8 @@ public interface ContentType<T> {
         return getTagType() != null;
     }
 
-    @Nullable TagType<T, ?> getTagType();
+    @Nullable
+    TagType<T, ?> getTagType();
 
     /**
      * @param content the content
@@ -101,7 +102,11 @@ public interface ContentType<T> {
     @Nullable
     ContentSerializer<T> getSerializer();
 
-    long hash(ContentStack<T> content, T value, boolean fuzzy);
+    default int hash(ContentStack<T> content, T value, MatchContext context) {
+        return hash(value, context);
+    }
+
+    int hash(T value, MatchContext context);
 
     Stream<? extends TagKey<?>> getTagsFor(ContentStack<T> content, T value);
 

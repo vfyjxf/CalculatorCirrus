@@ -8,11 +8,12 @@ import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeSystem;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeTransformer;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.recipes.ingredients.TagIngredientStack;
-import org.eclipse.collections.api.collection.MutableCollection;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.factory.Maps;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.map.MutableMap;
+import org.eclipse.collections.api.multimap.list.MutableListMultimap;
+import org.eclipse.collections.impl.factory.Multimaps;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Range;
 
@@ -29,13 +30,25 @@ public class SimpleCalculator implements RecipeCalculator {
     private final MutableList<RecipeTransformer> transformers = Lists.mutable.empty();
     private @Nullable RecipeDatabase dataBase;
     private CommonRecipe<?> recipe;
-    private @Range(from = 1, to = Long.MAX_VALUE) long amount = 1;
+    private @Nullable ContentStack<?> target;
+    private @Range(from = 1, to = Long.MAX_VALUE) int amount = 1;
     private MutableList<IngredientStack> results;
     private MutableList<IngredientStack> leftovers;
+    private final CostList costList = new CostList();
 
     @Override
-    public MutableCollection<? extends IngredientStack> targets() {
+    public MutableList<? extends IngredientStack> targets() {
         return recipe.data().get(IngredientType.OUTPUT).asUnmodifiable();
+    }
+
+    @Override
+    public void setTarget(@Nullable ContentStack<?> target) {
+        this.target = target;
+    }
+
+    @Override
+    public @Nullable ContentStack<?> getTarget() {
+        return target;
     }
 
     @Override
@@ -44,18 +57,21 @@ public class SimpleCalculator implements RecipeCalculator {
     }
 
     @Override
-    public void setAmount(@Range(from = 1, to = Long.MAX_VALUE) long amount) {
+    public void setAmount(@Range(from = 1, to = Integer.MAX_VALUE) int amount) {
         this.amount = amount;
     }
 
     @Override
-    public @Range(from = 1, to = Long.MAX_VALUE) long getAmount() {
+    public @Range(from = 1, to = Integer.MAX_VALUE) int getAmount() {
         return amount;
     }
 
     @Override
     public <T> void setRecipe(RecipeSystem<T> recipeSystem, T recipe) {
         this.recipe = CommonRecipe.create(recipeSystem, recipe);
+        if (target != null && this.recipe.data().getOutputs().noneSatisfyWith(IngredientStack::contains, target)) {
+            throw new IllegalArgumentException("The target isn't an output of the recipe.");
+        }
     }
 
     @Override
@@ -67,6 +83,7 @@ public class SimpleCalculator implements RecipeCalculator {
         if (recipe.data().getOutputs().noneSatisfyWith(IngredientStack::contains, target)) {
             throw new IllegalArgumentException("The target isn't an output of the recipe.");
         }
+        paths.put(target, recipe);
     }
 
     @Override
@@ -87,37 +104,35 @@ public class SimpleCalculator implements RecipeCalculator {
         results = Lists.mutable.empty();
         leftovers = Lists.mutable.empty();
         if (recipe.getInputs().isEmpty()) {
-            results.addAll(recipe.getOutputs().collect(i -> i.multiply(amount)));
+            results.addAll(recipe.getOutputs().collect(i -> i.copy().multiply(amount)));
             return;
         }
-
-        MutableList<IngredientStack> ingredients = Lists.mutable.empty();
-        ingredients.addAll(recipe.getInputs().collect(i -> i.multiply(amount)));
-        MutableList<RecipeTriple> decomposable = findDecomposable(ingredients);
+        //ignore chance
+        costList.addIngredient(recipe.getInputs().collect(i -> i.copy().reverse().multiply(amount)));
+        MutableList<RecipeTriple> decomposable = findDecomposable();
         int round = 0;
         while (decomposable.notEmpty()) {
-
-            //remove decomposable ingredients
-            ingredients.removeAll(decomposable.collect(RecipeTriple::ingredient));
-            results.addAll(ingredients.collect(i -> i.multiply(amount)));
-            ingredients = decomposable.flatCollect(d -> d.recipe().data().getInputs().collect(i -> i.multiply(d.amount)));
-            if (ingredients.isEmpty()) break;
-            decomposable = findDecomposable(ingredients);
+            decomposable.flatCollect(RecipeTriple::outputs).forEach(costList::addIngredient);
+            costList.addIngredient(decomposable.flatCollect(RecipeTriple::inputs).collect(IngredientStack::reverse));
+            costList.trim();
+            decomposable = findDecomposable();
             if (round++ > 2000) { //TODO: make it configurable.
-                break;
-//                throw new IllegalStateException("Too many rounds.");
+                throw new IllegalStateException("Too many rounds.");
             }
         }
-        results.addAll(ingredients);
+        leftovers.addAll(costList.ingredients.select(i -> i.getAmount() > 0).toList());
+        results.addAll(costList.ingredients.select(i -> i.getAmount() < 0).collect(IngredientStack::reverse).toList());
     }
 
-    private MutableList<RecipeTriple> findDecomposable(MutableList<IngredientStack> ingredients) {
+
+    private MutableList<RecipeTriple> findDecomposable() {
         MutableList<RecipeTriple> ret = Lists.mutable.empty();
-        for (IngredientStack ingredient : ingredients) {
+        for (IngredientStack ingredient : costList.ingredients) {
+            if (ingredient.getAmount() >= 0) continue;
             CommonRecipe<?> recipe = null;
             if (ingredient.isList()) {
                 for (ContentStack<?> stack : ingredient.getStacks()) {
-                    recipe = getRecipe(stack.normalize());
+                    recipe = getRecipe(stack);
                     if (recipe != null) {
                         break;
                     }
@@ -125,46 +140,80 @@ public class SimpleCalculator implements RecipeCalculator {
             } else if (ingredient instanceof TagIngredientStack tagIngredient) {
                 recipe = getRecipe(tagIngredient.getInternalStack());
             } else {
-                recipe = getRecipe(ingredient.getOnly().normalize());
+                recipe = getRecipe(ingredient.getOnly());
             }
             if (recipe == null) {
                 continue;
             }
-            long times = Math.ceilDiv(ingredient.getAmount(), recipe.getOutputs().getAny().getAmount());
-            if (times <= 0) {
-                continue;
+            IngredientStack targetStack = recipe.data().getOutputs().detect(output -> output.matches(ingredient));
+            if (targetStack == null) {
+                throw new IllegalStateException("Recipe:" + recipe.id() + " doesn't contain the output: " + ingredient + " but it was in path database.");
             }
-            ret.add(new RecipeTriple(ingredient, recipe, times));
+            long multiplier = Math.ceilDiv(-ingredient.getAmount(), targetStack.getAmount());
+            ret.add(new RecipeTriple(ingredient, recipe, multiplier));
         }
         return ret;
     }
 
     private @Nullable CommonRecipe<?> getRecipe(ContentStack<?> contentStack) {
-        CommonRecipe<?> recipe = paths.get(contentStack);
+        ContentStack<?> target = contentStack.normalize();
+        CommonRecipe<?> recipe = paths.get(target);
         if (recipe != null) {
             return recipe;
         }
-        return getRecipeFromDatabase(contentStack);
-    }
-
-    private @Nullable CommonRecipe<?> getRecipeFromDatabase(ContentStack<?> contentStack) {
-        if (dataBase == null) {
-            return null;
+        if (dataBase != null) {
+            return dataBase.get(target);
         }
-        return dataBase.get(contentStack);
+        return null;
     }
 
-    private record RecipeTriple(IngredientStack ingredient, CommonRecipe<?> recipe, long amount) {
+    private record RecipeTriple(IngredientStack ingredient, CommonRecipe<?> recipe, long multiplier) {
         public MutableList<? extends IngredientStack> inputs() {
-            return recipe.data().getInputs().collect(i -> i.multiply(amount));
+            return recipe.data().getInputs().collect(i -> i.copy().multiply(multiplier));
         }
 
         public MutableList<? extends IngredientStack> outputs() {
-            return recipe.data().getOutputs().collect(i -> i.multiply(amount));
+            return recipe.data().getOutputs().collect(i -> i.copy().multiply(multiplier));
         }
 
         public MutableList<? extends IngredientStack> catalysts() {
-            return recipe.data().getCatalysts().collect(i -> i.multiply(amount));
+            return recipe.data().getCatalysts().collect(i -> i.copy().multiply(multiplier));
+        }
+    }
+
+    private static class CostList {
+
+        private final MutableList<IngredientStack> ingredients = Lists.mutable.empty();
+
+        public void addIngredient(IngredientStack ingredient) {
+            addIngredient(ingredient, false);
+        }
+
+        public void addIngredient(IngredientStack ingredient, boolean consume) {
+            IngredientStack stack = ingredients.detect(i -> i.matches(ingredient));
+            if (stack == null) {
+                if (ingredient.isChanced()) {
+                    long amount = (long) (
+                            consume ? Math.ceil(ingredient.getAmount() * ingredient.getChance()) :
+                                    Math.ceil(ingredient.getAmount() / ingredient.getChance())
+                    );
+                    ingredients.add(ingredient.setAmount(amount));
+                } else {
+                    ingredients.add(ingredient);
+                }
+            } else {
+                stack.setAmount(stack.getAmount() + ingredient.getAmount());
+            }
+        }
+
+        public void addIngredient(MutableList<IngredientStack> ingredients) {
+            for (IngredientStack ingredient : ingredients) {
+                addIngredient(ingredient);
+            }
+        }
+
+        public void trim() {
+            ingredients.removeIf((i -> i.getAmount() == 0));
         }
     }
 
@@ -174,5 +223,11 @@ public class SimpleCalculator implements RecipeCalculator {
         return results;
     }
 
-
+    @Override
+    public MutableListMultimap<IngredientType, ? extends IngredientStack> getCalculations() {
+        MutableListMultimap<IngredientType, IngredientStack> calculations = Multimaps.mutable.list.empty();
+        calculations.putAll(IngredientType.CALCULATED, results);
+        calculations.putAll(IngredientType.LEFTOVER, leftovers);
+        return calculations;
+    }
 }

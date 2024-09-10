@@ -108,7 +108,7 @@ public class EmptyType implements ContentType, ContentSerializer {
     }
 
     @Override
-    public long hash(ContentStack content, Object value, boolean fuzzy) {
+    public int hash(Object value, MatchContext context) {
         return EMPTY.hashCode();
     }
 

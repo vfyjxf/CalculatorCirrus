@@ -108,10 +108,9 @@ public class FluidStackType extends BasicContentType<FluidStack> {
     }
 
     @Override
-    public long hash(ContentStack<FluidStack> content, FluidStack value, boolean fuzzy) {
-        //TODO:Rewrite this
-        if (fuzzy) return value.getFluid().hashCode();
-        else return value.hashCode();
+    public int hash(FluidStack value, MatchContext context) {
+        if (context.fuzzy()) return value.getFluid().hashCode();
+        else return FluidStack.hashFluidAndComponents(value);
     }
 
     @Override

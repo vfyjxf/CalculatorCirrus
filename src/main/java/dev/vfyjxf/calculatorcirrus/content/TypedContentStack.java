@@ -2,6 +2,7 @@ package dev.vfyjxf.calculatorcirrus.content;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
 
 public class TypedContentStack<T> extends BasicContentStack<T> {
     private final ContentType<T> type;
@@ -40,13 +41,14 @@ public class TypedContentStack<T> extends BasicContentStack<T> {
         if (o == null || getClass() != o.getClass()) return false;
 
         TypedContentStack<?> that = (TypedContentStack<?>) o;
-        return amount == that.amount && type.equals(that.type);
+        return (amount == that.amount) && type.equals(that.type) && type.matches(value, (T) that.value, MatchContext.EXACT);
     }
 
     @Override
     public int hashCode() {
         int result = type.hashCode();
         result = 31 * result + Long.hashCode(amount);
+        result = 31 * result + type.hash(value, MatchContext.EXACT);
         return result;
     }
 

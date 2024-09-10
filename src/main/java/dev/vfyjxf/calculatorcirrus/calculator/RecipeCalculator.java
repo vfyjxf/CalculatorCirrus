@@ -2,19 +2,25 @@ package dev.vfyjxf.calculatorcirrus.calculator;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.CommonRecipe;
+import dev.vfyjxf.calculatorcirrus.api.content.recipes.IngredientType;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeDatabase;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeSystem;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeTransformer;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.recipes.ingredients.TagIngredientStack;
-import org.eclipse.collections.api.collection.MutableCollection;
 import org.eclipse.collections.api.list.MutableList;
+import org.eclipse.collections.api.multimap.list.MutableListMultimap;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Range;
 
 public interface RecipeCalculator {
 
-    MutableCollection<? extends IngredientStack> targets();
+    MutableList<? extends IngredientStack> targets();
+
+    void setTarget(@Nullable ContentStack<?> target);
+
+    @Nullable
+    ContentStack<?> getTarget();
 
     /**
      * @return the target recipe to calculate.
@@ -24,13 +30,13 @@ public interface RecipeCalculator {
     /**
      * @param amount the Number of times the target recipe should be crafted.
      */
-    void setAmount(@Range(from = 1, to = Long.MAX_VALUE) long amount);
+    void setAmount(@Range(from = 1, to = Integer.MAX_VALUE) int amount);
 
     /**
      * @return the Number of times the target recipe should be crafted.
      */
-    @Range(from = 1, to = Long.MAX_VALUE)
-    long getAmount();
+    @Range(from = 1, to = Integer.MAX_VALUE)
+    int getAmount();
 
     <T> void setRecipe(RecipeSystem<T> recipeSystem, T recipe);
 
@@ -70,5 +76,7 @@ public interface RecipeCalculator {
     void calculate();
 
     MutableList<IngredientStack> getResults();
+
+    MutableListMultimap<IngredientType, ? extends IngredientStack> getCalculations();
 
 }

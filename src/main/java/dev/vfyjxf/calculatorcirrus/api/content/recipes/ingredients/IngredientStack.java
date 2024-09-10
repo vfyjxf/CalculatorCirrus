@@ -74,7 +74,7 @@ public interface IngredientStack {
 
     static IngredientStack create(Ingredient ingredient, long amount) {
         if (ingredient.isEmpty()) return create(ItemStack.EMPTY);
-        return create(ingredient, amount, IngredientStack.MAX_CHANCE);
+        return create(ingredient, amount, MAX_CHANCE);
     }
 
     static IngredientStack create(Ingredient ingredient, long amount, float chance) {
@@ -161,10 +161,14 @@ public interface IngredientStack {
         return MAX_CHANCE;
     }
 
+    /**
+     * @param chance range from 0 to 1.
+     */
+    @Contract("_ -> this")
     IngredientStack setChance(float chance);
 
     default boolean isChanced() {
-        return getChance() >= 0;
+        return getChance() != MAX_CHANCE;
     }
 
     /**
@@ -173,6 +177,11 @@ public interface IngredientStack {
      * @return the required amount
      */
     long getAmount();
+
+    default long getExpectation(boolean consume) {
+        if (!isChanced()) return getAmount();
+        return (long) (consume ? Math.ceil(getAmount() * getChance()) : Math.ceil(getAmount() / getChance()));
+    }
 
     default IngredientStack multiply(double multiplier) {
         double result = getAmount() * multiplier;
@@ -188,7 +197,7 @@ public interface IngredientStack {
     }
 
     default IngredientStack reverse() {
-        return multiply(-1);
+        return multiply(-1D);
     }
 
     static boolean contains(IngredientStack first, IngredientStack second) {
@@ -228,14 +237,8 @@ public interface IngredientStack {
         return true;
     }
 
-    default boolean merge(IngredientStack other) {
-        return merge(other, MatchContext.EXACT);
-    }
-
-    default boolean merge(IngredientStack other, MatchContext context) {
-        if (!matches(other, context)) return false;
-        setAmount(getAmount() + other.getAmount());
-        return true;
+    default IngredientStack addAmount(long amount) {
+        return setAmount(getAmount() + amount);
     }
 
     @Contract("_ -> this")
@@ -248,5 +251,12 @@ public interface IngredientStack {
     default long getMissing(long requirement) {
         return Math.max(0, getAmount() - requirement);
     }
+
+    /**
+     * Convention: The hashcode method should not use values such as AMOUNT and CHANCE.
+     * If you want to use these values, use the {@link #hash(IngredientStack)} method.
+     */
+    int hashCode();
+
 
 }

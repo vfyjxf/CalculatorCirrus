@@ -16,7 +16,7 @@ public class CommonRecipeImpl<T> implements CommonRecipe<T> {
     public CommonRecipeImpl(RecipeSystem<T> recipeSystem, T recipe) {
         this.recipeSystem = recipeSystem;
         this.recipe = recipe;
-        this.recipeData = Suppliers.memoize(() -> recipeSystem.parseRecipe(recipe).mergeData());
+        this.recipeData = Suppliers.memoize(() -> recipeSystem.parseRecipe(recipe));
     }
 
     @Override

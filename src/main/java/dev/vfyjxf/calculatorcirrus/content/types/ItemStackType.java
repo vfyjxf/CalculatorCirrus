@@ -120,14 +120,20 @@ public class ItemStackType extends BasicContentType<ItemStack> {
     }
 
     @Override
-    public long hash(ContentStack<ItemStack> content, ItemStack value, boolean fuzzy) {
+    public int hash(ContentStack<ItemStack> content, ItemStack value, MatchContext context) {
         //TODO:Rewrite this
-        if (fuzzy) {
-            CompoundTag serialized = save(content, value).getCompound("tag");
-            serialized.remove("tag");
-            return serialized.hashCode();
+        if (context.fuzzy()) {
+            return value.getItem().hashCode();
         }
         return this.save(content, value).hashCode();
+    }
+
+    @Override
+    public int hash(ItemStack value, MatchContext context) {
+        if (context.fuzzy()) {
+            return value.getItem().hashCode();
+        }
+        return ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, value).getOrThrow().hashCode();
     }
 
     @SuppressWarnings("deprecation")

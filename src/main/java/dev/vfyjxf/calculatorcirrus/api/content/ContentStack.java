@@ -92,6 +92,27 @@ public interface ContentStack<T> {
     @Contract("_ -> this")
     ContentStack<T> setAmount(long amount);
 
+    default ContentStack<T> addAmount(long amount) {
+        return setAmount(Math.addExact(getAmount(), amount));
+    }
+
+    default ContentStack<T> multiply(double multiplier) {
+        double result = getAmount() * multiplier;
+        if (result > Long.MAX_VALUE) {
+            throw new ArithmeticException("The result of the multiplication is too large to be stored in a long.");
+        }
+        setAmount((long) Math.ceil(result));
+        return this;
+    }
+
+    default ContentStack<T> multiply(long multiplier) {
+        return multiply((double) multiplier);
+    }
+
+    default ContentStack<T> reverse() {
+        return multiply(-1D);
+    }
+
     @Contract(" -> new")
     default ContentStack<T> normalize() {
         if (isNormalized()) return this;
@@ -183,6 +204,10 @@ public interface ContentStack<T> {
 
     default boolean is(ContentType<?> type) {
         return contentType() == type;
+    }
+
+    default String getAsString() {
+        return contentType().getAsString(value());
     }
 
 }

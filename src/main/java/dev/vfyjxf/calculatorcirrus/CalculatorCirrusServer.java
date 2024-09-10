@@ -12,6 +12,7 @@ import net.neoforged.fml.common.Mod;
 public class CalculatorCirrusServer extends CalculatorCirrus {
 
     public CalculatorCirrusServer(IEventBus modEventBus) {
+        //TODO:call register events
         super(modEventBus);
     }
 

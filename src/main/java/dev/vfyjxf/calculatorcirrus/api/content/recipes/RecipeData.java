@@ -36,8 +36,6 @@ public interface RecipeData {
 
     MutableListMultimap<MutableData.Key<?>, ? extends MutableData<?>> getMutableData();
 
-    RecipeData mergeData();
-
     @Nullable
     String id();
 

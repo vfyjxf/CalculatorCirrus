@@ -5,14 +5,10 @@ import dev.vfyjxf.calculatorcirrus.api.content.recipes.MutableData;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeData;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.helper.CollectionHelper;
-import dev.vfyjxf.calculatorcirrus.helper.ContentHelper;
 import net.minecraft.nbt.CompoundTag;
-import org.eclipse.collections.api.RichIterable;
-import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.multimap.list.ImmutableListMultimap;
 import org.eclipse.collections.api.multimap.list.MutableListMultimap;
-import org.eclipse.collections.impl.multimap.list.FastListMultimap;
 import org.jetbrains.annotations.Nullable;
 
 public class BasicRecipeData implements RecipeData {
@@ -74,17 +70,6 @@ public class BasicRecipeData implements RecipeData {
     @Override
     public MutableListMultimap<MutableData.Key<?>, ? extends MutableData<?>> getMutableData() {
         return mutableData.toMutable();
-    }
-
-    @Override
-    public RecipeData mergeData() {
-        MutableListMultimap<IngredientType, IngredientStack> mergedData = FastListMultimap.newMultimap();
-        for (IngredientType ingredientType : stableData.keySet()) {
-            ImmutableList<? extends IngredientStack> stacks = stableData.get(ingredientType);
-            RichIterable<? extends IngredientStack> merged = ContentHelper.mergeIngredients(stacks);
-            mergedData.putAll(ingredientType, merged);
-        }
-        return new BasicRecipeData(mergedData.toImmutable(), mutableData.toImmutable(), uid);
     }
 
     @Override

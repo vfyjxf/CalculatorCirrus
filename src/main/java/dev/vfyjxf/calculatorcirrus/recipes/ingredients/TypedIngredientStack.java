@@ -95,4 +95,13 @@ public class TypedIngredientStack<T> implements IngredientStack {
         result = 31 * result + Long.hashCode(amount);
         return result;
     }
+
+    @Override
+    public String toString() {
+        return "TypedIngredientStack{" +
+                "chance=" + chance +
+                ", amount=" + amount +
+                ", stack=" + stacks.getOnly().getAsString() +
+                '}';
+    }
 }

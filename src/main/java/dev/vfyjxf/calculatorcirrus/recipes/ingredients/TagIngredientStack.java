@@ -106,4 +106,15 @@ public class TagIngredientStack implements IngredientStack {
         result = 31 * result + Float.hashCode(chance);
         return result;
     }
+
+    @Override
+    public String toString() {
+        return "TagIngredientStack{" +
+                "type=" + type +
+                ", tagKey=" + tagKey +
+                ", location=" + location +
+                ", amount=" + amount +
+                ", chance=" + chance +
+                '}';
+    }
 }

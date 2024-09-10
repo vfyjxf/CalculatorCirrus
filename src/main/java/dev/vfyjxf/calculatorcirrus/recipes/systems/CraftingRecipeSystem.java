@@ -26,7 +26,7 @@ import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.multimap.list.MutableListMultimap;
 import org.eclipse.collections.api.ordered.OrderedIterable;
-import org.eclipse.collections.impl.multimap.list.FastListMultimap;
+import org.eclipse.collections.impl.factory.Multimaps;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Unmodifiable;
 
@@ -47,10 +47,6 @@ public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe>
             throw new IllegalStateException("Cannot create CraftingRecipeSystem without a world");
         }
         this.recipeManager = minecraft.level.getRecipeManager();
-    }
-
-    public CraftingRecipeSystem(RecipeManager manager) {
-        this.recipeManager = manager;
     }
 
     @Override
@@ -94,7 +90,7 @@ public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe>
     @Override
     public RecipeData parseRecipe(RecipeHolder<CraftingRecipe> recipeHolder) {
         CraftingRecipe recipe = recipeHolder.value();
-        MutableListMultimap<IngredientType, IngredientStack> recipeStableData = FastListMultimap.newMultimap();
+        MutableListMultimap<IngredientType, IngredientStack> recipeStableData = Multimaps.mutable.list.empty();
         for (Ingredient ingredient : recipe.getIngredients()) {
             IngredientStack stack = IngredientStack.create(ingredient);
             recipeStableData.put(IngredientType.INPUT, stack);

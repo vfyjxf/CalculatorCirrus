@@ -4,17 +4,23 @@ import com.mojang.logging.LogUtils;
 import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.recipes.IngredientType;
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeApi;
+import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.calculator.SimpleCalculator;
 import dev.vfyjxf.calculatorcirrus.recipes.RecipeApiImpl;
 import dev.vfyjxf.calculatorcirrus.recipes.systems.CraftingRecipeSystem;
 import dev.vfyjxf.calculatorcirrus.utils.Locations;
 import dev.vfyjxf.calculatorcirrus.utils.Singletons;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModLoader;
+import org.eclipse.collections.api.multimap.list.MutableListMultimap;
 import org.slf4j.Logger;
 
 public abstract class CalculatorCirrus {
@@ -33,7 +39,7 @@ public abstract class CalculatorCirrus {
         RecipeApiImpl recipeRegistry = new RecipeApiImpl();
         Singletons.attachInstance(RecipeApi.class, recipeRegistry);
         ModLoader.postEventWrapContainerInModOrder(new RegisterRecipeSystemEvent(recipeRegistry));
-//        test();
+        test();
     }
 
     protected abstract void fireContentRegisterEvent();
@@ -57,12 +63,22 @@ public abstract class CalculatorCirrus {
         RecipeApi recipeApi = RecipeApi.getInstance();
         CraftingRecipeSystem recipeSystem = (CraftingRecipeSystem) recipeApi.allSystems().getAny();
         RecipeHolder<CraftingRecipe> target = recipeSystem.getRecipe(Locations.ofDefault("gray_candle"));
-
+        RecipeHolder<CraftingRecipe> candleRecipe = recipeSystem.getRecipe(Locations.ofDefault("candle"));
+        RecipeHolder<CraftingRecipe> garyDyeRecipe = recipeSystem.getRecipe(Locations.ofDefault("gray_dye"));
+        RecipeHolder<CraftingRecipe> whiteDyeRecipe = recipeSystem.getRecipe(Locations.ofDefault("white_dye"));
+        RecipeHolder<CraftingRecipe> boneMealRecipe = recipeSystem.getRecipe(Locations.ofDefault("bone_meal"));
+        RecipeHolder<CraftingRecipe> blackDyeRecipe = recipeSystem.getRecipe(Locations.ofDefault("black_dye"));
         SimpleCalculator calculator = new SimpleCalculator();
         calculator.setRecipe(recipeSystem, target);
+        calculator.addPath(ContentStack.create(new ItemStack(Items.CANDLE)), recipeSystem, candleRecipe);
+        calculator.addPath(ContentStack.create(new ItemStack(Items.GRAY_DYE)), recipeSystem, garyDyeRecipe);
+        calculator.addPath(ContentStack.create(new ItemStack(Items.WHITE_DYE)), recipeSystem, whiteDyeRecipe);
+        calculator.addPath(ContentStack.create(new ItemStack(Items.BONE_MEAL)), recipeSystem, boneMealRecipe);
+        calculator.addPath(ContentStack.create(new ItemStack(Items.BLACK_DYE)), recipeSystem, blackDyeRecipe);
 
-        calculator.setAmount(2);
+        calculator.setAmount(1000);
         calculator.calculate();
-        System.out.println(calculator.getResults());
+        MutableListMultimap<IngredientType, ? extends IngredientStack> calculations = calculator.getCalculations();
+        System.out.println(calculations);
     }
 }

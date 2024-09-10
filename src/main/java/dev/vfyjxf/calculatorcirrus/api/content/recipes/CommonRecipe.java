@@ -4,6 +4,7 @@ import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientSta
 import dev.vfyjxf.calculatorcirrus.recipes.CommonRecipeImpl;
 import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.collection.MutableCollection;
+import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Nullable;
 
 public interface CommonRecipe<T> {
@@ -22,15 +23,15 @@ public interface CommonRecipe<T> {
 
     RecipeData data();
 
-    default MutableCollection<? extends IngredientStack> getInputs() {
+    default MutableList<? extends IngredientStack> getInputs() {
         return data().getInputs();
     }
 
-    default MutableCollection<? extends IngredientStack> getOutputs() {
+    default MutableList<? extends IngredientStack> getOutputs() {
         return data().getOutputs();
     }
 
-    default MutableCollection<? extends IngredientStack> getCatalysts() {
+    default MutableList<? extends IngredientStack> getCatalysts() {
         return data().getCatalysts();
     }
 

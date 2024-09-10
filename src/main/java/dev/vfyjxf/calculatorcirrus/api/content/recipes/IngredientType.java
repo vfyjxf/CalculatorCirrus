@@ -34,6 +34,20 @@ public interface IngredientType {
         }
     };
 
+    IngredientType CALCULATED = new IngredientType() {
+        @Override
+        public String toString() {
+            return "calculated";
+        }
+    };
+
+    IngredientType LEFTOVER = new IngredientType() {
+        @Override
+        public String toString() {
+            return "leftover";
+        }
+    };
+
     IngredientType UNKNOWN = new IngredientType() {
         @Override
         public String toString() {
