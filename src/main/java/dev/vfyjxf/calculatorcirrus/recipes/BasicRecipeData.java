@@ -8,6 +8,7 @@ import dev.vfyjxf.calculatorcirrus.helper.CollectionHelper;
 import net.minecraft.nbt.CompoundTag;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.multimap.list.ImmutableListMultimap;
+import org.eclipse.collections.api.multimap.list.ListMultimap;
 import org.eclipse.collections.api.multimap.list.MutableListMultimap;
 import org.jetbrains.annotations.Nullable;
 
@@ -18,27 +19,27 @@ public class BasicRecipeData implements RecipeData {
     private final String uid;
 
     public static BasicRecipeData create(
-            ImmutableListMultimap<IngredientType, ? extends IngredientStack> stableData,
+            ListMultimap<IngredientType, ? extends IngredientStack> stableData,
             @Nullable String uid
     ) {
         return new BasicRecipeData(stableData, CollectionHelper.emptyMultimap(), uid);
     }
 
     public static BasicRecipeData create(
-            ImmutableListMultimap<IngredientType, ? extends IngredientStack> stableData,
-            ImmutableListMultimap<MutableData.Key<?>, ? extends MutableData<?>> mutableData,
+            ListMultimap<IngredientType, ? extends IngredientStack> stableData,
+            ListMultimap<MutableData.Key<?>, ? extends MutableData<?>> mutableData,
             @Nullable String uid
     ) {
         return new BasicRecipeData(stableData, mutableData, uid);
     }
 
     private BasicRecipeData(
-            ImmutableListMultimap<IngredientType, ? extends IngredientStack> stableData,
-            ImmutableListMultimap<MutableData.Key<?>, ? extends MutableData<?>> mutableData,
+            ListMultimap<IngredientType, ? extends IngredientStack> stableData,
+            ListMultimap<MutableData.Key<?>, ? extends MutableData<?>> mutableData,
             @Nullable String uid
     ) {
-        this.stableData = stableData;
-        this.mutableData = mutableData;
+        this.stableData = stableData.toImmutable();
+        this.mutableData = mutableData.toImmutable();
         this.uid = uid;
     }
 

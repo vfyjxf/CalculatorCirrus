@@ -70,23 +70,6 @@ public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe>
         return true;
     }
 
-    @Nullable
-    @Override
-    public RecipeHolder<CraftingRecipe> getRecipe(String uniqueId) {
-        ResourceLocation id = ResourceLocation.parse(uniqueId);
-        return getRecipe(id);
-    }
-
-    @Nullable
-    @Override
-    public RecipeHolder<CraftingRecipe> getRecipe(ResourceLocation registryName) {
-        List<RecipeHolder<CraftingRecipe>> allRecipes = recipeManager.getAllRecipesFor(RecipeType.CRAFTING);
-        return allRecipes.stream()
-                .filter(recipe -> recipe.id().equals(registryName))
-                .findFirst()
-                .orElse(null);
-    }
-
     @Override
     public RecipeData parseRecipe(RecipeHolder<CraftingRecipe> recipeHolder) {
         CraftingRecipe recipe = recipeHolder.value();

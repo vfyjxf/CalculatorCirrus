@@ -1,4 +1,4 @@
-package dev.vfyjxf.calculatorcirrus.integration.jei.recipes;
+package dev.vfyjxf.calculatorcirrus.compact.jei.recipes;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;

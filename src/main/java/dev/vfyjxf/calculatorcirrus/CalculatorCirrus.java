@@ -1,5 +1,6 @@
 package dev.vfyjxf.calculatorcirrus;
 
+import com.google.common.base.Stopwatch;
 import com.mojang.logging.LogUtils;
 import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
@@ -32,6 +33,7 @@ public abstract class CalculatorCirrus {
     }
 
     protected void start() {
+        Stopwatch stopwatch = Stopwatch.createStarted();
         logger.info("Starting Calculator Cirrus");
         logger.info("Registering contents");
         fireContentRegisterEvent();
@@ -39,6 +41,8 @@ public abstract class CalculatorCirrus {
         RecipeApiImpl recipeRegistry = new RecipeApiImpl();
         Singletons.attachInstance(RecipeApi.class, recipeRegistry);
         ModLoader.postEventWrapContainerInModOrder(new RegisterRecipeSystemEvent(recipeRegistry));
+        stopwatch.stop();
+        logger.info("Calculator Cirrus started in {}", stopwatch);
         test();
     }
 
@@ -61,7 +65,7 @@ public abstract class CalculatorCirrus {
     @SuppressWarnings("ConstantConditions")
     private static void test() {
         RecipeApi recipeApi = RecipeApi.getInstance();
-        CraftingRecipeSystem recipeSystem = (CraftingRecipeSystem) recipeApi.allSystems().getAny();
+        CraftingRecipeSystem recipeSystem = (CraftingRecipeSystem) recipeApi.allSystems().detect(system -> system instanceof CraftingRecipeSystem);
         RecipeHolder<CraftingRecipe> target = recipeSystem.getRecipe(Locations.ofDefault("gray_candle"));
         RecipeHolder<CraftingRecipe> candleRecipe = recipeSystem.getRecipe(Locations.ofDefault("candle"));
         RecipeHolder<CraftingRecipe> garyDyeRecipe = recipeSystem.getRecipe(Locations.ofDefault("gray_dye"));

@@ -17,4 +17,8 @@ public class RegisterRecipeSystemEvent extends Event implements IModBusEvent {
         recipeRegistry.registerSystem(system);
     }
 
+    public void replaceSystem(RecipeSystem<?> system) {
+        recipeRegistry.replaceSystem(system);
+    }
+
 }

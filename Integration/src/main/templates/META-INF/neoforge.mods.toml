@@ -1,0 +1,37 @@
+modLoader = "javafml"
+loaderVersion = "${loader_version_range}"
+license = "${mod_license}"
+
+[[mods]]
+modId = "cirrus_integration"
+version = "${mod_version}"
+displayName = "Calcalator Cirrus Integration"
+authors = "${mod_authors}"
+description = '''The internal support for the Calcalator mod.'''
+
+[[dependencies.cirrus_integration]]
+modId = "neoforge"
+type = "required"
+versionRange = "${neo_version_range}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.cirrus_integration]]
+modId = "minecraft"
+type = "required"
+versionRange = "${minecraft_version_range}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.cirrus_integration]]
+modId = "calculator_cirrus"
+type = "required"
+versionRange = "[${mod_version},)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.cirrus_integration]]
+modId = "gtceu"
+type = "optional"
+ordering = "AFTER"
+side = "BOTH"

@@ -2,7 +2,7 @@ package dev.vfyjxf.calculatorcirrus.api.content.recipes;
 
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.integration.jei.CirrusJeiPlugin;
+import dev.vfyjxf.calculatorcirrus.compact.jei.CirrusJeiPlugin;
 import mezz.jei.api.recipe.RecipeType;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -53,6 +53,7 @@ public interface RecipeSystem<T> {
 
     RecipeData parseRecipe(T recipe);
 
+    @Unmodifiable
     MutableList<ContentStack<ItemStack>> getMachines();
 
     static MutableList<ContentStack<ItemStack>> getMachinesFromJei(RecipeType<?> recipeType) {
@@ -63,7 +64,9 @@ public interface RecipeSystem<T> {
                 .collect(Collectors2.toList());
     }
 
-    RecipeLookup<T> createLookup();
+    default RecipeLookup<T> createLookup() {
+        return RecipeLookup.empty();
+    }
 
     @Unmodifiable
     OrderedIterable<T> allRecipes();

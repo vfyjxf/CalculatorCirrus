@@ -26,6 +26,14 @@ public class RecipeApiImpl implements RecipeApi {
     }
 
     @ApiStatus.Internal
+    public void replaceSystem(RecipeSystem<?> system) {
+        if (!systems.containsKey(system.systemId())) {
+            throw new IllegalArgumentException("Recipe system with id: " + system.systemId() + " not registered");
+        }
+        systems.put(system.systemId(), system);
+    }
+
+    @ApiStatus.Internal
     public void registerVanillaSystem(VanillaRecipeSystem<?> system) {
         registerSystem(system);
     }

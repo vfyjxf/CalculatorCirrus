@@ -1,12 +1,32 @@
 package dev.vfyjxf.calculatorcirrus.api.content.recipes;
 
 import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.helper.CollectionHelper;
+import dev.vfyjxf.calculatorcirrus.recipes.BasicRecipeData;
 import net.minecraft.nbt.CompoundTag;
 import org.eclipse.collections.api.list.MutableList;
+import org.eclipse.collections.api.multimap.list.ImmutableListMultimap;
+import org.eclipse.collections.api.multimap.list.ListMultimap;
 import org.eclipse.collections.api.multimap.list.MutableListMultimap;
 import org.jetbrains.annotations.Nullable;
 
+//TODO:support recipes which have time, energy, etc(pertick input/output).
 public interface RecipeData {
+
+    static RecipeData create(
+            ListMultimap<IngredientType, ? extends IngredientStack> stableData,
+            @Nullable String uid
+    ) {
+        return BasicRecipeData.create(stableData, CollectionHelper.emptyMultimap(), uid);
+    }
+
+    static RecipeData create(
+            ListMultimap<IngredientType, ? extends IngredientStack> stableData,
+            ListMultimap<MutableData.Key<?>, ? extends MutableData<?>> mutableData,
+            @Nullable String uid
+    ) {
+        return BasicRecipeData.create(stableData, mutableData, uid);
+    }
 
     @Nullable
     static <T> RecipeData from(T recipe) {

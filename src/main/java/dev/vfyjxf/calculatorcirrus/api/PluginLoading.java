@@ -10,6 +10,7 @@ import org.jetbrains.annotations.Nullable;
 import org.objectweb.asm.Type;
 
 import java.lang.reflect.Constructor;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Objects;
 
@@ -17,7 +18,7 @@ public final class PluginLoading {
 
     private static final Logger LOGGER = LogManager.getLogger();
 
-    public static <T> Collection<T> load(Class<T> pluginInterface) {
+    public static <T> MutableList<T> load(Class<T> pluginInterface) {
         MutableList<T> plugins = new FastList<>();
         Type annotationType = Type.getType(RegisterPlugin.class);
         for (ModFileScanData scanData : ModList.get().getAllScanData()) {
@@ -37,7 +38,7 @@ public final class PluginLoading {
     private static <T> T getPlugin(String className, Class<T> type) {
         try {
             Class<?> asmClass = Class.forName(className);
-            if (!type.isAssignableFrom(asmClass)) return null;
+            if (!Arrays.asList(asmClass.getInterfaces()).contains(type)) return null;
             Class<? extends T> asmInstanceClass = asmClass.asSubclass(type);
             Constructor<? extends T> constructor = asmInstanceClass.getDeclaredConstructor();
             return constructor.newInstance();

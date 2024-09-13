@@ -4,6 +4,7 @@ package dev.vfyjxf.calculatorcirrus.api.content.recipes;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
 import dev.vfyjxf.calculatorcirrus.recipes.lookup.EmptyRecipeLookup;
+import dev.vfyjxf.calculatorcirrus.recipes.lookup.SystemRecipeLookup;
 import org.eclipse.collections.api.RichIterable;
 import org.jetbrains.annotations.Contract;
 
@@ -15,6 +16,10 @@ public interface RecipeLookup<T> {
     @SuppressWarnings("unchecked")
     static <T> RecipeLookup<T> empty() {
         return EmptyRecipeLookup.INSTANCE;
+    }
+
+    static <T> RecipeLookup<T> ofSystem(RecipeSystem<T> system) {
+        return new SystemRecipeLookup<>(system, system.allRecipes());
     }
 
     @Contract("_->this")

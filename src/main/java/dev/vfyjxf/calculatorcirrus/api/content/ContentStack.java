@@ -33,6 +33,17 @@ public interface ContentStack<T> {
         return new TypedContentStack<>(type, value, amount);
     }
 
+    @SuppressWarnings("unchecked")
+    static @Nullable <T> ContentStack<T> create(T content) {
+        ContentApi contentApi = ContentApi.getInstance();
+        ContentType<T> detect = (ContentType<T>) contentApi.allContentTypes()
+                .detect(contentType -> contentType.getTypeClass() == content);
+        if (detect != null) {
+            return create(detect, content);
+        }
+        return null;
+    }
+
     static ContentStack<ItemStack> create(@Nullable ItemStack stack) {
         if (stack == null) stack = ItemStack.EMPTY;
         return create(CirrusContentTypes.ITEM, stack, stack.getCount());
@@ -53,11 +64,16 @@ public interface ContentStack<T> {
         return create(CirrusContentTypes.FLUID, stack, amount);
     }
 
-    static <STACK, VALUE> TagStack<STACK, VALUE> create(TagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey) {
+    static <
+            STACK, VALUE> TagStack<STACK, VALUE> create(TagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey) {
         return new TagContentStack<>(tagType, tagKey, 1);
     }
 
-    static <STACK, VALUE> TagStack<STACK, VALUE> create(TagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey, long amount) {
+    static <
+            STACK, VALUE> TagStack<STACK, VALUE> create(
+            TagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey,
+            long amount
+    ) {
         return new TagContentStack<>(tagType, tagKey, amount);
     }
 

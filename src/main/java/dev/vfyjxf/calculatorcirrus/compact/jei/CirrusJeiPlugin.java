@@ -1,4 +1,4 @@
-package dev.vfyjxf.calculatorcirrus.integration.jei;
+package dev.vfyjxf.calculatorcirrus.compact.jei;
 
 import dev.vfyjxf.calculatorcirrus.Constants;
 import mezz.jei.api.IModPlugin;
