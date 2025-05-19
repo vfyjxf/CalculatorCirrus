@@ -16,7 +16,7 @@ public class TypedContentStack<T> extends BasicContentStack<T> {
         super(value);
         this.type = type;
         this.amount = amount;
-        //TODO:collect content tooltip.
+        //TODO:collect content richTooltip.
     }
 
     @Override

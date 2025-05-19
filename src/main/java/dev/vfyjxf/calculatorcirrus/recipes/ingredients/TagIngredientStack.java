@@ -4,7 +4,7 @@ import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
 import dev.vfyjxf.calculatorcirrus.api.content.TagStack;
 import dev.vfyjxf.calculatorcirrus.api.content.TagType;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import org.eclipse.collections.api.list.MutableList;
@@ -38,7 +38,7 @@ public class TagIngredientStack implements IngredientStack {
     }
 
     public TagType<?, ?> getType() {
-        return internalStack.tagType();
+        return type;
     }
 
     public TagKey<?> getTagKey() {
@@ -102,8 +102,6 @@ public class TagIngredientStack implements IngredientStack {
     public int hashCode() {
         int result = type.hashCode();
         result = 31 * result + tagKey.hashCode();
-        result = 31 * result + Long.hashCode(amount);
-        result = 31 * result + Float.hashCode(chance);
         return result;
     }
 

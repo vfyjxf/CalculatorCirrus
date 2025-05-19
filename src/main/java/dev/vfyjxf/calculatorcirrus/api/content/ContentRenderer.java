@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.content;
 
-import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
+import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.content.ClientContentApiImpl;
 import dev.vfyjxf.calculatorcirrus.utils.Singletons;
@@ -29,7 +29,7 @@ public interface ContentRenderer<T> {
     void decorate(ContentStack<T> content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY);
 
     @Nullable
-    Tooltip getTooltip(T content, TooltipContext context);
+    RichTooltip getTooltip(T content, TooltipContext context);
 
     Component getName(T content);
 

@@ -3,7 +3,7 @@ package dev.vfyjxf.calculatorcirrus.content.renderer;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentRenderer;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
+import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.helper.LocalizationHelper;
 import dev.vfyjxf.calculatorcirrus.utils.ErrorUtils;
@@ -81,20 +81,20 @@ public class ItemStackContentRenderer implements ContentRenderer<ItemStack> {
     }
 
     @Override
-    public @Nullable Tooltip getTooltip(ItemStack content, TooltipContext context) {
+    public @Nullable RichTooltip getTooltip(ItemStack content, TooltipContext context) {
         if (content.isEmpty())
             return null;
-        Tooltip tooltip = Tooltip.create();
+        RichTooltip richTooltip = RichTooltip.create();
         Optional<TooltipComponent> component = content.getTooltipImage();
         List<Component> components = tooltipHelper(content, context.flag());
         if (!components.isEmpty()) {
-            tooltip.add(components.get(0));
+            richTooltip.add(components.get(0));
         }
-        component.ifPresent(tooltip::add);
+        component.ifPresent(richTooltip::add);
         for (int i = 1; i < components.size(); i++) {
-            tooltip.add(components.get(i));
+            richTooltip.add(components.get(i));
         }
-        return tooltip;
+        return richTooltip;
     }
 
     @Override
@@ -109,9 +109,9 @@ public class ItemStackContentRenderer implements ContentRenderer<ItemStack> {
             return itemStack.getTooltipLines(Item.TooltipContext.of(minecraft.level), player, tooltipFlag);
         } catch (RuntimeException | LinkageError e) {
             String itemStackInfo = ErrorUtils.getItemStackInfo(itemStack);
-            LOGGER.error("Failed to get tooltip: {}", itemStackInfo, e);
+            LOGGER.error("Failed to get richTooltip: {}", itemStackInfo, e);
             List<Component> list = new ArrayList<>();
-            MutableComponent crash = LocalizationHelper.translatable("tooltip.error.crash");
+            MutableComponent crash = LocalizationHelper.translatable("richTooltip.error.crash");
             list.add(crash.withStyle(ChatFormatting.RED));
             return list;
         }

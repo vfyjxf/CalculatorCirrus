@@ -38,7 +38,7 @@ public class EmptyType implements ContentType, ContentSerializer {
     }
 
     @Override
-    public Object getBase(Object content) {
+    public Object getIdentity(Object content) {
         return EMPTY;
     }
 
@@ -72,12 +72,17 @@ public class EmptyType implements ContentType, ContentSerializer {
     }
 
     @Override
+    public Object copy(Object value) {
+        return EMPTY;
+    }
+
+    @Override
     public Object normalize(ContentStack content, Object value) {
         return EMPTY;
     }
 
     @Override
-    public Object wildcard(ContentStack entry, Object value) {
+    public Object normalize(Object value) {
         return EMPTY;
     }
 

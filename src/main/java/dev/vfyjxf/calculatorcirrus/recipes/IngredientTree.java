@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.recipes;
 
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.CommonRecipe;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeDatabase;
+import dev.vfyjxf.calculatorcirrus.api.recipes.CommonRecipe;
+import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeDatabase;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Range;
 

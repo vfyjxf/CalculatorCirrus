@@ -1,8 +1,9 @@
 package dev.vfyjxf.calculatorcirrus.recipes.ingredients;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.FixedSizeList;
 import org.eclipse.collections.api.list.MutableList;
@@ -22,6 +23,10 @@ public class TypedIngredientStack<T> implements IngredientStack {
         this.amount = amount;
         this.chance = chance;
         this.stacks = Lists.fixedSize.of(stack.normalize());
+    }
+
+    public ContentType<T> getType() {
+        return stacks.getFirst().contentType();
     }
 
     @Override
@@ -90,10 +95,7 @@ public class TypedIngredientStack<T> implements IngredientStack {
 
     @Override
     public int hashCode() {
-        int result = stacks.hashCode();
-        result = 31 * result + Float.hashCode(chance);
-        result = 31 * result + Long.hashCode(amount);
-        return result;
+        return stacks.hashCode();
     }
 
     @Override

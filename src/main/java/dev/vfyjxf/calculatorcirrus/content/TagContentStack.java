@@ -4,6 +4,7 @@ import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.TagStack;
 import dev.vfyjxf.calculatorcirrus.api.content.TagType;
+import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import net.minecraft.tags.TagKey;
@@ -19,7 +20,7 @@ public class TagContentStack<STACK, VALUE> implements TagStack<STACK, VALUE> {
     private final ContentType<STACK> stackType;
     private final TagType<STACK, VALUE> tagType;
     private final TagKey<VALUE> tagKey;
-    private Tooltip append;
+    private RichTooltip append;
     private long amount;
     private MutableList<? extends ContentStack<STACK>> values;
 
@@ -39,19 +40,19 @@ public class TagContentStack<STACK, VALUE> implements TagStack<STACK, VALUE> {
 
     @Nullable
     @Override
-    public Tooltip getTooltip(TooltipContext context) {
+    public RichTooltip getTooltip(TooltipContext context) {
         return append;
     }
 
     @Override
-    public TagStack<STACK, VALUE> appendTooltip(List<Tooltip.Entry> tooltips) {
-        append.addEntries(tooltips);
+    public TagStack<STACK, VALUE> appendTooltip(List<Tooltip> tooltips) {
+        append.tooltip(tooltips);
         return this;
     }
 
     @Override
-    public TagStack<STACK, VALUE> tooltip(Tooltip tooltip) {
-        append = tooltip;
+    public TagStack<STACK, VALUE> tooltip(RichTooltip richTooltip) {
+        append = richTooltip;
         return this;
     }
 

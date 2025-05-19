@@ -56,7 +56,7 @@ public record InputContext(
         return keyMapping.isActiveAndMatches(this.key);
     }
 
-    public FloatingPoint getRelative(Widget widget) {
+    public FloatingPoint ofRelative(Widget widget) {
         WidgetGroup<?> parent = widget.parent();
         if (parent == null) return new FloatingPoint(mouseX(), mouseY());
         Point absolute = widget.getAbsolute();

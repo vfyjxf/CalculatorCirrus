@@ -1,5 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.content;
 
+import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.content.EmptyContentStack;
@@ -26,11 +27,11 @@ public interface ContentStack<T> {
     }
 
     static <T> ContentStack<T> create(ContentType<T> type, T value) {
-        return new TypedContentStack<>(type, value, 1);
+        return new TypedContentStack<>(type, type.copy(value), 1);
     }
 
     static <T> ContentStack<T> create(ContentType<T> type, T value, long amount) {
-        return new TypedContentStack<>(type, value, amount);
+        return new TypedContentStack<>(type, type.copy(value), amount);
     }
 
     @SuppressWarnings("unchecked")
@@ -64,13 +65,11 @@ public interface ContentStack<T> {
         return create(CirrusContentTypes.FLUID, stack, amount);
     }
 
-    static <
-            STACK, VALUE> TagStack<STACK, VALUE> create(TagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey) {
+    static <STACK, VALUE> TagStack<STACK, VALUE> create(TagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey) {
         return new TagContentStack<>(tagType, tagKey, 1);
     }
 
-    static <
-            STACK, VALUE> TagStack<STACK, VALUE> create(
+    static <STACK, VALUE> TagStack<STACK, VALUE> create(
             TagType<STACK, VALUE> tagType, TagKey<VALUE> tagKey,
             long amount
     ) {
@@ -97,8 +96,8 @@ public interface ContentStack<T> {
 
     ContentType<T> contentType();
 
-    default Object getBase() {
-        return contentType().getBase(value());
+    default Object identity() {
+        return contentType().getIdentity(value());
     }
 
     default long getAmount() {
@@ -189,19 +188,19 @@ public interface ContentStack<T> {
     }
 
     @Nullable
-    Tooltip getTooltip(TooltipContext context);
+    RichTooltip getTooltip(TooltipContext context);
 
     default ContentStack<T> appendTooltip(String... tooltips) {
         return appendTooltip(Arrays.stream(tooltips).map(Component::translatable).toArray(Component[]::new));
     }
 
     default ContentStack<T> appendTooltip(Component... tooltips) {
-        return appendTooltip(Arrays.stream(tooltips).map(Tooltip::entry).toList());
+        return appendTooltip(Arrays.stream(tooltips).map(RichTooltip::tooltip).toList());
     }
 
-    ContentStack<T> appendTooltip(List<Tooltip.Entry> tooltips);
+    ContentStack<T> appendTooltip(List<Tooltip> tooltips);
 
-    ContentStack<T> tooltip(Tooltip tooltip);
+    ContentStack<T> tooltip(RichTooltip richTooltip);
 
     ContentStack<ItemStack> cheatsStack();
 

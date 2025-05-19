@@ -1,8 +1,8 @@
 package dev.vfyjxf.calculatorcirrus.recipes;
 
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeApi;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeSystem;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.VanillaRecipeSystem;
+import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeApi;
+import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeSystem;
+import dev.vfyjxf.calculatorcirrus.api.recipes.VanillaRecipeSystem;
 import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Maps;

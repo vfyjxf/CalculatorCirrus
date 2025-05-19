@@ -10,10 +10,10 @@ import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.RegisterPlugin;
 import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.IngredientType;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeApi;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
-import dev.vfyjxf.calculatorcirrus.calculator.SimpleCalculator;
+import dev.vfyjxf.calculatorcirrus.api.recipes.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeApi;
+import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.calculator.simple.SimpleCalculator;
 import dev.vfyjxf.calculatorcirrus.integration.CirrusAdapter;
 import dev.vfyjxf.calculatorcirrus.integration.gtm.converter.FluidConverter;
 import dev.vfyjxf.calculatorcirrus.integration.gtm.converter.ItemConverter;
@@ -56,11 +56,18 @@ public class PluginRegister {
             }
             return false;
         });
-        RecipeHolder<GTRecipe> target = recipeSystem.getRecipe("gtceu:centrifuge/mycelium_separation");
-        ContentStack<ItemStack> targetStack = ContentStack.create(new ItemStack(Items.RED_MUSHROOM));
-        calculator.setRecipe(recipeSystem, target);
-        calculator.setTarget(recipeSystem.parseRecipe(target).getOutputs().getLast().getAny());
-        calculator.setAmount(100);
+        GTMRecipeSystem mixerSystem = (GTMRecipeSystem) recipeApi.allSystems().detect(system -> {
+            if (system instanceof GTMRecipeSystem gtSystem) {
+                return gtSystem.recipeType() == GTRecipeTypes.MIXER_RECIPES;
+            }
+            return false;
+        });
+        RecipeHolder<GTRecipe> step1 = recipeSystem.getRecipe("gtceu:centrifuge/mycelium_separation");
+        RecipeHolder<GTRecipe> targetRecipe = mixerSystem.getRecipe("gtceu:mixer/fermented_spider_eye_red");
+        ContentStack<ItemStack> mushroom = ContentStack.create(new ItemStack(Items.RED_MUSHROOM));
+        calculator.setRecipe(mixerSystem, targetRecipe);
+        calculator.addPath(mushroom, recipeSystem, step1);
+        calculator.setAmount(200);
         calculator.calculate();
         MutableListMultimap<IngredientType, ? extends IngredientStack> calculations = calculator.getCalculations();
     }

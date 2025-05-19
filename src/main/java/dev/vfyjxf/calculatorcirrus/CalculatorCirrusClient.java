@@ -60,7 +60,7 @@ public class CalculatorCirrusClient extends CalculatorCirrus {
                                 event.register(clazz, t -> (ClientTooltipComponent) t);
                             }
                         } catch (ClassNotFoundException e) {
-                            logger.error("Failed to register client tooltip component: {}", annotation.memberName(), e);
+                            logger.error("Failed to register client richTooltip component: {}", annotation.memberName(), e);
                         }
                     });
         }

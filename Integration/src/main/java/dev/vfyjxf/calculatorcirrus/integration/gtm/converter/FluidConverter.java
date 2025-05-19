@@ -2,7 +2,7 @@ package dev.vfyjxf.calculatorcirrus.integration.gtm.converter;
 
 import com.gregtechceu.gtceu.api.capability.recipe.FluidRecipeCapability;
 import com.gregtechceu.gtceu.api.recipe.content.Content;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.integration.gtm.ContentConverter;
 
 public class FluidConverter implements ContentConverter {

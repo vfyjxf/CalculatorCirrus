@@ -1,9 +1,9 @@
 package dev.vfyjxf.calculatorcirrus.recipes;
 
 import com.google.common.base.Suppliers;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.CommonRecipe;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeData;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeSystem;
+import dev.vfyjxf.calculatorcirrus.api.recipes.CommonRecipe;
+import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeData;
+import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeSystem;
 
 import java.util.function.Supplier;
 

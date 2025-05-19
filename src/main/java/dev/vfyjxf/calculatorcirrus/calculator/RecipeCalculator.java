@@ -1,12 +1,12 @@
 package dev.vfyjxf.calculatorcirrus.calculator;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.CommonRecipe;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.IngredientType;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeDatabase;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeSystem;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeTransformer;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.recipes.CommonRecipe;
+import dev.vfyjxf.calculatorcirrus.api.recipes.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeDatabase;
+import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeSystem;
+import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeTransformer;
+import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.recipes.ingredients.TagIngredientStack;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.multimap.list.MutableListMultimap;
@@ -19,6 +19,9 @@ public interface RecipeCalculator {
 
     void setTarget(@Nullable ContentStack<?> target);
 
+    /**
+     * @return the target recipe to calculate.  It must be an- output of the {@link #getRecipe()}.
+     */
     @Nullable
     ContentStack<?> getTarget();
 

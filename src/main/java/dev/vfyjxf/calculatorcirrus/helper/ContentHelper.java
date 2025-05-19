@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.helper;
 
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;

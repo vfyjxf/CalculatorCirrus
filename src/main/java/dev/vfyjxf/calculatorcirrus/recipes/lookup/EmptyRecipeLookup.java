@@ -2,7 +2,7 @@ package dev.vfyjxf.calculatorcirrus.recipes.lookup;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeLookup;
+import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeLookup;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 

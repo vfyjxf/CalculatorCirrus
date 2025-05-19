@@ -32,7 +32,7 @@ public class FluidStackType extends BasicContentType<FluidStack> {
     }
 
     @Override
-    public Object getBase(FluidStack content) {
+    public Object getIdentity(FluidStack content) {
         return content.getFluid();
     }
 
@@ -69,12 +69,17 @@ public class FluidStackType extends BasicContentType<FluidStack> {
     }
 
     @Override
+    public FluidStack copy(FluidStack value) {
+        return value.copy();
+    }
+
+    @Override
     public FluidStack normalize(ContentStack<FluidStack> content, FluidStack value) {
         return value.copyWithAmount(1000);
     }
 
     @Override
-    public FluidStack wildcard(ContentStack<FluidStack> entry, FluidStack value) {
+    public FluidStack normalize(FluidStack value) {
         return value.copyWithAmount(1000);
     }
 

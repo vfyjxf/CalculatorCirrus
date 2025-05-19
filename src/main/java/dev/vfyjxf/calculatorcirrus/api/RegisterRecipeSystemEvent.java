@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api;
 
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeSystem;
+import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeSystem;
 import dev.vfyjxf.calculatorcirrus.recipes.RecipeApiImpl;
 import net.neoforged.bus.api.Event;
 import net.neoforged.fml.event.IModBusEvent;

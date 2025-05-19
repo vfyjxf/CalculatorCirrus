@@ -1,6 +1,5 @@
 package dev.vfyjxf.calculatorcirrus.helper;
 
-import org.eclipse.collections.api.multimap.ImmutableMultimap;
 import org.eclipse.collections.api.multimap.list.ImmutableListMultimap;
 import org.eclipse.collections.impl.multimap.list.FastListMultimap;
 

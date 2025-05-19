@@ -33,7 +33,7 @@ public interface ContentType<T> {
     /**
      * @return the item of ItemStack, the fluid of FluidStack, etc.
      */
-    Object getBase(T content);
+    Object getIdentity(T content);
 
     /**
      * @return the id from the content.
@@ -53,9 +53,11 @@ public interface ContentType<T> {
 
     T copy(ContentStack<T> content, T value);
 
+    T copy(T value);
+
     T normalize(ContentStack<T> content, T value);
 
-    T wildcard(ContentStack<T> entry, T value);
+    T normalize(T value);
 
     default boolean stackable() {
         return true;

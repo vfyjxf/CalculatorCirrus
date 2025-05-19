@@ -3,7 +3,7 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'maven-publish'
-    id 'net.neoforged.moddev' version '1.0.19'
+    id 'net.neoforged.moddev' version '1.0.21'
 }
 
 tasks.named('wrapper', Wrapper).configure {
@@ -63,12 +63,13 @@ neoForge {
     runs {
         client {
             client()
-
+            gameDirectory = file('runs/client')
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
 
         server {
             server()
+            gameDirectory = file('runs/server')
             programArgument '--nogui'
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
@@ -80,6 +81,7 @@ neoForge {
 
         data {
             data()
+            gameDirectory = file('runs/data')
             programArguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
         }
 

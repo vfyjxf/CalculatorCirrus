@@ -11,7 +11,6 @@ import org.objectweb.asm.Type;
 
 import java.lang.reflect.Constructor;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Objects;
 
 public final class PluginLoading {
@@ -27,7 +26,8 @@ public final class PluginLoading {
                 if (Objects.equals(a.annotationType(), annotationType)) {
                     String memberName = a.memberName();
                     T plugin = getPlugin(memberName, pluginInterface);
-                    if (plugin != null) plugins.add(plugin);
+                    if (plugin != null)
+                        plugins.add(plugin);
                 }
             }
         }

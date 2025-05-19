@@ -1,10 +1,12 @@
 package dev.vfyjxf.calculatorcirrus.recipes.ingredients;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
 import org.eclipse.collections.api.list.MutableList;
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Unmodifiable;
 
+@ApiStatus.Internal
 public class ListIngredientStack implements IngredientStack {
 
     private final MutableList<? extends ContentStack<?>> stacks;
@@ -84,8 +86,6 @@ public class ListIngredientStack implements IngredientStack {
     @Override
     public int hashCode() {
         int result = stacks.hashCode();
-        result = 31 * result + Long.hashCode(amount);
-        result = 31 * result + Float.hashCode(chance);
         return result;
     }
 

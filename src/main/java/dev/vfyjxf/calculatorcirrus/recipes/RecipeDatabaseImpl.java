@@ -1,9 +1,9 @@
 package dev.vfyjxf.calculatorcirrus.recipes;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.CommonRecipe;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeDatabase;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.recipes.CommonRecipe;
+import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeDatabase;
+import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.recipes.ingredients.TagIngredientStack;
 import net.minecraft.network.chat.Component;
 import org.eclipse.collections.api.factory.Maps;

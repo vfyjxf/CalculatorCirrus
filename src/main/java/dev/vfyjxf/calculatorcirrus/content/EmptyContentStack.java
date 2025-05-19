@@ -3,7 +3,7 @@ package dev.vfyjxf.calculatorcirrus.content;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
-import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
+import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.content.types.EmptyType;
 import net.minecraft.world.item.ItemStack;
@@ -36,12 +36,12 @@ public class EmptyContentStack implements ContentStack {
     }
 
     @Override
-    public @Nullable Tooltip getTooltip(TooltipContext context) {
+    public @Nullable RichTooltip getTooltip(TooltipContext context) {
         return null;
     }
 
     @Override
-    public ContentStack tooltip(Tooltip tooltip) {
+    public ContentStack tooltip(RichTooltip richTooltip) {
         return this;
     }
 

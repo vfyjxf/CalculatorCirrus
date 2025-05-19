@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.recipes;
 
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.CommonRecipe;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.recipes.CommonRecipe;
+import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
 import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Nullable;
 

@@ -1,9 +1,9 @@
 package dev.vfyjxf.calculatorcirrus.recipes;
 
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.IngredientType;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.MutableData;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeData;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.recipes.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipes.MutableData;
+import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeData;
+import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.helper.CollectionHelper;
 import net.minecraft.nbt.CompoundTag;
 import org.eclipse.collections.api.list.MutableList;
