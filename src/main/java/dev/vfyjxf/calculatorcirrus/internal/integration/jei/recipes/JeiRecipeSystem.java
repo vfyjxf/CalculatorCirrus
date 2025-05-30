@@ -1,10 +1,10 @@
 package dev.vfyjxf.calculatorcirrus.internal.integration.jei.recipes;
 
-import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
-import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeData;
-import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeLookup;
-import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeSystem;
+import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
+import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeData;
+import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeLookup;
+import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import org.eclipse.collections.api.RichIterable;
@@ -27,7 +27,7 @@ public class JeiRecipeSystem implements RecipeSystem<Object> {
 
     @Override
     public @Unmodifiable OrderedIterable<Object> allRecipes() {
-        return null;
+        throw new UnsupportedOperationException("Not Implemented");
     }
 
     @Override
@@ -48,27 +48,27 @@ public class JeiRecipeSystem implements RecipeSystem<Object> {
 
     @Override
     public @Nullable ResourceLocation getRegistryName(Object recipe) {
-        return null;
+        throw new UnsupportedOperationException("Not Implemented");
     }
 
     @Override
     public @Nullable Object getRecipe(String uniqueId) {
-        return null;
+        throw new UnsupportedOperationException("Not Implemented");
     }
 
     @Override
     public @Nullable Object getRecipe(ResourceLocation registryName) {
-        return null;
+        throw new UnsupportedOperationException("Not Implemented");
     }
 
     @Override
     public RecipeData parseRecipe(Object recipe) {
-        return null;
+        throw new UnsupportedOperationException("Not Implemented");
     }
 
     @Override
     public MutableList<ContentStack<ItemStack>> getMachines() {
-        return null;
+        throw new UnsupportedOperationException("Not Implemented");
     }
 
 
@@ -76,32 +76,32 @@ public class JeiRecipeSystem implements RecipeSystem<Object> {
 
         @Override
         public RecipeLookup<Object> filter(Predicate<Object> predicate) {
-            return null;
+             throw new UnsupportedOperationException("Not Implemented");
         }
 
         @Override
-        public RecipeLookup<Object> withInput(ContentStack<?> input, MatchContext context) {
-            return null;
+        public RecipeLookup<Object> withInput(ContentStack<?> input, MatchStrategy strategy) {
+            throw new UnsupportedOperationException("Not Implemented");
         }
 
         @Override
-        public RecipeLookup<Object> withInput(Collection<? extends ContentStack<?>> inputs, MatchContext context) {
-            return null;
+        public RecipeLookup<Object> withInput(Collection<? extends ContentStack<?>> inputs, MatchStrategy strategy) {
+            throw new UnsupportedOperationException("Not Implemented");
         }
 
         @Override
-        public RecipeLookup<Object> withOutput(ContentStack<?> output, MatchContext context) {
-            return null;
+        public RecipeLookup<Object> withOutput(ContentStack<?> output, MatchStrategy strategy) {
+            throw new UnsupportedOperationException("Not Implemented");
         }
 
         @Override
-        public RecipeLookup<Object> withOutput(Collection<? extends ContentStack<?>> outputs, MatchContext context) {
-            return null;
+        public RecipeLookup<Object> withOutput(Collection<? extends ContentStack<?>> outputs, MatchStrategy strategy) {
+            throw new UnsupportedOperationException("Not Implemented");
         }
 
         @Override
         public RichIterable<Object> get() {
-            return null;
+            throw new UnsupportedOperationException("Not Implemented");
         }
     }
 }

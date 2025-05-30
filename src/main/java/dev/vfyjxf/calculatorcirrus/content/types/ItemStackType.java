@@ -1,7 +1,8 @@
 package dev.vfyjxf.calculatorcirrus.content.types;
 
-import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
+import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
+import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -17,35 +18,29 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.stream.Stream;
 
-public class ItemStackType extends BasicContentType<ItemStack> {
+public class ItemStackType extends BasicStackContentType<ItemStack> {
 
-    private static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(namespace, "item_stack");
+    public static final ItemStackType INSTANCE = new ItemStackType();
+    private static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(ContentType.namespace, "item_stack");
 
-    public ItemStackType() {
+    private ItemStackType() {
         super(ItemStack.class, Item.class);
     }
 
     @Override
-    public ResourceLocation getId() {
+    public ResourceLocation typeId() {
         return ID;
     }
 
-
     @Override
-    public Object getIdentity(ItemStack content) {
-        return content.getItem();
-    }
-
-    @Override
-    public @Nullable String getUid(ContentStack<ItemStack> content, ItemStack value) {
+    public @Nullable ResourceLocation getLocation(ItemStack value) {
         return BuiltInRegistries.ITEM.getResourceKey(value.getItem())
                 .map(ResourceKey::location)
-                .map(ResourceLocation::toString)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown item " + value.getItem()));
     }
 
     @Override
-    public @Nullable String getModid(ContentStack<ItemStack> content, ItemStack value) {
+    public @Nullable String getNamespace(ItemStack value) {
         Item item = value.getItem();
         String modId = item.getCreatorModId(value);
         if (modId == null) {
@@ -58,28 +53,32 @@ public class ItemStackType extends BasicContentType<ItemStack> {
     }
 
     @Override
-    public boolean isEmpty(ContentStack<ItemStack> content, ItemStack value) {
+    public boolean isEmpty(ItemStack value) {
         return value.isEmpty();
     }
 
     @Override
-    public ItemStack create(ContentStack<ItemStack> content, DataComponentPatch components, long amount) {
-        return new ItemStack(content.value().getItemHolder(), (int) amount, components);
+    public Object getIdentity(ItemStack content) {
+        return content.getItem();
     }
 
     @Override
-    public ItemStack copy(ContentStack<ItemStack> content, ItemStack value) {
-        return value.copy();
+    public boolean isEmpty(ContentStack<ItemStack> content, ItemStack value) {
+        return content.amount() <= 0 || value.isEmpty();
     }
+
+    @Override
+    public ItemStack create(ContentStack<ItemStack> content, long amount, DataComponentPatch componentPatch) {
+        if (amount > Integer.MAX_VALUE) {
+            amount = Integer.MAX_VALUE;
+        }
+        return new ItemStack(content.value().getItemHolder(), (int) amount, componentPatch);
+    }
+
 
     @Override
     public ItemStack copy(ItemStack value) {
         return value.copy();
-    }
-
-    @Override
-    public ItemStack normalize(ContentStack<ItemStack> content, ItemStack value) {
-        return new ItemStack(value.getItem(), 1);
     }
 
     @Override
@@ -94,6 +93,21 @@ public class ItemStackType extends BasicContentType<ItemStack> {
     }
 
     @Override
+    public ItemStack wildcard(ItemStack value) {
+        return new ItemStack(value.getItem(), 1);
+    }
+
+    @Override
+    public DataComponentMap getComponents(ItemStack value) {
+        return value.getComponents();
+    }
+
+    @Override
+    public DataComponentPatch getComponentsPatch(ItemStack value) {
+        return value.getComponentsPatch();
+    }
+
+    @Override
     public long getAmount(ContentStack<ItemStack> content, ItemStack value) {
         return value.getCount();
     }
@@ -103,15 +117,10 @@ public class ItemStackType extends BasicContentType<ItemStack> {
         return value.getCount();
     }
 
-    @Override
-    public @Nullable DataComponentMap getComponents(ContentStack<ItemStack> content, ItemStack value) {
-        return value.getComponents();
-    }
-
     @Nullable
     @Override
-    public ItemStack merge(ItemStack value1, ItemStack value2, MatchContext matchContext) {
-        if (matches(value1, value2, matchContext)) {
+    public ItemStack merge(ItemStack value1, ItemStack value2, MatchStrategy matchStrategy) {
+        if (matches(value1, value2, matchStrategy)) {
             ItemStack result = value1.copy();
             result.grow(value2.getCount());
             return result;
@@ -120,39 +129,50 @@ public class ItemStackType extends BasicContentType<ItemStack> {
     }
 
     @Override
-    public boolean matches(ItemStack value1, ItemStack value2, MatchContext matchContext) {
-        if (matchContext.exact()) {
-            return ItemStack.isSameItemSameComponents(value1, value2);
-        } else {
-            return ItemStack.isSameItem(value1, value2);
-        }
+    public boolean matches(ItemStack value1, ItemStack value2, MatchStrategy strategy) {
+        if (value1 == value2) return true;
+        boolean identity = !strategy.withIdentity() || value1.getItem() == value2.getItem();
+        boolean amount = !strategy.withAmount() || value1.getCount() == value2.getCount();
+        boolean components = !strategy.withComponent() || strategy.testComponents(value1.getComponents(), value2.getComponents());
+        return identity && amount && components;
     }
 
     @Override
-    public int hash(ContentStack<ItemStack> content, ItemStack value, MatchContext context) {
-        //TODO:Rewrite this
-        if (context.fuzzy()) {
-            return value.getItem().hashCode();
-        }
-        return this.save(content, value).hashCode();
+    public int hash(ContentStack<ItemStack> content, ItemStack value, MatchStrategy strategy) {
+        if (value.isEmpty()) return ItemStack.EMPTY.hashCode();
+        int hashcode = value.hashCode();
+        hashcode = strategy.withAmount() ? 31 * hashcode + Long.hashCode(content.amount()) : hashcode;
+        hashcode = strategy.withComponent() ? 31 * hashcode + value.getComponents().hashCode() : hashcode;
+        return hashcode;
     }
 
     @Override
-    public int hash(ItemStack value, MatchContext context) {
-        if (context.fuzzy()) {
-            return value.getItem().hashCode();
-        }
-        return ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, value).getOrThrow().hashCode();
+    public int hash(ItemStack value, MatchStrategy strategy) {
+        if (value.isEmpty()) return ItemStack.EMPTY.hashCode();
+        int hashcode = value.hashCode();
+        hashcode = strategy.withAmount() ? 31 * hashcode + value.getCount() : hashcode;
+        hashcode = strategy.withComponent() ? 31 * hashcode + value.getComponents().hashCode() : hashcode;
+        return hashcode;
+    }
+
+    @Override
+    public long maxAmount() {
+        return Integer.MAX_VALUE;
     }
 
     @SuppressWarnings("deprecation")
     @Override
-    public Stream<? extends TagKey<?>> getTagsFor(ContentStack<ItemStack> content, ItemStack value) {
+    public Stream<? extends TagKey<?>> getTags(ItemStack value) {
         Stream<? extends TagKey<?>> tags = value.getTags();
         if (value.getItem() instanceof BlockItem blockItem) {
             tags = Stream.concat(tags, blockItem.getBlock().builtInRegistryHolder().tags());
         }
         return tags;
+    }
+
+    @Override
+    public ItemStack cheatStack(ItemStack value) {
+        return value.copy();
     }
 
     @Override

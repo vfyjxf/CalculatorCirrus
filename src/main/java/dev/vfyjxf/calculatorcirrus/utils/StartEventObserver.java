@@ -16,6 +16,7 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RecipesUpdatedEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.event.TagsUpdatedEvent;
+import net.neoforged.neoforge.registries.datamaps.DataMapsUpdatedEvent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -29,7 +30,7 @@ import java.util.Set;
  */
 public class StartEventObserver implements ResourceManagerReloadListener {
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final Set<Class<? extends Event>> requiredEvents = Set.of(TagsUpdatedEvent.class, RecipesUpdatedEvent.class);
+    private static final Set<Class<? extends Event>> requiredEvents = Set.of(TagsUpdatedEvent.class, RecipesUpdatedEvent.class, DataMapsUpdatedEvent.class);
 
     private enum State {
         LISTENING, MOD_STARTED
@@ -67,10 +68,10 @@ public class StartEventObserver implements ResourceManagerReloadListener {
                             .toList();
 
                     LOGGER.error("""
-                                         A Screen is opening but Calculator Cirrus hasn't started yet.
-                                         Normally, Calculator Cirrus is started after ClientPlayerNetworkEvent.LoggedInEvent, TagsUpdatedEvent, and RecipesUpdatedEvent.
-                                         Something has caused one or more of these events to fail, so Calculator Cirrus is starting very late.
-                                         Missing events: {}""", missingEvents);
+                            A Screen is opening but Calculator Cirrus hasn't started yet.
+                            Normally, Calculator Cirrus is started after ClientPlayerNetworkEvent.LoggedInEvent, TagsUpdatedEvent, and RecipesUpdatedEvent.
+                            Something has caused one or more of these events to fail, so Calculator Cirrus is starting very late.
+                            Missing events: {}""", missingEvents);
                     transitionState(State.LISTENING);
                     transitionState(State.MOD_STARTED);
                 }

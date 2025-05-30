@@ -1,12 +1,12 @@
 package dev.vfyjxf.calculatorcirrus.calculator.simple;
 
-import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipes.CommonRecipe;
-import dev.vfyjxf.calculatorcirrus.api.recipes.IngredientType;
-import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeDatabase;
-import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeSystem;
-import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeTransformer;
-import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.recipe.CommonRecipe;
+import dev.vfyjxf.calculatorcirrus.api.recipe.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeDatabase;
+import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeTransformer;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredients.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.calculator.RecipeCalculator;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.factory.Maps;
@@ -119,7 +119,7 @@ public class SimpleCalculator implements RecipeCalculator {
     private record StackToCraft(IngredientStack stack, CommonRecipe<?> recipe, double amount) {}
 
     private MutableList<StackToCraft> findStacks() {
-
+        return null;
     }
 
     private @Nullable CommonRecipe<?> getRecipe(ContentStack<?> contentStack) {

@@ -5,12 +5,13 @@ import com.gregtechceu.gtceu.api.recipe.GTRecipe;
 import com.gregtechceu.gtceu.api.recipe.GTRecipeType;
 import com.gregtechceu.gtceu.api.recipe.content.Content;
 import com.gregtechceu.gtceu.api.registry.GTRegistries;
-import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipes.IngredientType;
-import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeData;
-import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeLookup;
-import dev.vfyjxf.calculatorcirrus.api.recipes.VanillaRecipeSystem;
-import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.recipe.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeData;
+import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeLookup;
+import dev.vfyjxf.calculatorcirrus.api.recipe.VanillaRecipeSystem;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.calculatorcirrus.helper.RecipeHelper;
 import dev.vfyjxf.calculatorcirrus.integration.gtm.ContentConverter;
 import dev.vfyjxf.calculatorcirrus.utils.Locations;
@@ -49,7 +50,7 @@ public class GTMRecipeSystem implements VanillaRecipeSystem<GTRecipe> {
     public GTMRecipeSystem(GTRecipeType recipeType) {
         this.recipeType = recipeType;
         this.systemId = Locations.of(recipeType.registryName.getNamespace(), recipeType.group + "/" + recipeType.registryName.getPath());
-        this.recipeManager = RecipeHelper.getRecipeManager();
+        this.recipeManager = VanillaRecipeSystem.recipeManager();
         this.machines = LazyIterate.adapt(GTRegistries.MACHINES)
                 .select(machine -> {
                     @Nullable GTRecipeType[] recipeTypes = machine.getRecipeTypes();

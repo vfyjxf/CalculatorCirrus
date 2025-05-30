@@ -1,13 +1,14 @@
 package dev.vfyjxf.calculatorcirrus.calculator;
 
-import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipes.CommonRecipe;
-import dev.vfyjxf.calculatorcirrus.api.recipes.IngredientType;
-import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeDatabase;
-import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeSystem;
-import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeTransformer;
-import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
-import dev.vfyjxf.calculatorcirrus.recipes.ingredients.TagIngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.value.TagStack;
+import dev.vfyjxf.calculatorcirrus.api.recipe.CommonRecipe;
+import dev.vfyjxf.calculatorcirrus.api.recipe.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeDatabase;
+import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeTransformer;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.recipe.ingredients.TagIngredientStack;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.multimap.list.MutableListMultimap;
 import org.jetbrains.annotations.Nullable;
@@ -54,7 +55,7 @@ public interface RecipeCalculator {
             addPath(ingredient.getStacks().getOnly(), recipe);
         } else {
             if (ingredient instanceof TagIngredientStack tagIngredient) {
-                addPath(ContentStack.create(tagIngredient.getType().cast(), tagIngredient.getTagKey()), recipe);
+                addPath(TagStack.create(tagIngredient.getType().cast(), tagIngredient.getTagKey()), recipe);
             } else if (ingredient.isList()) {
                 ContentStack<?> detect = ingredient.getStacks().detect(stack -> recipe.data().getOutputs().anySatisfy(output -> output.contains(stack)));
                 if (detect != null) {

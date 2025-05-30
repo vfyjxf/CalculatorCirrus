@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.content.renderer;
 
-import dev.vfyjxf.calculatorcirrus.api.content.ContentRenderer;
-import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.type.ContentRenderer;
+import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.helper.LocalizationHelper;

@@ -1,0 +1,49 @@
+package dev.vfyjxf.calculatorcirrcus.api.recipe;
+
+import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.recipe.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeApi;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.calculator.simple.SimpleCalculator;
+import dev.vfyjxf.calculatorcirrus.recipe.systems.CraftingRecipeSystem;
+import dev.vfyjxf.calculatorcirrus.utils.Locations;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.neoforged.testframework.junit.EphemeralTestServerProvider;
+import org.eclipse.collections.api.multimap.list.MutableListMultimap;
+import org.junit.jupiter.api.extension.ExtendWith;
+
+@ExtendWith(EphemeralTestServerProvider.class)
+public class RecipeApiTest {
+
+    void testCraftingRecipeSystemParse(MinecraftServer server) {
+
+    }
+
+    private void recipeTest() {
+        RecipeApi recipeApi = RecipeApi.getInstance();
+        CraftingRecipeSystem recipeSystem = (CraftingRecipeSystem) recipeApi.allSystems().detect(system -> system instanceof CraftingRecipeSystem);
+        RecipeHolder<CraftingRecipe> target = recipeSystem.getRecipe(Locations.create("gray_candle"));
+        RecipeHolder<CraftingRecipe> candleRecipe = recipeSystem.getRecipe(Locations.create("candle"));
+        RecipeHolder<CraftingRecipe> garyDyeRecipe = recipeSystem.getRecipe(Locations.create("gray_dye"));
+        RecipeHolder<CraftingRecipe> whiteDyeRecipe = recipeSystem.getRecipe(Locations.create("white_dye"));
+        RecipeHolder<CraftingRecipe> boneMealRecipe = recipeSystem.getRecipe(Locations.create("bone_meal"));
+        RecipeHolder<CraftingRecipe> blackDyeRecipe = recipeSystem.getRecipe(Locations.create("black_dye"));
+        SimpleCalculator calculator = new SimpleCalculator();
+        calculator.setRecipe(recipeSystem, target);
+        calculator.addPath(ContentStack.create(new ItemStack(Items.CANDLE)), recipeSystem, candleRecipe);
+        calculator.addPath(ContentStack.create(new ItemStack(Items.GRAY_DYE)), recipeSystem, garyDyeRecipe);
+        calculator.addPath(ContentStack.create(new ItemStack(Items.WHITE_DYE)), recipeSystem, whiteDyeRecipe);
+        calculator.addPath(ContentStack.create(new ItemStack(Items.BONE_MEAL)), recipeSystem, boneMealRecipe);
+        calculator.addPath(ContentStack.create(new ItemStack(Items.BLACK_DYE)), recipeSystem, blackDyeRecipe);
+
+        calculator.setAmount(1000);
+        calculator.calculate();
+        MutableListMultimap<IngredientType, ? extends IngredientStack> calculations = calculator.getCalculations();
+        System.out.println(calculations);
+    }
+
+}

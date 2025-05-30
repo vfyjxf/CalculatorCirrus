@@ -1,8 +1,8 @@
 package dev.vfyjxf.calculatorcirrus.calculator.tree;
 
-import dev.vfyjxf.calculatorcirrus.api.recipes.CommonRecipe;
-import dev.vfyjxf.calculatorcirrus.api.recipes.RecipeDatabase;
-import dev.vfyjxf.calculatorcirrus.api.recipes.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.recipe.CommonRecipe;
+import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeDatabase;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredients.IngredientStack;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.ApiStatus;

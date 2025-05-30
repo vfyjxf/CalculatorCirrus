@@ -1,7 +1,9 @@
 package dev.vfyjxf.calculatorcirrus.api.content;
 
 import dev.vfyjxf.calculatorcirrus.Constants;
-import dev.vfyjxf.calculatorcirrus.content.types.EmptyType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.StackContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
+import dev.vfyjxf.calculatorcirrus.api.content.value.EmptyStackContentType;
 import dev.vfyjxf.calculatorcirrus.content.types.FluidStackType;
 import dev.vfyjxf.calculatorcirrus.content.types.ItemStackType;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -13,27 +15,27 @@ import net.neoforged.neoforge.fluids.FluidStack;
 
 import static net.minecraft.resources.ResourceLocation.fromNamespaceAndPath;
 
+@SuppressWarnings("deprecated")
 public final class CirrusContentTypes {
 
-    @SuppressWarnings("rawtypes")
-    public static final ContentType EMPTY = new EmptyType();
-    public static final ContentType<ItemStack> ITEM = new ItemStackType();
-    public static final ContentType<FluidStack> FLUID = new FluidStackType();
+    public static final StackContentType<?> EMPTY = EmptyStackContentType.INSTANCE;
+    public static final StackContentType<ItemStack> ITEM = ItemStackType.INSTANCE;
+    public static final StackContentType<FluidStack> FLUID = FluidStackType.INSTANCE;
 
-    public static final TagType<ItemStack, Item> ITEM_TAG = TagType.fromRegistry(of("tag/item"), ITEM, Item.class, (item, amount) -> new ItemStack(item, (int) amount), ItemStack::getItem, BuiltInRegistries.ITEM);
-    public static final TagType<FluidStack, Fluid> FLUID_TAG = TagType.fromRegistry(of("tag/fluid"), FLUID, Fluid.class, (fluid, amount) -> new FluidStack(fluid, ((int) amount)), FluidStack::getFluid, BuiltInRegistries.FLUID);
+    public static final TagType<Item, ItemStack> ITEM_TAG = TagType.fromRegistry(
+            of("tag/item"), Item.class, ITEM, BuiltInRegistries.ITEM, ItemStack::getItem,
+            (item, amount, componentPatch) -> new ItemStack(item.builtInRegistryHolder(), (int) amount, componentPatch)
+    );
+    public static final TagType<Fluid, FluidStack> FLUID_TAG = TagType.fromRegistry(
+            of("tag/fluid"), Fluid.class, FLUID, BuiltInRegistries.FLUID, FluidStack::getFluid,
+            (fluid, amount, componentPatch) -> new FluidStack(fluid.builtInRegistryHolder(), ((int) amount), componentPatch));
 
 
-    @SuppressWarnings("unchecked")
-    public static <T> ContentType<T> emptyType() {
-        return (ContentType<T>) EMPTY;
-    }
-
-    public static ContentType<ItemStack> itemType() {
+    public static StackContentType<ItemStack> itemType() {
         return ITEM;
     }
 
-    public static ContentType<FluidStack> fluidType() {
+    public static StackContentType<FluidStack> fluidType() {
         return FLUID;
     }
 
@@ -41,6 +43,5 @@ public final class CirrusContentTypes {
         return fromNamespaceAndPath(Constants.MOD_ID, path);
     }
 
-    private CirrusContentTypes() {
-    }
+    private CirrusContentTypes() {throw new AssertionError("This class should not be instantiated!");}
 }

@@ -3,7 +3,9 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'maven-publish'
-    id 'net.neoforged.moddev' version '1.0.21'
+    id 'net.neoforged.moddev' version '2.0.72'
+    id "me.champeau.jmh" version "0.7.2"
+//    id "scala"
 }
 
 tasks.named('wrapper', Wrapper).configure {
@@ -13,34 +15,52 @@ tasks.named('wrapper', Wrapper).configure {
 version = mod_version
 group = mod_group_id
 
-repositories {
-    mavenCentral()
-    maven { url = "https://maven.quiltmc.org/repository/release/" }
-    maven { url = "https://jitpack.io" }
-    maven { url = "https://dvs1.progwml6.com/files/maven/" }
-    maven { url = "https://maven.blamejared.com/" }
-    maven { url = "https://modmaven.dev" }
-    maven { url = "https://maven.parchmentmc.org" }
-    maven { url = "https://maven.shedaniel.me" }
-    maven { url = "https://repo.kenzie.mx/releases" }
-    maven { url = "https://maven.tterrag.com/" }
-    maven { url = "https://oss.sonatype.org/content/repositories/snapshots/" }
-    maven { url = 'https://thedarkcolour.github.io/KotlinForForge/' }
-    maven {
-        url = "https://cursemaven.com"
-        content {
-            includeGroup "curse.maven"
-        }
-    }
-    exclusiveContent {
-        forRepository {
-            maven {
-                name = "Modrinth"
-                url = "https://api.modrinth.com/maven"
+allprojects {
+    repositories {
+        mavenCentral()
+        maven { url = "https://maven.quiltmc.org/repository/release/" }
+        maven { url = "https://jitpack.io" }
+        maven { url = "https://dvs1.progwml6.com/files/maven/" }
+        maven { url = "https://maven.blamejared.com/" }
+        maven { url = "https://modmaven.dev" }
+        maven { url = "https://maven.parchmentmc.org" }
+        maven { url = "https://maven.shedaniel.me" }
+        maven { url = "https://repo.kenzie.mx/releases" }
+        maven { url = "https://maven.tterrag.com/" }
+        maven { url = "https://oss.sonatype.org/content/repositories/snapshots/" }
+        maven { url = 'https://thedarkcolour.github.io/KotlinForForge/' }
+        maven {
+            name = "Azure-SLP"
+            url = "https://pkgs.dev.azure.com/Kotori316/minecraft/_packaging/mods/maven/v1"
+            content {
+                includeGroup("com.kotori316")
+                includeGroup("org.typelevel")
             }
         }
-        filter {
-            includeGroup "maven.modrinth"
+        maven {
+            name = "MavenTestGCP Fallback"
+            url = "https://storage.googleapis.com/kotori316-maven-test-storage/maven/"
+        }
+        maven {
+            name = "Kotori316 main"
+            url = "https://maven.kotori316.com"
+        }
+        maven {
+            url = "https://cursemaven.com"
+            content {
+                includeGroup "curse.maven"
+            }
+        }
+        exclusiveContent {
+            forRepository {
+                maven {
+                    name = "Modrinth"
+                    url = "https://api.modrinth.com/maven"
+                }
+            }
+            filter {
+                includeGroup "maven.modrinth"
+            }
         }
     }
 }
@@ -65,6 +85,7 @@ neoForge {
             client()
             gameDirectory = file('runs/client')
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            systemProperty 'mixin.debug', 'true'
         }
 
         server {
@@ -98,6 +119,11 @@ neoForge {
         }
     }
 
+    unitTest {
+        enable()
+        testedMod = mods."${mod_id}"
+    }
+
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
@@ -107,6 +133,16 @@ configurations {
 }
 
 dependencies {
+//    compileOnly(group: 'org.scala-lang', name: 'scala3-library_3', version: '3.6.2')
+//    compileOnly(group: 'org.typelevel', name: 'cats-core_3', version: '2.12.1-kotori')
+//    runtimeOnly(
+//            group: "com.kotori316",
+//            name: "scalablecatsforce-neoforge",
+//            version: "3.6.2-build-0",
+//            classifier: "with-library"
+//    ) {
+//        transitive = false
+//    }
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
     additionalRuntimeClasspath(implementation("org.eclipse.collections:eclipse-collections-api:11.1.0"))
     jarJar "org.eclipse.collections:eclipse-collections-api:11.1.0"
@@ -115,6 +151,19 @@ dependencies {
     jarJar(project(":Integration"))
     compileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
+    testImplementation "net.neoforged:testframework:${project.neo_version}"
+    testImplementation 'com.palantir.javapoet:javapoet:0.6.0'
+
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testRuntimeOnly "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+    jmh "org.openjdk.jmh:jmh-core:1.37"
+    jmh "org.openjdk.jmh:jmh-generator-annprocess:1.37"
+    jmhAnnotationProcessor "org.openjdk.jmh:jmh-generator-annprocess:1.37"
+}
+test {
+    useJUnitPlatform()
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
