@@ -68,11 +68,13 @@ public class ItemStackType extends BasicStackContentType<ItemStack> {
     }
 
     @Override
-    public ItemStack create(ContentStack<ItemStack> content, long amount, DataComponentPatch componentPatch) {
+    public ItemStack create(ItemStack value, long amount, DataComponentPatch componentPatch) {
         if (amount > Integer.MAX_VALUE) {
             amount = Integer.MAX_VALUE;
+        } else if (amount <= 0 || value.isEmpty()) {
+            return ItemStack.EMPTY;
         }
-        return new ItemStack(content.value().getItemHolder(), (int) amount, componentPatch);
+        return new ItemStack(value.getItemHolder(), (int) amount, componentPatch);
     }
 
 
@@ -119,13 +121,22 @@ public class ItemStackType extends BasicStackContentType<ItemStack> {
 
     @Nullable
     @Override
-    public ItemStack merge(ItemStack value1, ItemStack value2, MatchStrategy matchStrategy) {
-        if (matches(value1, value2, matchStrategy)) {
+    public ItemStack merge(ItemStack value1, ItemStack value2, MatchStrategy strategy) {
+        if (matches(value1, value2, strategy)) {
             ItemStack result = value1.copy();
             result.grow(value2.getCount());
             return result;
         }
         return null;
+    }
+
+    @Override
+    public long mergeDiff(ItemStack value1, ItemStack value2, MatchStrategy strategy) {
+        boolean identity = value1.getItem() == value2.getItem();
+        boolean components = !strategy.withComponent() || strategy.testComponents(value1.getComponents(), value2.getComponents());
+        if (identity && components) {
+            return value1.getCount() - value2.getCount();
+        } else return 0;
     }
 
     @Override
@@ -186,7 +197,7 @@ public class ItemStackType extends BasicStackContentType<ItemStack> {
     }
 
     @Override
-    public @Nullable ItemStack cheatStack(ContentStack<ItemStack> content, ItemStack value) {
+    public ItemStack cheatStack(ContentStack<ItemStack> content, ItemStack value) {
         return value.copy();
     }
 

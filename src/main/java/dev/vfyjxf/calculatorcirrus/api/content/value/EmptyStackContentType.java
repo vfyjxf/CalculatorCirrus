@@ -46,17 +46,17 @@ public class EmptyStackContentType implements StackContentType<Object>, ContentS
 
     @Override
     public Class<?> baseType() {
-        return null;
+        return Object.class;
     }
 
     @Override
     public Object getIdentity(@NotNull Object content) {
-        return null;
+        return EmptyContentStack.EMPTY;
     }
 
     @Override
-    public Object create(ContentStack<Object> content, long amount, DataComponentPatch componentPatch) {
-        return null;
+    public Object create(Object value, long amount, DataComponentPatch componentPatch) {
+        return EmptyContentStack.EMPTY;
     }
 
     @Override
@@ -91,7 +91,7 @@ public class EmptyStackContentType implements StackContentType<Object>, ContentS
 
     @Override
     public DataComponentPatch getComponentsPatch(Object value) {
-        return null;
+        return DataComponentPatch.EMPTY;
     }
 
     @Override
@@ -120,8 +120,13 @@ public class EmptyStackContentType implements StackContentType<Object>, ContentS
     }
 
     @Override
-    public @Nullable Object merge(Object value1, Object value2, MatchStrategy matchStrategy) {
+    public @Nullable Object merge(Object value1, Object value2, MatchStrategy strategy) {
         return null;
+    }
+
+    @Override
+    public long mergeDiff(Object value1, Object value2, MatchStrategy strategy) {
+        return 0;
     }
 
     @Override

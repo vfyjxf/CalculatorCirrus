@@ -44,7 +44,7 @@ abstract non-sealed class BasicContentValue<T> implements ContentValue<T> {
         return this;
     }
 
-    public abstract boolean equals(Object o);
+    public abstract boolean equals(@Nullable Object o);
 
     public abstract int hashCode();
 

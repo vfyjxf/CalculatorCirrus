@@ -68,8 +68,20 @@ public class FluidStackType extends BasicStackContentType<FluidStack> {
     public FluidStack create(ContentStack<FluidStack> content, long amount, DataComponentPatch componentPatch) {
         if (amount > Integer.MAX_VALUE) {
             amount = Integer.MAX_VALUE;
+        } else if (amount <= 0 || content.value().isEmpty()) {
+            return FluidStack.EMPTY;
         }
         return new FluidStack(content.value().getFluidHolder(), (int) amount, componentPatch);
+    }
+
+    @Override
+    public FluidStack create(FluidStack value, long amount, DataComponentPatch componentPatch) {
+        if (amount > Integer.MAX_VALUE) {
+            amount = Integer.MAX_VALUE;
+        } else if (amount <= 0 || value.isEmpty()) {
+            return FluidStack.EMPTY;
+        }
+        return new FluidStack(value.getFluidHolder(), (int) amount, componentPatch);
     }
 
 
@@ -109,12 +121,17 @@ public class FluidStackType extends BasicStackContentType<FluidStack> {
     }
 
     @Override
-    public @Nullable FluidStack merge(FluidStack value1, FluidStack value2, MatchStrategy matchStrategy) {
-        if (matches(value1, value2, matchStrategy)) {
+    public @Nullable FluidStack merge(FluidStack value1, FluidStack value2, MatchStrategy strategy) {
+        if (matches(value1, value2, strategy)) {
             FluidStack result = value1.copy();
             result.grow(value2.getAmount());
         }
         return null;
+    }
+
+    @Override
+    public long mergeDiff(FluidStack value1, FluidStack value2, MatchStrategy strategy) {
+        return 0;
     }
 
     @Override

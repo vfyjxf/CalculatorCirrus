@@ -65,6 +65,8 @@ public sealed interface TagType<VALUE, STACK> permits RegistryTagType {
 
     boolean hasTag(TagKey<VALUE> tagKey);
 
+    TagKey<VALUE> createTagKey(ResourceLocation location);
+
     default @Nullable Named<VALUE> getTag(ResourceLocation tagKey) {
         return getTagKeys()
                 .filter(it -> it.location().equals(tagKey))
@@ -73,6 +75,8 @@ public sealed interface TagType<VALUE, STACK> permits RegistryTagType {
                 .findFirst()
                 .orElse(null);
     }
+
+    Stream<? extends TagKey<VALUE>> getTagFor(VALUE value);
 
     Optional<Named<VALUE>> getTag(TagKey<VALUE> tagKey);
 
@@ -93,7 +97,7 @@ public sealed interface TagType<VALUE, STACK> permits RegistryTagType {
                 .toList();
     }
 
-    VALUE getValue(STACK stack);
+    VALUE getStackValue(STACK stack);
 
     default STACK makeStack(VALUE value) {
         return makeStack(value, 1, DataComponentPatch.EMPTY);
@@ -115,7 +119,7 @@ public sealed interface TagType<VALUE, STACK> permits RegistryTagType {
 
     @Nullable
     default TagKey<VALUE> getTagFrom(RichIterable<? extends ContentStack<STACK>> stacks) {
-        return getTag(stacks.collect(c -> getValue(c.value())));
+        return getTag(stacks.collect(c -> getStackValue(c.value())));
     }
 
     @SuppressWarnings("unchecked")

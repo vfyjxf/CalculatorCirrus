@@ -1,6 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.api.content.type;
 
 import com.mojang.datafixers.util.Pair;
+import dev.vfyjxf.calculatorcirrus.utils.Checks;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderSet;
 import net.minecraft.core.Registry;
@@ -67,12 +68,24 @@ record RegistryTagType<VALUE, STACK>(
     }
 
     @Override
+    public TagKey<VALUE> createTagKey(ResourceLocation location) {
+        return TagKey.create(registry.key(), location);
+    }
+
+    @Override
     public @Nullable HolderSet.Named<VALUE> getTag(ResourceLocation tagKey) {
         return registry.getTags()
                 .filter(tag -> tag.getFirst().location().equals(tagKey))
                 .findAny()
                 .map(Pair::getSecond)
                 .orElse(null);
+    }
+
+    @Override
+    public Stream<? extends TagKey<VALUE>> getTagFor(VALUE value) {
+        return registry.getHolder(registry.getId(value))
+                .map(Holder::tags)
+                .orElseGet(Stream::empty);
     }
 
     @Override
@@ -86,12 +99,13 @@ record RegistryTagType<VALUE, STACK>(
     }
 
     @Override
-    public VALUE getValue(STACK stack) {
+    public VALUE getStackValue(STACK stack) {
         return valueGetter.apply(stack);
     }
 
     @Override
     public STACK makeStack(VALUE value, long amount, DataComponentPatch componentPatch) {
+        Checks.checkRangeClosed(amount, 0, stackType().maxAmount());
         return stackMaker.make(value, amount, componentPatch);
     }
 
