@@ -121,15 +121,6 @@ public class FluidStackType extends BasicStackContentType<FluidStack> {
     }
 
     @Override
-    public @Nullable FluidStack merge(FluidStack value1, FluidStack value2, MatchStrategy strategy) {
-        if (matches(value1, value2, strategy)) {
-            FluidStack result = value1.copy();
-            result.grow(value2.getAmount());
-        }
-        return null;
-    }
-
-    @Override
     public long mergeDiff(FluidStack value1, FluidStack value2, MatchStrategy strategy) {
         return 0;
     }

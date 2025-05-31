@@ -187,9 +187,6 @@ public interface StackContentType<T> extends ContentType<T> {
 
     long getAmount(T value);
 
-    @Nullable
-    T merge(T value1, T value2, MatchStrategy strategy);
-
     /**
      * get merge diff of two values, it should be used to calculate the difference between two values,
      *
