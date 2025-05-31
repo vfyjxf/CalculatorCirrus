@@ -119,17 +119,6 @@ public class ItemStackType extends BasicStackContentType<ItemStack> {
         return value.getCount();
     }
 
-    @Nullable
-    @Override
-    public ItemStack merge(ItemStack value1, ItemStack value2, MatchStrategy strategy) {
-        if (matches(value1, value2, strategy)) {
-            ItemStack result = value1.copy();
-            result.grow(value2.getCount());
-            return result;
-        }
-        return null;
-    }
-
     @Override
     public long mergeDiff(ItemStack value1, ItemStack value2, MatchStrategy strategy) {
         boolean identity = value1.getItem() == value2.getItem();

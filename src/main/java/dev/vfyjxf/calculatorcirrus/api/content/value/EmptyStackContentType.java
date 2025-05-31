@@ -120,11 +120,6 @@ public class EmptyStackContentType implements StackContentType<Object>, ContentS
     }
 
     @Override
-    public @Nullable Object merge(Object value1, Object value2, MatchStrategy strategy) {
-        return null;
-    }
-
-    @Override
     public long mergeDiff(Object value1, Object value2, MatchStrategy strategy) {
         return 0;
     }
