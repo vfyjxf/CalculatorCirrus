@@ -1,8 +1,8 @@
 package dev.vfyjxf.calculatorcirrus.content.renderer;
 
-import dev.vfyjxf.calculatorcirrus.api.content.ContentRenderer;
-import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
+import dev.vfyjxf.calculatorcirrus.api.content.type.ContentRenderer;
+import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.helper.LocalizationHelper;
 import dev.vfyjxf.calculatorcirrus.helper.RenderHelper;
@@ -49,7 +49,7 @@ public class FluidStackContentRenderer implements ContentRenderer<FluidStack> {
 
     @Nullable
     @Override
-    public Tooltip getTooltip(FluidStack content, TooltipContext context) {
+    public RichTooltip getTooltip(FluidStack content, TooltipContext context) {
         Fluid fluid = content.getFluid();
         try {
             if (fluid.isSame(Fluids.EMPTY)) {
@@ -60,12 +60,12 @@ public class FluidStackContentRenderer implements ContentRenderer<FluidStack> {
 
             long milliBuckets = (content.getAmount() * 1000L) / FluidType.BUCKET_VOLUME;
 
-            MutableComponent amountString = LocalizationHelper.translatable("tooltip.liquid.amount.with.capacity", FORMAT.format(milliBuckets), FORMAT.format(FluidType.BUCKET_VOLUME));
+            MutableComponent amountString = LocalizationHelper.translatable("richTooltip.liquid.amount.with.capacity", FORMAT.format(milliBuckets), FORMAT.format(FluidType.BUCKET_VOLUME));
             tooltip.add(amountString.withStyle(ChatFormatting.GRAY));
-            return Tooltip.create(tooltip);
+            return RichTooltip.create(tooltip);
         } catch (RuntimeException e) {
             Component displayName = content.getHoverName();
-            LOGGER.error("Failed to get tooltip for fluid: " + displayName.getString(), e);
+            LOGGER.error("Failed to get richTooltip for fluid: " + displayName.getString(), e);
         }
 
         return null;

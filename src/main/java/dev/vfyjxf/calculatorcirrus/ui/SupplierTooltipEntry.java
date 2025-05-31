@@ -6,7 +6,7 @@ import net.minecraft.world.inventory.tooltip.TooltipComponent;
 
 import java.util.function.Supplier;
 
-public record SupplierTooltipEntry(Supplier<Component> supplier) implements Tooltip.Entry {
+public record SupplierTooltipEntry(Supplier<Component> supplier) implements Tooltip {
 
     @Override
     public boolean isText() {

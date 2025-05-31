@@ -8,11 +8,10 @@ import dev.vfyjxf.calculatorcirrus.api.event.EventHandler;
 import dev.vfyjxf.calculatorcirrus.api.math.Dimension;
 import dev.vfyjxf.calculatorcirrus.api.math.Point;
 import dev.vfyjxf.calculatorcirrus.api.math.Rectangle;
-import dev.vfyjxf.calculatorcirrus.api.ui.IRenderable;
-import dev.vfyjxf.calculatorcirrus.api.ui.IRenderableTexture;
 import dev.vfyjxf.calculatorcirrus.api.ui.InputContext;
-import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
-import dev.vfyjxf.calculatorcirrus.api.ui.drag.Draggable;
+import dev.vfyjxf.calculatorcirrus.api.ui.Renderable;
+import dev.vfyjxf.calculatorcirrus.api.ui.RenderableTexture;
+import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.event.InputEvent;
 import dev.vfyjxf.calculatorcirrus.api.ui.event.WidgetEvent;
 import net.minecraft.client.gui.GuiGraphics;
@@ -26,7 +25,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-public abstract class Widget implements IRenderable, Draggable, EventHandler<WidgetEvent> {
+public abstract class Widget implements Renderable, EventHandler<WidgetEvent> {
 
     protected final EventChannel<WidgetEvent> channel = EventChannel.create(this);
 
@@ -38,12 +37,12 @@ public abstract class Widget implements IRenderable, Draggable, EventHandler<Wid
     protected Point position = Point.ZERO;
     protected Point absolute = calculateAbsolute();
     protected Dimension size = Dimension.ZERO;
-    protected IRenderableTexture background;
-    protected IRenderableTexture icon;
+    protected RenderableTexture background;
+    protected RenderableTexture icon;
     protected boolean active = true;
     protected Visibility visibility = Visibility.VISIBLE;
     protected boolean moving = false;
-    protected Tooltip tooltip = Tooltip.create();
+    protected RichTooltip tooltip = RichTooltip.create();
 
     protected Point calculateAbsolute() {
         if (parent == null) return position;
@@ -229,13 +228,13 @@ public abstract class Widget implements IRenderable, Draggable, EventHandler<Wid
     }
 
 
-    public Widget setBackground(IRenderableTexture background) {
+    public Widget setBackground(RenderableTexture background) {
         this.background = background;
         return this;
     }
 
 
-    public Widget setIcon(IRenderableTexture icon) {
+    public Widget setIcon(RenderableTexture icon) {
         this.icon = icon;
         return this;
     }
@@ -357,13 +356,13 @@ public abstract class Widget implements IRenderable, Draggable, EventHandler<Wid
     }
 
 
-    public @Nullable Tooltip getTooltip() {
-        return null;
+    public @Nullable RichTooltip getTooltip() {
+        return tooltip;
     }
 
 
-    public Widget setTooltip(@Nullable Tooltip tooltip) {
-        this.tooltip = tooltip;
+    public Widget setTooltip(@Nullable RichTooltip richTooltip) {
+        this.tooltip = richTooltip;
         return this;
     }
 
@@ -392,8 +391,8 @@ public abstract class Widget implements IRenderable, Draggable, EventHandler<Wid
     }
 
 
-    public Widget tooltip(Tooltip tooltip) {
-        this.tooltip.ofAll(tooltip);
+    public Widget tooltip(RichTooltip richTooltip) {
+        this.tooltip.ofAll(richTooltip);
         return this;
     }
 

@@ -1,36 +1,29 @@
 package dev.vfyjxf.calculatorcirrus.content.types;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
-import dev.vfyjxf.calculatorcirrus.api.content.ContentSerializer;
-import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
-import dev.vfyjxf.calculatorcirrus.api.content.TagType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.ContentSerializer;
+import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
 import org.jetbrains.annotations.Nullable;
 
 public abstract class BasicContentType<T> implements ContentType<T>, ContentSerializer<T> {
 
     private final Class<T> typeClass;
-    private final Class<?> valueClass;
-    private @Nullable TagType<T, ?> tagType;
+    private @Nullable TagType<?, T> tagType;
 
-    public BasicContentType(Class<T> typeClass, Class<?> valueClass) {
+    public BasicContentType(Class<T> typeClass) {
         this.typeClass = typeClass;
-        this.valueClass = valueClass;
     }
 
     @Override
-    public Class<T> getTypeClass() {
+    public Class<T> valueType() {
         return typeClass;
     }
 
-    @Override
-    public Class<?> getBaseClass() {
-        return valueClass;
-    }
-
 
     @Override
-    public @Nullable TagType<T, ?> getTagType() {
-        if (tagType == null && this.supportTags()) {
+    public @Nullable TagType<?, T> tagType() {
+        if (tagType == null) {
             ContentApi registry = ContentApi.getInstance();
             tagType = registry.getTagType(this);
         }

@@ -1,39 +1,32 @@
 package dev.vfyjxf.calculatorcirrus.content;
 
-import dev.vfyjxf.calculatorcirrus.api.content.ContentRenderer;
-import dev.vfyjxf.calculatorcirrus.api.content.ContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.ContentRenderer;
+import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
+import dev.vfyjxf.calculatorcirrus.utils.Checks;
+import net.neoforged.fml.loading.FMLEnvironment;
 import org.eclipse.collections.api.factory.Maps;
-import org.eclipse.collections.api.map.MutableMap;
+import org.eclipse.collections.api.map.ImmutableMap;
 import org.jetbrains.annotations.ApiStatus;
 
 @ApiStatus.Internal
 public class ClientContentApiImpl extends ContentApiImpl {
 
-    private final MutableMap<ContentType<?>, ContentRenderer<?>> contentRenderers = Maps.mutable.empty();
+    private final ImmutableMap<ContentType<?>, ContentRenderer<?>> contentRenderers;
 
-    @ApiStatus.Internal
-    @Override
-    public <T> void registerContent(ContentType<T> contentType) {
-        super.registerContent(contentType);
-    }
-
-    @ApiStatus.Internal
-    public <T> void registerContent(ContentType<T> contentType, ContentRenderer<T> contentRenderer) {
-        this.registerContent(contentType);
-        contentRenderers.put(contentType, contentRenderer);
-    }
-
-    public <T> void registerRenderer(ContentType<T> contentType, ContentRenderer<T> contentRenderer) {
-        if (!super.isRegistered(contentType)) {
-            throw new IllegalStateException("The content type: " + contentType.getId() + " has not been registered");
-        }
-        contentRenderers.put(contentType, contentRenderer);
+    public ClientContentApiImpl(ClientContentRegistryBuilder builder) {
+        super(builder);
+        this.contentRenderers = Maps.immutable.ofMap(builder.contentRenderers);
     }
 
     @ApiStatus.Internal
     @SuppressWarnings("unchecked")
     public <T> ContentRenderer<T> getRenderer(ContentType<T> contentType) {
-        return (ContentRenderer<T>) contentRenderers.get(contentType);
+        Checks.checkNotNull(contentType, "contentType");
+        Checks.checkArgument(FMLEnvironment.dist.isClient(), "ContentRenderer should only be used on client side!");
+        ContentRenderer<T> contentRenderer = (ContentRenderer<T>) contentRenderers.get(contentType);
+        if (contentRenderer == null) {
+            throw new IllegalStateException("No renderer found for content type: " + contentType);
+        }
+        return contentRenderer;
     }
-
 }

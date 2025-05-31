@@ -1,5 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.utils;
 
+import dev.vfyjxf.calculatorcirrus.Constants;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -9,7 +10,7 @@ public final class Locations {
         return ResourceLocation.parse(location);
     }
 
-    public static @Nullable ResourceLocation tryParse(String location) {
+    public static @Nullable ResourceLocation maybe(String location) {
         return ResourceLocation.tryParse(location);
     }
 
@@ -17,12 +18,12 @@ public final class Locations {
         return ResourceLocation.fromNamespaceAndPath(namespace, path);
     }
 
-    public static ResourceLocation ofDefault(String path) {
+    public static ResourceLocation ofMc(String path) {
         return ResourceLocation.withDefaultNamespace(path);
     }
 
     public static ResourceLocation create(String path) {
-        return ResourceLocation.fromNamespaceAndPath("calculatorcirrus", path);
+        return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, path);
     }
 
     private Locations() {

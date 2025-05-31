@@ -29,6 +29,7 @@ repositories {
 
 dependencies {
     implementation(rootProject)
+//    implementation("maven.modrinth:gregtechceu-modern:mc1.21.1-1.4.6:slim")
     implementation("com.gregtechceu.gtceu:gtceu-${project.minecraft_version}:${gtm_version}") { transitive = false }
     implementation("org.eclipse.collections:eclipse-collections-api:11.1.0")
     implementation("org.eclipse.collections:eclipse-collections:11.1.0")

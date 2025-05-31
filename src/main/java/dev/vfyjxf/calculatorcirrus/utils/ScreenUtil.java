@@ -2,7 +2,7 @@ package dev.vfyjxf.calculatorcirrus.utils;
 
 import dev.vfyjxf.calculatorcirrus.api.math.Point;
 import dev.vfyjxf.calculatorcirrus.api.math.Rectangle;
-import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
+import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
 import dev.vfyjxf.calculatorcirrus.api.ui.TooltipStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.MouseHandler;
@@ -34,16 +34,16 @@ public final class ScreenUtil {
         return new Point((int) getMouseX(), (int) getMouseY());
     }
 
-    public static void renderTooltip(Screen screen, GuiGraphics graphics, Tooltip tooltip, int mouseX, int mouseY) {
+    public static void renderTooltip(Screen screen, GuiGraphics graphics, RichTooltip richTooltip, int mouseX, int mouseY) {
         graphics.pose().pushPose();
         {
-            TooltipStack<?> stack = tooltip.stack();
+            TooltipStack<?> stack = richTooltip.stack();
             ItemStack itemStack = (stack != null && stack.type() == ItemStack.class) ? stack.castValue() : ItemStack.EMPTY;
             Font font = Minecraft.getInstance().font;
             if (!itemStack.isEmpty()) {
                 font = ClientHooks.getTooltipFont(itemStack, font);
             }
-            graphics.renderComponentTooltipFromElements(font, tooltip.guiEntries(), mouseX, mouseY, itemStack);
+            graphics.renderComponentTooltipFromElements(font, richTooltip.guiTooltips(), mouseX, mouseY, itemStack);
         }
         graphics.pose().popPose();
     }

@@ -1,145 +1,14 @@
 package dev.vfyjxf.calculatorcirrus.api.ui;
 
-import com.mojang.datafixers.util.Either;
-import dev.vfyjxf.calculatorcirrus.api.math.Point;
-import dev.vfyjxf.calculatorcirrus.ui.ListTooltip;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.FormattedText;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
-import org.eclipse.collections.api.factory.Lists;
-import org.eclipse.collections.api.list.MutableList;
-import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.Nullable;
-
-import java.util.Collection;
-import java.util.List;
-import java.util.function.Supplier;
 
 public interface Tooltip {
+    boolean isText();
 
-    static Entry entry(Component text) {
-        return new TooltipEntry(text);
-    }
+    boolean isComponent();
 
-    static Entry entry(TooltipComponent text) {
-        return new TooltipEntry(text);
-    }
+    Component asText();
 
-    static Tooltip create(@Nullable Point mousePos, List<Component> texts) {
-        return from(mousePos, texts.stream().map(Tooltip::entry).toList());
-    }
-
-    static Tooltip create(@Nullable Point mousePos, Component... texts) {
-        return create(mousePos, List.of(texts));
-    }
-
-    static Tooltip create(List<Component> texts) {
-        return create(null, texts);
-    }
-
-    static Tooltip create(Component... texts) {
-        return create(List.of(texts));
-    }
-
-    static Tooltip from(@Nullable Point mousePos, List<Entry> entries) {
-        return new ListTooltip(mousePos, entries);
-    }
-
-    static Tooltip from(@Nullable Point mousePos, Entry... entries) {
-        return from(mousePos, List.of(entries));
-    }
-
-    static Tooltip from(List<Entry> entries) {
-        return from(null, entries);
-    }
-
-    static Tooltip from(Entry... entries) {
-        return from(List.of(entries));
-    }
-
-    int getPosX();
-
-    int getPosY();
-
-    MutableList<Entry> entries();
-
-    default MutableList<Either<FormattedText, TooltipComponent>> guiEntries() {
-        MutableList<Either<FormattedText, TooltipComponent>> result = Lists.mutable.empty();
-        for (Entry entry : entries()) {
-            if (entry.isText()) result.add(Either.left(entry.asText()));
-            else result.add(Either.right(entry.asComponent()));
-        }
-        return result;
-    }
-
-    @Contract("_ -> this")
-    Tooltip addEntry(Entry entry);
-
-    @Contract("_ -> this")
-    Tooltip addEntries(Collection<Entry> entries);
-
-    default Tooltip addEntries(Entry... entries) {
-        for (Entry entry : entries) {
-            addEntry(entry);
-        }
-        return this;
-    }
-
-    Tooltip add(Component text);
-
-    Tooltip add(TooltipComponent component);
-
-    Tooltip add(Supplier<Component> supplier);
-
-    default Tooltip addAll(TooltipComponent... components) {
-        for (TooltipComponent component : components) {
-            add(component);
-        }
-        return this;
-    }
-
-    default Tooltip addAll(Component... text) {
-        for (Component component : text) {
-            add(component);
-        }
-        return this;
-    }
-
-    default Tooltip addAllTooltipComponents(Iterable<TooltipComponent> text) {
-        for (TooltipComponent component : text) {
-            add(component);
-        }
-        return this;
-    }
-
-    default Tooltip addAllTexts(Iterable<Component> text) {
-        for (Component component : text) {
-            add(component);
-        }
-        return this;
-    }
-
-    Tooltip ofAll(Tooltip other);
-
-    Tooltip copy();
-
-    @Nullable
-    TooltipStack<?> stack();
-
-    @Contract("_ -> this")
-    Tooltip setContextStack(@Nullable TooltipStack<?> stack);
-
-    boolean isEmpty();
-
-    interface Entry {
-        boolean isText();
-
-        boolean isComponent();
-
-        Component asText();
-
-        TooltipComponent asComponent();
-    }
-
-
+    TooltipComponent asComponent();
 }

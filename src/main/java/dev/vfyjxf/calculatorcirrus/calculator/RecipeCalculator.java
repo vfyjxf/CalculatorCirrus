@@ -1,13 +1,14 @@
 package dev.vfyjxf.calculatorcirrus.calculator;
 
-import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.CommonRecipe;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.IngredientType;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeDatabase;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeSystem;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.RecipeTransformer;
-import dev.vfyjxf.calculatorcirrus.api.content.recipes.ingredients.IngredientStack;
-import dev.vfyjxf.calculatorcirrus.recipes.ingredients.TagIngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.content.value.TagStack;
+import dev.vfyjxf.calculatorcirrus.api.recipe.CommonRecipe;
+import dev.vfyjxf.calculatorcirrus.api.recipe.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeDatabase;
+import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeTransformer;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.recipe.ingredients.TagIngredientStack;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.multimap.list.MutableListMultimap;
 import org.jetbrains.annotations.Nullable;
@@ -19,6 +20,9 @@ public interface RecipeCalculator {
 
     void setTarget(@Nullable ContentStack<?> target);
 
+    /**
+     * @return the target recipe to calculate.  It must be an- output of the {@link #getRecipe()}.
+     */
     @Nullable
     ContentStack<?> getTarget();
 
@@ -51,7 +55,7 @@ public interface RecipeCalculator {
             addPath(ingredient.getStacks().getOnly(), recipe);
         } else {
             if (ingredient instanceof TagIngredientStack tagIngredient) {
-                addPath(ContentStack.create(tagIngredient.getType().cast(), tagIngredient.getTagKey()), recipe);
+                addPath(TagStack.create(tagIngredient.getType().cast(), tagIngredient.getTagKey()), recipe);
             } else if (ingredient.isList()) {
                 ContentStack<?> detect = ingredient.getStacks().detect(stack -> recipe.data().getOutputs().anySatisfy(output -> output.contains(stack)));
                 if (detect != null) {

@@ -5,7 +5,7 @@ import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
 
 public interface ClientCirrusAdapter {
 
-   default void registerContent(ClientRegisterContentEvent event){
+    default void registerContent(ClientRegisterContentEvent event) {
 
     }
 

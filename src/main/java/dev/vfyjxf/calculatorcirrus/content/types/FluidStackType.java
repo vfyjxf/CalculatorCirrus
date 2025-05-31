@@ -1,7 +1,8 @@
 package dev.vfyjxf.calculatorcirrus.content.types;
 
-import dev.vfyjxf.calculatorcirrus.api.content.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.content.MatchContext;
+import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
+import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -18,64 +19,95 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.stream.Stream;
 
-public class FluidStackType extends BasicContentType<FluidStack> {
+public class FluidStackType extends BasicStackContentType<FluidStack> {
 
-    private static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(namespace, "fluid_stack");
+    public static final FluidStackType INSTANCE = new FluidStackType();
+    private static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(ContentType.namespace, "fluid_stack");
 
-    public FluidStackType() {
+    private FluidStackType() {
         super(FluidStack.class, Fluid.class);
     }
 
     @Override
-    public ResourceLocation getId() {
+    public ResourceLocation typeId() {
         return ID;
     }
 
     @Override
-    public Object getBase(FluidStack content) {
-        return content.getFluid();
-    }
-
-    @Override
-    public @Nullable String getUid(ContentStack<FluidStack> content, FluidStack value) {
+    public @Nullable ResourceLocation getLocation(FluidStack value) {
         return BuiltInRegistries.FLUID.getResourceKey(value.getFluid())
                 .map(ResourceKey::location)
-                .map(ResourceLocation::toString)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown fluid " + value.getFluid()));
     }
 
     @Override
-    public @Nullable String getModid(ContentStack<FluidStack> content, FluidStack value) {
+    public @Nullable String getNamespace(FluidStack value) {
         Fluid fluid = value.getFluid();
         return BuiltInRegistries.FLUID.getResourceKey(fluid)
                 .map(ResourceKey::location)
                 .map(ResourceLocation::getNamespace)
-                .orElse("None");
+                .orElse(null);
     }
 
     @Override
-    public boolean isEmpty(ContentStack<FluidStack> content, FluidStack value) {
+    public boolean isEmpty(FluidStack value) {
         return value.isEmpty();
     }
 
     @Override
-    public FluidStack create(ContentStack<FluidStack> content, DataComponentPatch components, long amount) {
-        return new FluidStack(content.value().getFluidHolder(), (int) amount, components);
+    public Object getIdentity(FluidStack content) {
+        return content.getFluid();
     }
 
     @Override
-    public FluidStack copy(ContentStack<FluidStack> content, FluidStack value) {
+    public boolean isEmpty(ContentStack<FluidStack> content, FluidStack value) {
+        return content.amount() <= 0 || value.isEmpty();
+    }
+
+    @Override
+    public FluidStack create(ContentStack<FluidStack> content, long amount, DataComponentPatch componentPatch) {
+        if (amount > Integer.MAX_VALUE) {
+            amount = Integer.MAX_VALUE;
+        } else if (amount <= 0 || content.value().isEmpty()) {
+            return FluidStack.EMPTY;
+        }
+        return new FluidStack(content.value().getFluidHolder(), (int) amount, componentPatch);
+    }
+
+    @Override
+    public FluidStack create(FluidStack value, long amount, DataComponentPatch componentPatch) {
+        if (amount > Integer.MAX_VALUE) {
+            amount = Integer.MAX_VALUE;
+        } else if (amount <= 0 || value.isEmpty()) {
+            return FluidStack.EMPTY;
+        }
+        return new FluidStack(value.getFluidHolder(), (int) amount, componentPatch);
+    }
+
+
+    @Override
+    public FluidStack copy(FluidStack value) {
         return value.copy();
     }
 
     @Override
-    public FluidStack normalize(ContentStack<FluidStack> content, FluidStack value) {
+    public FluidStack normalize(FluidStack value) {
         return value.copyWithAmount(1000);
     }
 
     @Override
-    public FluidStack wildcard(ContentStack<FluidStack> entry, FluidStack value) {
-        return value.copyWithAmount(1000);
+    public FluidStack wildcard(FluidStack value) {
+        return new FluidStack(value.getFluid(), 1000);
+    }
+
+    @Override
+    public DataComponentMap getComponents(FluidStack value) {
+        return value.getComponents();
+    }
+
+    @Override
+    public DataComponentPatch getComponentsPatch(FluidStack value) {
+        return value.getComponentsPatch();
     }
 
     @Override
@@ -89,8 +121,8 @@ public class FluidStackType extends BasicContentType<FluidStack> {
     }
 
     @Override
-    public @Nullable FluidStack merge(FluidStack value1, FluidStack value2, MatchContext matchContext) {
-        if (matches(value1, value2, matchContext)) {
+    public @Nullable FluidStack merge(FluidStack value1, FluidStack value2, MatchStrategy strategy) {
+        if (matches(value1, value2, strategy)) {
             FluidStack result = value1.copy();
             result.grow(value2.getAmount());
         }
@@ -98,29 +130,42 @@ public class FluidStackType extends BasicContentType<FluidStack> {
     }
 
     @Override
-    public boolean matches(FluidStack value1, FluidStack value2, MatchContext matchContext) {
+    public long mergeDiff(FluidStack value1, FluidStack value2, MatchStrategy strategy) {
+        return 0;
+    }
+
+    @Override
+    public boolean matches(FluidStack value1, FluidStack value2, MatchStrategy strategy) {
         if (value1 == value2) return true;
-        if (matchContext.exact()) {
-            return FluidStack.isSameFluidSameComponents(value1, value2);
-        } else {
-            return FluidStack.isSameFluid(value1, value2);
-        }
+        boolean identity = !strategy.withIdentity() || value1.getFluid() == value2.getFluid();
+        boolean amount = !strategy.withAmount() || value1.getAmount() == value2.getAmount();
+        boolean components = !strategy.withComponent() || strategy.testComponents(value1.getComponents(), value2.getComponents());
+        return identity && amount && components;
     }
 
     @Override
-    public int hash(FluidStack value, MatchContext context) {
-        if (context.fuzzy()) return value.getFluid().hashCode();
-        else return FluidStack.hashFluidAndComponents(value);
+    public int hash(FluidStack value, MatchStrategy strategy) {
+        int hashcode = value.getFluid().hashCode();
+        hashcode = strategy.withAmount() ? 31 * hashcode + value.getAmount() : hashcode;
+        hashcode = strategy.withComponent() ? 31 * hashcode + value.getComponents().hashCode() : hashcode;
+        return hashcode;
     }
 
     @Override
-    public Stream<? extends TagKey<?>> getTagsFor(ContentStack<FluidStack> content, FluidStack value) {
-        return value.getFluid().defaultFluidState().getTags();
+    public long maxAmount() {
+        return Integer.MAX_VALUE;
     }
 
     @Override
-    public @Nullable DataComponentMap getComponents(ContentStack<FluidStack> content, FluidStack value) {
-        return value.getComponents();
+    public Stream<? extends TagKey<?>> getTags(FluidStack value) {
+        return Stream.empty();
+    }
+
+    @Override
+    public ItemStack cheatStack(FluidStack value) {
+        if (value.isEmpty()) return ItemStack.EMPTY;
+        Item bucket = value.getFluid().getBucket();
+        return new ItemStack(bucket);
     }
 
     @Override
@@ -131,13 +176,6 @@ public class FluidStackType extends BasicContentType<FluidStack> {
     @Override
     public @Nullable FluidStack read(CompoundTag tag) {
         return FluidStack.CODEC.parse(NbtOps.INSTANCE, tag).result().orElse(null);
-    }
-
-    @Override
-    public @Nullable ItemStack cheatStack(ContentStack<FluidStack> content, FluidStack value) {
-        if (value.isEmpty()) return ItemStack.EMPTY;
-        Item bucket = value.getFluid().getBucket();
-        return new ItemStack(bucket);
     }
 
     @Override
