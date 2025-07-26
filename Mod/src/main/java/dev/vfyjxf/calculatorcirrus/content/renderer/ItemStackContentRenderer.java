@@ -1,0 +1,121 @@
+package dev.vfyjxf.calculatorcirrus.content.renderer;
+
+import com.mojang.blaze3d.systems.RenderSystem;
+import dev.vfyjxf.calculatorcirrus.api.content.type.ContentRenderer;
+import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
+import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
+import dev.vfyjxf.calculatorcirrus.helper.LocalizationHelper;
+import dev.vfyjxf.calculatorcirrus.util.ErrorUtils;
+import dev.vfyjxf.calculatorcirrus.util.NumberUtils;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.tooltip.TooltipComponent;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix4fStack;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+public class ItemStackContentRenderer implements ContentRenderer<ItemStack> {
+
+    private static final Logger LOGGER = LogManager.getLogger();
+
+    private void renderItemStack(GuiGraphics graphics, ItemStack content, int width, int height, @Nullable String text) {
+        Matrix4fStack modelViewStack = RenderSystem.getModelViewStack();
+        modelViewStack.pushMatrix();
+        {
+            modelViewStack.mul(graphics.pose().last().pose());
+
+            RenderSystem.enableDepthTest();
+            graphics.pose().scale(width / 16f, height / 16f, 0f);
+            Minecraft minecraft = Minecraft.getInstance();
+            graphics.renderFakeItem(content, 0, 0);
+            graphics.renderItemDecorations(minecraft.font, content, 0, 0, text);
+            RenderSystem.disableBlend();
+        }
+        modelViewStack.popMatrix();
+        // Restore model-view matrix now that the item has been rendered
+        RenderSystem.applyModelViewMatrix();
+    }
+
+    @Override
+    public void render(ContentStack<ItemStack> content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY, float delta) {
+        ItemStack itemStack = content.value();
+        if (itemStack.isEmpty()) return;
+        int count = itemStack.getCount();
+        String amount = count == 1 ? null : NumberUtils.toSuffix(count);
+        renderItemStack(graphics, itemStack, width, height, amount);
+    }
+
+    @Override
+    public void render(ItemStack content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY, float delta) {
+        if (content.isEmpty()) return;
+        int count = content.getCount();
+        String amount = count == 1 ? null : NumberUtils.toSuffix(count);
+        renderItemStack(graphics, content, width, height, amount);
+    }
+
+    @Override
+    public void render(ItemStack content, GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+        if (content.isEmpty())
+            return;
+        int count = content.getCount();
+        String amount = count == 1 ? null : NumberUtils.toSuffix(count);
+        renderItemStack(graphics, content, 16, 16, amount);
+    }
+
+    @Override
+    public void decorate(ContentStack<ItemStack> content, GuiGraphics graphics, int width, int height, int mouseX, int mouseY) {
+
+    }
+
+    @Override
+    public @Nullable RichTooltip getTooltip(ItemStack content, TooltipContext context) {
+        if (content.isEmpty())
+            return null;
+        RichTooltip richTooltip = RichTooltip.create();
+        Optional<TooltipComponent> component = content.getTooltipImage();
+        List<Component> components = tooltipHelper(content, context.flag());
+        if (!components.isEmpty()) {
+            richTooltip.add(components.get(0));
+        }
+        component.ifPresent(richTooltip::add);
+        for (int i = 1; i < components.size(); i++) {
+            richTooltip.add(components.get(i));
+        }
+        return richTooltip;
+    }
+
+    @Override
+    public Component getName(ItemStack content) {
+        return content.getDisplayName();
+    }
+
+    private static List<Component> tooltipHelper(ItemStack itemStack, TooltipFlag tooltipFlag) {
+        Minecraft minecraft = Minecraft.getInstance();
+        Player player = minecraft.player;
+        try {
+            return itemStack.getTooltipLines(Item.TooltipContext.of(minecraft.level), player, tooltipFlag);
+        } catch (RuntimeException | LinkageError e) {
+            String itemStackInfo = ErrorUtils.getItemStackInfo(itemStack);
+            LOGGER.error("Failed to get richTooltip: {}", itemStackInfo, e);
+            List<Component> list = new ArrayList<>();
+            MutableComponent crash = LocalizationHelper.translatable("richTooltip.error.crash");
+            list.add(crash.withStyle(ChatFormatting.RED));
+            return list;
+        }
+    }
+
+
+}

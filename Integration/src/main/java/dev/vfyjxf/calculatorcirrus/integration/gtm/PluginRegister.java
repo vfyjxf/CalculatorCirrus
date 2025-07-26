@@ -12,7 +12,7 @@ import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.recipe.IngredientType;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeApi;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredients.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.calculator.simple.SimpleCalculator;
 import dev.vfyjxf.calculatorcirrus.integration.CirrusAdapter;
 import dev.vfyjxf.calculatorcirrus.integration.gtm.converter.FluidConverter;

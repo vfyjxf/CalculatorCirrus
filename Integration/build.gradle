@@ -27,12 +27,20 @@ repositories {
     }
 }
 
+configurations{
+    runtimeClasspath.extendsFrom localRuntime
+}
+
+def base = project(":Mod")
+
 dependencies {
-    implementation(rootProject)
+    compileOnly(base)
+    localRuntime(base)
 //    implementation("maven.modrinth:gregtechceu-modern:mc1.21.1-1.4.6:slim")
     implementation("com.gregtechceu.gtceu:gtceu-${project.minecraft_version}:${gtm_version}") { transitive = false }
     implementation("org.eclipse.collections:eclipse-collections-api:11.1.0")
     implementation("org.eclipse.collections:eclipse-collections:11.1.0")
+    testImplementation(base)
 }
 
 lombok {
@@ -41,16 +49,16 @@ lombok {
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
     var replaceProperties = [
-            minecraft_version      : rootProject.minecraft_version,
-            minecraft_version_range: rootProject.minecraft_version_range,
-            neo_version            : rootProject.neo_version,
-            neo_version_range      : rootProject.neo_version_range,
-            loader_version_range   : rootProject.loader_version_range,
-            mod_license            : rootProject.mod_license,
-            mod_version            : rootProject.mod_version,
-            mod_authors            : rootProject.mod_authors,
-            mod_description        : rootProject.mod_description,
-            jei_version            : rootProject.jei_version,
+            minecraft_version      : base.minecraft_version,
+            minecraft_version_range: base.minecraft_version_range,
+            neo_version            : base.neo_version,
+            neo_version_range      : base.neo_version_range,
+            loader_version_range   : base.loader_version_range,
+            mod_license            : base.mod_license,
+            mod_version            : base.mod_version,
+            mod_authors            : base.mod_authors,
+            mod_description        : base.mod_description,
+            jei_version            : base.jei_version,
     ]
     inputs.properties replaceProperties
     expand replaceProperties
