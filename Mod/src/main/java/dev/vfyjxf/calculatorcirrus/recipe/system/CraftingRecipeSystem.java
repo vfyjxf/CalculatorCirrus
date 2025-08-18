@@ -4,7 +4,7 @@ import dev.vfyjxf.calculatorcirrus.Constants;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipe.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientGroup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeData;
 import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeLookup;
@@ -34,7 +34,7 @@ import java.util.function.Predicate;
 
 public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe> {
 
-    public static final ResourceLocation SYSTEM_ID = RecipeSystem.createId(Constants.MOD_ID, "crafting");
+    public static final ResourceLocation SYSTEM_ID = RecipeSystem.systemId(Constants.MOD_ID, "crafting");
 
     private final RecipeManager recipeManager;
 
@@ -66,12 +66,12 @@ public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe>
     @Override
     public RecipeData parseRecipe(RecipeHolder<CraftingRecipe> recipeHolder) {
         CraftingRecipe recipe = recipeHolder.value();
-        MutableListMultimap<IngredientType, IngredientStack> recipeStableData = Multimaps.mutable.list.empty();
+        MutableListMultimap<IngredientGroup, IngredientStack> recipeStableData = Multimaps.mutable.list.empty();
         for (Ingredient ingredient : recipe.getIngredients()) {
             IngredientStack stack = IngredientStack.create(ingredient);
-            recipeStableData.put(IngredientType.INPUT, stack);
+            recipeStableData.put(IngredientGroup.input, stack);
         }
-        recipeStableData.put(IngredientType.OUTPUT, IngredientStack.create(RecipeHelper.getOutput(recipe)));
+        recipeStableData.put(IngredientGroup.output, IngredientStack.create(RecipeHelper.getOutput(recipe)));
         return BasicRecipeData.create(recipeStableData.toImmutable(), recipeHolder.id().toString());
     }
 

@@ -6,13 +6,13 @@ import com.gregtechceu.gtceu.api.recipe.GTRecipeType;
 import com.gregtechceu.gtceu.api.recipe.content.Content;
 import com.gregtechceu.gtceu.api.registry.GTRegistries;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipe.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientGroup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeData;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeLookup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.VanillaRecipeSystem;
 import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.integration.gtm.ContentConverter;
-import dev.vfyjxf.calculatorcirrus.util.Locations;
+import dev.vfyjxf.calculatorcirrus.util.CirrusLocations;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -47,7 +47,7 @@ public class GTMRecipeSystem implements VanillaRecipeSystem<GTRecipe> {
 
     public GTMRecipeSystem(GTRecipeType recipeType) {
         this.recipeType = recipeType;
-        this.systemId = Locations.of(recipeType.registryName.getNamespace(), recipeType.group + "/" + recipeType.registryName.getPath());
+        this.systemId = CirrusLocations.of(recipeType.registryName.getNamespace(), recipeType.group + "/" + recipeType.registryName.getPath());
         this.recipeManager = VanillaRecipeSystem.recipeManager();
         this.machines = LazyIterate.adapt(GTRegistries.MACHINES)
                 .select(machine -> {
@@ -71,27 +71,27 @@ public class GTMRecipeSystem implements VanillaRecipeSystem<GTRecipe> {
 
     @Override
     public RecipeData parseRecipe(RecipeHolder<GTRecipe> recipe) {
-        MutableListMultimap<IngredientType, IngredientStack> recipeData = Multimaps.mutable.list.empty();
+        MutableListMultimap<IngredientGroup, IngredientStack> recipeData = Multimaps.mutable.list.empty();
         GTRecipe gtRecipe = recipe.value();
 
-        gtRecipe.inputs.forEach((key, value) -> addIngredients(IngredientType.INPUT, key, value, recipeData));
-        gtRecipe.outputs.forEach((key, value) -> addIngredients(IngredientType.OUTPUT, key, value, recipeData));
+        gtRecipe.inputs.forEach((key, value) -> addIngredients(IngredientGroup.input, key, value, recipeData));
+        gtRecipe.outputs.forEach((key, value) -> addIngredients(IngredientGroup.output, key, value, recipeData));
         //TODO:tick ingredients support
         return RecipeData.create(recipeData, recipe.id().toString());
     }
 
     private static <T> void addIngredients(
-            IngredientType ingredientType,
+            IngredientGroup ingredientGroup,
             RecipeCapability<T> capability,
             List<Content> contents,
-            MutableListMultimap<IngredientType, IngredientStack> recipeData
+            MutableListMultimap<IngredientGroup, IngredientStack> recipeData
     ) {
         ContentConverter converter = CONVERTERS.get(capability);
         if (converter == null) return;
         for (Content content : contents) {
             IngredientStack converted = converter.convert(content);
             if (converted == null || converted.isEmpty()) continue;
-            recipeData.put(ingredientType, converted);
+            recipeData.put(ingredientGroup, converted);
         }
     }
 

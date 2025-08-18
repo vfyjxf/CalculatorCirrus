@@ -2,8 +2,8 @@ package dev.vfyjxf.calculatorcirrus.api.content.value;
 
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
-import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
-import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
+import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
+import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;

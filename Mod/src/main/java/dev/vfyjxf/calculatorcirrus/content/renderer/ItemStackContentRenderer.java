@@ -3,11 +3,11 @@ package dev.vfyjxf.calculatorcirrus.content.renderer;
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentRenderer;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
-import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.helper.LocalizationHelper;
 import dev.vfyjxf.calculatorcirrus.util.ErrorUtils;
 import dev.vfyjxf.calculatorcirrus.util.NumberUtils;
+import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
+import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -88,7 +88,7 @@ public class ItemStackContentRenderer implements ContentRenderer<ItemStack> {
         Optional<TooltipComponent> component = content.getTooltipImage();
         List<Component> components = tooltipHelper(content, context.flag());
         if (!components.isEmpty()) {
-            richTooltip.add(components.get(0));
+            richTooltip.add(components.getFirst());
         }
         component.ifPresent(richTooltip::add);
         for (int i = 1; i < components.size(); i++) {

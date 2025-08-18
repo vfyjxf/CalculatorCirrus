@@ -2,8 +2,8 @@ package dev.vfyjxf.calculatorcirrus.util;
 
 import dev.vfyjxf.calculatorcirrus.api.math.Point;
 import dev.vfyjxf.calculatorcirrus.api.math.Rectangle;
-import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
-import dev.vfyjxf.calculatorcirrus.api.ui.TooltipStack;
+import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
+import dev.vfyjxf.cloudlib.api.ui.widget.TooltipStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.MouseHandler;
 import net.minecraft.client.gui.Font;

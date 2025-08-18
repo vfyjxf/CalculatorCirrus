@@ -4,7 +4,7 @@ plugins {
     id 'maven-publish'
     id 'net.neoforged.moddev' version '2.0.72'
     id "me.champeau.jmh" version "0.7.2"
-//    id "scala"
+    id "scala"
 }
 
 version = mod_version
@@ -55,6 +55,7 @@ neoForge {
             systemProperty 'forge.logging.markers', 'REGISTRIES'
 
             logLevel = org.slf4j.event.Level.DEBUG
+            systemProperty('terminal.jline', 'true')
         }
     }
 
@@ -78,20 +79,23 @@ configurations {
 }
 
 dependencies {
-//    compileOnly(group: 'org.scala-lang', name: 'scala3-library_3', version: '3.6.2')
-//    compileOnly(group: 'org.typelevel', name: 'cats-core_3', version: '2.12.1-kotori')
-//    runtimeOnly(
-//            group: "com.kotori316",
-//            name: "scalablecatsforce-neoforge",
-//            version: "3.6.2-build-0",
-//            classifier: "with-library"
-//    ) {
-//        transitive = false
-//    }
+    compileOnly(group: 'org.scala-lang', name: 'scala3-library_3', version: '3.6.2')
+    compileOnly(group: 'org.typelevel', name: 'cats-core_3', version: '2.12.1-kotori')
+    runtimeOnly(
+            group: "com.kotori316",
+            name: "scalablecatsforce-neoforge",
+            version: "3.6.2-build-0",
+            classifier: "with-library"
+    ) {
+        transitive = false
+    }
+
+    api("dev.vfyjxf:cloudlib")
+
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
-    additionalRuntimeClasspath(implementation("org.eclipse.collections:eclipse-collections-api:11.1.0"))
+    compileOnly("org.eclipse.collections:eclipse-collections-api:11.1.0")
     jarJar "org.eclipse.collections:eclipse-collections-api:11.1.0"
-    additionalRuntimeClasspath(implementation("org.eclipse.collections:eclipse-collections:11.1.0"))
+    compileOnly("org.eclipse.collections:eclipse-collections:11.1.0")
     jarJar "org.eclipse.collections:eclipse-collections:11.1.0"
     jarJar(project(":Integration"))
     compileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
@@ -107,6 +111,7 @@ dependencies {
     jmh "org.openjdk.jmh:jmh-generator-annprocess:1.37"
     jmhAnnotationProcessor "org.openjdk.jmh:jmh-generator-annprocess:1.37"
 }
+
 test {
     useJUnitPlatform()
 }

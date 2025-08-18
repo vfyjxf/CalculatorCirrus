@@ -2,10 +2,10 @@ package dev.vfyjxf.calculatorcirrus.content.renderer;
 
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentRenderer;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
-import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.helper.LocalizationHelper;
 import dev.vfyjxf.calculatorcirrus.helper.RenderHelper;
+import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
+import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;

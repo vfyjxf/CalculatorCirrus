@@ -18,7 +18,7 @@ import java.util.function.Predicate;
 
 //TODO: Implement this class
 public class JeiRecipeSystem implements RecipeSystem<Object> {
-    private static final ResourceLocation SYSTEM_ID = RecipeSystem.createId("jei", "jei");
+    private static final ResourceLocation SYSTEM_ID = RecipeSystem.systemId("jei", "jei");
 
     @Override
     public RecipeLookup<Object> createLookup() {

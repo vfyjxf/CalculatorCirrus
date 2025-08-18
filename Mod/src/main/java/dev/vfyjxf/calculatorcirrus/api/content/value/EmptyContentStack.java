@@ -1,13 +1,11 @@
 package dev.vfyjxf.calculatorcirrus.api.content.value;
 
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackContentType;
-import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
-import dev.vfyjxf.calculatorcirrus.api.ui.Tooltip;
-import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
+import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
+import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
 import java.util.function.BiConsumer;
 
 final class EmptyContentStack implements ContentStack<Object> {

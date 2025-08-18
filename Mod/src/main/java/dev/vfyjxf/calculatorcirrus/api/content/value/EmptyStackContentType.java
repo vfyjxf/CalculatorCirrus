@@ -4,7 +4,7 @@ import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentSerializer;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
-import dev.vfyjxf.calculatorcirrus.util.Locations;
+import dev.vfyjxf.calculatorcirrus.util.CirrusLocations;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.nbt.CompoundTag;
@@ -21,8 +21,8 @@ import java.util.stream.Stream;
 public class EmptyStackContentType implements StackContentType<Object>, ContentSerializer<Object> {
 
     public static final EmptyStackContentType INSTANCE = new EmptyStackContentType();
-    private static final ResourceLocation ID = Locations.of(namespace, "empty");
-    private static final ResourceLocation LOCATION = Locations.of("empty_content", "empty");
+    private static final ResourceLocation ID = CirrusLocations.of(namespace, "empty");
+    private static final ResourceLocation LOCATION = CirrusLocations.of("empty_content", "empty");
 
 
     public static ContentStack<?> empty() {

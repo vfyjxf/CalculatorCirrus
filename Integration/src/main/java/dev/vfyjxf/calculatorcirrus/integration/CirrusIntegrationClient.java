@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.integration;
 
 import dev.vfyjxf.calculatorcirrus.api.ClientRegisterContentEvent;
-import dev.vfyjxf.calculatorcirrus.api.PluginLoading;
+import dev.vfyjxf.cloudlib.api.util.ServiceLoading;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -20,7 +20,7 @@ public class CirrusIntegrationClient extends CirrusIntegration {
 
     private void registerClientContent(ClientRegisterContentEvent event) {
         if (this.clientPlugins == null) {
-            this.clientPlugins = PluginLoading.load(ClientCirrusAdapter.class);
+            this.clientPlugins = ServiceLoading.load(ClientCirrusAdapter.class);
         }
         for (ClientCirrusAdapter plugin : clientPlugins) {
             plugin.registerContent(event);

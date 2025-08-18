@@ -3,7 +3,7 @@ package dev.vfyjxf.calculatorcirrus.calculator;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.value.TagStack;
 import dev.vfyjxf.calculatorcirrus.api.recipe.CommonRecipe;
-import dev.vfyjxf.calculatorcirrus.api.recipe.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientGroup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeDatabase;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeTransformer;
@@ -81,6 +81,6 @@ public interface RecipeCalculator {
 
     MutableList<IngredientStack> getResults();
 
-    MutableListMultimap<IngredientType, ? extends IngredientStack> getCalculations();
+    MutableListMultimap<IngredientGroup, ? extends IngredientStack> getCalculations();
 
 }

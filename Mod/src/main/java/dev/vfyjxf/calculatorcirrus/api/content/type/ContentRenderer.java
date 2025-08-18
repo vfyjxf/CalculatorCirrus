@@ -1,10 +1,10 @@
 package dev.vfyjxf.calculatorcirrus.api.content.type;
 
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
-import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
 import dev.vfyjxf.calculatorcirrus.content.ClientContentApiImpl;
 import dev.vfyjxf.calculatorcirrus.util.Singletons;
+import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
+import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;

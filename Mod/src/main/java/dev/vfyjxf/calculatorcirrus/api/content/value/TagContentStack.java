@@ -2,8 +2,8 @@ package dev.vfyjxf.calculatorcirrus.api.content.value;
 
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
-import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
-import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
+import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
+import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.loading.FMLEnvironment;

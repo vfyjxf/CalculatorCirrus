@@ -2,7 +2,7 @@ package dev.vfyjxf.calculatorcirrus.calculator.simple;
 
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.recipe.CommonRecipe;
-import dev.vfyjxf.calculatorcirrus.api.recipe.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientGroup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeDatabase;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeTransformer;
@@ -37,7 +37,7 @@ public class SimpleCalculator implements RecipeCalculator {
 
     @Override
     public MutableList<? extends IngredientStack> targets() {
-        return recipe.data().get(IngredientType.OUTPUT).asUnmodifiable();
+        return recipe.data().get(IngredientGroup.output).asUnmodifiable();
     }
 
     @Override
@@ -140,10 +140,10 @@ public class SimpleCalculator implements RecipeCalculator {
     }
 
     @Override
-    public MutableListMultimap<IngredientType, ? extends IngredientStack> getCalculations() {
-        MutableListMultimap<IngredientType, IngredientStack> calculations = Multimaps.mutable.list.empty();
-        calculations.putAll(IngredientType.CALCULATED, results);
-        calculations.putAll(IngredientType.LEFTOVER, leftovers);
+    public MutableListMultimap<IngredientGroup, ? extends IngredientStack> getCalculations() {
+        MutableListMultimap<IngredientGroup, IngredientStack> calculations = Multimaps.mutable.list.empty();
+//        calculations.putAll(IngredientGroup.CALCULATED, results);
+//        calculations.putAll(IngredientGroup.LEFTOVER, leftovers);
         return calculations;
     }
 }

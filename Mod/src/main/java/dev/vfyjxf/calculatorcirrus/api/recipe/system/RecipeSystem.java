@@ -14,9 +14,9 @@ import org.jetbrains.annotations.Unmodifiable;
 
 import javax.annotation.Nullable;
 
-public interface RecipeSystem<T> {
+public interface RecipeSystem<R> {
 
-    static ResourceLocation createId(String namespace, String path) {
+    static ResourceLocation systemId(String namespace, String path) {
         return ResourceLocation.fromNamespaceAndPath(namespace, "recipe_system/" + path);
     }
 
@@ -28,24 +28,24 @@ public interface RecipeSystem<T> {
 
     Class<?> basicType();
 
-    default boolean supportsRecipe(T recipe) {
+    default boolean supportsRecipe(R recipe) {
         return contains(recipe);
     }
 
-    default boolean contains(T recipe) {
+    default boolean contains(R recipe) {
         return basicType().isInstance(recipe);
     }
 
     @Nullable
-    ResourceLocation getRecipeId(T recipe);
+    ResourceLocation getRecipeId(R recipe);
 
     @Nullable
-    T getRecipe(String uniqueId);
+    R getRecipe(String uniqueId);
 
     @Nullable
-    T getRecipe(ResourceLocation registryName);
+    R getRecipe(ResourceLocation registryName);
 
-    RecipeData parseRecipe(T recipe);
+    RecipeData parseRecipe(R recipe);
 
     @Unmodifiable
     MutableList<ContentStack<ItemStack>> getMachines();
@@ -58,11 +58,11 @@ public interface RecipeSystem<T> {
             .collect(Collectors2.toList());
     }
 
-    default RecipeLookup<T> createLookup() {
+    default RecipeLookup<R> createLookup() {
         return RecipeLookup.empty();
     }
 
     @Unmodifiable
-    OrderedIterable<T> allRecipes();
+    OrderedIterable<R> allRecipes();
 
 }

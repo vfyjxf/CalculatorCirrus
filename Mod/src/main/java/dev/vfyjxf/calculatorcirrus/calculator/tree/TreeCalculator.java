@@ -2,7 +2,7 @@ package dev.vfyjxf.calculatorcirrus.calculator.tree;
 
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.recipe.CommonRecipe;
-import dev.vfyjxf.calculatorcirrus.api.recipe.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientGroup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeDatabase;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeTransformer;
@@ -75,7 +75,7 @@ public class TreeCalculator implements RecipeCalculator {
     }
 
     @Override
-    public MutableListMultimap<IngredientType, ? extends IngredientStack> getCalculations() {
+    public MutableListMultimap<IngredientGroup, ? extends IngredientStack> getCalculations() {
         return null;
     }
 }

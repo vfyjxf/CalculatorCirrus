@@ -1,5 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.recipe;
 
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientGroup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.helper.CollectionHelper;
 import dev.vfyjxf.calculatorcirrus.recipe.BasicRecipeData;
@@ -13,16 +14,16 @@ import org.jetbrains.annotations.Nullable;
 public interface RecipeData {
 
     static RecipeData create(
-            ListMultimap<IngredientType, ? extends IngredientStack> stableData,
-            @Nullable String uid
+        ListMultimap<IngredientGroup, ? extends IngredientStack> stableData,
+        @Nullable String uid
     ) {
         return BasicRecipeData.create(stableData, CollectionHelper.emptyMultimap(), uid);
     }
 
     static RecipeData create(
-            ListMultimap<IngredientType, ? extends IngredientStack> stableData,
-            ListMultimap<MutableData.Key<?>, ? extends MutableData<?>> mutableData,
-            @Nullable String uid
+        ListMultimap<IngredientGroup, ? extends IngredientStack> stableData,
+        ListMultimap<MutableData.Key<?>, ? extends MutableData<?>> mutableData,
+        @Nullable String uid
     ) {
         return BasicRecipeData.create(stableData, mutableData, uid);
     }
@@ -32,26 +33,26 @@ public interface RecipeData {
         throw new UnsupportedOperationException("Not implemented");
     }
 
-    default MutableList<? extends IngredientStack> get(IngredientType type) {
+    default MutableList<? extends IngredientStack> get(IngredientGroup type) {
         return getStableData().get(type);
     }
 
     default MutableList<? extends IngredientStack> getInputs() {
-        return getStableData().get(IngredientType.INPUT);
+        return getStableData().get(IngredientGroup.input);
     }
 
     default MutableList<? extends IngredientStack> getOutputs() {
-        return getStableData().get(IngredientType.OUTPUT);
+        return getStableData().get(IngredientGroup.output);
     }
 
     default MutableList<? extends IngredientStack> getCatalysts() {
-        return getStableData().get(IngredientType.CATALYST);
+        return getStableData().get(IngredientGroup.catalyst);
     }
 
     /**
      * @return the recipe getStableData;
      */
-    MutableListMultimap<IngredientType, ? extends IngredientStack> getStableData();
+    MutableListMultimap<IngredientGroup, ? extends IngredientStack> getStableData();
 
     MutableListMultimap<MutableData.Key<?>, ? extends MutableData<?>> getMutableData();
 

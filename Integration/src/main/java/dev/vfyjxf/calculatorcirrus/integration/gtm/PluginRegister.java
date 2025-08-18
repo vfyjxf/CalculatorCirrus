@@ -10,7 +10,7 @@ import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.RegisterPlugin;
 import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipe.IngredientType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientGroup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.calculator.simple.SimpleCalculator;
@@ -69,6 +69,6 @@ public class PluginRegister {
         calculator.addPath(mushroom, recipeSystem, step1);
         calculator.setAmount(200);
         calculator.calculate();
-        MutableListMultimap<IngredientType, ? extends IngredientStack> calculations = calculator.getCalculations();
+        MutableListMultimap<IngredientGroup, ? extends IngredientStack> calculations = calculator.getCalculations();
     }
 }
