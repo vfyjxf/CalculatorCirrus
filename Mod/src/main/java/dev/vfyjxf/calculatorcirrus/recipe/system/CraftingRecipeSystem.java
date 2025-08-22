@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.recipe.system;
 
-import dev.vfyjxf.calculatorcirrus.Constants;
+import dev.vfyjxf.calculatorcirrus.CirrusConstants;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
@@ -34,7 +34,7 @@ import java.util.function.Predicate;
 
 public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe> {
 
-    public static final ResourceLocation SYSTEM_ID = RecipeSystem.systemId(Constants.MOD_ID, "crafting");
+    public static final ResourceLocation SYSTEM_ID = RecipeSystem.systemId(CirrusConstants.MOD_ID, "crafting");
 
     private final RecipeManager recipeManager;
 

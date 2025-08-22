@@ -1,10 +1,20 @@
 package dev.vfyjxf.calculatorcirrus.util;
 
-import dev.vfyjxf.calculatorcirrus.Constants;
+import dev.vfyjxf.calculatorcirrus.CirrusConstants;
+import net.minecraft.core.Registry;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 public final class CirrusLocations {
+
+    public static <T> ResourceKey<Registry<T>> createKey(ResourceLocation location) {
+        return ResourceKey.createRegistryKey(location);
+    }
+
+    public static <T> ResourceKey<T> createKey(ResourceKey<? extends Registry<T>> registryKey, ResourceLocation location) {
+        return ResourceKey.create(registryKey, location);
+    }
 
     public static ResourceLocation parse(String location) {
         return ResourceLocation.parse(location);
@@ -23,7 +33,7 @@ public final class CirrusLocations {
     }
 
     public static ResourceLocation create(String path) {
-        return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, path);
+        return ResourceLocation.fromNamespaceAndPath(CirrusConstants.MOD_ID, path);
     }
 
     private CirrusLocations() {}

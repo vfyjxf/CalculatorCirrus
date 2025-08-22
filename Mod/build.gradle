@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
     id 'eclipse'
     id 'maven-publish'
-    id 'net.neoforged.moddev' version '2.0.72'
+    id 'net.neoforged.moddev'
     id "me.champeau.jmh" version "0.7.2"
     id "scala"
 }
@@ -130,6 +130,7 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
             mod_authors            : mod_authors,
             mod_description        : mod_description,
             jei_version            : jei_version,
+            cloudlib_version       : cloudlib_version
     ]
     inputs.properties replaceProperties
     expand replaceProperties

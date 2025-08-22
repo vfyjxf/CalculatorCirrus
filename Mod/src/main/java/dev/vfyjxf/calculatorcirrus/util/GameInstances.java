@@ -5,7 +5,7 @@ import net.minecraft.world.item.crafting.RecipeManager;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
-//@EventBusSubscriber(modid = Constants.MOD_ID, bus = EventBusSubscriber.Bus.GAME)
+//@EventBusSubscriber(modid = CirrusConstants.MOD_ID, bus = EventBusSubscriber.Bus.GAME)
 public class GameInstances {
 
     //region server
@@ -15,7 +15,7 @@ public class GameInstances {
 //        return server;
 //    }
 //
-    private static RecipeManager recipeManager;
+//    private static RecipeManager recipeManager;
 //
 //    @SubscribeEvent
 //    private static void onServerStarting(ServerStartingEvent event) {

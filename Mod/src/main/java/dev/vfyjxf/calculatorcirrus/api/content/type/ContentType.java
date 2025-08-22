@@ -22,7 +22,7 @@ import java.util.stream.Stream;
  */
 public interface ContentType<T> {
 
-    //region Constants
+    //region CirrusConstants
 
     String namespace = "content_type";
 

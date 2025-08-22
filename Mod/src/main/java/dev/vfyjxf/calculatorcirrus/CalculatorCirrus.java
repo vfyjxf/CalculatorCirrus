@@ -2,7 +2,6 @@ package dev.vfyjxf.calculatorcirrus;
 
 import com.google.common.base.Stopwatch;
 import com.mojang.logging.LogUtils;
-import dev.vfyjxf.calculatorcirrus.api.CirrusRegistries;
 import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
@@ -11,16 +10,19 @@ import dev.vfyjxf.calculatorcirrus.content.ContentRegistryBuilder;
 import dev.vfyjxf.calculatorcirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.calculatorcirrus.recipe.system.CraftingRecipeSystem;
 import dev.vfyjxf.calculatorcirrus.util.Singletons;
+import dev.vfyjxf.cloudlib.api.module.ModEntryPoint;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.ModLoader;
 import net.neoforged.neoforge.registries.NewRegistryEvent;
 import org.slf4j.Logger;
 
-public abstract class CalculatorCirrus {
+public abstract class CalculatorCirrus extends ModEntryPoint {
     private static final Logger logger = LogUtils.getLogger();
 
-    public CalculatorCirrus(IEventBus modEventBus) {
+    public CalculatorCirrus(ModContainer modContainer, IEventBus modEventBus) {
+        super(modContainer, modEventBus);
         modEventBus.addListener(this::onContentRegister);
         modEventBus.addListener(this::onRecipeSystemRegister);
         modEventBus.addListener(this::onRegisterRegistry);
@@ -48,7 +50,6 @@ public abstract class CalculatorCirrus {
     }
 
     private void onRegisterRegistry(NewRegistryEvent event) {
-        CirrusRegistries.register(event);
     }
 
     void registerBuiltinContent(ContentRegistryBuilder registryBuilder) {

@@ -20,18 +20,19 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.ModLoader;
 import net.neoforged.fml.common.Mod;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
-@Mod(value = Constants.MOD_ID, dist = Dist.CLIENT)
+@Mod(value = CirrusConstants.MOD_ID, dist = Dist.CLIENT)
 public class CalculatorCirrusClient extends CalculatorCirrus {
 
     public static final Logger logger = LogUtils.getLogger();
 
-    public CalculatorCirrusClient(IEventBus modEventBus) {
-        super(modEventBus);
+    public CalculatorCirrusClient(ModContainer modContainer, IEventBus modEventBus) {
+        super(modContainer, modEventBus);
         new StartEventObserver(
                 this::start,
                 () -> ModLoader.postEventWrapContainerInModOrder(new UnloadingContentEvent())
@@ -53,6 +54,7 @@ public class CalculatorCirrusClient extends CalculatorCirrus {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void onClientRegisterContent(ClientRegisterContentEvent event) {
+        //TODO:Rewrite this
         event.registerRenderer(
                 CirrusContentTypes.EMPTY, new ContentRenderer() {
                     @Override

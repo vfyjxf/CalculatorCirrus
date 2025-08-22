@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.content;
 
-import dev.vfyjxf.calculatorcirrus.Constants;
+import dev.vfyjxf.calculatorcirrus.CirrusConstants;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.EmptyStackContentType;
@@ -40,7 +40,7 @@ public final class CirrusContentTypes {
     }
 
     private static ResourceLocation of(String path) {
-        return fromNamespaceAndPath(Constants.MOD_ID, path);
+        return fromNamespaceAndPath(CirrusConstants.MOD_ID, path);
     }
 
     private CirrusContentTypes() {throw new AssertionError("This class should not be instantiated!");}
