@@ -4,7 +4,7 @@ plugins {
     id 'maven-publish'
     id 'net.neoforged.moddev'
     id "me.champeau.jmh" version "0.7.2"
-    id "scala"
+//    id "scala"
 }
 
 version = mod_version
@@ -79,16 +79,16 @@ configurations {
 }
 
 dependencies {
-    compileOnly(group: 'org.scala-lang', name: 'scala3-library_3', version: '3.6.2')
-    compileOnly(group: 'org.typelevel', name: 'cats-core_3', version: '2.12.1-kotori')
-    runtimeOnly(
-            group: "com.kotori316",
-            name: "scalablecatsforce-neoforge",
-            version: "3.6.2-build-0",
-            classifier: "with-library"
-    ) {
-        transitive = false
-    }
+//    compileOnly(group: 'org.scala-lang', name: 'scala3-library_3', version: '3.6.2')
+//    compileOnly(group: 'org.typelevel', name: 'cats-core_3', version: '2.12.1-kotori')
+//    runtimeOnly(
+//            group: "com.kotori316",
+//            name: "scalablecatsforce-neoforge",
+//            version: "3.6.2-build-0",
+//            classifier: "with-library"
+//    ) {
+//        transitive = false
+//    }
 
     api("dev.vfyjxf:cloudlib")
 

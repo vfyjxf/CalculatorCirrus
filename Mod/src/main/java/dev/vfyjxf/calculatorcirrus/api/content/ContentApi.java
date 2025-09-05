@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.api.content;
 
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
-import dev.vfyjxf.calculatorcirrus.api.content.type.StackContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
 import dev.vfyjxf.calculatorcirrus.util.Singletons;
 import net.minecraft.resources.ResourceLocation;
@@ -19,7 +19,7 @@ public interface ContentApi {
 
     //region content type
 
-    boolean isRegistered(ResourceLocation typeId);
+    boolean hasContentType(ResourceLocation typeId);
 
     <T> ContentType<T> getContentType(ResourceLocation typeId);
 
@@ -33,9 +33,13 @@ public interface ContentApi {
 
     //region stack type
 
-    <T> StackContentType<T> getStackType(ResourceLocation typeId);
+    boolean hasStackType(ResourceLocation typeId);
 
-    default @Nullable <T> StackContentType<T> getStackType(String typeId) {
+    <T, S> StackType<T, S> getStackType(ResourceLocation typeId);
+
+    <T, S> StackType<T, S> getStackType(ContentType<T> contentType);
+
+    default @Nullable <T, S> StackType<T, S> getStackType(String typeId) {
         if (ResourceLocation.isValidPath(typeId)) {
             return getStackType(ResourceLocation.fromNamespaceAndPath(ContentType.namespace, typeId));
         }
@@ -43,33 +47,23 @@ public interface ContentApi {
     }
     //endregion
 
-    //region atomic type
-//
-//    <T> AtomicContentType<T> getAtomicType(ResourceLocation typeId);
-//
-//    default @Nullable <T> AtomicContentType<T> getAtomicType(String typeId) {
-//        if (ResourceLocation.isValidPath(typeId)) {
-//            return getAtomicType(ResourceLocation.fromNamespaceAndPath(ContentType.namespace, typeId));
-//        }
-//        return getAtomicType(ResourceLocation.parse(typeId));
-//    }
-
-    //endregion
-
     //region tag type
 
-    boolean isTagRegistered(ResourceLocation typeId);
+    boolean hasTagType(ResourceLocation typeId);
 
-    <STACK, VALUE> TagType<VALUE, STACK> getTagType(ResourceLocation typeId);
+    <T> TagType<T> getTagType(ResourceLocation typeId);
 
-    <STACK, VALUE> TagType<VALUE, STACK> getTagType(ContentType<STACK> stackType);
+    <T> TagType<T> getTagType(ContentType<T> contentType);
 
     //endregion
 
     @UnmodifiableView
-    RichIterable<? extends ContentType<?>> allContentTypes();
+    RichIterable<? extends ContentType<?>> contentTypes();
 
     @UnmodifiableView
-    RichIterable<? extends TagType<?, ?>> allTagTypes();
+    RichIterable<? extends StackType<?, ?>> stackTypes();
+
+    @UnmodifiableView
+    RichIterable<? extends TagType<?>> tagTypes();
 
 }

@@ -1,4 +1,4 @@
 @NotNullByDefault
-package dev.vfyjxf.calculatorcirrus.calculator.simple;
+package dev.vfyjxf.calculatorcirrus.api.content.util;
 
 import dev.vfyjxf.calculatorcirrus.api.annotation.NotNullByDefault;

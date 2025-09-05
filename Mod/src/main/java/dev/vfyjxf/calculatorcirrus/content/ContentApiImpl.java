@@ -2,104 +2,119 @@ package dev.vfyjxf.calculatorcirrus.content;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
-import dev.vfyjxf.calculatorcirrus.api.content.type.StackContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
-import dev.vfyjxf.calculatorcirrus.util.Checks;
 import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Maps;
 import org.eclipse.collections.api.map.ImmutableMap;
-import org.eclipse.collections.api.map.MutableMap;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.UnmodifiableView;
 
 @ApiStatus.Internal
-public class ContentApiImpl implements ContentApi {
+public sealed class ContentApiImpl implements ContentApi permits ClientContentApiImpl {
 
+    private final ImmutableMap<Object/*ContentType | ResourceLocation*/, StackType<?, ?>> stackTypes;
     private final ImmutableMap<ResourceLocation, ContentType<?>> contentTypes;
-    private final ImmutableMap<Object/*ContentType | ResourceLocation*/, TagType<?, ?>> tagTypes;
+    private final ImmutableMap<Object/*ContentType | ResourceLocation*/, TagType<?>> tagTypes;
 
-    public ContentApiImpl(ContentRegistryBuilder builder) {
+    public ContentApiImpl(
+            ContentRegistryBuilder builder
+    ) {
         this.contentTypes = Maps.immutable.ofMap(builder.contentTypes);
-        MutableMap<Object, TagType<?, ?>> tagTypes = Maps.mutable.ofInitialCapacity(builder.tagTypes.size() + builder.tagTypesByType.size());
-        tagTypes.putAll(builder.tagTypes);
-        tagTypes.putAll(builder.tagTypesByType);
-        this.tagTypes = tagTypes.toImmutable();
+        this.stackTypes = Maps.immutable.ofMap(builder.stackTypes);
+        this.tagTypes = Maps.immutable.ofMap(builder.tagTypes);
     }
 
-    @ApiStatus.Internal
-    public boolean isRegistered(ResourceLocation typeId) {
-        return contentTypes.containsValue(typeId);
-    }
+    //region content type
 
-    @SuppressWarnings("unchecked")
     @Override
+    public boolean hasContentType(ResourceLocation typeId) {
+        return contentTypes.containsKey(typeId);
+    }
+
+
+    @Override
+    @SuppressWarnings("unchecked")
     public <T> ContentType<T> getContentType(ResourceLocation typeId) {
-        Checks.checkNotNull(typeId, "typeId");
-        ContentType<T> contentType = (ContentType<T>) contentTypes.get(typeId);
-        if (contentType == null) {
-            throw new IllegalArgumentException("Unknown content type: " + typeId);
+        ContentType<T> result = (ContentType<T>) contentTypes.get(typeId);
+        if (result == null) {
+            throw new IllegalArgumentException("Unknown content type id: " + typeId);
         }
-        return contentType;
+        return result;
+    }
+    //endregion
+
+    //region stack type
+
+    @Override
+    public boolean hasStackType(ResourceLocation typeId) {
+        return stackTypes.containsKey(typeId);
     }
 
+    @Override
     @SuppressWarnings("unchecked")
-    @Override
-    public <T> StackContentType<T> getStackType(ResourceLocation typeId) {
-        Checks.checkNotNull(typeId, "typeId");
-        ContentType<T> contentType = (ContentType<T>) contentTypes.get(typeId);
-        if (!(contentType instanceof StackContentType<T> stackType)) {
-            throw new IllegalArgumentException("Unknown stack type: " + typeId);
+    public <T, S> StackType<T, S> getStackType(ResourceLocation typeId) {
+        StackType<T, S> result = (StackType<T, S>) contentTypes.get(typeId);
+        if (result == null) {
+            throw new IllegalArgumentException("Unknown stack type id: " + typeId);
         }
-        return stackType;
+        return result;
     }
 
-//    @SuppressWarnings("unchecked")
-//    @Override
-//    public <T> AtomicContentType<T> getAtomicType(ResourceLocation typeId) {
-//        Checks.checkNotNull(typeId, "typeId");
-//        ContentType<T> contentType = (ContentType<T>) contentTypes.get(typeId);
-//        if (!(contentType instanceof AtomicContentType<T> atomicType)) {
-//            throw new IllegalArgumentException("Unknown atomic type: " + typeId);
-//        }
-//        return atomicType;
-//    }
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T, S> StackType<T, S> getStackType(ContentType<T> contentType) {
+        StackType<T, S> result = (StackType<T, S>) contentTypes.get(contentType);
+        if (result == null) {
+            throw new IllegalArgumentException("Unknown stack type for: " + contentType.typeId());
+        }
+        return result;
+    }
+
+    //endregion
+
+    //region tag type
 
     @Override
-    public boolean isTagRegistered(ResourceLocation typeId) {
+    public boolean hasTagType(ResourceLocation typeId) {
         return tagTypes.containsKey(typeId);
     }
 
+    @Override
     @SuppressWarnings("unchecked")
-    @Override
-    public <STACK, VALUE> TagType<VALUE, STACK> getTagType(ResourceLocation typeId) {
-        Checks.checkNotNull(typeId, "typeId");
-        TagType<VALUE, STACK> tagType = (TagType<VALUE, STACK>) tagTypes.get(typeId);
-        if (tagType == null) {
-            throw new IllegalArgumentException("Unknown tag type: " + typeId);
+    public <T> TagType<T> getTagType(ResourceLocation typeId) {
+        TagType<T> result = (TagType<T>) tagTypes.get(typeId);
+        if (result == null) {
+            throw new IllegalArgumentException("Unknown tag type id: " + typeId);
         }
-        return tagType;
+        return result;
     }
 
+    @Override
     @SuppressWarnings("unchecked")
-    @Override
-    public <STACK, VALUE> TagType<VALUE, STACK> getTagType(ContentType<STACK> stackType) {
-        Checks.checkNotNull(stackType, "stackType");
-        TagType<VALUE, STACK> tagType = (TagType<VALUE, STACK>) tagTypes.get(stackType);
-        if (tagType == null) {
-            throw new IllegalArgumentException("Unknown tag type for stack type: " + stackType.typeId());
+    public <T> TagType<T> getTagType(ContentType<T> contentType) {
+        TagType<T> result = (TagType<T>) tagTypes.get(contentType);
+        if (result == null) {
+            throw new IllegalArgumentException("Unknown tag type for content type: " + contentType.typeId());
         }
-        return tagType;
+        return result;
     }
 
+    //endregion
 
     @Override
-    public @UnmodifiableView RichIterable<? extends ContentType<?>> allContentTypes() {
-        return contentTypes.valuesView();
+    public @UnmodifiableView RichIterable<? extends ContentType<?>> contentTypes() {
+        return contentTypes;
     }
 
     @Override
-    public @UnmodifiableView RichIterable<? extends TagType<?, ?>> allTagTypes() {
-        return tagTypes.valuesView();
+    public @UnmodifiableView RichIterable<? extends StackType<?, ?>> stackTypes() {
+        return stackTypes;
+    }
+
+    @Override
+    public @UnmodifiableView RichIterable<? extends TagType<?>> tagTypes() {
+        return tagTypes;
     }
 }

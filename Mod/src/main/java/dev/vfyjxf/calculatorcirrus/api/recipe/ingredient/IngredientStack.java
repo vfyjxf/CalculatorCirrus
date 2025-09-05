@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.recipe.ingredient;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
+import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
@@ -47,15 +47,15 @@ public interface IngredientStack {
         return new TypedIngredientStack<>(stack.normalize(), amount, chance);
     }
 
-    static <STACK, VALUE> IngredientStack create(TagType<VALUE, STACK> tagType, TagKey<VALUE> tagKey) {
+    static <STACK, VALUE> IngredientStack create(TagType<VALUE> tagType, TagKey<VALUE> tagKey) {
         return create(tagType, tagKey, 1, MAX_CHANCE);
     }
 
-    static <STACK, VALUE> IngredientStack create(TagType<VALUE, STACK> tagType, TagKey<VALUE> tagKey, long amount) {
+    static <STACK, VALUE> IngredientStack create(TagType<VALUE> tagType, TagKey<VALUE> tagKey, long amount) {
         return create(tagType, tagKey, amount, MAX_CHANCE);
     }
 
-    static <STACK, VALUE> IngredientStack create(TagType<VALUE, STACK> tagType, TagKey<VALUE> tagKey, long amount, float chance) {
+    static <STACK, VALUE> IngredientStack create(TagType<VALUE> tagType, TagKey<VALUE> tagKey, long amount, float chance) {
         return new TagIngredientStack(tagType, tagKey, amount, chance);
     }
 
@@ -92,7 +92,7 @@ public interface IngredientStack {
     static IngredientStack create(FluidIngredient ingredient, long amount, float chance) {
         if (ingredient.isEmpty()) return empty();
         if (ingredient instanceof TagFluidIngredient fluidTag) {
-            return create(CirrusContentTypes.FLUID_TAG, fluidTag.tag(), amount);
+            return create(CirrusTypes.fluidTag, fluidTag.tag(), amount);
         } else {
             MutableList<ContentStack<FluidStack>> fluidStacks = ArrayAdapter.adapt(ingredient.getStacks())
                     .collect(ContentStack::create)
@@ -134,9 +134,9 @@ public interface IngredientStack {
         if (stacks.size() == 1) {
             return create(stacks.getFirst(), amount, chance);
         } else {
-            TagKey<Item> tag = CirrusContentTypes.ITEM_TAG.getTagFrom(stacks);
+            TagKey<Item> tag = CirrusTypes.itemTag.getTagFrom(stacks);
             if (tag == null) return new ListIngredientStack(stacks, amount, chance);
-            return new TagIngredientStack(CirrusContentTypes.ITEM_TAG, tag, amount, chance);
+            return new TagIngredientStack(CirrusTypes.itemTag, tag, amount, chance);
         }
     }
 

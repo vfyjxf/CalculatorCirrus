@@ -1,83 +1,131 @@
-package dev.vfyjxf.calculatorcirrus.api.content.value;
-
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
-import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
-import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
-import net.minecraft.tags.TagKey;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.material.Fluid;
-import net.neoforged.neoforge.fluids.FluidStack;
-import org.eclipse.collections.api.list.MutableList;
-import org.jetbrains.annotations.Unmodifiable;
-
-/**
- * When handling recipe,only a tag with amount is useful for us.
- */
-public sealed interface TagStack<VALUE, STACK>
-        extends ContentStack<STACK>
-        permits TagContentStack {
-
-
-    //region factories
-
-    static <STACK, VALUE> TagStack<VALUE, STACK> create(TagType<VALUE, STACK> tagType, TagKey<VALUE> tagKey) {
-        return new TagContentStack<>(tagType, tagKey, 1);
-    }
-
-    static <STACK, VALUE> TagStack<VALUE, STACK> create(
-            TagType<VALUE, STACK> tagType, TagKey<VALUE> tagKey,
-            long amount
-    ) {
-        return new TagContentStack<>(tagType, tagKey, amount);
-    }
-
-    static TagStack<Item, ItemStack> createItemTag(TagKey<Item> tagKey) {
-        return create(CirrusContentTypes.ITEM_TAG, tagKey);
-    }
-
-    static TagStack<Item, ItemStack> createItemTag(TagKey<Item> tagKey, long amount) {
-        return create(CirrusContentTypes.ITEM_TAG, tagKey, amount);
-    }
-
-    static TagStack<Fluid, FluidStack> createFluidTag(TagKey<Fluid> tagKey) {
-        return create(CirrusContentTypes.FLUID_TAG, tagKey, 1);
-    }
-
-    static TagStack<Fluid, FluidStack> createFluidTag(TagKey<Fluid> tagKey, long amount) {
-        return create(CirrusContentTypes.FLUID_TAG, tagKey, amount);
-    }
-
-    //endregion
-
-    TagType<VALUE, STACK> tagType();
-
-    @Unmodifiable
-    MutableList<? extends ContentStack<STACK>> getAsStacks();
-
-    @Unmodifiable
-    MutableList<? extends VALUE> getValues();
-
-    TagKey<VALUE> tagKey();
-
-    @Override
-    TagStack<VALUE, STACK> copy();
-
-    /**
-     * @return make any stack with a random value and a default amount.
-     */
-    @Override
-    STACK value();
-
-    @Override
-    default <C> boolean matches(ContentStack<C> otherContent, MatchStrategy strategy) {
-        if (!(otherContent instanceof TagStack<?, C> other)) return false;
-        return matchesTag(other, strategy);
-    }
-
-    default <V, S> boolean matchesTag(TagStack<V, S> other, MatchStrategy strategy) {
-        boolean identity = !strategy.withIdentity() || (tagType() == other.tagType() && tagKey().equals(other.tagKey()));
-        boolean amount = !strategy.withAmount() || amount() == other.amount();
-        return identity && amount;
-    }
-}
+//package dev.vfyjxf.calculatorcirrus.api.content.value;
+//
+//import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
+//import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
+//import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
+//import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
+//import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
+//import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
+//import net.minecraft.tags.TagKey;
+//import org.eclipse.collections.api.list.MutableList;
+//import org.jetbrains.annotations.Contract;
+//import org.jetbrains.annotations.Nullable;
+//import org.jetbrains.annotations.UnmodifiableView;
+//
+//import java.util.function.BiConsumer;
+//
+//public sealed interface TagStack<T> extends ContentVariant permits TypedTagStack, EmptyTagStack {
+//
+//    @SuppressWarnings("unchecked")
+//    static <T> TagStack<T> empty() {
+//        return EmptyTagStack.instance;
+//    }
+//
+//    //region factory
+//
+//    static <T> TagStack<T> from(TagType<T> type, TagKey<T> tagKey, long amount) {
+//        return new TypedTagStack<>(type, tagKey, amount);
+//    }
+//
+//    //endregion
+//
+//    //region builtin type factory
+//
+//    //endregion
+//
+//    //region type info
+//
+//    TagType<T> type();
+//
+//    default ContentType<T> contentType() {
+//        return type().contentType();
+//    }
+//
+//    //endregion
+//
+//    //region stack info
+//
+//    TagKey<T> tagKey();
+//
+//    boolean isEmpty();
+//
+//    @UnmodifiableView
+//    MutableList<T> values();
+//
+//    /**
+//     * @see ContentStack#amount()
+//     */
+//    long amount();
+//
+//    /**
+//     * @see ContentStack#setAmount(long)
+//     */
+//    TagStack<T> setAmount(long amount);
+//
+//    default boolean matches(TagStack<?> other, MatchStrategy strategy) {
+//        boolean identity = !strategy.withIdentity() || (type() == other.type() && tagKey().equals(other.tagKey()));
+//        boolean amount = !strategy.withAmount() || other.amount() == amount();
+//        return identity && amount;
+//    }
+//
+//    //endregion
+//
+//    //region copy
+//
+//    default TagStack<T> copy() {
+//        if (this == empty() || isEmpty()) return empty();
+//        return from(type(), tagKey(), amount());
+//    }
+//
+//    //endregion
+//
+//    //region tooltip
+//
+//    /**
+//     * Append tooltips to the tag stack.
+//     *
+//     * @param configurator the builder to append tooltip to this tag stack
+//     * @return this tag stack
+//     */
+//    @Contract("_ -> this")
+//    TagStack<T> appendTooltip(BiConsumer<RichTooltip, TooltipContext> configurator);
+//
+//    /**
+//     * Same as {@link #appendTooltip(BiConsumer)} .
+//     *
+//     * @see #appendTooltip(BiConsumer)
+//     */
+//    @Contract("_ -> this")
+//    default TagStack<T> withTooltip(BiConsumer<RichTooltip, TooltipContext> configurator) {
+//        return appendTooltip(configurator);
+//    }
+//
+//    /**
+//     * Configure the tooltip for this tag stack.
+//     *
+//     * @param tooltip the rich tooltip to configure.
+//     * @see #getTooltip(TooltipContext)
+//     */
+//    void configureTooltip(RichTooltip tooltip, TooltipContext context);
+//
+//    /**
+//     * @param context the tooltip context.
+//     * @return the rich tooltip for this tag stack, or null if tooltip is not available or called from server side.
+//     */
+//    @Nullable
+//    RichTooltip getTooltip(TooltipContext context);
+//
+//    //endregion
+//
+//    //region util
+//
+//    <S> MutableList<S> toStacks(StackType<T, S> stackType);
+//
+//    @SuppressWarnings("unchecked")
+//    default <C> TagStack<C> cast() {
+//        return (TagStack<C>) this;
+//    }
+//
+//    //endregion
+//}
+//

@@ -2,9 +2,8 @@ package dev.vfyjxf.calculatorcirrus;
 
 import com.google.common.base.Stopwatch;
 import com.mojang.logging.LogUtils;
-import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
+import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.calculatorcirrus.content.ContentRegistryBuilder;
 import dev.vfyjxf.calculatorcirrus.recipe.RecipeApiImpl;
@@ -23,7 +22,6 @@ public abstract class CalculatorCirrus extends ModEntryPoint {
 
     public CalculatorCirrus(ModContainer modContainer, IEventBus modEventBus) {
         super(modContainer, modEventBus);
-        modEventBus.addListener(this::onContentRegister);
         modEventBus.addListener(this::onRecipeSystemRegister);
         modEventBus.addListener(this::onRegisterRegistry);
     }
@@ -43,17 +41,17 @@ public abstract class CalculatorCirrus extends ModEntryPoint {
 
     protected abstract void fireContentRegisterEvent();
 
-    private void onContentRegister(RegisterContentEvent event) {
-        logger.info("Registering builtin contents");
-        event.registerContent(CirrusContentTypes.ITEM, CirrusContentTypes.ITEM_TAG);
-        event.registerContent(CirrusContentTypes.FLUID, CirrusContentTypes.FLUID_TAG);
-    }
-
     private void onRegisterRegistry(NewRegistryEvent event) {
     }
 
     void registerBuiltinContent(ContentRegistryBuilder registryBuilder) {
-        registryBuilder.registerContent(CirrusContentTypes.EMPTY);
+        logger.info("Registering builtin contents");
+        registryBuilder.registerContentType(CirrusTypes.item);
+        registryBuilder.registerContentType(CirrusTypes.fluid);
+        registryBuilder.registerTag(CirrusTypes.item, CirrusTypes.itemTag);
+        registryBuilder.registerTag(CirrusTypes.fluid, CirrusTypes.fluidTag);
+        registryBuilder.registerStackType(CirrusTypes.item, CirrusTypes.itemStack);
+        registryBuilder.registerStackType(CirrusTypes.fluid, CirrusTypes.fluidStack);
     }
 
     @SubscribeEvent

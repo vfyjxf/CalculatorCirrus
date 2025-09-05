@@ -8,6 +8,6 @@ import org.eclipse.collections.api.list.MutableList;
  */
 public interface IngredientProvider {
 
-    MutableList<ContentStack<?>> getContents();
+    MutableList<ContentStack<?,?>> getContents();
 
 }

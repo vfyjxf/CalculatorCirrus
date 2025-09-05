@@ -1,9 +1,8 @@
 package dev.vfyjxf.calculatorcirrus.api.content;
 
-import dev.vfyjxf.calculatorcirrus.api.content.type.StackContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentValue;
-import dev.vfyjxf.calculatorcirrus.api.content.value.TagStack;
 import net.minecraft.core.component.DataComponentMap;
 import org.jetbrains.annotations.Nullable;
 
@@ -12,18 +11,16 @@ import java.util.function.BiPredicate;
 /**
  * {@code Identity}:
  * <ul>
- *     <li> {@link ContentValue}: {@link ContentValue#value()} and  {@link ContentValue#contentType()}.
- *     <li> {@link ContentStack}:  {@link ContentStack#contentType()} and result of {@link StackContentType#getIdentity(Object)} </li>
- *     <li> {@link TagStack}: {@link TagStack#tagType()} and {@link TagStack#tagKey()}</li>
+ *     <li> {@link ContentValue}: {@link ContentValue#value()} and  {@link ContentValue#type()}.
+ *     <li> {@link ContentStack}:  {@link ContentStack#type()} ()} and result of {@link StackType#getContent(Object)} (Object)} </li>
  * </ul>
  * <p>
- * {@code Amount}:{@link ContentStack#amount()} and {@link StackContentType#getAmount(Object)}
+ * {@code Amount}:{@link ContentStack#amount()} and {@link StackType#getAmount(Object)}
  * <p>
- * {@code Component}:{@link ContentStack#getComponents()} and {@link TagStack#getComponents()} and {@link StackContentType#getComponents(Object)}
+ * {@code Component}:{@link ContentStack#components()}  and {@link StackType#getComponents(Object)}
  *
  * @see ContentValue
  * @see ContentStack
- * @see TagStack
  */
 public record MatchStrategy(
         boolean withIdentity,

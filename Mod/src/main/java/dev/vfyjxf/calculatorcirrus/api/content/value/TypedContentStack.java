@@ -1,25 +1,44 @@
 package dev.vfyjxf.calculatorcirrus.api.content.value;
 
+import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
-import dev.vfyjxf.calculatorcirrus.api.content.type.StackContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
+import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
+import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.neoforged.fml.loading.FMLEnvironment;
+import org.eclipse.collections.api.factory.Lists;
+import org.eclipse.collections.api.list.MutableList;
+import org.jetbrains.annotations.Nullable;
 
-class TypedContentStack<T> extends BasicContentStack<T> {
-    private final StackContentType<T> type;
+import java.util.function.BiConsumer;
+
+final class TypedContentStack<T, S> implements ContentStack<T, S> {
+
+    private final MutableList<BiConsumer<RichTooltip, TooltipContext>> tooltipConfigurers = Lists.mutable.empty();
+    private final S value;
+    private final StackType<T, S> type;
     private long amount;
 
-    public TypedContentStack(StackContentType<T> type, T value) {
-        this(type, value, 1);
+    TypedContentStack(StackType<T, S> type, S value) {
+        this(type, value, type.quantity());
     }
 
-    public TypedContentStack(StackContentType<T> type, T value, long amount) {
-        super(value);
+    TypedContentStack(StackType<T, S> type, S value, long amount) {
         this.type = type;
+        this.value = value;
         this.amount = amount;
     }
 
     @Override
-    public StackContentType<T> contentType() {
+    public StackType<T, S> type() {
         return type;
+    }
+
+    @Override
+    public S value() {
+        return value;
     }
 
     @Override
@@ -28,9 +47,38 @@ class TypedContentStack<T> extends BasicContentStack<T> {
     }
 
     @Override
-    public ContentStack<T> setAmount(long amount) {
+    public ContentStack<T, S> setAmount(long amount) {
         this.amount = amount;
         return this;
+    }
+
+    @Nullable
+    @Override
+    public RichTooltip getTooltip(TooltipContext context) {
+        if (FMLEnvironment.dist.isDedicatedServer()) return null;
+        RichTooltip richTooltip = RichTooltip.create();
+        this.configureTooltip(richTooltip, context);
+        return richTooltip;
+    }
+
+    @Override
+    public void configureTooltip(RichTooltip tooltip, TooltipContext context) {
+        for (var configurer : tooltipConfigurers) {
+            configurer.accept(tooltip, context);
+        }
+    }
+
+    @Override
+    public ContentStack<T, S> appendTooltip(BiConsumer<RichTooltip, TooltipContext> configurator) {
+        if (FMLEnvironment.dist.isDedicatedServer()) return this;
+        this.tooltipConfigurers.add(configurator);
+        return this;
+    }
+
+    @Override
+    public ContentStack<Item, ItemStack> cheatsStack() {
+        ItemStack itemStack = type.toItemStack(this);
+        return new TypedContentStack<>(CirrusTypes.itemStack, itemStack, itemStack.getCount());
     }
 
     @SuppressWarnings("unchecked")
@@ -39,17 +87,18 @@ class TypedContentStack<T> extends BasicContentStack<T> {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
 
-        TypedContentStack<?> that = (TypedContentStack<?>) o;
+        TypedContentStack<?, ?> that = (TypedContentStack<?, ?>) o;
         return (amount == that.amount) &&
                 type.equals(that.type) &&
-                type.matches(value, (T) that.value, MatchStrategy.IDENTITY_COMPONENT);
+                type.matches(value, (S) that.value, MatchStrategy.IDENTITY_COMPONENT);
     }
 
     @Override
     public int hashCode() {
+        if (isEmpty()) return ContentStack.empty().hashCode();
         int result = type.hashCode();
         result = 31 * result + Long.hashCode(amount);
-        result = 31 * result + type.hash(value, MatchStrategy.IDENTITY_COMPONENT);
+        result = 31 * result + type.contentType().hash(type.getContent(value));
         return result;
     }
 
@@ -58,7 +107,59 @@ class TypedContentStack<T> extends BasicContentStack<T> {
         return "TypedContentStack{" +
                 "type=" + type +
                 ", amount=" + amount +
-                ", value=" + type.asString(value) +
+                ", value=" + type.toString(value) +
                 '}';
+    }
+}
+
+
+final class EmptyContentStack<T, S> implements ContentStack<T, S> {
+
+    @SuppressWarnings("rawtypes")
+    static final ContentStack instance = new EmptyContentStack<>();
+
+    @Override
+    public StackType<T, S> type() {
+        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
+    }
+
+    @Override
+    public S value() {
+        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
+    }
+
+    @Override
+    public long amount() {
+        return 0;
+    }
+
+    @Override
+    public ContentStack<T, S> setAmount(long amount) {
+        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
+    }
+
+    @Override
+    public ContentStack<T, S> appendTooltip(BiConsumer<RichTooltip, TooltipContext> configurator) {
+        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
+    }
+
+    @Override
+    public void configureTooltip(RichTooltip tooltip, TooltipContext context) {
+        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
+    }
+
+    @Override
+    public @Nullable RichTooltip getTooltip(TooltipContext context) {
+        return null;
+    }
+
+    @Override
+    public ContentStack<Item, ItemStack> cheatsStack() {
+        return new TypedContentStack<>(CirrusTypes.itemStack, ItemStack.EMPTY, 0);
+    }
+
+    @Override
+    public String toString() {
+        return "empty content stack";
     }
 }

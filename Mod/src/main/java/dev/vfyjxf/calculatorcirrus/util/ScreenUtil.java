@@ -43,7 +43,7 @@ public final class ScreenUtil {
             if (!itemStack.isEmpty()) {
                 font = ClientHooks.getTooltipFont(itemStack, font);
             }
-            graphics.renderComponentTooltipFromElements(font, richTooltip.guiTooltips(), mouseX, mouseY, itemStack);
+            graphics.renderComponentTooltipFromElements(font, richTooltip.toVanilla(), mouseX, mouseY, itemStack);
         }
         graphics.pose().popPose();
     }

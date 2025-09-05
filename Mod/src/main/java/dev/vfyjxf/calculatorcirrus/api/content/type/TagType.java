@@ -1,135 +1,73 @@
 package dev.vfyjxf.calculatorcirrus.api.content.type;
 
-import com.mojang.datafixers.util.Pair;
-import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import net.minecraft.core.Holder;
-import net.minecraft.core.HolderSet.Named;
+import dev.vfyjxf.calculatorcirrus.api.content.util.TagLookup;
+import net.minecraft.core.HolderSet;
 import net.minecraft.core.Registry;
-import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.list.MutableList;
-import org.eclipse.collections.api.map.MutableMap;
-import org.eclipse.collections.impl.collection.mutable.CollectionAdapter;
-import org.eclipse.collections.impl.collector.Collectors2;
+import org.eclipse.collections.api.set.MutableSet;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
-import java.util.Optional;
-import java.util.function.Function;
-import java.util.stream.Stream;
+public sealed interface TagType<T> permits RegistryTagType {
 
-public sealed interface TagType<VALUE, STACK> permits RegistryTagType {
-
-    static <STACK, VALUE> TagType<VALUE, STACK> fromRegistry(
+    static <T> TagType<T> fromRegistry(
             String id,
-            StackContentType<STACK> stackType,
-            Class<VALUE> valueClass,
-            Registry<VALUE> registry,
-            Function<STACK, VALUE> valueGetter,
-            StackMaker<STACK, VALUE> stackMaker
+            ContentType<T> contentType,
+            Registry<T> registry
     ) {
-        return fromRegistry(ResourceLocation.parse(id), valueClass, stackType, registry, valueGetter, stackMaker);
+        return fromRegistry(ResourceLocation.parse(id), contentType, registry);
     }
 
-    static <STACK, VALUE> TagType<VALUE, STACK> fromRegistry(
+    static <T> TagType<T> fromRegistry(
             ResourceLocation id,
-            Class<VALUE> valueClass, StackContentType<STACK> stackType,
-            Registry<VALUE> registry,
-            Function<STACK, VALUE> valueGetter,
-            StackMaker<STACK, VALUE> stackMaker
+            ContentType<T> contentType,
+            Registry<T> registry
     ) {
-        return new RegistryTagType<>(id, valueClass, stackType, registry, valueGetter, stackMaker);
+        return new RegistryTagType<>(id, contentType, registry);
     }
+
+    //region tag info
 
     ResourceLocation typeId();
 
-    Class<VALUE> baseType();
+    ContentType<T> contentType();
 
-    StackContentType<STACK> stackType();
+    //endregion
 
-    Stream<Pair<TagKey<VALUE>, Named<VALUE>>> getTags();
-
-    MutableMap<TagKey<VALUE>, Named<VALUE>> getTagMap();
-
-    Stream<TagKey<VALUE>> getTagKeys();
-
-    Stream<Named<VALUE>> getTagValues();
-
-    default MutableList<TagKey<VALUE>> tagKeys() {
-        return getTagKeys().collect(Collectors2.toList());
-    }
+    //region simple query
 
     boolean hasTag(ResourceLocation tagKey);
 
-    boolean hasTag(TagKey<VALUE> tagKey);
+    boolean hasTag(TagKey<T> tagKey);
 
-    TagKey<VALUE> createTagKey(ResourceLocation location);
+    @Nullable HolderSet.Named<T> getTag(ResourceLocation tagKey);
 
-    default @Nullable Named<VALUE> getTag(ResourceLocation tagKey) {
-        return getTagKeys()
-                .filter(it -> it.location().equals(tagKey))
-                .map(this::getTag)
-                .flatMap(Optional::stream)
-                .findFirst()
-                .orElse(null);
-    }
+    @Nullable HolderSet.Named<T> getTag(TagKey<T> tagKey);
 
-    Stream<? extends TagKey<VALUE>> getTagFor(VALUE value);
+    MutableSet<TagKey<T>> getTagFor(T value);
 
-    Optional<Named<VALUE>> getTag(TagKey<VALUE> tagKey);
+    RichIterable<T> getTagValues(ResourceLocation tagKey);
 
-    RichIterable<Holder<VALUE>> getTagOrEmpty(TagKey<VALUE> key);
+    RichIterable<T> getTagValues(TagKey<T> tagKey);
 
-    default MutableList<? extends VALUE> getValues(TagKey<VALUE> tagKey) {
-        return getTagOrEmpty(tagKey)
-                .collect(Holder::value)
+    default <S> MutableList<S> getAsStacks(TagKey<T> tagKey, StackType<T, S> stackType) {
+        return getTagValues(tagKey)
+                .collect(content -> stackType.fromContent(content, stackType.quantity()))
                 .toList();
     }
 
-    default MutableList<? extends ContentStack<STACK>> getAsStacks(TagKey<VALUE> tagKey) {
-        return getTagOrEmpty(tagKey)
-                .collect(holder -> {
-                    STACK stack = makeStack(holder.value());
-                    return ContentStack.create(stackType(), stack);
-                })
-                .toList();
+    MutableSet<TagKey<T>> allTags();
+
+    //endregion
+
+    //region lookup
+
+    default TagLookup<T> createLookup() {
+        return TagLookup.create(this);
     }
 
-    VALUE getStackValue(STACK stack);
-
-    default STACK makeStack(VALUE value) {
-        return makeStack(value, 1, DataComponentPatch.EMPTY);
-    }
-
-    default STACK makeStack(VALUE value, long amount) {
-        return makeStack(value, amount, DataComponentPatch.EMPTY);
-    }
-
-    STACK makeStack(VALUE value, long amount, DataComponentPatch componentPatch);
-
-    @Nullable
-    default TagKey<VALUE> getTag(Collection<VALUE> collection) {
-        return getTag((RichIterable<VALUE>) new CollectionAdapter<>(collection));
-    }
-
-    @Nullable
-    TagKey<VALUE> getTag(RichIterable<VALUE> richIterable);
-
-    @Nullable
-    default TagKey<VALUE> getTagFrom(RichIterable<? extends ContentStack<STACK>> stacks) {
-        return getTag(stacks.collect(c -> getStackValue(c.value())));
-    }
-
-    @SuppressWarnings("unchecked")
-    default <S, V> TagType<V, S> cast() {
-        return (TagType<V, S>) this;
-    }
-
-    @FunctionalInterface
-    interface StackMaker<STACK, VALUE> {
-        STACK make(VALUE value, long amount, DataComponentPatch componentPatch);
-    }
+    //endregion
 
 }

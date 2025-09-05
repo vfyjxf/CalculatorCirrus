@@ -6,6 +6,7 @@ import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeData;
 import dev.vfyjxf.calculatorcirrus.internal.integration.jei.CirrusJeiPlugin;
 import mezz.jei.api.recipe.RecipeType;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.ordered.OrderedIterable;
@@ -48,14 +49,14 @@ public interface RecipeSystem<R> {
     RecipeData parseRecipe(R recipe);
 
     @Unmodifiable
-    MutableList<ContentStack<ItemStack>> getMachines();
+    MutableList<ContentStack<Item, ItemStack>> getMachines();
 
-    static MutableList<ContentStack<ItemStack>> getMachinesFromJei(RecipeType<?> recipeType) {
+    static MutableList<ContentStack<Item, ItemStack>> getMachinesFromJei(RecipeType<?> recipeType) {
         return CirrusJeiPlugin.recipeManager.createRecipeCatalystLookup(recipeType)
-            .get()
-            .flatMap(i -> i.getItemStack().stream())
-            .map(ContentStack::create)
-            .collect(Collectors2.toList());
+                .get()
+                .flatMap(i -> i.getItemStack().stream())
+                .map(ContentStack::fromStack)
+                .collect(Collectors2.toList());
     }
 
     default RecipeLookup<R> createLookup() {

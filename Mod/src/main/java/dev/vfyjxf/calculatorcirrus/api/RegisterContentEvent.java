@@ -1,6 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.api;
 
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
 import dev.vfyjxf.calculatorcirrus.content.ContentRegistryBuilder;
 import net.neoforged.bus.api.Event;
@@ -17,19 +18,24 @@ public class RegisterContentEvent extends Event implements IModBusEvent {
     public <T> void registerContent(
             ContentType<T> contentType
     ) {
-        registry.registerContent(contentType);
+        registry.registerContentType(contentType);
     }
 
-    public <STACK, VALUE> void registerContent(
-            ContentType<STACK> contentType,
-            TagType<VALUE, STACK> tagType
+    public <T> void registerContent(
+            ContentType<T> contentType,
+            TagType<T> tagType
     ) {
         registerContent(contentType);
         registerTag(contentType, tagType);
     }
 
-    public <STACK, VALUE> void registerTag(ContentType<STACK> contentType, TagType<VALUE, STACK> tagType) {
+    public <T> void registerTag(ContentType<T> contentType, TagType<T> tagType) {
         registry.registerTag(contentType, tagType);
     }
+
+    public <T, S> void registerStack(ContentType<T> contentType, StackType<T, S> stackType) {
+        registry.registerStackType(contentType, stackType);
+    }
+
 
 }

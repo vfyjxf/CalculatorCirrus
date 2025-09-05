@@ -45,10 +45,6 @@ public class GameInstances {
         return server.getRecipeManager();
     }
 
-    public static void setRecipeManager(RecipeManager manager) {
-        recipeManager = manager;
-    }
-
     //endregion
 
 }
