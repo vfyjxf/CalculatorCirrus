@@ -5,7 +5,7 @@ import dev.vfyjxf.calculatorcirrus.api.content.type.ValueType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentValue;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentVariant;
-import dev.vfyjxf.calculatorcirrus.util.Checks;
+import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Range;

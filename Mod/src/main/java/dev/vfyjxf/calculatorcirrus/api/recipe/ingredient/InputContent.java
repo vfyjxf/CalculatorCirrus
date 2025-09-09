@@ -5,7 +5,7 @@ import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.calculatorcirrus.helper.TagHelper;
-import dev.vfyjxf.calculatorcirrus.util.Checks;
+import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;

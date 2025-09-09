@@ -2,7 +2,7 @@ package dev.vfyjxf.calculatorcirrus.content;
 
 import dev.vfyjxf.calculatorcirrus.api.content.render.StackRenderer;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
-import dev.vfyjxf.calculatorcirrus.util.Checks;
+import dev.vfyjxf.cloudlib.util.Checks;
 import net.neoforged.fml.loading.FMLEnvironment;
 import org.eclipse.collections.api.factory.Maps;
 import org.eclipse.collections.api.map.ImmutableMap;

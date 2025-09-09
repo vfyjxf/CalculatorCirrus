@@ -8,7 +8,7 @@ import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentValue;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentVariant;
-import dev.vfyjxf.calculatorcirrus.util.Checks;
+import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.tags.TagKey;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;

@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.recipe.content;
 
-import dev.vfyjxf.calculatorcirrus.util.Checks;
+import dev.vfyjxf.cloudlib.util.Checks;
 import org.jetbrains.annotations.Range;
 
 /**
