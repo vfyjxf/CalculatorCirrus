@@ -6,6 +6,17 @@ plugins {
 
 neoForge {
     version = project.neo_version
+
+    mods {
+        "cirrus_integration"{
+            sourceSet(sourceSets.main)
+        }
+    }
+
+    unitTest {
+        enable()
+        testedMod = mods.cirrus_integration
+    }
 }
 
 repositories {
@@ -50,6 +61,10 @@ dependencies {
     implementation("org.eclipse.collections:eclipse-collections-api:11.1.0")
     implementation("org.eclipse.collections:eclipse-collections:11.1.0")
     testImplementation(base)
+}
+
+test {
+    useJUnitPlatform()
 }
 
 lombok {
