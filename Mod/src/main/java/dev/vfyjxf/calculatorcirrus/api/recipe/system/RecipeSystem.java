@@ -2,14 +2,14 @@ package dev.vfyjxf.calculatorcirrus.api.recipe.system;
 
 
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeData;
+import dev.vfyjxf.calculatorcirrus.api.recipe.data.RecipeData;
 import dev.vfyjxf.calculatorcirrus.internal.integration.jei.CirrusJeiPlugin;
 import mezz.jei.api.recipe.RecipeType;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.list.MutableList;
-import org.eclipse.collections.api.ordered.OrderedIterable;
 import org.eclipse.collections.impl.collector.Collectors2;
 import org.jetbrains.annotations.Unmodifiable;
 
@@ -29,7 +29,7 @@ public interface RecipeSystem<R> {
 
     Class<?> basicType();
 
-    default boolean supportsRecipe(R recipe) {
+    default boolean supports(R recipe) {
         return contains(recipe);
     }
 
@@ -38,15 +38,15 @@ public interface RecipeSystem<R> {
     }
 
     @Nullable
-    ResourceLocation getRecipeId(R recipe);
+    ResourceLocation getId(R recipe);
 
     @Nullable
-    R getRecipe(String uniqueId);
+    R findRecipe(String uniqueId);
 
     @Nullable
-    R getRecipe(ResourceLocation registryName);
+    R findRecipe(ResourceLocation registryName);
 
-    RecipeData parseRecipe(R recipe);
+    RecipeData getData(R recipe);
 
     @Unmodifiable
     MutableList<ContentStack<Item, ItemStack>> getMachines();
@@ -64,6 +64,6 @@ public interface RecipeSystem<R> {
     }
 
     @Unmodifiable
-    OrderedIterable<R> allRecipes();
+    RichIterable<R> allRecipes();
 
 }

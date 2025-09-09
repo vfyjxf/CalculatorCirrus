@@ -14,7 +14,7 @@ public sealed interface ContentValue<T> extends ContentVariant permits EmptyCont
 
     //region factory and constant
 
-    static <T> ContentValue<T> create(ContentType<T> type, T value) {
+    static <T> ContentValue<T> fromContent(ContentType<T> type, T value) {
         return new TypedContentValue<>(type, value);
     }
 
@@ -52,6 +52,10 @@ public sealed interface ContentValue<T> extends ContentVariant permits EmptyCont
      */
     default boolean isEmpty() {
         return type().isEmpty(value());
+    }
+
+    default boolean notEmpty() {
+        return !isEmpty();
     }
 
     //endregion

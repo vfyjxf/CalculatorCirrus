@@ -25,6 +25,13 @@ repositories {
     maven { // Registrate
         url "https://maven.tterrag.com/"
     }
+    maven {
+        name = 'GTCEu Maven'
+        url = 'https://maven.gtceu.com'
+        content {
+            includeGroup 'com.gregtechceu.gtceu'
+        }
+    }
 }
 
 configurations{
@@ -38,7 +45,8 @@ dependencies {
     localRuntime(base)
 //    compileOnly("dev.vfyjxf:cloudlib")
 //    implementation("maven.modrinth:gregtechceu-modern:mc1.21.1-1.4.6:slim")
-    implementation("com.gregtechceu.gtceu:gtceu-${project.minecraft_version}:${gtm_version}") { transitive = false }
+    implementation "com.gregtechceu.gtceu:gtceu-${project.minecraft_version}:${gtm_version}"
+//    implementation("com.gregtechceu.gtceu:gtceu-${}:${gtm_version}") { transitive = false }
     implementation("org.eclipse.collections:eclipse-collections-api:11.1.0")
     implementation("org.eclipse.collections:eclipse-collections:11.1.0")
     testImplementation(base)

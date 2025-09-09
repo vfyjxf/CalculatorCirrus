@@ -15,7 +15,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
 
-public class ItemStackContentRenderer implements StackRenderer<Item, ItemStack> {
+public class ItemStackRenderer implements StackRenderer<Item, ItemStack> {
 
     @Override
     public void render(GuiGraphics graphics, ItemStack stack, int width, int height, float delta) {

@@ -6,7 +6,7 @@ import net.minecraft.core.HolderSet;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
-import org.eclipse.collections.api.RichIterable;
+import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.set.MutableSet;
 import org.eclipse.collections.impl.collector.Collectors2;
 import org.jetbrains.annotations.Nullable;
@@ -50,13 +50,13 @@ record RegistryTagType<T>(
     }
 
     @Override
-    public RichIterable<T> getTagValues(ResourceLocation location) {
+    public MutableList<T> getTagValues(ResourceLocation location) {
         TagKey<T> tagKey = TagKey.create(registry.key(), location);
         return getTagValues(tagKey);
     }
 
     @Override
-    public RichIterable<T> getTagValues(TagKey<T> tagKey) {
+    public MutableList<T> getTagValues(TagKey<T> tagKey) {
         return registry.getTag(tagKey)
                 .stream()
                 .flatMap(HolderSet.Named::stream)

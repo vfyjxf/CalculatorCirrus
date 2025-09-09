@@ -27,7 +27,7 @@ import org.joml.Matrix4f;
 
 import java.util.function.LongFunction;
 
-public class FluidStackContentRenderer implements StackRenderer<Fluid, FluidStack> {
+public class FluidStackRenderer implements StackRenderer<Fluid, FluidStack> {
 
     private static final int TEXTURE_SIZE = 16;
 
@@ -63,8 +63,7 @@ public class FluidStackContentRenderer implements StackRenderer<Fluid, FluidStac
         float blue = (color & 0xFF) / 255.0F;
         float alpha = ((color >> 24) & 0xFF) / 255F;
 
-        RenderSystem.setShaderColor(red, green, blue, alpha);
-        RenderSystem.setShader(GameRenderer::getPositionTexShader);
+        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
 
         Tesselator tesselator = Tesselator.getInstance();
 
@@ -73,11 +72,11 @@ public class FluidStackContentRenderer implements StackRenderer<Fluid, FluidStac
         float vMin = sprite.getV0();
         float vMax = sprite.getV1();
 
-        BufferBuilder buffer = tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-        buffer.addVertex(matrix, 0, 0, 0).setUv(uMin, vMin);
-        buffer.addVertex(matrix, 0, height, 0).setUv(uMin, vMax);
-        buffer.addVertex(matrix, width, height, 0).setUv(uMax, vMax);
-        buffer.addVertex(matrix, width, 0, 0).setUv(uMax, vMin);
+        BufferBuilder buffer = tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
+        buffer.addVertex(matrix, 0, 0, 0).setColor(red, green, blue, alpha).setUv(uMin, vMin);
+        buffer.addVertex(matrix, 0, height, 0).setColor(red, green, blue, alpha).setUv(uMin, vMax);
+        buffer.addVertex(matrix, width, height, 0).setColor(red, green, blue, alpha).setUv(uMax, vMax);
+        buffer.addVertex(matrix, width, 0, 0).setColor(red, green, blue, alpha).setUv(uMax, vMin);
         BufferUploader.drawWithShader(buffer.buildOrThrow());
     }
 

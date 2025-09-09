@@ -4,6 +4,11 @@ import dev.vfyjxf.calculatorcirrus.CirrusConstants;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.ValueType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.EnergyValue;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.EnergyContentType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.TimeValue;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.TimeValueType;
 import dev.vfyjxf.calculatorcirrus.content.type.FluidContentType;
 import dev.vfyjxf.calculatorcirrus.content.type.FluidStackType;
 import dev.vfyjxf.calculatorcirrus.content.type.ItemContentType;
@@ -32,6 +37,11 @@ public final class CirrusTypes {
     //region tag
     public static final TagType<Item> itemTag = TagType.fromRegistry(of("tag/item"), item, BuiltInRegistries.ITEM);
     public static final TagType<Fluid> fluidTag = TagType.fromRegistry(of("tag/fluid"), fluid, BuiltInRegistries.FLUID);
+    //endregion
+
+    //region recipe content
+    public static final ValueType<TimeValue> time = TimeValueType.instance;
+    public static final ValueType<EnergyValue> energy = EnergyContentType.instance;
     //endregion
 
     private static ResourceLocation of(String path) {

@@ -88,7 +88,9 @@ public non-sealed interface ContentType<T> extends ContentKind {
 
     //region util
 
-    ItemStack toItemStack(T value);
+    default ItemStack toItemStack(T value) {
+        return ItemStack.EMPTY;
+    }
 
     @SuppressWarnings("unchecked")
     default <C extends ContentType<R>, R> C cast() {

@@ -3,6 +3,7 @@ package dev.vfyjxf.calculatorcirrus.api.content.value;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
+import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
 import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
@@ -53,9 +54,6 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
 
     static <T, S> ContentStack<T, S> fromStack(ResourceLocation typeId, S stack) {
         StackType<T, S> stackType = ContentApi.getInstance().getStackType(typeId);
-        if (stackType == null) {
-            throw new IllegalArgumentException("No StackType found for type ID: " + typeId);
-        }
         return fromStack(stackType, stack);
     }
 
@@ -135,6 +133,8 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
 
     StackType<T, S> type();
 
+    ContentType<T> contentType();
+
     S value();
 
     default T content() {
@@ -143,6 +143,10 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
 
     default boolean isEmpty() {
         return this == empty() || amount() <= 0 || type().isEmpty(value());
+    }
+
+    default boolean notEmpty() {
+        return !isEmpty();
     }
 
     long amount();
@@ -163,8 +167,16 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
         return type().getComponentsPatch(value());
     }
 
+    //endregion
+
+
+    //region match
+
     default boolean matches(ContentStack<?, ?> other, MatchStrategy strategy) {
+        if (this == other) return true;
+        if (this == empty() || other == empty()) return false;
         if (type() != other.type()) return false;
+
         return (!strategy.withAmount() || amount() == other.amount()) &&
                 type().matches(value(), other.<T, S>cast().value(), strategy);
 
@@ -172,6 +184,14 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
 
     default boolean matches(ContentStack<?, ?> other) {
         return matches(other, MatchStrategy.IDENTITY_COMPONENT);
+    }
+
+    default boolean matchesContent(ContentValue<?> value) {
+        if (this == empty() || value == ContentValue.empty()) {
+            return this == empty() && value == ContentValue.empty();
+        }
+        return contentType() == value.type() &&
+                contentType().matches(content(), value.<T>cast().value());
     }
 
     //endregion

@@ -8,8 +8,8 @@ import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.content.ClientContentApiImpl;
 import dev.vfyjxf.calculatorcirrus.content.ClientContentRegistryBuilder;
-import dev.vfyjxf.calculatorcirrus.content.renderer.FluidStackContentRenderer;
-import dev.vfyjxf.calculatorcirrus.content.renderer.ItemStackContentRenderer;
+import dev.vfyjxf.calculatorcirrus.content.renderer.FluidStackRenderer;
+import dev.vfyjxf.calculatorcirrus.content.renderer.ItemStackRenderer;
 import dev.vfyjxf.calculatorcirrus.util.Singletons;
 import dev.vfyjxf.calculatorcirrus.util.StartEventObserver;
 import net.neoforged.api.distmarker.Dist;
@@ -47,8 +47,8 @@ public class CalculatorCirrusClient extends CalculatorCirrus {
 
     private void onClientRegisterContent(ClientRegisterContentEvent event) {
         //TODO:Rewrite this
-        event.registerRenderer(CirrusTypes.itemStack, new ItemStackContentRenderer());
-        event.registerRenderer(CirrusTypes.fluidStack, new FluidStackContentRenderer());
+        event.registerRenderer(CirrusTypes.itemStack, new ItemStackRenderer());
+        event.registerRenderer(CirrusTypes.fluidStack, new FluidStackRenderer());
     }
 
 }

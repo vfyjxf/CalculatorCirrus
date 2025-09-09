@@ -9,7 +9,6 @@ import dev.vfyjxf.calculatorcirrus.content.ContentRegistryBuilder;
 import dev.vfyjxf.calculatorcirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.calculatorcirrus.recipe.system.CraftingRecipeSystem;
 import dev.vfyjxf.calculatorcirrus.util.Singletons;
-import dev.vfyjxf.cloudlib.api.module.ModEntryPoint;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
@@ -17,11 +16,10 @@ import net.neoforged.fml.ModLoader;
 import net.neoforged.neoforge.registries.NewRegistryEvent;
 import org.slf4j.Logger;
 
-public abstract class CalculatorCirrus extends ModEntryPoint {
+public abstract class CalculatorCirrus {
     private static final Logger logger = LogUtils.getLogger();
 
     public CalculatorCirrus(ModContainer modContainer, IEventBus modEventBus) {
-        super(modContainer, modEventBus);
         modEventBus.addListener(this::onRecipeSystemRegister);
         modEventBus.addListener(this::onRegisterRegistry);
     }

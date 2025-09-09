@@ -4,30 +4,22 @@ import dev.vfyjxf.calculatorcirrus.CirrusConstants;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeData;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientGroup;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientStack;
+import dev.vfyjxf.calculatorcirrus.api.recipe.data.RecipeData;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeLookup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.VanillaRecipeSystem;
 import dev.vfyjxf.calculatorcirrus.helper.RecipeHelper;
-import dev.vfyjxf.calculatorcirrus.recipe.BasicRecipeData;
 import mezz.jei.api.constants.RecipeTypes;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
-import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeManager;
 import net.minecraft.world.item.crafting.RecipeType;
 import org.eclipse.collections.api.RichIterable;
-import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
-import org.eclipse.collections.api.multimap.list.MutableListMultimap;
-import org.eclipse.collections.api.ordered.OrderedIterable;
-import org.eclipse.collections.impl.factory.Multimaps;
-import org.jetbrains.annotations.Nullable;
+import org.eclipse.collections.impl.collection.mutable.CollectionAdapter;
 import org.jetbrains.annotations.Unmodifiable;
 
 import java.util.Collection;
@@ -53,27 +45,23 @@ public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe>
         return SYSTEM_ID;
     }
 
-    @Nullable
-    @Override
-    public ResourceLocation getRecipeId(RecipeHolder<CraftingRecipe> recipeHolder) {
-        return recipeHolder.id();
-    }
-
     @Override
     public boolean contains(RecipeHolder<CraftingRecipe> recipe) {
         return recipeManager.byKey(recipe.id()).isPresent();
     }
 
     @Override
-    public RecipeData parseRecipe(RecipeHolder<CraftingRecipe> recipeHolder) {
-        CraftingRecipe recipe = recipeHolder.value();
-        MutableListMultimap<IngredientGroup, IngredientStack> recipeStableData = Multimaps.mutable.list.empty();
-        for (Ingredient ingredient : recipe.getIngredients()) {
-            IngredientStack stack = IngredientStack.create(ingredient);
-            recipeStableData.put(IngredientGroup.input, stack);
-        }
-        recipeStableData.put(IngredientGroup.output, IngredientStack.create(RecipeHelper.getOutput(recipe)));
-        return BasicRecipeData.create(recipeStableData.toImmutable(), recipeHolder.id().toString());
+    public RecipeData getData(RecipeHolder<CraftingRecipe> recipeHolder) {
+//        CraftingRecipe recipe = recipeHolder.value();
+//        MutableListMultimap<ContentGroup, IngredientStack> recipeStableData = Multimaps.mutable.list.empty();
+//        for (Ingredient ingredient : recipe.getIngredients()) {
+//            IngredientStack stack = IngredientStack.create(ingredient);
+//            recipeStableData.put(ContentGroup.input, stack);
+//        }
+//        recipeStableData.put(ContentGroup.output, IngredientStack.create(RecipeHelper.getOutput(recipe)));
+//        return BasicRecipeData.create(recipeStableData.toImmutable(), recipeHolder.id().toString());
+        //TODO:
+        throw new UnsupportedOperationException("Not Implemented");
     }
 
     @Override
@@ -87,9 +75,9 @@ public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe>
     }
 
     @Override
-    public @Unmodifiable OrderedIterable<RecipeHolder<CraftingRecipe>> allRecipes() {
-        var allRecipeForType = recipeManager.byType(RecipeType.CRAFTING);
-        return Lists.immutable.ofAll(allRecipeForType);
+    public @Unmodifiable RichIterable<RecipeHolder<CraftingRecipe>> allRecipes() {
+        return CollectionAdapter.adapt(recipeManager.byType(RecipeType.CRAFTING))
+                .asUnmodifiable();
     }
 
     @Override

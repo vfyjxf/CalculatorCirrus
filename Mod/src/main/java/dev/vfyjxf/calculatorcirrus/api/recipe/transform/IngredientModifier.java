@@ -1,4 +1,6 @@
-package dev.vfyjxf.calculatorcirrus.api.recipe;
+package dev.vfyjxf.calculatorcirrus.api.recipe.transform;
+
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * The modifier for an ingredient.
@@ -11,6 +13,6 @@ package dev.vfyjxf.calculatorcirrus.api.recipe;
  */
 public interface IngredientModifier {
 
-    void applyModifier();
+    ResourceLocation id();
 
 }

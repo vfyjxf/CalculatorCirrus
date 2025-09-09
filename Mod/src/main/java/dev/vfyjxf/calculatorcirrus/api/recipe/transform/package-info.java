@@ -1,4 +1,4 @@
 @NotNullByDefault
-package dev.vfyjxf.calculatorcirrus.recipe.ingredient;
+package dev.vfyjxf.calculatorcirrus.api.recipe.transform;
 
 import dev.vfyjxf.calculatorcirrus.api.annotation.NotNullByDefault;

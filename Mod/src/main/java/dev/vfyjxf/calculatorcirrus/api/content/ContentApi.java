@@ -35,9 +35,11 @@ public interface ContentApi {
 
     boolean hasStackType(ResourceLocation typeId);
 
+    boolean hasStackType(ContentType<?> contentType);
+
     <T, S> StackType<T, S> getStackType(ResourceLocation typeId);
 
-    <T, S> StackType<T, S> getStackType(ContentType<T> contentType);
+    <T> StackType<T, ?> getStackType(ContentType<T> contentType);
 
     default @Nullable <T, S> StackType<T, S> getStackType(String typeId) {
         if (ResourceLocation.isValidPath(typeId)) {
@@ -50,6 +52,8 @@ public interface ContentApi {
     //region tag type
 
     boolean hasTagType(ResourceLocation typeId);
+
+    boolean hasTagType(ContentType<?> contentType);
 
     <T> TagType<T> getTagType(ResourceLocation typeId);
 

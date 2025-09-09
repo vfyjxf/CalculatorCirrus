@@ -2,6 +2,7 @@ package dev.vfyjxf.calculatorcirrus.api.content.value;
 
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
+import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
 import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
@@ -34,6 +35,11 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
     @Override
     public StackType<T, S> type() {
         return type;
+    }
+
+    @Override
+    public ContentType<T> contentType() {
+        return type.contentType();
     }
 
     @Override
@@ -120,6 +126,11 @@ final class EmptyContentStack<T, S> implements ContentStack<T, S> {
 
     @Override
     public StackType<T, S> type() {
+        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
+    }
+
+    @Override
+    public ContentType<T> contentType() {
         throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
     }
 

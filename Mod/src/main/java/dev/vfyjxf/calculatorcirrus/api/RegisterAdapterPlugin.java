@@ -9,7 +9,7 @@ import java.lang.annotation.RetentionPolicy;
  * must have a no-arg constructor.
  */
 @Retention(RetentionPolicy.CLASS)
-public @interface RegisterPlugin {
+public @interface RegisterAdapterPlugin {
 
     //TODO
     String value() default "";

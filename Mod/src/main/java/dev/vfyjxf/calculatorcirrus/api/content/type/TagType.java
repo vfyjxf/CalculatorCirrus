@@ -5,7 +5,6 @@ import net.minecraft.core.HolderSet;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
-import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.set.MutableSet;
 import org.jetbrains.annotations.Nullable;
@@ -48,9 +47,9 @@ public sealed interface TagType<T> permits RegistryTagType {
 
     MutableSet<TagKey<T>> getTagFor(T value);
 
-    RichIterable<T> getTagValues(ResourceLocation tagKey);
+    MutableList<T> getTagValues(ResourceLocation tagKey);
 
-    RichIterable<T> getTagValues(TagKey<T> tagKey);
+    MutableList<T> getTagValues(TagKey<T> tagKey);
 
     default <S> MutableList<S> getAsStacks(TagKey<T> tagKey, StackType<T, S> stackType) {
         return getTagValues(tagKey)

@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.api.recipe.system;
 
-import dev.vfyjxf.calculatorcirrus.util.GameInstances;
 import dev.vfyjxf.calculatorcirrus.util.CirrusLocations;
+import dev.vfyjxf.calculatorcirrus.util.GameInstances;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -28,31 +28,30 @@ public interface VanillaRecipeSystem<T extends Recipe<?>> extends RecipeSystem<R
     }
 
     @Override
-    default boolean supportsRecipe(RecipeHolder<T> recipe) {
+    default boolean supports(RecipeHolder<T> recipe) {
         return recipeType() == recipe.value().getType();
     }
 
     @Nullable
     @Override
-    default ResourceLocation getRecipeId(RecipeHolder<T> recipe) {
+    default ResourceLocation getId(RecipeHolder<T> recipe) {
         return recipe.id();
     }
 
     @Nullable
     @Override
     @SuppressWarnings("unchecked")
-    default RecipeHolder<T> getRecipe(ResourceLocation registryName) {
+    default RecipeHolder<T> findRecipe(ResourceLocation registryName) {
         RecipeType<T> recipeType = recipeType();
         return (RecipeHolder<T>) recipeManager().
-            byKey(registryName)
-            .filter(recipeHolder -> recipeHolder.value().getType() == recipeType)
-            .orElse(null);
+                byKey(registryName)
+                .filter(recipeHolder -> recipeHolder.value().getType() == recipeType)
+                .orElse(null);
     }
 
     @Nullable
     @Override
-    default RecipeHolder<T> getRecipe(String uniqueId) {
-        return getRecipe(CirrusLocations.parse(uniqueId));
+    default RecipeHolder<T> findRecipe(String uniqueId) {
+        return findRecipe(CirrusLocations.parse(uniqueId));
     }
-
 }

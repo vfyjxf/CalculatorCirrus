@@ -53,6 +53,11 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
     }
 
     @Override
+    public boolean hasStackType(ContentType<?> contentType) {
+        return stackTypes.containsKey(contentType);
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
     public <T, S> StackType<T, S> getStackType(ResourceLocation typeId) {
         StackType<T, S> result = (StackType<T, S>) contentTypes.get(typeId);
@@ -64,8 +69,8 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
 
     @Override
     @SuppressWarnings("unchecked")
-    public <T, S> StackType<T, S> getStackType(ContentType<T> contentType) {
-        StackType<T, S> result = (StackType<T, S>) contentTypes.get(contentType);
+    public <T> StackType<T, ?> getStackType(ContentType<T> contentType) {
+        StackType<T, ?> result = (StackType<T, ?>) contentTypes.get(contentType);
         if (result == null) {
             throw new IllegalArgumentException("Unknown stack type for: " + contentType.typeId());
         }
@@ -79,6 +84,11 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
     @Override
     public boolean hasTagType(ResourceLocation typeId) {
         return tagTypes.containsKey(typeId);
+    }
+
+    @Override
+    public boolean hasTagType(ContentType<?> contentType) {
+        return tagTypes.containsKey(contentType);
     }
 
     @Override
