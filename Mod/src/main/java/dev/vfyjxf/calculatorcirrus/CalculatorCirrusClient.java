@@ -47,8 +47,8 @@ public class CalculatorCirrusClient extends CalculatorCirrus {
 
     private void onClientRegisterContent(ClientRegisterContentEvent event) {
         //TODO:Rewrite this
-        event.registerRenderer(CirrusTypes.itemStack, new ItemStackRenderer());
-        event.registerRenderer(CirrusTypes.fluidStack, new FluidStackRenderer());
+        event.registerRenderer(CirrusTypes.ITEM_STACK, new ItemStackRenderer());
+        event.registerRenderer(CirrusTypes.FLUID_STACK, new FluidStackRenderer());
     }
 
 }

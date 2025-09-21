@@ -4,7 +4,7 @@ import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentValue;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentVariant;
-import org.eclipse.collections.api.factory.Lists;
+import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Range;
 
@@ -49,7 +49,7 @@ public final class EmptyRecipeContent implements InputContent, OutputContent {
 
     @Override
     public MutableList<? extends ContentVariant> equivalents() {
-        return Lists.mutable.empty();
+        return MutableLists.empty();
     }
 
     @Override

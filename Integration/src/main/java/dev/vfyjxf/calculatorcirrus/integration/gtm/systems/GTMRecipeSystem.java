@@ -6,13 +6,13 @@ import com.gregtechceu.gtceu.api.recipe.content.Content;
 import com.gregtechceu.gtceu.api.recipe.kind.GTRecipe;
 import com.gregtechceu.gtceu.api.registry.GTRegistries;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipe.data.RecipeData;
+import dev.vfyjxf.calculatorcirrus.api.recipe.view.RecipeView;
 import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientGroup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientStack;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeLookup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.VanillaRecipeSystem;
 import dev.vfyjxf.calculatorcirrus.integration.gtm.ContentConverter;
-import dev.vfyjxf.calculatorcirrus.util.CirrusLocations;
+import dev.vfyjxf.cloudlib.util.Locations;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -47,7 +47,7 @@ public class GTMRecipeSystem implements VanillaRecipeSystem<GTRecipe> {
 
     public GTMRecipeSystem(GTRecipeType recipeType) {
         this.recipeType = recipeType;
-        this.systemId = CirrusLocations.of(recipeType.registryName.getNamespace(), recipeType.group + "/" + recipeType.registryName.getPath());
+        this.systemId = Locations.create(recipeType.registryName.getNamespace(), recipeType.group + "/" + recipeType.registryName.getPath());
         this.recipeManager = VanillaRecipeSystem.recipeManager();
         this.machines = LazyIterate.adapt(GTRegistries.MACHINES)
                 .select(machine -> {
@@ -69,7 +69,7 @@ public class GTMRecipeSystem implements VanillaRecipeSystem<GTRecipe> {
     }
 
     @Override
-    public RecipeData getData(RecipeHolder<GTRecipe> recipe) {
+    public RecipeView analyzeRecipe(RecipeHolder<GTRecipe> recipe) {
         MutableListMultimap<IngredientGroup, IngredientStack> recipeData = Multimaps.mutable.list.empty();
         GTRecipe gtRecipe = recipe.value();
 

@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.api.recipe.system;
 
-import dev.vfyjxf.calculatorcirrus.util.CirrusLocations;
 import dev.vfyjxf.calculatorcirrus.util.GameInstances;
+import dev.vfyjxf.cloudlib.util.Locations;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -52,6 +52,6 @@ public interface VanillaRecipeSystem<T extends Recipe<?>> extends RecipeSystem<R
     @Nullable
     @Override
     default RecipeHolder<T> findRecipe(String uniqueId) {
-        return findRecipe(CirrusLocations.parse(uniqueId));
+        return findRecipe(Locations.parse(uniqueId));
     }
 }

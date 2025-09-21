@@ -14,7 +14,7 @@ public class ItemContentType extends BasicContentType<Item> {
     public static final ItemContentType instance = new ItemContentType();
 
     private ItemContentType() {
-        super(Locations.create(ContentType.namespace, "item"), Item.class);
+        super(Locations.create(ContentType.namespace, "item"), Item.class, BuiltInRegistries.ITEM.byNameCodec());
     }
 
     @Override

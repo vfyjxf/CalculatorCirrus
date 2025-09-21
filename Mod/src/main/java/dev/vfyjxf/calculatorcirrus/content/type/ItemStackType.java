@@ -4,20 +4,24 @@ import com.google.common.primitives.Ints;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
+import dev.vfyjxf.cloudlib.helper.ItemHelper;
+import dev.vfyjxf.cloudlib.util.Locations;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.component.DataComponentType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.UnknownNullability;
 
 public class ItemStackType extends BasicStackType<Item, ItemStack> {
 
     public static final ItemStackType instance = new ItemStackType();
-    private static final ResourceLocation id = ResourceLocation.fromNamespaceAndPath(ContentType.namespace, "item_stack");
 
     private ItemStackType() {
-        super(id, ItemContentType.instance, Integer.MAX_VALUE);
+        super(Locations.create(ContentType.namespace, "item_stack"), ItemContentType.instance, Integer.MAX_VALUE, ItemHelper.OPTIONAL_CODEC);
     }
 
     //region stack properties
@@ -55,6 +59,16 @@ public class ItemStackType extends BasicStackType<Item, ItemStack> {
     @Override
     public DataComponentPatch getComponentsPatch(ItemStack stack) {
         return stack.getComponentsPatch();
+    }
+
+    @Override
+    public boolean hasComponent(ItemStack stack, DataComponentType<?> componentType) {
+        return stack.has(componentType);
+    }
+
+    @Override
+    public <C> @UnknownNullability C getComponent(ItemStack stack, DataComponentType<? extends C> componentType) {
+        return stack.get(componentType);
     }
 
     //endregion

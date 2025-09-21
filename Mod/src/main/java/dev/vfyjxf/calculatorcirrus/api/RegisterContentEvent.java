@@ -9,21 +9,21 @@ import net.neoforged.fml.event.IModBusEvent;
 
 public class RegisterContentEvent extends Event implements IModBusEvent {
 
-    protected final ContentRegistryBuilder registry;
+    private final ContentRegistryBuilder registry;
 
     public RegisterContentEvent(ContentRegistryBuilder registry) {
         this.registry = registry;
     }
 
     public <T> void registerContent(
-            ContentType<T> contentType
+        ContentType<T> contentType
     ) {
         registry.registerContentType(contentType);
     }
 
     public <T> void registerContent(
-            ContentType<T> contentType,
-            TagType<T> tagType
+        ContentType<T> contentType,
+        TagType<T> tagType
     ) {
         registerContent(contentType);
         registerTag(contentType, tagType);

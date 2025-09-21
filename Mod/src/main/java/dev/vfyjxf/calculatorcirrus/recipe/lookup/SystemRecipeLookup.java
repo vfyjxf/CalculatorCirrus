@@ -2,9 +2,9 @@ package dev.vfyjxf.calculatorcirrus.recipe.lookup;
 
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipe.data.RecipeData;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeLookup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.calculatorcirrus.api.recipe.view.RecipeView;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.impl.lazy.LazyIterableAdapter;
 
@@ -31,8 +31,8 @@ public class SystemRecipeLookup<T> implements RecipeLookup<T> {
     @Override
     public RecipeLookup<T> withInput(ContentStack<?, ?> input, MatchStrategy strategy) {
         Predicate<T> inputPredicate = (T recipe) -> {
-            RecipeData recipeData = system.getData(recipe);
-            return recipeData.inputs().anySatisfy(stack -> stack.satisfy(input, strategy));
+            RecipeView recipeView = system.analyzeRecipe(recipe);
+            return recipeView.inputs().anySatisfy(stack -> stack.content().satisfy(input, strategy));
         };
         this.predicate = this.predicate.and(inputPredicate);
         return this;
@@ -41,8 +41,8 @@ public class SystemRecipeLookup<T> implements RecipeLookup<T> {
     @Override
     public RecipeLookup<T> withInput(Collection<? extends ContentStack<?, ?>> inputs, MatchStrategy strategy) {
         Predicate<T> inputPredicate = (T recipe) -> {
-            RecipeData recipeData = system.getData(recipe);
-            return recipeData.inputs().allSatisfy(stack -> inputs.stream().anyMatch(input -> stack.satisfy(input, strategy)));
+            RecipeView recipeView = system.analyzeRecipe(recipe);
+            return recipeView.inputs().allSatisfy(stack -> inputs.stream().anyMatch(input -> stack.content().satisfy(input, strategy)));
         };
         this.predicate = this.predicate.and(inputPredicate);
         return this;
@@ -51,8 +51,8 @@ public class SystemRecipeLookup<T> implements RecipeLookup<T> {
     @Override
     public RecipeLookup<T> withOutput(ContentStack<?, ?> output, MatchStrategy strategy) {
         Predicate<T> outputPredicate = (T recipe) -> {
-            RecipeData recipeData = system.getData(recipe);
-            return recipeData.outputs().anySatisfy(stack -> stack.satisfy(output, strategy));
+            RecipeView recipeView = system.analyzeRecipe(recipe);
+            return recipeView.outputs().anySatisfy(stack -> stack.content().satisfy(output, strategy));
         };
         this.predicate = this.predicate.and(outputPredicate);
         return this;
@@ -61,8 +61,8 @@ public class SystemRecipeLookup<T> implements RecipeLookup<T> {
     @Override
     public RecipeLookup<T> withOutput(Collection<? extends ContentStack<?, ?>> outputs, MatchStrategy strategy) {
         Predicate<T> outputPredicate = (T recipe) -> {
-            RecipeData recipeData = system.getData(recipe);
-            return recipeData.outputs().allSatisfy(stack -> outputs.stream().anyMatch(output -> stack.satisfy(output, strategy)));
+            RecipeView recipeView = system.analyzeRecipe(recipe);
+            return recipeView.outputs().allSatisfy(stack -> outputs.stream().anyMatch(output -> stack.content().satisfy(output, strategy)));
         };
         this.predicate = this.predicate.and(outputPredicate);
         return this;

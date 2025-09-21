@@ -1,9 +1,11 @@
 package dev.vfyjxf.calculatorcirrus.api.content.type;
 
+import com.mojang.serialization.Codec;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
+import net.minecraft.core.component.DataComponentType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
@@ -80,6 +82,26 @@ public non-sealed interface StackType<T, S> extends ContentKind {
      */
     DataComponentPatch getComponentsPatch(S stack);
 
+    /**
+     * Checks if the given stack has the specified data component.
+     *
+     * @param stack the stack to check for the component
+     * @param componentType the data component type to check for
+     * @return true if the stack has the specified component, false otherwise or if components are not supported.
+     */
+    boolean hasComponent(S stack, DataComponentType<?> componentType);
+
+    /**
+     *
+     * @param stack the stack to get the component from
+     * @param componentType the data component type to get
+     * @return the component of the specified type, or null if the stack does not have the component or components are not supported.
+     * @param <C> the component data type
+     * @throws IllegalArgumentException if components are not supported for the stack type.
+     */
+    <C> C getComponent(S stack, DataComponentType<? extends C> componentType) throws IllegalArgumentException;
+
+    @Nullable Codec<S> stackCodec();
 
     //endregion
 

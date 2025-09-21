@@ -1,67 +1,53 @@
 package dev.vfyjxf.calculatorcirrus.recipe.system;
 
-import dev.vfyjxf.calculatorcirrus.CirrusConstants;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipe.data.RecipeData;
+import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.InputContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.OutputContent;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeLookup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
-import dev.vfyjxf.calculatorcirrus.api.recipe.system.VanillaRecipeSystem;
+import dev.vfyjxf.calculatorcirrus.api.recipe.view.RecipeView;
 import dev.vfyjxf.calculatorcirrus.helper.RecipeHelper;
+import dev.vfyjxf.cloudlib.api.util.MutableLists;
+import dev.vfyjxf.cloudlib.util.Locations;
 import mezz.jei.api.constants.RecipeTypes;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
-import net.minecraft.world.item.crafting.RecipeManager;
 import net.minecraft.world.item.crafting.RecipeType;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.list.MutableList;
-import org.eclipse.collections.impl.collection.mutable.CollectionAdapter;
-import org.jetbrains.annotations.Unmodifiable;
 
 import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.function.Predicate;
 
-public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe> {
+public class CraftingRecipeSystem extends BasicVanillaSystem<CraftingRecipe> {
 
-    public static final ResourceLocation SYSTEM_ID = RecipeSystem.systemId(CirrusConstants.MOD_ID, "crafting");
-
-    private final RecipeManager recipeManager;
+    public static final ResourceLocation SYSTEM_ID = Locations.ofMc("crafting");
 
     public CraftingRecipeSystem() {
-        this.recipeManager = VanillaRecipeSystem.recipeManager();
+        super(SYSTEM_ID, RecipeType.CRAFTING);
     }
 
-    @Override
-    public RecipeType<CraftingRecipe> recipeType() {
-        return RecipeType.CRAFTING;
-    }
+    private CraftingRecipeSystem self() {return this;}
 
     @Override
-    public ResourceLocation systemId() {
-        return SYSTEM_ID;
-    }
+    public RecipeView analyzeRecipe(RecipeHolder<CraftingRecipe> recipeHolder) {
+        CraftingRecipe recipe = recipeHolder.value();
+        List<InputContent> inputs = MutableLists.empty();
+        for (var ingredient : recipe.getIngredients())
+            inputs.add(InputContent.fromItemIngredient(ingredient));
 
-    @Override
-    public boolean contains(RecipeHolder<CraftingRecipe> recipe) {
-        return recipeManager.byKey(recipe.id()).isPresent();
-    }
-
-    @Override
-    public RecipeData getData(RecipeHolder<CraftingRecipe> recipeHolder) {
-//        CraftingRecipe recipe = recipeHolder.value();
-//        MutableListMultimap<ContentGroup, IngredientStack> recipeStableData = Multimaps.mutable.list.empty();
-//        for (Ingredient ingredient : recipe.getIngredients()) {
-//            IngredientStack stack = IngredientStack.create(ingredient);
-//            recipeStableData.put(ContentGroup.input, stack);
-//        }
-//        recipeStableData.put(ContentGroup.output, IngredientStack.create(RecipeHelper.getOutput(recipe)));
-//        return BasicRecipeData.create(recipeStableData.toImmutable(), recipeHolder.id().toString());
-        //TODO:
-        throw new UnsupportedOperationException("Not Implemented");
+        List<OutputContent> output = Collections.singletonList(
+            OutputContent.fromItemStack(RecipeHelper.getOutput(recipe))
+        );
+        return new RecipeView(new RecipeEntry<>(this, recipeHolder), null, null);
     }
 
     @Override
@@ -72,12 +58,6 @@ public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe>
     @Override
     public RecipeLookup<RecipeHolder<CraftingRecipe>> createLookup() {
         return new CraftingRecipeLookup();
-    }
-
-    @Override
-    public @Unmodifiable RichIterable<RecipeHolder<CraftingRecipe>> allRecipes() {
-        return CollectionAdapter.adapt(recipeManager.byType(RecipeType.CRAFTING))
-                .asUnmodifiable();
     }
 
     @Override
@@ -127,7 +107,7 @@ public class CraftingRecipeSystem implements VanillaRecipeSystem<CraftingRecipe>
             if (!output.isItem()) return this;
             Predicate<RecipeHolder<CraftingRecipe>> outputPredicate = recipeHolder -> {
                 CraftingRecipe recipe = recipeHolder.value();
-                return CirrusTypes.itemStack.matches(RecipeHelper.getOutput(recipe), output.<Item, ItemStack>cast().value(), MatchStrategy.ALL);
+                return CirrusTypes.ITEM_STACK.matches(RecipeHelper.getOutput(recipe), output.<Item, ItemStack>cast().value(), MatchStrategy.ALL);
             };
             this.predicate = this.predicate.and(outputPredicate);
             return this;

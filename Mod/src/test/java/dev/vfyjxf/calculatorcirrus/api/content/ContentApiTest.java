@@ -37,7 +37,7 @@ class ContentApiTest {
 
     @Test
     void testContentMatches(MinecraftServer server) {
-        var itemType = CirrusTypes.itemStack;
+        var itemType = CirrusTypes.ITEM_STACK;
         var a = new ItemStack(Items.CANDLE);
         var b = new ItemStack(Items.CANDLE, 2);
         var c = new ItemStack(Items.WHEAT, 30);

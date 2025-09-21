@@ -1,5 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.content.type;
 
+import com.mojang.serialization.Codec;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
@@ -83,6 +84,8 @@ public non-sealed interface ContentType<T> extends ContentKind {
      * @return the hashcode of given value.
      */
     int hash(T value);
+
+    @Nullable Codec<T> contentCodec();
 
     //endregion
 

@@ -11,7 +11,7 @@ import org.eclipse.collections.impl.collection.mutable.CollectionAdapter;
 import org.jetbrains.annotations.Range;
 import org.jetbrains.annotations.Unmodifiable;
 
-import java.util.Collection;
+import java.util.SequencedCollection;
 
 public final class StackListContent implements InputContent {
 
@@ -19,18 +19,18 @@ public final class StackListContent implements InputContent {
     private final long amount;
     private final float chance;
 
-    StackListContent(Collection<? extends ContentStack<?, ?>> stacks, long amount, float chance) {
-        Checks.checkRange(chance, 0, 1);
+    StackListContent(SequencedCollection<? extends ContentStack<?, ?>> stacks, long amount, float chance) {
+        Checks.checkRangeClosed(chance, 0, 1);
         this.stacks = CollectionAdapter.adapt(stacks)
-                .reject(ContentStack::isEmpty)
-                .<ContentStack<?, ?>>collect(ContentStack::normalize)
-                .toImmutableList();
+            .reject(ContentStack::isEmpty)
+            .<ContentStack<?, ?>>collect(ContentStack::normalize)
+            .toImmutableList();
         this.amount = amount;
         this.chance = chance;
     }
 
     private StackListContent(ImmutableList<ContentStack<?, ?>> stacks, long amount, float chance) {
-        Checks.checkRange(chance, 0, 1);
+        Checks.checkRangeClosed(chance, 0, 1);
         this.stacks = stacks;
         this.amount = amount;
         this.chance = chance;

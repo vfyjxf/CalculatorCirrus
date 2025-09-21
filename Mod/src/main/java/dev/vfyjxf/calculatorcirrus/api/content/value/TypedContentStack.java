@@ -6,10 +6,10 @@ import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
 import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
+import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.loading.FMLEnvironment;
-import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Nullable;
 
@@ -17,7 +17,7 @@ import java.util.function.BiConsumer;
 
 final class TypedContentStack<T, S> implements ContentStack<T, S> {
 
-    private final MutableList<BiConsumer<RichTooltip, TooltipContext>> tooltipConfigurers = Lists.mutable.empty();
+    private final MutableList<BiConsumer<RichTooltip, TooltipContext>> tooltipConfigurers = MutableLists.empty();
     private final S value;
     private final StackType<T, S> type;
     private long amount;
@@ -84,7 +84,7 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
     @Override
     public ContentStack<Item, ItemStack> cheatsStack() {
         ItemStack itemStack = type.toItemStack(this);
-        return new TypedContentStack<>(CirrusTypes.itemStack, itemStack, itemStack.getCount());
+        return new TypedContentStack<>(CirrusTypes.ITEM_STACK, itemStack, itemStack.getCount());
     }
 
     @SuppressWarnings("unchecked")
@@ -95,8 +95,8 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
 
         TypedContentStack<?, ?> that = (TypedContentStack<?, ?>) o;
         return (amount == that.amount) &&
-                type.equals(that.type) &&
-                type.matches(value, (S) that.value, MatchStrategy.IDENTITY_COMPONENT);
+            type.equals(that.type) &&
+            type.matches(value, (S) that.value, MatchStrategy.IDENTITY_COMPONENT);
     }
 
     @Override
@@ -111,10 +111,10 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
     @Override
     public String toString() {
         return "TypedContentStack{" +
-                "type=" + type +
-                ", amount=" + amount +
-                ", value=" + type.toString(value) +
-                '}';
+            "type=" + type +
+            ", amount=" + amount +
+            ", value=" + type.toString(value) +
+            '}';
     }
 }
 
@@ -166,7 +166,7 @@ final class EmptyContentStack<T, S> implements ContentStack<T, S> {
 
     @Override
     public ContentStack<Item, ItemStack> cheatsStack() {
-        return new TypedContentStack<>(CirrusTypes.itemStack, ItemStack.EMPTY, 0);
+        return new TypedContentStack<>(CirrusTypes.ITEM_STACK, ItemStack.EMPTY, 0);
     }
 
     @Override

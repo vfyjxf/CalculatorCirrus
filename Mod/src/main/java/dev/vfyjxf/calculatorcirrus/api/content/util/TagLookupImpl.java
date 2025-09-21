@@ -1,8 +1,8 @@
 package dev.vfyjxf.calculatorcirrus.api.content.util;
 
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
+import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import net.minecraft.tags.TagKey;
-import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.set.MutableSet;
 
@@ -13,7 +13,7 @@ import java.util.function.Predicate;
 final class TagLookupImpl<T> implements TagLookup<T> {
 
     private final TagType<T> tagType;
-    private final MutableList<QueryPredicate> predicates = Lists.mutable.empty();
+    private final MutableList<QueryPredicate> predicates = MutableLists.empty();
 
     TagLookupImpl(TagType<T> tagType) {
         this.tagType = tagType;

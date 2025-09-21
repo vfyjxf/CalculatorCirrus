@@ -35,7 +35,7 @@ public final class TagStackContent<T> implements InputContent {
     }
 
     TagStackContent(TagType<T> type, TagKey<T> tagKey, long amount, float chance) {
-        Checks.checkRange(chance, 0, 1);
+        Checks.checkRangeClosed(chance, 0, 1);
         this.type = type;
         this.contentType = type.contentType();
         this.tagKey = tagKey;

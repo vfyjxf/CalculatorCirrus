@@ -7,6 +7,8 @@ import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.calculatorcirrus.content.ContentRegistryBuilder;
 import dev.vfyjxf.calculatorcirrus.recipe.RecipeApiImpl;
+import dev.vfyjxf.calculatorcirrus.recipe.RecipeApiRegistryBuilder;
+import dev.vfyjxf.calculatorcirrus.recipe.facet.UnwrapFluidHandlerFacet;
 import dev.vfyjxf.calculatorcirrus.recipe.system.CraftingRecipeSystem;
 import dev.vfyjxf.calculatorcirrus.util.Singletons;
 import net.neoforged.bus.api.IEventBus;
@@ -14,6 +16,8 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.ModLoader;
 import net.neoforged.neoforge.registries.NewRegistryEvent;
+import org.eclipse.collections.api.factory.primitive.LongLists;
+import org.eclipse.collections.api.list.primitive.MutableLongList;
 import org.slf4j.Logger;
 
 public abstract class CalculatorCirrus {
@@ -22,6 +26,7 @@ public abstract class CalculatorCirrus {
     public CalculatorCirrus(ModContainer modContainer, IEventBus modEventBus) {
         modEventBus.addListener(this::onRecipeSystemRegister);
         modEventBus.addListener(this::onRegisterRegistry);
+        MutableLongList mutableLongList = LongLists.mutable.withInitialCapacity(10);
     }
 
     protected void start() {
@@ -30,9 +35,9 @@ public abstract class CalculatorCirrus {
         logger.info("Registering contents");
         fireContentRegisterEvent();
         logger.info("Registering recipe systems");
-        RecipeApiImpl recipeRegistry = new RecipeApiImpl();
-        ModLoader.postEventWrapContainerInModOrder(new RegisterRecipeSystemEvent(recipeRegistry));
-        Singletons.attachInstance(RecipeApi.class, recipeRegistry);
+        var recipeApiRegistry = new RecipeApiRegistryBuilder();
+        ModLoader.postEventWrapContainerInModOrder(new RegisterRecipeSystemEvent(recipeApiRegistry));
+        Singletons.attachInstance(RecipeApi.class, new RecipeApiImpl(recipeApiRegistry));
         stopwatch.stop();
         logger.info("Calculator Cirrus started in {}", stopwatch);
     }
@@ -44,12 +49,12 @@ public abstract class CalculatorCirrus {
 
     void registerBuiltinContent(ContentRegistryBuilder registryBuilder) {
         logger.info("Registering builtin contents");
-        registryBuilder.registerContentType(CirrusTypes.item);
-        registryBuilder.registerContentType(CirrusTypes.fluid);
-        registryBuilder.registerTag(CirrusTypes.item, CirrusTypes.itemTag);
-        registryBuilder.registerTag(CirrusTypes.fluid, CirrusTypes.fluidTag);
-        registryBuilder.registerStackType(CirrusTypes.item, CirrusTypes.itemStack);
-        registryBuilder.registerStackType(CirrusTypes.fluid, CirrusTypes.fluidStack);
+        registryBuilder.registerContentType(CirrusTypes.ITEM);
+        registryBuilder.registerContentType(CirrusTypes.FLUID);
+        registryBuilder.registerTag(CirrusTypes.ITEM, CirrusTypes.ITEM_TAG);
+        registryBuilder.registerTag(CirrusTypes.FLUID, CirrusTypes.FLUID_TAG);
+        registryBuilder.registerStackType(CirrusTypes.ITEM, CirrusTypes.ITEM_STACK);
+        registryBuilder.registerStackType(CirrusTypes.FLUID, CirrusTypes.FLUID_STACK);
     }
 
     @SubscribeEvent
@@ -57,5 +62,7 @@ public abstract class CalculatorCirrus {
         logger.info("Registering builtin recipe systems");
         CraftingRecipeSystem craftingRecipeSystem = new CraftingRecipeSystem();
         event.registerSystem(craftingRecipeSystem);
+
+        event.registerFacetTransformer(UnwrapFluidHandlerFacet.TYPE, UnwrapFluidHandlerFacet.transformer);
     }
 }

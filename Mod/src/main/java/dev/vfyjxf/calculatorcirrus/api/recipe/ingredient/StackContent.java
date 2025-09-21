@@ -5,10 +5,11 @@ import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentValue;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import dev.vfyjxf.cloudlib.util.Checks;
-import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Range;
+import org.jetbrains.annotations.Unmodifiable;
 
 public final class StackContent<T, S> implements InputContent, OutputContent {
 
@@ -17,7 +18,7 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
     private final float chance;
 
     StackContent(StackType<T, S> type, ContentStack<T, S> stack, float chance) {
-        Checks.checkRange(chance, 0, 1);
+        Checks.checkRangeClosed(chance, 0, 1);
         this.type = type;
         this.stack = stack;
         this.chance = chance;
@@ -25,6 +26,10 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
 
     public StackType<T, S> type() {
         return type;
+    }
+
+    public @Unmodifiable ContentStack<T, S> stack() {
+        return stack;
     }
 
     @Override
@@ -68,9 +73,8 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public MutableList<? extends ContentVariant> equivalents() {
-        return Lists.mutable.with(stack.copy());
+        return MutableLists.with(stack.copy());
     }
 
     @Override
@@ -88,5 +92,20 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
         if (!(other instanceof StackContent<?, ?> content)) return false;
         return stack.matches(content.stack);
     }
+
+    //region extra utils
+
+    public boolean isFluid() {return stack.isFluid();}
+
+    public boolean isItem() {return stack.isItem();}
+
+    public boolean is(StackType<?, ?> type) {return stack.is(type);}
+
+    @SuppressWarnings("unchecked")
+    public <C, R> StackContent<C, R> cast() {
+        return (StackContent<C, R>) this;
+    }
+
+    //endregion
 
 }

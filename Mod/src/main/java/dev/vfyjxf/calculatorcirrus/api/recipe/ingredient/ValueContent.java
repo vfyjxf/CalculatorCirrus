@@ -5,8 +5,8 @@ import dev.vfyjxf.calculatorcirrus.api.content.type.ValueType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentValue;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import dev.vfyjxf.cloudlib.util.Checks;
-import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Range;
 
@@ -17,7 +17,7 @@ public final class ValueContent<T> implements InputContent, OutputContent {
     private final float chance;
 
     ValueContent(ValueType<T> type, T value, float chance) {
-        Checks.checkRange(chance, 0, 1);
+        Checks.checkRangeClosed(chance, 0, 1);
         this.type = type;
         this.value = type.copy(value);
         this.chance = chance;
@@ -65,7 +65,7 @@ public final class ValueContent<T> implements InputContent, OutputContent {
 
     @Override
     public MutableList<? extends ContentVariant> equivalents() {
-        return Lists.mutable.empty();
+        return MutableLists.empty();
     }
 
     @Override

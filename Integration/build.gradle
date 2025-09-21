@@ -8,7 +8,7 @@ neoForge {
     version = project.neo_version
 
     mods {
-        "cirrus_integration"{
+        "cirrus_integration" {
             sourceSet(sourceSets.main)
         }
     }
@@ -45,22 +45,21 @@ repositories {
     }
 }
 
-configurations{
+configurations {
     runtimeClasspath.extendsFrom localRuntime
 }
 
-def base = project(":Mod")
-
 dependencies {
-    compileOnly(base)
-    localRuntime(base)
+    compileOnly("dev.vfyjxf:cloudlib")
+    compileOnly(project(":Mod"))
+    localRuntime(project(":Mod"))
 //    compileOnly("dev.vfyjxf:cloudlib")
 //    implementation("maven.modrinth:gregtechceu-modern:mc1.21.1-1.4.6:slim")
-    implementation "com.gregtechceu.gtceu:gtceu-${project.minecraft_version}:${gtm_version}"
-//    implementation("com.gregtechceu.gtceu:gtceu-${}:${gtm_version}") { transitive = false }
+//    implementation("aztech:Modern-Industrialization:2.3.11")
+    implementation("com.gregtechceu.gtceu:gtceu-${}:${gtm_version}") { transitive = false }
     implementation("org.eclipse.collections:eclipse-collections-api:11.1.0")
     implementation("org.eclipse.collections:eclipse-collections:11.1.0")
-    testImplementation(base)
+    testImplementation(project(":Mod"))
 }
 
 test {
@@ -71,7 +70,9 @@ lombok {
     version = "1.18.32"
 }
 
+
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
+    def base = project(":Mod")
     var replaceProperties = [
             minecraft_version      : base.minecraft_version,
             minecraft_version_range: base.minecraft_version_range,

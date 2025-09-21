@@ -2,7 +2,7 @@ package dev.vfyjxf.calculatorcirrus.api.recipe.system;
 
 
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipe.data.RecipeData;
+import dev.vfyjxf.calculatorcirrus.api.recipe.view.RecipeView;
 import dev.vfyjxf.calculatorcirrus.internal.integration.jei.CirrusJeiPlugin;
 import mezz.jei.api.recipe.RecipeType;
 import net.minecraft.resources.ResourceLocation;
@@ -17,9 +17,7 @@ import javax.annotation.Nullable;
 
 public interface RecipeSystem<R> {
 
-    static ResourceLocation systemId(String namespace, String path) {
-        return ResourceLocation.fromNamespaceAndPath(namespace, "recipe_system/" + path);
-    }
+    //region system info
 
     default String namespace() {
         return systemId().getNamespace();
@@ -28,6 +26,10 @@ public interface RecipeSystem<R> {
     ResourceLocation systemId();
 
     Class<?> basicType();
+
+    //endregion
+
+    //region lookup
 
     default boolean supports(R recipe) {
         return contains(recipe);
@@ -46,10 +48,21 @@ public interface RecipeSystem<R> {
     @Nullable
     R findRecipe(ResourceLocation registryName);
 
-    RecipeData getData(R recipe);
+    //endregion
+
+    RecipeView analyzeRecipe(R recipe);
+
+    //region system data
+
+    //TODO:provide a custom data query api.
+    //  something like data component system,but for recipe system.
 
     @Unmodifiable
     MutableList<ContentStack<Item, ItemStack>> getMachines();
+
+    //endregion
+
+    //region util
 
     static MutableList<ContentStack<Item, ItemStack>> getMachinesFromJei(RecipeType<?> recipeType) {
         return CirrusJeiPlugin.recipeManager.createRecipeCatalystLookup(recipeType)
@@ -65,5 +78,7 @@ public interface RecipeSystem<R> {
 
     @Unmodifiable
     RichIterable<R> allRecipes();
+
+    //endregion
 
 }

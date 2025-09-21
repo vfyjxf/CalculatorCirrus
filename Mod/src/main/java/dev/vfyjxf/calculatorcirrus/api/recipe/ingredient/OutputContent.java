@@ -30,19 +30,19 @@ public sealed interface OutputContent
     //region time value factory
 
     static OutputContent fromTime(TimeValue timeValue) {
-        return fromValue(CirrusTypes.time, timeValue);
+        return fromValue(CirrusTypes.TIME, timeValue);
     }
 
     static OutputContent fromTimeTick(int ticks) {
-        return fromValue(CirrusTypes.time, TimeValue.fromTick(ticks));
+        return fromValue(CirrusTypes.TIME, TimeValue.fromTick(ticks));
     }
 
     static OutputContent fromTimeSeconds(int seconds) {
-        return fromValue(CirrusTypes.time, TimeValue.fromSecond(seconds));
+        return fromValue(CirrusTypes.TIME, TimeValue.fromSecond(seconds));
     }
 
     static OutputContent fromTimeMinutes(int minutes) {
-        return fromValue(CirrusTypes.time, TimeValue.fromMinute(minutes));
+        return fromValue(CirrusTypes.TIME, TimeValue.fromMinute(minutes));
     }
 
     //endregion
@@ -50,11 +50,11 @@ public sealed interface OutputContent
     //region forge energy value factory
 
     static OutputContent fromEnergy(EnergyValue energyValue) {
-        return fromValue(CirrusTypes.energy, energyValue);
+        return fromValue(CirrusTypes.ENERGY, energyValue);
     }
 
     static OutputContent fromEnergy(long energy) {
-        return fromValue(CirrusTypes.energy, EnergyValue.from(energy));
+        return fromValue(CirrusTypes.ENERGY, EnergyValue.from(energy));
     }
 
     //endregion
@@ -83,7 +83,7 @@ public sealed interface OutputContent
     }
 
     static OutputContent fromItemStack(ItemStack stack, long amount, float chance) {
-        return fromStack(CirrusTypes.itemStack, stack, amount, chance);
+        return fromStack(CirrusTypes.ITEM_STACK, stack, amount, chance);
     }
 
     static OutputContent fromItemStack(ItemStack stack, long amount) {
@@ -95,7 +95,7 @@ public sealed interface OutputContent
     }
 
     static OutputContent fromFluidStack(FluidStack stack, long amount, float chance) {
-        return fromStack(CirrusTypes.fluidStack, stack, amount, chance);
+        return fromStack(CirrusTypes.FLUID_STACK, stack, amount, chance);
     }
 
     static OutputContent fromFluidStack(FluidStack stack, long amount) {

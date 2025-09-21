@@ -2,6 +2,7 @@ package dev.vfyjxf.calculatorcirrus.api.recipe.ingredient;
 
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.ValueType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.calculatorcirrus.helper.TagHelper;
@@ -17,22 +18,36 @@ import net.neoforged.neoforge.fluids.crafting.FluidIngredient;
 import net.neoforged.neoforge.fluids.crafting.SizedFluidIngredient;
 import net.neoforged.neoforge.fluids.crafting.TagFluidIngredient;
 import org.eclipse.collections.api.list.MutableList;
+import org.eclipse.collections.impl.collector.Collectors2;
 import org.eclipse.collections.impl.list.fixed.ArrayAdapter;
 
-import static dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes.*;
+import java.util.SequencedCollection;
+
+import static dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes.FLUID_STACK;
+import static dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes.FLUID_TAG;
+import static dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes.ITEM_STACK;
+import static dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes.ITEM_TAG;
 
 
 public sealed interface InputContent
-        extends RecipeContent
-        permits EmptyRecipeContent,
-                StackContent,
-                ValueContent,
-                StackListContent,
-                TypedStackListContent,
-                TagStackContent {
+    extends RecipeContent
+    permits EmptyRecipeContent,
+            StackContent,
+            ValueContent,
+            StackListContent,
+            TypedStackListContent,
+            TagStackContent {
 
 
     //region stack factory
+
+    static <T, S> InputContent fromStack(ContentStack<T, S> stack, float chance) {
+        return new StackContent<>(stack.type(), stack.copy(), chance);
+    }
+
+    static <T, S> InputContent fromStack(ContentStack<T, S> stack) {
+        return fromStack(stack, MAX_CHANCE);
+    }
 
     static <T, S> InputContent fromStack(StackType<T, S> type, S stack, long amount, float chance) {
         if (amount <= 0) return empty;
@@ -57,7 +72,7 @@ public sealed interface InputContent
 
     //region item stack factory
     static InputContent fromItemStack(ItemStack stack, long amount, float chance) {
-        return fromStack(itemStack, stack, amount, chance);
+        return fromStack(ITEM_STACK, stack, amount, chance);
     }
 
     static InputContent fromItemStack(ItemStack stack, long amount) {
@@ -76,7 +91,7 @@ public sealed interface InputContent
 
     //region fluid stack factory
     static InputContent fromFluidStack(FluidStack stack, long amount, float chance) {
-        return fromStack(fluidStack, stack, amount, chance);
+        return fromStack(FLUID_STACK, stack, amount, chance);
     }
 
     static InputContent fromFluidStack(FluidStack stack, long amount) {
@@ -106,7 +121,7 @@ public sealed interface InputContent
     //item tag
 
     static InputContent fromItemTag(TagKey<Item> tag, long amount, float chance) {
-        return fromTag(itemTag, tag, amount, chance);
+        return fromTag(ITEM_TAG, tag, amount, chance);
     }
 
     static InputContent fromItemTag(TagKey<Item> tag, long amount) {
@@ -114,29 +129,72 @@ public sealed interface InputContent
     }
 
     static InputContent fromItemTag(TagKey<Item> tag, float chance) {
-        return fromItemTag(tag, itemStack.quantity(), chance);
+        return fromItemTag(tag, ITEM_STACK.quantity(), chance);
     }
 
     static InputContent fromItemTag(TagKey<Item> tag) {
-        return fromItemTag(tag, itemStack.quantity(), MAX_CHANCE);
+        return fromItemTag(tag, ITEM_STACK.quantity(), MAX_CHANCE);
     }
 
     //fluid tag
 
     static InputContent fromFluidTag(TagKey<Fluid> tag, long amount, float chance) {
-        return fromTag(fluidTag, tag, amount, chance);
+        return fromTag(FLUID_TAG, tag, amount, chance);
     }
 
     static InputContent fromFluidTag(TagKey<Fluid> tag, long amount) {
-        return fromTag(fluidTag, tag, amount);
+        return fromTag(FLUID_TAG, tag, amount);
     }
 
     static InputContent fromFluidTag(TagKey<Fluid> tag, float chance) {
-        return fromTag(fluidTag, tag, fluidStack.quantity(), chance);
+        return fromTag(FLUID_TAG, tag, FLUID_STACK.quantity(), chance);
     }
 
     static InputContent fromFluidTag(TagKey<Fluid> tag) {
-        return fromFluidTag(tag, fluidStack.quantity(), MAX_CHANCE);
+        return fromFluidTag(tag, FLUID_STACK.quantity(), MAX_CHANCE);
+    }
+
+    //endregion
+
+    //region value factory
+
+    static <T> InputContent fromValue(ValueType<T> type, T value, float chance) {
+        return new ValueContent<>(type, value, chance);
+    }
+
+    static <T> InputContent fromValue(ValueType<T> type, T value) {
+        return fromValue(type, value, MAX_CHANCE);
+    }
+
+    //endregion
+
+    //region stack list factory
+
+    static <T, S> InputContent fromTypedStackList(StackType<T, S> type, SequencedCollection<? extends S> stacks, long amount, float chance) {
+        var contentStacks = stacks.stream()
+            .map(stack -> ContentStack.fromStack(type, stack))
+            .collect(Collectors2.toList());
+        return new TypedStackListContent<>(type, contentStacks, amount, chance);
+    }
+
+    static <T, S> InputContent fromTypedStackList(StackType<T, S> type, SequencedCollection<? extends S> stacks, long amount) {
+        return InputContent.fromTypedStackList(type, stacks, amount, MAX_CHANCE);
+    }
+
+    static <T, S> InputContent fromContentStackList(StackType<T, S> type, SequencedCollection<? extends ContentStack<T, S>> contentStacks, long amount, float chance) {
+        return new TypedStackListContent<>(type, contentStacks, amount, chance);
+    }
+
+    static <T, S> InputContent fromContentStackList(StackType<T, S> type, SequencedCollection<? extends ContentStack<T, S>> contentStacks, long amount) {
+        return new TypedStackListContent<>(type, contentStacks, amount, MAX_CHANCE);
+    }
+
+    static InputContent fromStackList(SequencedCollection<? extends ContentStack<?, ?>> stacks, long amount, float chance) {
+        return new StackListContent(stacks, amount, chance);
+    }
+
+    static InputContent fromStackList(SequencedCollection<? extends ContentStack<?, ?>> stacks, long amount) {
+        return fromStackList(stacks, amount, MAX_CHANCE);
     }
 
     //endregion
@@ -149,10 +207,10 @@ public sealed interface InputContent
         TagKey<T> matchedTag = TagHelper.findTagMatchStacks(tagType, stackType, adapter);
         if (matchedTag == null) {
             return new TypedStackListContent<>(
-                    stackType,
-                    adapter.collect(stack -> ContentStack.fromStack(stackType, stack)),
-                    amount,
-                    chance
+                stackType,
+                adapter.collect(stack -> ContentStack.fromStack(stackType, stack)),
+                amount,
+                chance
             );
         } else return new TagStackContent<>(tagType, matchedTag, amount, chance);
     }
@@ -188,7 +246,7 @@ public sealed interface InputContent
                 if (stack.isEmpty()) yield empty;
                 else yield fromItemStack(stack, amount, chance);
             }
-            default -> fromStackArray(itemStack, itemTag, items, amount, chance);
+            default -> fromStackArray(ITEM_STACK, ITEM_TAG, items, amount, chance);
         };
     }
 
@@ -216,7 +274,7 @@ public sealed interface InputContent
         if (ingredient.isEmpty()) return empty;
 
         if (ingredient instanceof TagFluidIngredient tagFluid) {
-            return new TagStackContent<>(fluidTag, tagFluid.tag(), amount, chance);
+            return new TagStackContent<>(FLUID_TAG, tagFluid.tag(), amount, chance);
         }
 
         FluidStack[] stacks = ingredient.getStacks();
@@ -227,7 +285,7 @@ public sealed interface InputContent
                 if (stack.isEmpty()) yield empty;
                 else yield fromFluidStack(stack, amount, chance);
             }
-            default -> fromStackArray(fluidStack, fluidTag, stacks, amount, chance);
+            default -> fromStackArray(FLUID_STACK, FLUID_TAG, stacks, amount, chance);
         };
     }
 
@@ -240,7 +298,6 @@ public sealed interface InputContent
     }
 
     //endregion
-
 
 
     //region match

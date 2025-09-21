@@ -9,6 +9,8 @@ import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
 import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
+import net.minecraft.core.component.DataComponentType;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -16,6 +18,7 @@ import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.UnknownNullability;
 
 import java.util.function.BiConsumer;
 
@@ -75,26 +78,26 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
 
     static ContentStack<Item, ItemStack> fromStack(@Nullable ItemStack stack) {
         if (stack == null || stack.isEmpty()) return empty();
-        var type = CirrusTypes.itemStack;
+        var type = CirrusTypes.ITEM_STACK;
         return fromStack(type, type.copy(stack), type.getAmount(stack));
     }
 
     static ContentStack<Item, ItemStack> fromStack(@Nullable ItemStack stack, long amount) {
         if (stack == null || stack.isEmpty()) return empty();
-        var type = CirrusTypes.itemStack;
+        var type = CirrusTypes.ITEM_STACK;
         return fromStack(type, type.copy(stack), amount);
     }
 
     static ContentStack<Item, ItemStack> fromContent(Item item, long amount, DataComponentPatch componentPatch) {
-        return fromContent(CirrusTypes.itemStack, item, amount, componentPatch);
+        return fromContent(CirrusTypes.ITEM_STACK, item, amount, componentPatch);
     }
 
     static ContentStack<Item, ItemStack> fromContent(Item item, long amount) {
-        return fromContent(CirrusTypes.itemStack, item, amount);
+        return fromContent(CirrusTypes.ITEM_STACK, item, amount);
     }
 
     static ContentStack<Item, ItemStack> fromContent(Item item) {
-        return fromContent(CirrusTypes.itemStack, item, CirrusTypes.itemStack.quantity());
+        return fromContent(CirrusTypes.ITEM_STACK, item, CirrusTypes.ITEM_STACK.quantity());
     }
 
     //endregion
@@ -103,26 +106,26 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
 
     static ContentStack<Fluid, FluidStack> fromStack(@Nullable FluidStack stack) {
         if (stack == null || stack.isEmpty()) return empty();
-        var type = CirrusTypes.fluidStack;
+        var type = CirrusTypes.FLUID_STACK;
         return fromStack(type, type.copy(stack), type.getAmount(stack));
     }
 
     static ContentStack<Fluid, FluidStack> fromStack(@Nullable FluidStack stack, long amount) {
         if (stack == null || stack.isEmpty()) return empty();
-        var type = CirrusTypes.fluidStack;
+        var type = CirrusTypes.FLUID_STACK;
         return fromStack(type, type.copy(stack), amount);
     }
 
     static ContentStack<Fluid, FluidStack> fromContent(Fluid fluid, long amount, DataComponentPatch componentPatch) {
-        return fromContent(CirrusTypes.fluidStack, fluid, amount, componentPatch);
+        return fromContent(CirrusTypes.FLUID_STACK, fluid, amount, componentPatch);
     }
 
     static ContentStack<Fluid, FluidStack> fromContent(Fluid fluid, long amount) {
-        return fromContent(CirrusTypes.fluidStack, fluid, amount);
+        return fromContent(CirrusTypes.FLUID_STACK, fluid, amount);
     }
 
     static ContentStack<Fluid, FluidStack> fromContent(Fluid fluid) {
-        return fromContent(CirrusTypes.fluidStack, fluid, CirrusTypes.fluidStack.quantity());
+        return fromContent(CirrusTypes.FLUID_STACK, fluid, CirrusTypes.FLUID_STACK.quantity());
     }
 
     //endregion
@@ -167,6 +170,18 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
         return type().getComponentsPatch(value());
     }
 
+    default boolean hasComponent(DataComponentType<?> componentType) {
+        return type().hasComponent(value(), componentType);
+    }
+
+    default <C> @UnknownNullability C getComponent(DataComponentType<? extends C> componentType) throws IllegalArgumentException {
+        if (!hasComponent(componentType)){
+            ResourceLocation key = BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(componentType);
+            throw new IllegalArgumentException("Component: " + key + " not found");
+        }
+        return type().getComponent(value(), componentType);
+    }
+
     //endregion
 
 
@@ -178,7 +193,7 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
         if (type() != other.type()) return false;
 
         return (!strategy.withAmount() || amount() == other.amount()) &&
-                type().matches(value(), other.<T, S>cast().value(), strategy);
+            type().matches(value(), other.<T, S>cast().value(), strategy);
 
     }
 
@@ -191,7 +206,7 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
             return this == empty() && value == ContentValue.empty();
         }
         return contentType() == value.type() &&
-                contentType().matches(content(), value.<T>cast().value());
+            contentType().matches(content(), value.<T>cast().value());
     }
 
     //endregion
@@ -263,11 +278,11 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
     //region util
 
     default boolean isItem() {
-        return type() == CirrusTypes.itemStack;
+        return type() == CirrusTypes.ITEM_STACK;
     }
 
     default boolean isFluid() {
-        return type() == CirrusTypes.fluidStack;
+        return type() == CirrusTypes.FLUID_STACK;
     }
 
     default boolean is(StackType<?, ?> type) {

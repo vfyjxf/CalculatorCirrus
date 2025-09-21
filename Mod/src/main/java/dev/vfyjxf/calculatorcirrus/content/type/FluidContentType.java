@@ -15,14 +15,14 @@ public class FluidContentType extends BasicContentType<Fluid> {
     public static final FluidContentType instance = new FluidContentType();
 
     private FluidContentType() {
-        super(Locations.create(ContentType.namespace, "fluid"), Fluid.class);
+        super(Locations.create(ContentType.namespace, "fluid"), Fluid.class, BuiltInRegistries.FLUID.byNameCodec());
     }
 
     @Override
     public @Nullable ResourceLocation getLocation(Fluid fluid) {
         return BuiltInRegistries.FLUID.getResourceKey(fluid)
-                .map(ResourceKey::location)
-                .orElseThrow(() -> new IllegalArgumentException("Unknown fluid: " + fluid));
+            .map(ResourceKey::location)
+            .orElseThrow(() -> new IllegalArgumentException("Unknown fluid: " + fluid));
     }
 
     @Override

@@ -1,8 +1,8 @@
 package dev.vfyjxf.calculatorcirrus.api.recipe.routing;
 
 import com.google.common.graph.Graph;
+import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import it.unimi.dsi.fastutil.objects.Object2IntArrayMap;
-import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
 
 import java.util.ArrayDeque;
@@ -21,7 +21,7 @@ public interface RecipeGraph {
             else inDegree.put(node, degree);
         }
 
-        MutableList<N> result = Lists.mutable.empty();
+        MutableList<N> result = MutableLists.empty();
 
         while (!queue.isEmpty()) {
             N node = queue.remove();

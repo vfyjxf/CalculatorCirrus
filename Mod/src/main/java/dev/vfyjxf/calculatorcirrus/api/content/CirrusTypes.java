@@ -5,8 +5,8 @@ import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ValueType;
-import dev.vfyjxf.calculatorcirrus.api.recipe.content.EnergyValue;
 import dev.vfyjxf.calculatorcirrus.api.recipe.content.EnergyContentType;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.EnergyValue;
 import dev.vfyjxf.calculatorcirrus.api.recipe.content.TimeValue;
 import dev.vfyjxf.calculatorcirrus.api.recipe.content.TimeValueType;
 import dev.vfyjxf.calculatorcirrus.content.type.FluidContentType;
@@ -25,23 +25,23 @@ import static net.minecraft.resources.ResourceLocation.fromNamespaceAndPath;
 public final class CirrusTypes {
 
     //region content
-    public static final ContentType<Item> item = ItemContentType.instance;
-    public static final ContentType<Fluid> fluid = FluidContentType.instance;
+    public static final ContentType<Item> ITEM = ItemContentType.instance;
+    public static final ContentType<Fluid> FLUID = FluidContentType.instance;
     //endregion
 
     //region stack
-    public static final StackType<Item, ItemStack> itemStack = ItemStackType.instance;
-    public static final StackType<Fluid, FluidStack> fluidStack = FluidStackType.instance;
+    public static final StackType<Item, ItemStack> ITEM_STACK = ItemStackType.instance;
+    public static final StackType<Fluid, FluidStack> FLUID_STACK = FluidStackType.instance;
     //endregion
 
     //region tag
-    public static final TagType<Item> itemTag = TagType.fromRegistry(of("tag/item"), item, BuiltInRegistries.ITEM);
-    public static final TagType<Fluid> fluidTag = TagType.fromRegistry(of("tag/fluid"), fluid, BuiltInRegistries.FLUID);
+    public static final TagType<Item> ITEM_TAG = TagType.fromRegistry(of("tag/item"), ITEM, BuiltInRegistries.ITEM);
+    public static final TagType<Fluid> FLUID_TAG = TagType.fromRegistry(of("tag/fluid"), FLUID, BuiltInRegistries.FLUID);
     //endregion
 
     //region recipe content
-    public static final ValueType<TimeValue> time = TimeValueType.instance;
-    public static final ValueType<EnergyValue> energy = EnergyContentType.instance;
+    public static final ValueType<TimeValue> TIME = TimeValueType.instance;
+    public static final ValueType<EnergyValue> ENERGY = EnergyContentType.instance;
     //endregion
 
     private static ResourceLocation of(String path) {

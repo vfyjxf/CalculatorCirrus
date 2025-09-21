@@ -1,19 +1,19 @@
-package dev.vfyjxf.calculatorcirrus.api.recipe.data;
+package dev.vfyjxf.calculatorcirrus.api.recipe.view;
 
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-public final class ContextType<T> {
+public final class RecipeContextType<T> {
 
-    private static final ConcurrentMap<ResourceLocation, ContextType<?>> contextTypes = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<ResourceLocation, RecipeContextType<?>> contextTypes = new ConcurrentHashMap<>();
 
     @SuppressWarnings("unchecked")
-    public static <T> ContextType<T> create(ResourceLocation id, Class<T> valueType, T defaultValue) {
-        ContextType<T> contextType = (ContextType<T>) contextTypes.computeIfAbsent(id, (key) -> new ContextType<>(key, valueType, defaultValue));
+    public static <T> RecipeContextType<T> create(ResourceLocation id, Class<T> valueType, T defaultValue) {
+        RecipeContextType<T> contextType = (RecipeContextType<T>) contextTypes.computeIfAbsent(id, (key) -> new RecipeContextType<>(key, valueType, defaultValue));
         if (contextType.valueType != valueType) {
-            throw new IllegalArgumentException("ContextType with id " + id + " already exists");
+            throw new IllegalArgumentException("RecipeContextType with id " + id + " already exists");
         }
         return contextType;
     }
@@ -22,7 +22,7 @@ public final class ContextType<T> {
     private final Class<T> valueType;
     private final T defaultValue;
 
-    private ContextType(ResourceLocation id, Class<T> valueType, T defaultValue) {
+    private RecipeContextType(ResourceLocation id, Class<T> valueType, T defaultValue) {
         this.id = id;
         this.valueType = valueType;
         this.defaultValue = defaultValue;
@@ -44,7 +44,7 @@ public final class ContextType<T> {
     public boolean equals(Object object) {
         if (object == null || getClass() != object.getClass()) return false;
 
-        ContextType<?> that = (ContextType<?>) object;
+        RecipeContextType<?> that = (RecipeContextType<?>) object;
         return id.equals(that.id) && valueType.equals(that.valueType);
     }
 

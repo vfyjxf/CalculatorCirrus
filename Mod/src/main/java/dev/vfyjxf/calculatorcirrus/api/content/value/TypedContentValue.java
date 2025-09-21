@@ -4,22 +4,22 @@ import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
 import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
+import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.fml.loading.FMLEnvironment;
-import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.function.BiConsumer;
 
 record TypedContentValue<T>(
-        ContentType<T> type,
-        T value,
-        MutableList<BiConsumer<RichTooltip, TooltipContext>> tooltipConfigurers
+    ContentType<T> type,
+    T value,
+    MutableList<BiConsumer<RichTooltip, TooltipContext>> tooltipConfigurers
 ) implements ContentValue<T> {
 
     TypedContentValue(ContentType<T> type, T value) {
-        this(type, value, Lists.mutable.empty());
+        this(type, value, MutableLists.empty());
     }
 
     @Nullable
@@ -64,9 +64,9 @@ record TypedContentValue<T>(
     @Override
     public String toString() {
         return "TypedContentValue{" +
-                "type=" + type +
-                ", value=" + value +
-                '}';
+            "type=" + type +
+            ", value=" + value +
+            '}';
     }
 }
 

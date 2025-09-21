@@ -7,7 +7,7 @@ import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cloudlib.util.Locations;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.component.DataComponentType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
@@ -15,14 +15,14 @@ import net.minecraft.world.level.material.Fluids;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.FluidType;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.UnknownNullability;
 
 public class FluidStackType extends BasicStackType<Fluid, FluidStack> {
 
     public static final FluidStackType instance = new FluidStackType();
-    private static final ResourceLocation id = Locations.create(ContentType.namespace, "fluid_stack");
 
     private FluidStackType() {
-        super(id, FluidContentType.instance, Integer.MAX_VALUE);
+        super(Locations.create(ContentType.namespace, "fluid_stack"), FluidContentType.instance, Integer.MAX_VALUE, FluidStack.OPTIONAL_CODEC);
     }
 
     //region stack properties
@@ -60,6 +60,16 @@ public class FluidStackType extends BasicStackType<Fluid, FluidStack> {
     @Override
     public DataComponentPatch getComponentsPatch(FluidStack stack) {
         return stack.getComponentsPatch();
+    }
+
+    @Override
+    public boolean hasComponent(FluidStack stack, DataComponentType<?> componentType) {
+        return stack.has(componentType);
+    }
+
+    @Override
+    public <C> @UnknownNullability C getComponent(FluidStack stack, DataComponentType<? extends C> componentType) {
+        return stack.get(componentType);
     }
 
     //endregion

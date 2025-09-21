@@ -94,9 +94,7 @@ dependencies {
 
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
     compileOnly("org.eclipse.collections:eclipse-collections-api:11.1.0")
-    jarJar "org.eclipse.collections:eclipse-collections-api:11.1.0"
     compileOnly("org.eclipse.collections:eclipse-collections:11.1.0")
-    jarJar "org.eclipse.collections:eclipse-collections:11.1.0"
 //    jarJar(project(":Integration"))
     compileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
