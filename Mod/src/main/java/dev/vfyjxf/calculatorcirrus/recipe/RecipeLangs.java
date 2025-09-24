@@ -1,9 +1,10 @@
 package dev.vfyjxf.calculatorcirrus.recipe;
 
 import dev.vfyjxf.calculatorcirrus.CirrusConstants;
-import dev.vfyjxf.calculatorcirrus.api.data.lang.LangBuilder;
-import dev.vfyjxf.calculatorcirrus.api.data.lang.LangEntry;
-import dev.vfyjxf.calculatorcirrus.api.data.lang.LangProvider;
+import dev.vfyjxf.cloudlib.data.lang.LangBuilder;
+import dev.vfyjxf.cloudlib.data.lang.LangEntry;
+import dev.vfyjxf.cloudlib.data.lang.LangProvider;
+
 
 @LangProvider
 public class RecipeLangs {

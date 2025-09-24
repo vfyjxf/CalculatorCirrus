@@ -39,4 +39,9 @@ public abstract class BasicStackType<T, S> implements StackType<T, S> {
     public @Nullable Codec<S> stackCodec() {
         return stackCodec;
     }
+
+    @Override
+    public String toString() {
+        return typeId.toString();
+    }
 }

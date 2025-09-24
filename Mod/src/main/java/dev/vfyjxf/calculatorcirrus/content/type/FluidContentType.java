@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.content.type;
 
-import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.cloudlib.util.Locations;
+import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -15,7 +15,7 @@ public class FluidContentType extends BasicContentType<Fluid> {
     public static final FluidContentType instance = new FluidContentType();
 
     private FluidContentType() {
-        super(Locations.create(ContentType.namespace, "fluid"), Fluid.class, BuiltInRegistries.FLUID.byNameCodec());
+        super(Locations.ofMc("fluid"), Fluid.class, BuiltInRegistries.FLUID.byNameCodec());
     }
 
     @Override

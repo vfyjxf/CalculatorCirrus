@@ -5,6 +5,7 @@ import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.VariantType;
 import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
 import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
 import net.minecraft.core.component.DataComponentMap;
@@ -44,7 +45,7 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
     static <T, S> ContentStack<T, S> fromStack(StackType<T, S> type, S stack, long amount, DataComponentPatch componentPatch) {
         stack = type.fromStack(stack, type.quantity(), componentPatch);
         if (type.isEmpty(stack)) return empty();
-        return new TypedContentStack<>(type, stack, amount);
+        return new TypedContentStack<>(type, amount, stack);
     }
 
     static <T, S> ContentStack<T, S> fromStack(StackType<T, S> type, S stack, long amount) {
@@ -56,13 +57,13 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
     }
 
     static <T, S> ContentStack<T, S> fromStack(ResourceLocation typeId, S stack) {
-        StackType<T, S> stackType = ContentApi.getInstance().getStackType(typeId);
+        StackType<T, S> stackType = ContentApi.instance().getStackType(typeId);
         return fromStack(stackType, stack);
     }
 
     static <T, S> ContentStack<T, S> fromContent(StackType<T, S> type, T content, long amount, DataComponentPatch componentPatch) {
-        S identityStack = type.fromContent(content, type.quantity(), componentPatch);
-        return fromStack(type, identityStack, amount);
+        S stack = type.fromContent(content, type.quantity(), componentPatch);
+        return fromStack(type, stack, amount);
     }
 
     static <T, S> ContentStack<T, S> fromContent(StackType<T, S> type, T content, long amount) {
@@ -138,6 +139,8 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
 
     ContentType<T> contentType();
 
+    @Nullable VariantType<T, S> variantType();
+
     S value();
 
     default T content() {
@@ -175,7 +178,7 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
     }
 
     default <C> @UnknownNullability C getComponent(DataComponentType<? extends C> componentType) throws IllegalArgumentException {
-        if (!hasComponent(componentType)){
+        if (!hasComponent(componentType)) {
             ResourceLocation key = BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(componentType);
             throw new IllegalArgumentException("Component: " + key + " not found");
         }

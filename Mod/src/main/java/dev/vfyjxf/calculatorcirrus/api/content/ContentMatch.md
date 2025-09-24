@@ -1,0 +1,14 @@
+# ContentMatch
+
+## StackType定义的匹配行为的初衷
+
+1. 用于确认两个**Stack**在特定上下文中是否等价，上下文包括额外的Component匹配，MatchStrategy的控制
+
+目前主要争议在于，我们是否要允许在StackType中只匹配Component而忽略Content这种Identity，这样会造成拥有Variant的Content无法正确匹配上
+并且根据查询，目前不存在使用StackType来仅匹配Component的用例，如果需要仅匹配Component，可以从Stack中读取并进行自定义匹配逻辑
+
+综上，在StackType当中不应该允许仅匹配Component的使用场景，而应把Content和Component进行强关联，否则会造成无法正确处理VariantType
+
+Question:物品的Component完全匹配是否可以推出类似附魔书/药水瓶的物品也相等
+这个问题的初衷是我希望能忽略对于附魔书/药水瓶这些拥有Variant的物品本身决定它们Variant的Component，
+但是这个需求会在何处存在呢？

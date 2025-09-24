@@ -1,8 +1,9 @@
 package dev.vfyjxf.calculatorcirrus.content.type;
 
 import com.google.common.primitives.Ints;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
-import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.VariantType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cloudlib.helper.ItemHelper;
 import dev.vfyjxf.cloudlib.util.Locations;
@@ -12,7 +13,6 @@ import net.minecraft.core.component.DataComponentType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnknownNullability;
 
@@ -21,7 +21,7 @@ public class ItemStackType extends BasicStackType<Item, ItemStack> {
     public static final ItemStackType instance = new ItemStackType();
 
     private ItemStackType() {
-        super(Locations.create(ContentType.namespace, "item_stack"), ItemContentType.instance, Integer.MAX_VALUE, ItemHelper.OPTIONAL_CODEC);
+        super(Locations.ofMc("item_stack"), ItemContentType.instance, Integer.MAX_VALUE, ItemHelper.OPTIONAL_CODEC);
     }
 
     //region stack properties
@@ -132,9 +132,22 @@ public class ItemStackType extends BasicStackType<Item, ItemStack> {
     //region match
 
     @Override
+    public boolean matchesIdentity(ItemStack stack1, ItemStack stack2, @Nullable VariantType<Item, ItemStack> variantType) {
+        if (stack1.getItem() != stack2.getItem()) return false;
+
+        if (variantType != null) return variantType.matchesVariantIdentity(stack1, stack2);
+
+        Item identityBase = stack1.getItem();
+        if (identityBase == Items.AIR) return true;
+
+        variantType = ContentApi.instance().findVariantType(this, identityBase);
+        return variantType == null || variantType.matchesVariantIdentity(stack1, stack2);
+    }
+
+    @Override
     public long mergeDiff(ItemStack stack1, ItemStack stack2, MatchStrategy strategy) {
         if (stack1 == stack2) return 0;
-        boolean identity = stack1.getItem() == stack2.getItem();
+        boolean identity = matchesIdentity(stack1, stack2);
         boolean components = !strategy.withComponent() || strategy.testComponents(stack1.getComponents(), stack2.getComponents());
         if (identity && components) {
             return stack1.getCount() - stack2.getCount();
@@ -144,7 +157,7 @@ public class ItemStackType extends BasicStackType<Item, ItemStack> {
     @Override
     public boolean matches(ItemStack stack1, ItemStack stack2, MatchStrategy strategy) {
         if (stack1 == stack2) return true;
-        boolean identity = !strategy.withIdentity() || stack1.getItem() == stack2.getItem();
+        boolean identity = !strategy.withIdentity() || matches(stack1, stack2);
         boolean amount = !strategy.withAmount() || stack1.getCount() == stack2.getCount();
         boolean components = !strategy.withComponent() || strategy.testComponents(stack1.getComponents(), stack2.getComponents());
         return identity && amount && components;

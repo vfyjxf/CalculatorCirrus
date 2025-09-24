@@ -2,7 +2,7 @@ package dev.vfyjxf.calculatorcirrus.content.type;
 
 import com.google.common.primitives.Ints;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
-import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.VariantType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cloudlib.util.Locations;
 import net.minecraft.core.component.DataComponentMap;
@@ -22,7 +22,7 @@ public class FluidStackType extends BasicStackType<Fluid, FluidStack> {
     public static final FluidStackType instance = new FluidStackType();
 
     private FluidStackType() {
-        super(Locations.create(ContentType.namespace, "fluid_stack"), FluidContentType.instance, Integer.MAX_VALUE, FluidStack.OPTIONAL_CODEC);
+        super(Locations.ofMc("fluid_stack"), FluidContentType.instance, Integer.MAX_VALUE, FluidStack.OPTIONAL_CODEC);
     }
 
     //region stack properties
@@ -112,7 +112,7 @@ public class FluidStackType extends BasicStackType<Fluid, FluidStack> {
     @SuppressWarnings("deprecation")
     public FluidStack fromContent(Fluid content, long amount, DataComponentPatch componentPatch) {
         if (amount <= 0 || content == Fluids.EMPTY) return FluidStack.EMPTY;
-        return new FluidStack(content.builtInRegistryHolder(), Ints.saturatedCast(amount), componentPatch);
+        else return new FluidStack(content.builtInRegistryHolder(), Ints.saturatedCast(amount), componentPatch);
     }
 
     @Override

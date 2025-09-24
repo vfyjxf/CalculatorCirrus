@@ -19,7 +19,7 @@ public final class ViewTransformPipeline {
     private final MutableList<Pair<RecipeFacetType, FacetTransformer<?, ?>>> facetTransformers = MutableLists.empty();
 
     public void detectFacet(RecipeFacetType facetType) {
-        var api = RecipeApi.getInstance();
+        var api = RecipeApi.instance();
         ViewTransformer<?> viewTransformer = api.getViewTransformer(facetType);
         if (viewTransformer != null)
             addTransformer(facetType, viewTransformer);
@@ -37,7 +37,7 @@ public final class ViewTransformPipeline {
     }
 
     public TransformedRecipeView transformView(RecipeContext context, RecipeView view) {
-        var api = RecipeApi.getInstance();
+        var api = RecipeApi.instance();
         var viewFacets = view.facets();
         var increment = new ViewIncrementOps();
         var decrement = new ViewDecrementOps();
