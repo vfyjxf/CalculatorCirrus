@@ -1,9 +1,11 @@
 package dev.vfyjxf.calculatorcirrus.api.content.value;
 
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.VariantType;
 import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
 import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
 import dev.vfyjxf.cloudlib.api.util.MutableLists;
@@ -18,16 +20,25 @@ import java.util.function.BiConsumer;
 final class TypedContentStack<T, S> implements ContentStack<T, S> {
 
     private final MutableList<BiConsumer<RichTooltip, TooltipContext>> tooltipConfigurers = MutableLists.empty();
-    private final S value;
     private final StackType<T, S> type;
+    private final @Nullable VariantType<T, S> variantType;
+    private final S value;
     private long amount;
 
-    TypedContentStack(StackType<T, S> type, S value) {
-        this(type, value, type.quantity());
+    TypedContentStack(StackType<T, S> type, long amount, S value) {
+        this.type = type;
+        this.variantType = ContentApi.instance().findVariantType(type, type.getContent(value));
+        this.value = value;
+        this.amount = amount;
     }
 
     TypedContentStack(StackType<T, S> type, S value, long amount) {
+        this(type, amount, value);
+    }
+
+    TypedContentStack(StackType<T, S> type, VariantType<T, S> variantType, S value, long amount) {
         this.type = type;
+        this.variantType = variantType;
         this.value = value;
         this.amount = amount;
     }
@@ -40,6 +51,11 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
     @Override
     public ContentType<T> contentType() {
         return type.contentType();
+    }
+
+    @Override
+    public @Nullable VariantType<T, S> variantType() {
+        return variantType;
     }
 
     @Override
@@ -135,6 +151,11 @@ final class EmptyContentStack<T, S> implements ContentStack<T, S> {
     }
 
     @Override
+    public VariantType<T, S> variantType() {
+        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
+    }
+
+    @Override
     public S value() {
         throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
     }
@@ -166,7 +187,7 @@ final class EmptyContentStack<T, S> implements ContentStack<T, S> {
 
     @Override
     public ContentStack<Item, ItemStack> cheatsStack() {
-        return new TypedContentStack<>(CirrusTypes.ITEM_STACK, ItemStack.EMPTY, 0);
+        return new TypedContentStack<>(CirrusTypes.ITEM_STACK, 0, ItemStack.EMPTY);
     }
 
     @Override

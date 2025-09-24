@@ -23,7 +23,7 @@ public class FacetTransformTest {
 
     @Test
     void testFluidHandlerUnwrap(MinecraftServer server) {
-        RecipeApi api = RecipeApi.getInstance();
+        RecipeApi api = RecipeApi.instance();
         RecipeView raw = new TestRecipeBuilder()
             .input(InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)), UnwrapFluidHandlerFacet.INSTANCE)
             .build();

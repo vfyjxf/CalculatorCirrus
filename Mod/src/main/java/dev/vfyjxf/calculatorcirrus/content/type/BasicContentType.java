@@ -33,7 +33,7 @@ public abstract class BasicContentType<T> implements ContentType<T> {
     @Override
     public @Nullable TagType<T> tagType() {
         if (tagType == null) {
-            ContentApi registry = ContentApi.getInstance();
+            ContentApi registry = ContentApi.instance();
             tagType = registry.getTagType(this);
         }
         return tagType;

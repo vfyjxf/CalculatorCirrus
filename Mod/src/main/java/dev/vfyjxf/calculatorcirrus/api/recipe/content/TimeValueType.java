@@ -1,15 +1,14 @@
 package dev.vfyjxf.calculatorcirrus.api.recipe.content;
 
-import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.content.type.BasicValueType;
-import dev.vfyjxf.cloudlib.util.Locations;
+import dev.vfyjxf.calculatorcirrus.util.CirrusLocations;
 
 public class TimeValueType extends BasicValueType<TimeValue> {
 
     public static final TimeValueType instance = new TimeValueType();
 
     private TimeValueType() {
-        super(Locations.create(ContentType.namespace, "time"));
+        super(CirrusLocations.ofMod("time"));
     }
 
     @Override

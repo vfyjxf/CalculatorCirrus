@@ -51,8 +51,8 @@ public abstract class CalculatorCirrus {
         logger.info("Registering builtin contents");
         registryBuilder.registerContentType(CirrusTypes.ITEM);
         registryBuilder.registerContentType(CirrusTypes.FLUID);
-        registryBuilder.registerTag(CirrusTypes.ITEM, CirrusTypes.ITEM_TAG);
-        registryBuilder.registerTag(CirrusTypes.FLUID, CirrusTypes.FLUID_TAG);
+        registryBuilder.registerTagType(CirrusTypes.ITEM, CirrusTypes.ITEM_TAG);
+        registryBuilder.registerTagType(CirrusTypes.FLUID, CirrusTypes.FLUID_TAG);
         registryBuilder.registerStackType(CirrusTypes.ITEM, CirrusTypes.ITEM_STACK);
         registryBuilder.registerStackType(CirrusTypes.FLUID, CirrusTypes.FLUID_STACK);
     }

@@ -28,7 +28,7 @@ public final class TagStackContent<T> implements InputContent {
         this.contentType = type.contentType();
         this.tagKey = tagKey;
         this.values = type.getTagValues(tagKey).toImmutableList();
-        var contentApi = ContentApi.getInstance();
+        var contentApi = ContentApi.instance();
         var hasStackType = contentApi.hasStackType(contentType);
         this.amount = hasStackType ? contentApi.getStackType(contentType).quantity() : 1;
         this.chance = MAX_CHANCE;
@@ -99,7 +99,7 @@ public final class TagStackContent<T> implements InputContent {
 
     @Override
     public MutableList<? extends ContentVariant> equivalents() {
-        var contentApi = ContentApi.getInstance();
+        var contentApi = ContentApi.instance();
         if (contentApi.hasStackType(contentType)) {
             StackType<T, ?> stackType = contentApi.getStackType(contentType);
             return values.collect(value -> ContentStack.fromContent(stackType, value, amount))
@@ -120,7 +120,7 @@ public final class TagStackContent<T> implements InputContent {
     public boolean satisfy(ContentStack<?, ?> stack, MatchStrategy strategy) {
         if (stack.isEmpty()) return false;
 
-        var contentApi = ContentApi.getInstance();
+        var contentApi = ContentApi.instance();
         if (contentApi.hasStackType(contentType)) {
             var stackType = contentApi.getStackType(contentType);
             return stack.type() == stackType &&

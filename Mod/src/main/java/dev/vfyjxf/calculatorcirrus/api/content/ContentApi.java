@@ -3,6 +3,7 @@ package dev.vfyjxf.calculatorcirrus.api.content;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.VariantType;
 import dev.vfyjxf.calculatorcirrus.util.Singletons;
 import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
@@ -13,7 +14,7 @@ import org.jetbrains.annotations.UnmodifiableView;
 @ApiStatus.NonExtendable
 public interface ContentApi {
 
-    static ContentApi getInstance() {
+    static ContentApi instance() {
         return Singletons.get(ContentApi.class);
     }
 
@@ -61,6 +62,16 @@ public interface ContentApi {
 
     //endregion
 
+    //region variant type
+
+    boolean hasVariantType(ResourceLocation typeId);
+
+    <T, S> VariantType<T, S> getVariantType(ResourceLocation typeId);
+
+    <T, S> @Nullable VariantType<T, S> findVariantType(StackType<T, S> stackType, T content);
+
+    //region types
+
     @UnmodifiableView
     RichIterable<? extends ContentType<?>> contentTypes();
 
@@ -69,5 +80,9 @@ public interface ContentApi {
 
     @UnmodifiableView
     RichIterable<? extends TagType<?>> tagTypes();
+
+    RichIterable<? extends VariantType<?, ?>> variantTypes();
+
+    //endregion
 
 }

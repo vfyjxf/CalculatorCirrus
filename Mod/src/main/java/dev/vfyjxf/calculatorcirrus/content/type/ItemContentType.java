@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.content.type;
 
-import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.cloudlib.util.Locations;
+import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
@@ -14,7 +14,7 @@ public class ItemContentType extends BasicContentType<Item> {
     public static final ItemContentType instance = new ItemContentType();
 
     private ItemContentType() {
-        super(Locations.create(ContentType.namespace, "item"), Item.class, BuiltInRegistries.ITEM.byNameCodec());
+        super(Locations.ofMc("item"), Item.class, BuiltInRegistries.ITEM.byNameCodec());
     }
 
     @Override

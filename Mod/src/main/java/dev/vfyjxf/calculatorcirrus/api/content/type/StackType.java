@@ -13,6 +13,7 @@ import net.neoforged.neoforge.fluids.FluidStack;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
+import java.util.function.Predicate;
 
 /**
  * @param <T> the type of content, see {@link ContentType}
@@ -107,6 +108,23 @@ public non-sealed interface StackType<T, S> extends ContentKind {
 
     //region match
 
+    /**
+     * Checks if the two stacks have the same identity.
+     * @param stack1 the stack to match
+     * @param stack2 the stack to match
+     * @return true if the two stacks have the same identity, false otherwise.
+     * @see #matchesVariantIdentity(Object, Object, VariantType)
+     */
+    boolean matchesIdentity(S stack1, S stack2, @Nullable VariantType<T, S> variantType);
+
+    default boolean matchesIdentity(S stack1, S stack2) {
+        return matchesIdentity(stack1, stack2, null);
+    }
+
+    default boolean componentsSatisfy(S stack, Predicate<DataComponentMap> componentMatcher) {
+        return componentMatcher.test(getComponents(stack));
+    }
+
     boolean matches(S stack1, S stack2, MatchStrategy strategy);
 
     default boolean matches(S stack1, S stack2) {
@@ -183,7 +201,7 @@ public non-sealed interface StackType<T, S> extends ContentKind {
     }
 
     default S fromStack(ContentStack<T, S> contentStack, long amount) {
-        return fromStack(contentStack, amount, DataComponentPatch.EMPTY);
+        return fromStack(contentStack, amount, net.minecraft.core.component.DataComponentPatch.EMPTY);
     }
 
     /**
@@ -198,7 +216,7 @@ public non-sealed interface StackType<T, S> extends ContentKind {
     S fromStack(S stack, long amount, DataComponentPatch componentPatch);
 
     default S fromStack(S stack, long amount) {
-        return fromStack(stack, amount, DataComponentPatch.EMPTY);
+        return fromStack(stack, amount, net.minecraft.core.component.DataComponentPatch.EMPTY);
     }
 
     /**
@@ -211,6 +229,10 @@ public non-sealed interface StackType<T, S> extends ContentKind {
 
     default S fromContent(T content, long amount) {
         return fromContent(content, amount, DataComponentPatch.EMPTY);
+    }
+
+    default S fromContent(T content) {
+        return fromContent(content, quantity(), DataComponentPatch.EMPTY);
     }
 
     default ItemStack toItemStack(ContentStack<T, S> stack) {

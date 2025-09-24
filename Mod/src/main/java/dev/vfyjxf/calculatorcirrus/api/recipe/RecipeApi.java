@@ -17,7 +17,7 @@ import org.jetbrains.annotations.UnmodifiableView;
 @ApiStatus.NonExtendable
 public interface RecipeApi {
 
-    static RecipeApi getInstance() {
+    static RecipeApi instance() {
         return Singletons.get(RecipeApi.class);
     }
 

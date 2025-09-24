@@ -24,7 +24,7 @@ class ContentApiTest {
 
     @Test
     void testContentApi(MinecraftServer server) {
-        ContentApi instance = ContentApi.getInstance();
+        ContentApi instance = ContentApi.instance();
         var itemId = ResourceLocation.fromNamespaceAndPath(ContentType.namespace, "item_stack");
         StackType<Item, ItemStack> stackType = instance.getStackType(itemId);
         Assertions.assertNotNull(stackType);
