@@ -1,5 +1,8 @@
 package dev.vfyjxf.calculatorcirrus.content;
 
+import dev.vfyjxf.calculatorcirrus.api.content.resolver.ContentResolver;
+import dev.vfyjxf.calculatorcirrus.api.content.resolver.ResolverType;
+import dev.vfyjxf.calculatorcirrus.api.content.resolver.StackResolver;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
@@ -8,10 +11,14 @@ import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.ApiStatus;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @ApiStatus.Internal
 public class ContentRegistryBuilder {
+
     final ConcurrentHashMap<ResourceLocation, ContentType<?>> contentTypes = new ConcurrentHashMap<>();
 
     final ConcurrentHashMap<ContentType<?>, StackType<?, ?>> stackTypesByType = new ConcurrentHashMap<>();
@@ -22,6 +29,9 @@ public class ContentRegistryBuilder {
 
     final ConcurrentHashMap<ResourceLocation, VariantType<?, ?>> variantTypes = new ConcurrentHashMap<>();
     final ConcurrentHashMap<Object, VariantType<?, ?>> variantTypeByContent = new ConcurrentHashMap<>();
+
+    final ConcurrentHashMap<ResolverType<?>, Set<ContentResolver<?, ?>>> contentResolvers = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<ResolverType<?>, Set<StackResolver<?, ?, ?>>> stackResolvers = new ConcurrentHashMap<>();
 
     public <T> void registerContentType(ContentType<T> contentType) {
         Checks.checkNotNull(contentType, "contentType");
@@ -81,6 +91,16 @@ public class ContentRegistryBuilder {
             throw new IllegalArgumentException("Variant type not registered: " + variantType.typeId());
         }
         variantTypeByContent.put(content, variantType);
+    }
+
+    public <T, S> void registerContentResolver(ContentResolver<T, S> resolver) {
+        Checks.checkNotNull(resolver, "resolver");
+        contentResolvers.computeIfAbsent(resolver.type(), (type) -> Collections.synchronizedSet(new HashSet<>())).add(resolver);
+    }
+
+    public <T, S, R> void registerStackResolver(StackResolver<T, S, R> resolver) {
+        Checks.checkNotNull(resolver, "resolver");
+        stackResolvers.computeIfAbsent(resolver.type(), (type) -> Collections.synchronizedSet(new HashSet<>())).add(resolver);
     }
 
 }

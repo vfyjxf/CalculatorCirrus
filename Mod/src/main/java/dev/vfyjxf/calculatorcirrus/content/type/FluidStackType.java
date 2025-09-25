@@ -1,6 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.content.type;
 
 import com.google.common.primitives.Ints;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.type.VariantType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
@@ -70,6 +71,19 @@ public class FluidStackType extends BasicStackType<Fluid, FluidStack> {
     @Override
     public <C> @UnknownNullability C getComponent(FluidStack stack, DataComponentType<? extends C> componentType) {
         return stack.get(componentType);
+    }
+
+    @Override
+    public boolean matchesIdentity(FluidStack stack1, FluidStack stack2, @Nullable VariantType<Fluid, FluidStack> variantType) {
+        if (stack1.getFluid() != stack2.getFluid()) return false;
+
+        if (variantType != null) return variantType.matchesVariantIdentity(stack1, stack2);
+
+        Fluid identityBase = stack1.getFluid();
+        if (identityBase == Fluids.EMPTY) return true;
+
+        variantType = ContentApi.instance().findVariantType(this, identityBase);
+        return variantType == null || variantType.matchesVariantIdentity(stack1, stack2);
     }
 
     //endregion

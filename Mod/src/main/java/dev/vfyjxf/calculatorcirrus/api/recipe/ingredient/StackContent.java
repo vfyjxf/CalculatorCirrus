@@ -108,4 +108,13 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
 
     //endregion
 
+
+    @Override
+    public String toString() {
+        return "StackContent{" +
+            "type=" + type +
+            ", stack=" + stack +
+            ", chance=" + chance +
+            '}';
+    }
 }

@@ -137,4 +137,14 @@ public final class TagStackContent<T> implements InputContent {
 
         return type == content.type && tagKey == content.tagKey;
     }
+
+    @Override
+    public String toString() {
+        return "TagStackContent{" +
+            "type=" + type +
+            ", tagKey=" + tagKey +
+            ", amount=" + amount +
+            ", chance=" + chance +
+            '}';
+    }
 }

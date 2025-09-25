@@ -50,7 +50,7 @@ public interface RecipeSystem<R> {
 
     //endregion
 
-    RecipeView analyzeRecipe(R recipe);
+    RecipeView resolveRecipe(R recipe);
 
     //region system data
 

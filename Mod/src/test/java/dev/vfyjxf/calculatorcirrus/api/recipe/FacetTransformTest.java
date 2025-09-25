@@ -25,7 +25,7 @@ public class FacetTransformTest {
     void testFluidHandlerUnwrap(MinecraftServer server) {
         RecipeApi api = RecipeApi.instance();
         RecipeView raw = new TestRecipeBuilder()
-            .input(InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)), UnwrapFluidHandlerFacet.INSTANCE)
+            .input(InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)), UnwrapFluidHandlerFacet.instance)
             .build();
 
         var pipeline = new ViewTransformPipeline();
@@ -34,38 +34,38 @@ public class FacetTransformTest {
         System.out.println(transformed);
     }
 
-}
+    private static class TestRecipeBuilder {
+        private final MutableList<FacetedContent<InputContent>> inputs = MutableLists.empty();
+        private final MutableList<FacetedContent<OutputContent>> outputs = MutableLists.empty();
 
-class TestRecipeBuilder {
-    private final MutableList<FacetedContent<InputContent>> inputs = MutableLists.empty();
-    private final MutableList<FacetedContent<OutputContent>> outputs = MutableLists.empty();
+        public TestRecipeBuilder input(InputContent content) {
+            inputs.add(FacetedContent.from(content));
+            return this;
+        }
 
-    public TestRecipeBuilder input(InputContent content) {
-        inputs.add(FacetedContent.from(content));
-        return this;
-    }
+        public TestRecipeBuilder output(OutputContent content) {
+            outputs.add(FacetedContent.from(content));
+            return this;
+        }
 
-    public TestRecipeBuilder output(OutputContent content) {
-        outputs.add(FacetedContent.from(content));
-        return this;
-    }
+        public TestRecipeBuilder input(InputContent content, RecipeFacet... facets) {
+            FacetedContent<InputContent> from = FacetedContent.from(content);
+            for (RecipeFacet facet : facets) from.facets().addFacet(facet);
+            inputs.add(from);
+            return this;
+        }
 
-    public TestRecipeBuilder input(InputContent content, RecipeFacet... facets) {
-        FacetedContent<InputContent> from = FacetedContent.from(content);
-        for (RecipeFacet facet : facets) from.facets().addFacet(facet);
-        inputs.add(from);
-        return this;
-    }
+        public TestRecipeBuilder output(OutputContent content, RecipeFacet... facets) {
+            FacetedContent<OutputContent> from = FacetedContent.from(content);
+            for (RecipeFacet facet : facets) from.facets().addFacet(facet);
+            outputs.add(from);
+            return this;
+        }
 
-    public TestRecipeBuilder output(OutputContent content, RecipeFacet... facets) {
-        FacetedContent<OutputContent> from = FacetedContent.from(content);
-        for (RecipeFacet facet : facets) from.facets().addFacet(facet);
-        outputs.add(from);
-        return this;
-    }
+        public RecipeView build() {
+            return new RecipeView(null, inputs.toImmutable(), outputs.toImmutable());
+        }
 
-    public RecipeView build() {
-        return new RecipeView(null, inputs.toImmutable(), outputs.toImmutable());
     }
 
 }

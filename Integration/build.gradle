@@ -59,6 +59,10 @@ dependencies {
     implementation("com.gregtechceu.gtceu:gtceu-${}:${gtm_version}") { transitive = false }
     implementation("org.eclipse.collections:eclipse-collections-api:11.1.0")
     implementation("org.eclipse.collections:eclipse-collections:11.1.0")
+
+    compileOnly 'com.google.auto.service:auto-service:1.1.1'
+    annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
+
     testImplementation(project(":Mod"))
 }
 

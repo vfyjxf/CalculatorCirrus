@@ -1,6 +1,9 @@
 package dev.vfyjxf.calculatorcirrus.internal.integration.builtin;
 
 import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
+import dev.vfyjxf.calculatorcirrus.api.content.CirrusResolvers;
+import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.content.resolver.fluid.VanillaFluidHandlerResolver;
 import dev.vfyjxf.calculatorcirrus.content.type.variant.EnchantedBookVariantType;
 import dev.vfyjxf.calculatorcirrus.content.type.variant.FireworkRocketVariantType;
 import dev.vfyjxf.calculatorcirrus.content.type.variant.InstrumentVariantType;
@@ -31,6 +34,18 @@ public class BuiltinCirrusRegister {
 
         event.registerVariant(Items.ENCHANTED_BOOK, EnchantedBookVariantType.instance);
         event.registerVariant(Items.FIREWORK_ROCKET, FireworkRocketVariantType.instance);
+        //endregion
+    }
+
+    @SubscribeEvent
+    static void onRegisterResolver(RegisterContentEvent event) {
+        //region content
+        //endregion
+
+        //region stack
+
+        event.registerStackResolver(CirrusResolvers.FLUID_CONTAINER, CirrusTypes.ITEM_STACK, VanillaFluidHandlerResolver.instance);
+
         //endregion
     }
 

@@ -84,4 +84,12 @@ public final class ValueContent<T> implements InputContent, OutputContent {
         return type == content.type;
     }
 
+    @Override
+    public String toString() {
+        return "ValueContent{" +
+            "type=" + type +
+            ", value=" + value +
+            ", chance=" + chance +
+            '}';
+    }
 }
