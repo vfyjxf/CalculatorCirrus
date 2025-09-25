@@ -1,6 +1,8 @@
 package dev.vfyjxf.calculatorcirrus.recipe.facet;
 
+import dev.vfyjxf.calculatorcirrus.api.content.CirrusResolvers;
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.InputContent;
 import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.RecipeContent;
@@ -21,7 +23,7 @@ public final class UnwrapFluidHandlerFacet implements RecipeFacet {
 
     public static final ResourceLocation ID = CirrusLocations.ofMod("facet/unwrap_fluid_handler");
     public static final RecipeFacetType TYPE = new RecipeFacetType(ID, (entry, content) -> checkContent(content));
-    public static final UnwrapFluidHandlerFacet INSTANCE = new UnwrapFluidHandlerFacet();
+    public static final UnwrapFluidHandlerFacet instance = new UnwrapFluidHandlerFacet();
 
     //region transform
 
@@ -37,13 +39,13 @@ public final class UnwrapFluidHandlerFacet implements RecipeFacet {
                 if (fluidStack.isEmpty()) continue;
                 fluids.add(ContentStack.fromStack(fluidStack));
             }
-            //TODO:Replace this by ContentHandler api when it's ready
-            var handlerContainer = fluidHandler.getContainer();
-            if (ItemStack.isSameItemSameComponents(containerStack, handlerContainer)) {
-                handlerContainer = containerStack.getCraftingRemainingItem();
+            var container = fluidHandler.getContainer();
+            var api = ContentApi.instance();
+            var resolver = api.findStackResolver(CirrusResolvers.FLUID_CONTAINER, CirrusTypes.ITEM_STACK, container);
+            if (resolver != null) {
+                container = resolver.resolve(container.getItem(), container);
             }
-
-            increment.injectInput(InputContent.fromItemStack(handlerContainer, CirrusTypes.ITEM_STACK.quantity(), RecipeContent.MIN_CHANCE));
+            increment.injectInput(InputContent.fromItemStack(container, CirrusTypes.ITEM_STACK.quantity(), RecipeContent.MIN_CHANCE));
 
             if (fluids.isEmpty()) return;
             InputContent fluidContent;

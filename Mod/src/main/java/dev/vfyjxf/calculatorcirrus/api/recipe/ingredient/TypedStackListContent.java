@@ -101,4 +101,14 @@ public final class TypedStackListContent<T, S> implements InputContent {
         //endregion
         return true;
     }
+
+    @Override
+    public String toString() {
+        return "TypedStackListContent{" +
+            "type=" + type +
+            ", stacks=" + stacks +
+            ", amount=" + amount +
+            ", chance=" + chance +
+            '}';
+    }
 }

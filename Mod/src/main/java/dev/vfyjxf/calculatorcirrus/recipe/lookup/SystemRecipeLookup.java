@@ -31,7 +31,7 @@ public class SystemRecipeLookup<T> implements RecipeLookup<T> {
     @Override
     public RecipeLookup<T> withInput(ContentStack<?, ?> input, MatchStrategy strategy) {
         Predicate<T> inputPredicate = (T recipe) -> {
-            RecipeView recipeView = system.analyzeRecipe(recipe);
+            RecipeView recipeView = system.resolveRecipe(recipe);
             return recipeView.inputs().anySatisfy(stack -> stack.content().satisfy(input, strategy));
         };
         this.predicate = this.predicate.and(inputPredicate);
@@ -41,7 +41,7 @@ public class SystemRecipeLookup<T> implements RecipeLookup<T> {
     @Override
     public RecipeLookup<T> withInput(Collection<? extends ContentStack<?, ?>> inputs, MatchStrategy strategy) {
         Predicate<T> inputPredicate = (T recipe) -> {
-            RecipeView recipeView = system.analyzeRecipe(recipe);
+            RecipeView recipeView = system.resolveRecipe(recipe);
             return recipeView.inputs().allSatisfy(stack -> inputs.stream().anyMatch(input -> stack.content().satisfy(input, strategy)));
         };
         this.predicate = this.predicate.and(inputPredicate);
@@ -51,7 +51,7 @@ public class SystemRecipeLookup<T> implements RecipeLookup<T> {
     @Override
     public RecipeLookup<T> withOutput(ContentStack<?, ?> output, MatchStrategy strategy) {
         Predicate<T> outputPredicate = (T recipe) -> {
-            RecipeView recipeView = system.analyzeRecipe(recipe);
+            RecipeView recipeView = system.resolveRecipe(recipe);
             return recipeView.outputs().anySatisfy(stack -> stack.content().satisfy(output, strategy));
         };
         this.predicate = this.predicate.and(outputPredicate);
@@ -61,7 +61,7 @@ public class SystemRecipeLookup<T> implements RecipeLookup<T> {
     @Override
     public RecipeLookup<T> withOutput(Collection<? extends ContentStack<?, ?>> outputs, MatchStrategy strategy) {
         Predicate<T> outputPredicate = (T recipe) -> {
-            RecipeView recipeView = system.analyzeRecipe(recipe);
+            RecipeView recipeView = system.resolveRecipe(recipe);
             return recipeView.outputs().allSatisfy(stack -> outputs.stream().anyMatch(output -> stack.content().satisfy(output, strategy)));
         };
         this.predicate = this.predicate.and(outputPredicate);

@@ -1,5 +1,8 @@
 package dev.vfyjxf.calculatorcirrus.api.content;
 
+import dev.vfyjxf.calculatorcirrus.api.content.resolver.ContentResolver;
+import dev.vfyjxf.calculatorcirrus.api.content.resolver.ResolverType;
+import dev.vfyjxf.calculatorcirrus.api.content.resolver.StackResolver;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
@@ -69,6 +72,26 @@ public interface ContentApi {
     <T, S> VariantType<T, S> getVariantType(ResourceLocation typeId);
 
     <T, S> @Nullable VariantType<T, S> findVariantType(StackType<T, S> stackType, T content);
+
+    //endregion
+
+    //region resolver
+
+    boolean hasContentResolver(ResolverType<?> type);
+
+    boolean hasStackResolver(ResolverType<?> type);
+
+    @UnmodifiableView
+    <T, R> RichIterable<ContentResolver<T, R>> getResolver(ResolverType<R> type, ContentType<T> contentType);
+
+    @UnmodifiableView
+    <T, S, R> RichIterable<StackResolver<T, S, R>> getStackResolver(ResolverType<R> type, StackType<T, S> stackType);
+
+    @Nullable <T, S, R> StackResolver<T, S, R> findStackResolver(ResolverType<R> type, StackType<T, S> stackType, S stack);
+
+    @Nullable <T, R> ContentResolver<T, R> findContentResolver(ResolverType<R> type, ContentType<T> contentType, T content);
+
+    //endregion
 
     //region types
 

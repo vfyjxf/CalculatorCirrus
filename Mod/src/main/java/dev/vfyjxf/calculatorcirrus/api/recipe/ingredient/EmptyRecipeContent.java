@@ -67,4 +67,8 @@ public final class EmptyRecipeContent implements InputContent, OutputContent {
         return other == this || other.isEmpty();
     }
 
+    @Override
+    public String toString() {
+        return "EmptyRecipeContent";
+    }
 }

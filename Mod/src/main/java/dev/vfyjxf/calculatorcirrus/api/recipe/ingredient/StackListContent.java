@@ -99,4 +99,13 @@ public final class StackListContent implements InputContent {
         //endregion
         return true;
     }
+
+    @Override
+    public String toString() {
+        return "StackListContent{" +
+            "stacks=" + stacks +
+            ", amount=" + amount +
+            ", chance=" + chance +
+            '}';
+    }
 }

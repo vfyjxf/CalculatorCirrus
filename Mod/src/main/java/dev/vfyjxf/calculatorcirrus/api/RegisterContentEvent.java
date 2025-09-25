@@ -1,6 +1,9 @@
 package dev.vfyjxf.calculatorcirrus.api;
 
 import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.content.resolver.ContentResolver;
+import dev.vfyjxf.calculatorcirrus.api.content.resolver.ResolverType;
+import dev.vfyjxf.calculatorcirrus.api.content.resolver.StackResolver;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
@@ -19,9 +22,7 @@ public class RegisterContentEvent extends Event implements IModBusEvent {
         this.registry = registry;
     }
 
-    public <T> void registerContent(
-        ContentType<T> contentType
-    ) {
+    public <T> void registerContent(ContentType<T> contentType) {
         registry.registerContentType(contentType);
     }
 
@@ -50,5 +51,18 @@ public class RegisterContentEvent extends Event implements IModBusEvent {
         registry.registerVariantForContent(content, variantType);
     }
 
+    public <T, R> void registerContentResolver(ResolverType<R> type, ContentType<T> contentType, ContentResolver<T, R> resolver) {
+        registry.registerContentResolver(resolver);
+    }
+
+    public <T, R> void registerFallbackContentResolver(ResolverType<R> type, ContentType<T> contentType, ContentResolver<T, R> resolver) {
+    }
+
+    public <T, S, R> void registerStackResolver(ResolverType<R> type, StackType<T, S> stackType, StackResolver<T, S, R> resolver) {
+        registry.registerStackResolver(resolver);
+    }
+
+    public <T, S, R> void registerFallbackStackResolver(ResolverType<R> type, StackType<T, S> stackType, StackResolver<T, S, R> resolver) {
+    }
 
 }

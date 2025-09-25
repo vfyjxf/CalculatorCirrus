@@ -15,7 +15,7 @@ public class EmptyRecipeLookup<T> implements RecipeLookup<T> {
     private static final RichIterable EMPTY = Lists.immutable.empty();
 
     @SuppressWarnings("rawtypes")
-    public static final RecipeLookup INSTANCE = new EmptyRecipeLookup<>();
+    public static final RecipeLookup instance = new EmptyRecipeLookup<>();
 
     private EmptyRecipeLookup() {
     }

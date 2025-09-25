@@ -15,7 +15,7 @@ public interface RecipeLookup<T> {
 
     @SuppressWarnings("unchecked")
     static <T> RecipeLookup<T> empty() {
-        return EmptyRecipeLookup.INSTANCE;
+        return EmptyRecipeLookup.instance;
     }
 
     static <T> RecipeLookup<T> ofSystem(RecipeSystem<T> system) {

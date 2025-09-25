@@ -70,5 +70,11 @@ record RegistryTagType<T>(
                 .collect(Collectors2.toSet());
     }
 
-
+    @Override
+    public String toString() {
+        return "RegistryTagType{" +
+            "typeId=" + typeId +
+            ", contentType=" + contentType +
+            '}';
+    }
 }

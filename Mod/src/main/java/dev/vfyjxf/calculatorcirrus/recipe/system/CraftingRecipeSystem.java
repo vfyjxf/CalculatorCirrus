@@ -38,7 +38,7 @@ public class CraftingRecipeSystem extends BasicVanillaSystem<CraftingRecipe> {
     private CraftingRecipeSystem self() {return this;}
 
     @Override
-    public RecipeView analyzeRecipe(RecipeHolder<CraftingRecipe> recipeHolder) {
+    public RecipeView resolveRecipe(RecipeHolder<CraftingRecipe> recipeHolder) {
         CraftingRecipe recipe = recipeHolder.value();
         List<InputContent> inputs = MutableLists.empty();
         for (var ingredient : recipe.getIngredients())
