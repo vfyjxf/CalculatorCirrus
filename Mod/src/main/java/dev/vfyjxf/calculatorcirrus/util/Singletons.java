@@ -2,12 +2,12 @@ package dev.vfyjxf.calculatorcirrus.util;
 
 import org.jetbrains.annotations.Nullable;
 
-import java.util.IdentityHashMap;
+import java.util.HashMap;
 
 @SuppressWarnings("unchecked")
 public class Singletons {
 
-    private static final IdentityHashMap<Class<?>, Object> SINGLETONS = new IdentityHashMap<>();
+    private static final HashMap<Class<?>, Object> SINGLETONS = new HashMap<>();
 
 
     public static <T> void attachInstance(Class<T> type, T instance) {

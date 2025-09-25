@@ -2,23 +2,22 @@ package dev.vfyjxf.calculatorcirrus.api.recipe.system;
 
 
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeData;
+import dev.vfyjxf.calculatorcirrus.api.recipe.view.RecipeView;
 import dev.vfyjxf.calculatorcirrus.internal.integration.jei.CirrusJeiPlugin;
 import mezz.jei.api.recipe.RecipeType;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.list.MutableList;
-import org.eclipse.collections.api.ordered.OrderedIterable;
 import org.eclipse.collections.impl.collector.Collectors2;
 import org.jetbrains.annotations.Unmodifiable;
 
 import javax.annotation.Nullable;
 
-public interface RecipeSystem<T> {
+public interface RecipeSystem<R> {
 
-    static ResourceLocation createId(String namespace, String path) {
-        return ResourceLocation.fromNamespaceAndPath(namespace, "recipe_system/" + path);
-    }
+    //region system info
 
     default String namespace() {
         return systemId().getNamespace();
@@ -28,41 +27,58 @@ public interface RecipeSystem<T> {
 
     Class<?> basicType();
 
-    default boolean supportsRecipe(T recipe) {
+    //endregion
+
+    //region lookup
+
+    default boolean supports(R recipe) {
         return contains(recipe);
     }
 
-    default boolean contains(T recipe) {
+    default boolean contains(R recipe) {
         return basicType().isInstance(recipe);
     }
 
     @Nullable
-    ResourceLocation getRecipeId(T recipe);
+    ResourceLocation getId(R recipe);
 
     @Nullable
-    T getRecipe(String uniqueId);
+    R findRecipe(String uniqueId);
 
     @Nullable
-    T getRecipe(ResourceLocation registryName);
+    R findRecipe(ResourceLocation registryName);
 
-    RecipeData parseRecipe(T recipe);
+    //endregion
+
+    RecipeView resolveRecipe(R recipe);
+
+    //region system data
+
+    //TODO:provide a custom data query api.
+    //  something like data component system,but for recipe system.
 
     @Unmodifiable
-    MutableList<ContentStack<ItemStack>> getMachines();
+    MutableList<ContentStack<Item, ItemStack>> getMachines();
 
-    static MutableList<ContentStack<ItemStack>> getMachinesFromJei(RecipeType<?> recipeType) {
+    //endregion
+
+    //region util
+
+    static MutableList<ContentStack<Item, ItemStack>> getMachinesFromJei(RecipeType<?> recipeType) {
         return CirrusJeiPlugin.recipeManager.createRecipeCatalystLookup(recipeType)
-            .get()
-            .flatMap(i -> i.getItemStack().stream())
-            .map(ContentStack::create)
-            .collect(Collectors2.toList());
+                .get()
+                .flatMap(i -> i.getItemStack().stream())
+                .map(ContentStack::fromStack)
+                .collect(Collectors2.toList());
     }
 
-    default RecipeLookup<T> createLookup() {
+    default RecipeLookup<R> createLookup() {
         return RecipeLookup.empty();
     }
 
     @Unmodifiable
-    OrderedIterable<T> allRecipes();
+    RichIterable<R> allRecipes();
+
+    //endregion
 
 }

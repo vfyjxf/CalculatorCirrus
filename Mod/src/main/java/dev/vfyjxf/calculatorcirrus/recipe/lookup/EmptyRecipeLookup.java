@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.recipe.lookup;
 
-import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
+import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeLookup;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
@@ -15,7 +15,7 @@ public class EmptyRecipeLookup<T> implements RecipeLookup<T> {
     private static final RichIterable EMPTY = Lists.immutable.empty();
 
     @SuppressWarnings("rawtypes")
-    public static final RecipeLookup INSTANCE = new EmptyRecipeLookup<>();
+    public static final RecipeLookup instance = new EmptyRecipeLookup<>();
 
     private EmptyRecipeLookup() {
     }
@@ -26,22 +26,22 @@ public class EmptyRecipeLookup<T> implements RecipeLookup<T> {
     }
 
     @Override
-    public RecipeLookup<T> withInput(ContentStack<?> input, MatchStrategy strategy) {
+    public RecipeLookup<T> withInput(ContentStack<?, ?> input, MatchStrategy strategy) {
         return this;
     }
 
     @Override
-    public RecipeLookup<T> withInput(Collection<? extends ContentStack<?>> inputs, MatchStrategy strategy) {
+    public RecipeLookup<T> withInput(Collection<? extends ContentStack<?, ?>> inputs, MatchStrategy strategy) {
         return this;
     }
 
     @Override
-    public RecipeLookup<T> withOutput(ContentStack<?> output, MatchStrategy strategy) {
+    public RecipeLookup<T> withOutput(ContentStack<?, ?> output, MatchStrategy strategy) {
         return this;
     }
 
     @Override
-    public RecipeLookup<T> withOutput(Collection<? extends ContentStack<?>> outputs, MatchStrategy strategy) {
+    public RecipeLookup<T> withOutput(Collection<? extends ContentStack<?, ?>> outputs, MatchStrategy strategy) {
         return this;
     }
 

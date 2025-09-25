@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
     id 'eclipse'
     id 'maven-publish'
-    id 'net.neoforged.moddev' version '2.0.72'
+    id 'net.neoforged.moddev'
     id "me.champeau.jmh" version "0.7.2"
 //    id "scala"
 }
@@ -55,6 +55,7 @@ neoForge {
             systemProperty 'forge.logging.markers', 'REGISTRIES'
 
             logLevel = org.slf4j.event.Level.DEBUG
+            systemProperty('terminal.jline', 'true')
         }
     }
 
@@ -88,14 +89,18 @@ dependencies {
 //    ) {
 //        transitive = false
 //    }
+
+    api("dev.vfyjxf:cloudlib")
+
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
-    additionalRuntimeClasspath(implementation("org.eclipse.collections:eclipse-collections-api:11.1.0"))
-    jarJar "org.eclipse.collections:eclipse-collections-api:11.1.0"
-    additionalRuntimeClasspath(implementation("org.eclipse.collections:eclipse-collections:11.1.0"))
-    jarJar "org.eclipse.collections:eclipse-collections:11.1.0"
-    jarJar(project(":Integration"))
+    compileOnly("org.eclipse.collections:eclipse-collections-api:11.1.0")
+    compileOnly("org.eclipse.collections:eclipse-collections:11.1.0")
+//    jarJar(project(":Integration"))
     compileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
+
+    compileOnly 'com.google.auto.service:auto-service:1.1.1'
+    annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
     testImplementation "net.neoforged:testframework:${project.neo_version}"
@@ -107,6 +112,7 @@ dependencies {
     jmh "org.openjdk.jmh:jmh-generator-annprocess:1.37"
     jmhAnnotationProcessor "org.openjdk.jmh:jmh-generator-annprocess:1.37"
 }
+
 test {
     useJUnitPlatform()
 }
@@ -125,6 +131,7 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
             mod_authors            : mod_authors,
             mod_description        : mod_description,
             jei_version            : jei_version,
+            cloudlib_version       : cloudlib_version
     ]
     inputs.properties replaceProperties
     expand replaceProperties

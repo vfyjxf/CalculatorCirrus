@@ -1,130 +1,317 @@
 package dev.vfyjxf.calculatorcirrus.api.content.value;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusContentTypes;
+import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
-import dev.vfyjxf.calculatorcirrus.api.content.type.StackContentType;
-import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
-import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
+import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
+import dev.vfyjxf.calculatorcirrus.api.content.type.VariantType;
+import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
+import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
-import net.minecraft.tags.TagKey;
+import net.minecraft.core.component.DataComponentType;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.UnknownNullability;
 
 import java.util.function.BiConsumer;
 
-public sealed interface ContentStack<T>
-        extends ContentValue<T>
-        permits BasicContentStack,
-                EmptyContentStack,
-                TagStack {
+public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyContentStack, TypedContentStack {
 
-    //region factories
-
-    ContentStack<?> EMPTY = empty();
-
-    static ContentStack<?> empty() {
-        return EmptyStackContentType.empty();
+    @SuppressWarnings("unchecked")
+    static <C, R> ContentStack<C, R> empty() {
+        return EmptyContentStack.instance;
     }
 
-    static <T> ContentStack<T> create(StackContentType<T> type, T value) {
-        return new TypedContentStack<>(type, type.copy(value), 1);
-    }
 
-    static <T> ContentStack<T> create(StackContentType<T> type, T value, long amount) {
-        return new TypedContentStack<>(type, type.copy(value), amount);
-    }
-
-    @Contract("null-> null")
-    static @Nullable <T> ContentStack<T> create(@Nullable T content) {
-        if (content == null) return null;
-        ContentApi contentApi = ContentApi.getInstance();
-        ContentType<?> detectedType = contentApi.allContentTypes()
-                .detect(contentType -> contentType.valueType().isAssignableFrom(content.getClass()));
-        if (detectedType != null) {
-            return create(detectedType.cast(), content);
-        }
-        return null;
-    }
-
-    //endregion
-
-    //region builtin types factories
-    static ContentStack<ItemStack> create(@Nullable ItemStack stack) {
-        if (stack == null) stack = ItemStack.EMPTY;
-        return create(CirrusContentTypes.ITEM, stack, stack.getCount());
-    }
-
-    static ContentStack<ItemStack> create(@Nullable ItemStack stack, long amount) {
-        if (stack == null) stack = ItemStack.EMPTY;
-        return create(CirrusContentTypes.ITEM, stack, amount);
-    }
-
-    static ContentStack<FluidStack> create(@Nullable FluidStack stack) {
-        if (stack == null) stack = FluidStack.EMPTY;
-        return create(CirrusContentTypes.FLUID, stack);
-    }
-
-    static ContentStack<FluidStack> create(@Nullable FluidStack stack, long amount) {
-        if (stack == null) stack = FluidStack.EMPTY;
-        return create(CirrusContentTypes.FLUID, stack, amount);
-    }
-
-    //endregion
-
-    //region tag factories
-
-    static TagStack<Item, ItemStack> createItemTag(TagKey<Item> tagKey) {
-        return TagStack.create(CirrusContentTypes.ITEM_TAG, tagKey);
-    }
-
-    static TagStack<Item, ItemStack> createItemTag(TagKey<Item> tagKey, long amount) {
-        return TagStack.create(CirrusContentTypes.ITEM_TAG, tagKey, amount);
-    }
-
-    static TagStack<Fluid, FluidStack> createFluidTag(TagKey<Fluid> tagKey) {
-        return TagStack.create(CirrusContentTypes.FLUID_TAG, tagKey, 1);
-    }
-
-    static TagStack<Fluid, FluidStack> createFluidTag(TagKey<Fluid> tagKey, long amount) {
-        return TagStack.create(CirrusContentTypes.FLUID_TAG, tagKey, amount);
-    }
-
-    //endregion
-
-
-    StackContentType<T> contentType();
+    //region factory
 
     /**
-     * For Stack Contents, the value become identity with {@link DataComponentMap}
-     *
-     * @return the normalized value of the content stack.
+     * @param type           the stack type
+     * @param stack          the identity stack.
+     * @param amount         the amount of content stack.
+     * @param componentPatch the data components
+     * @param <T>            the type of Content
+     * @param <S>            the type of Stack
+     * @return the created ContentStack,it may be {@link ContentStack#empty()}.
      */
-    @Override
-    T value();
-
-    default Object identity() {
-        return contentType().getIdentity(value());
+    static <T, S> ContentStack<T, S> fromStack(StackType<T, S> type, S stack, long amount, DataComponentPatch componentPatch) {
+        stack = type.fromStack(stack, type.quantity(), componentPatch);
+        if (type.isEmpty(stack)) return empty();
+        return new TypedContentStack<>(type, amount, stack);
     }
 
-    default long amount() {
-        return contentType().getAmount(this, value());
+    static <T, S> ContentStack<T, S> fromStack(StackType<T, S> type, S stack, long amount) {
+        return fromStack(type, stack, amount, type.getComponentsPatch(stack));
     }
+
+    static <T, S> ContentStack<T, S> fromStack(StackType<T, S> type, S stack) {
+        return fromStack(type, stack, type.quantity());
+    }
+
+    static <T, S> ContentStack<T, S> fromStack(ResourceLocation typeId, S stack) {
+        StackType<T, S> stackType = ContentApi.instance().getStackType(typeId);
+        return fromStack(stackType, stack);
+    }
+
+    static <T, S> ContentStack<T, S> fromContent(StackType<T, S> type, T content, long amount, DataComponentPatch componentPatch) {
+        S stack = type.fromContent(content, type.quantity(), componentPatch);
+        return fromStack(type, stack, amount);
+    }
+
+    static <T, S> ContentStack<T, S> fromContent(StackType<T, S> type, T content, long amount) {
+        S stack = type.fromContent(content, type.quantity());
+        return fromStack(type, stack, amount);
+    }
+
+    //endregion
+
+    //region builtin type factory
+
+    //region item
+
+    static ContentStack<Item, ItemStack> fromStack(@Nullable ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return empty();
+        var type = CirrusTypes.ITEM_STACK;
+        return fromStack(type, type.copy(stack), type.getAmount(stack));
+    }
+
+    static ContentStack<Item, ItemStack> fromStack(@Nullable ItemStack stack, long amount) {
+        if (stack == null || stack.isEmpty()) return empty();
+        var type = CirrusTypes.ITEM_STACK;
+        return fromStack(type, type.copy(stack), amount);
+    }
+
+    static ContentStack<Item, ItemStack> fromContent(Item item, long amount, DataComponentPatch componentPatch) {
+        return fromContent(CirrusTypes.ITEM_STACK, item, amount, componentPatch);
+    }
+
+    static ContentStack<Item, ItemStack> fromContent(Item item, long amount) {
+        return fromContent(CirrusTypes.ITEM_STACK, item, amount);
+    }
+
+    static ContentStack<Item, ItemStack> fromContent(Item item) {
+        return fromContent(CirrusTypes.ITEM_STACK, item, CirrusTypes.ITEM_STACK.quantity());
+    }
+
+    //endregion
+
+    //region fluid
+
+    static ContentStack<Fluid, FluidStack> fromStack(@Nullable FluidStack stack) {
+        if (stack == null || stack.isEmpty()) return empty();
+        var type = CirrusTypes.FLUID_STACK;
+        return fromStack(type, type.copy(stack), type.getAmount(stack));
+    }
+
+    static ContentStack<Fluid, FluidStack> fromStack(@Nullable FluidStack stack, long amount) {
+        if (stack == null || stack.isEmpty()) return empty();
+        var type = CirrusTypes.FLUID_STACK;
+        return fromStack(type, type.copy(stack), amount);
+    }
+
+    static ContentStack<Fluid, FluidStack> fromContent(Fluid fluid, long amount, DataComponentPatch componentPatch) {
+        return fromContent(CirrusTypes.FLUID_STACK, fluid, amount, componentPatch);
+    }
+
+    static ContentStack<Fluid, FluidStack> fromContent(Fluid fluid, long amount) {
+        return fromContent(CirrusTypes.FLUID_STACK, fluid, amount);
+    }
+
+    static ContentStack<Fluid, FluidStack> fromContent(Fluid fluid) {
+        return fromContent(CirrusTypes.FLUID_STACK, fluid, CirrusTypes.FLUID_STACK.quantity());
+    }
+
+    //endregion
+
+    //endregion
+
+    //region stack info
+
+    StackType<T, S> type();
+
+    ContentType<T> contentType();
+
+    @Nullable VariantType<T, S> variantType();
+
+    S value();
+
+    default T content() {
+        return type().getContent(value());
+    }
+
+    default boolean isEmpty() {
+        return this == empty() || amount() <= 0 || type().isEmpty(value());
+    }
+
+    default boolean notEmpty() {
+        return !isEmpty();
+    }
+
+    long amount();
 
     @Contract("_ -> this")
-    ContentStack<T> setAmount(long amount);
+    ContentStack<T, S> setAmount(long amount);
 
-    default ContentStack<T> addAmount(long amount) {
+    default long maxStackSize() {
+        return type().getMaxStackSize(value());
+    }
+
+    @Nullable
+    default DataComponentMap components() {
+        return type().getComponents(value());
+    }
+
+    default DataComponentPatch componentsPatch() {
+        return type().getComponentsPatch(value());
+    }
+
+    default boolean hasComponent(DataComponentType<?> componentType) {
+        return type().hasComponent(value(), componentType);
+    }
+
+    default <C> @UnknownNullability C getComponent(DataComponentType<? extends C> componentType) throws IllegalArgumentException {
+        if (!hasComponent(componentType)) {
+            ResourceLocation key = BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(componentType);
+            throw new IllegalArgumentException("Component: " + key + " not found");
+        }
+        return type().getComponent(value(), componentType);
+    }
+
+    //endregion
+
+
+    //region match
+
+    default boolean matches(ContentStack<?, ?> other, MatchStrategy strategy) {
+        if (this == other) return true;
+        if (this == empty() || other == empty()) return false;
+        if (type() != other.type()) return false;
+
+        return (!strategy.withAmount() || amount() == other.amount()) &&
+            type().matches(value(), other.<T, S>cast().value(), strategy);
+
+    }
+
+    default boolean matches(ContentStack<?, ?> other) {
+        return matches(other, MatchStrategy.IDENTITY_COMPONENT);
+    }
+
+    default boolean matchesContent(ContentValue<?> value) {
+        if (this == empty() || value == ContentValue.empty()) {
+            return this == empty() && value == ContentValue.empty();
+        }
+        return contentType() == value.type() &&
+            contentType().matches(content(), value.<T>cast().value());
+    }
+
+    //endregion
+
+    //region copy
+
+    @Contract(" -> new")
+    default ContentStack<T, S> copy() {
+        if (isEmpty()) return empty();
+        return fromStack(type(), value(), amount(), componentsPatch());
+    }
+
+    default ContentStack<T, S> copyWithAmount(long amount) {
+        if (isEmpty()) return empty();
+        return fromStack(type(), value(), amount, componentsPatch());
+    }
+
+    @Contract(" -> new")
+    default ContentStack<T, S> normalize() {
+        if (isEmpty()) return empty();
+        return fromStack(type(), value(), type().quantity(), componentsPatch());
+    }
+
+    default ContentStack<T, S> wildcard() {
+        if (isEmpty()) return empty();
+        return fromStack(type(), type().wildcard(value()), type().quantity());
+    }
+
+    //endregion
+
+    //region tooltip
+
+    /**
+     * Append tooltips to the content stack.
+     *
+     * @param configurator the builder to append tooltip to this content stack
+     * @return this content stack
+     */
+    @Contract("_ -> this")
+    ContentStack<T, S> appendTooltip(BiConsumer<RichTooltip, TooltipContext> configurator);
+
+    /**
+     * Same as {@link #appendTooltip(BiConsumer)} .
+     *
+     * @see #appendTooltip(BiConsumer)
+     */
+    @Contract("_ -> this")
+    default ContentStack<T, S> withTooltip(BiConsumer<RichTooltip, TooltipContext> configurator) {
+        return appendTooltip(configurator);
+    }
+
+    /**
+     * Configure the tooltip for this content stack.
+     *
+     * @param tooltip the rich tooltip to configure.
+     * @see #getTooltip(TooltipContext)
+     */
+    void configureTooltip(RichTooltip tooltip, TooltipContext context);
+
+    /**
+     * @param context the tooltip context.
+     * @return the rich tooltip for this content stack, or null if tooltip is not available or called from server side.
+     */
+    @Nullable
+    RichTooltip getTooltip(TooltipContext context);
+
+    //endregion
+
+    //region util
+
+    default boolean isItem() {
+        return type() == CirrusTypes.ITEM_STACK;
+    }
+
+    default boolean isFluid() {
+        return type() == CirrusTypes.FLUID_STACK;
+    }
+
+    default boolean is(StackType<?, ?> type) {
+        return type() == type;
+    }
+
+    @SuppressWarnings("unchecked")
+    default <C, R> ContentStack<C, R> cast() {
+        return (ContentStack<C, R>) this;
+    }
+
+    ContentStack<Item, ItemStack> cheatsStack();
+
+    //endregion
+
+    //region amount util
+
+    default ContentStack<T, S> addAmount(long amount) {
         return setAmount(Math.addExact(amount(), amount));
     }
 
-    default ContentStack<T> multiply(double multiplier) {
+    default ContentStack<T, S> decrease(long amount) {
+        return setAmount(Math.addExact(amount(), -amount));
+    }
+
+    default ContentStack<T, S> multiply(double multiplier) {
         double result = amount() * multiplier;
         if (result > Long.MAX_VALUE) {
             throw new ArithmeticException("The result of the multiplication is too large to be stored in a long.");
@@ -133,134 +320,14 @@ public sealed interface ContentStack<T>
         return this;
     }
 
-    default ContentStack<T> multiply(long multiplier) {
+    default ContentStack<T, S> multiply(long multiplier) {
         return multiply((double) multiplier);
     }
 
-    default ContentStack<T> reverse() {
+    default ContentStack<T, S> reverse() {
         return multiply(-1D);
     }
 
-    @Contract(" -> new")
-    @Override
-    default ContentStack<T> normalize() {
-        return contentType().normalize(this, value());
-    }
-
-    @Override
-    default ContentStack<T> copy() {
-        return contentType().copy(this, value());
-    }
-
-    default ContentStack<T> copyWithAmount(long amount) {
-        return contentType().copy(this, value()).setAmount(amount);
-    }
-
-    /**
-     * Check if the content value is empty.
-     * <p>
-     * The {@link ContentValue#value()} of empty content value shouldn't be read ,and all empty value will be treated as {@link ContentValue#empty()}.
-     *
-     * @return true if the value is empty, false otherwise
-     */
-    @Override
-    default boolean isEmpty() {
-        return contentType().isEmpty(this, value());
-    }
-
-    @Nullable
-    default DataComponentMap getComponents() {
-        return contentType().getComponents(value());
-    }
-
-    default DataComponentPatch getComponentsPatch() {
-        return contentType().getComponentsPatch(value());
-    }
-
-    @Override
-    default <C> boolean matches(ContentValue<C> other, MatchStrategy strategy) {
-        if (!(other instanceof ContentStack<C> stack)) return false;
-        return matches(stack, strategy);
-    }
-
-    /**
-     * @param other other content stack to match with
-     * @param <C>   the type of the content stack
-     * @return the strict match of the content stack, it will check the content type and value.
-     */
-    default <C> boolean matches(ContentStack<C> other) {
-        return matches(other, MatchStrategy.ALL);
-    }
-
-    default <C> boolean matches(ContentStack<C> other, MatchStrategy strategy) {
-        if (strategy.withIdentity() && contentType() != other.contentType()) return false;
-        return contentType().matches(this, other.cast(), strategy);
-    }
-
-    default Class<T> getTypeClass() {
-        return contentType().valueType();
-    }
-
-    @SuppressWarnings("unchecked")
-    default <R extends T> R castValue() {
-        return (R) value();
-    }
-
-    /**
-     * Append tooltips to the content stack.
-     * <p>
-     * <b>Only available on client side. Calling from server side will have no effect.</b>
-     *
-     * @param configurator the builder to append tooltip to this content stack
-     * @return this content stack
-     */
-    @Contract("_ -> this")
-    ContentStack<T> appendTooltip(BiConsumer<RichTooltip, TooltipContext> configurator);
-
-    /**
-     * Same as {@link ContentValue#appendTooltip(BiConsumer)} .
-     *
-     * @see ContentValue#appendTooltip(BiConsumer)
-     */
-    @Contract("_ -> this")
-    default ContentStack<T> withTooltip(BiConsumer<RichTooltip, TooltipContext> configurator) {
-        return appendTooltip(configurator);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    @Nullable RichTooltip getTooltip(TooltipContext context);
-
-    /**
-     * {@inheritDoc}
-     */
-
-    @Override
-    void configureTooltip(RichTooltip tooltip, TooltipContext context);
-
-    ContentStack<ItemStack> cheatsStack();
-
-    @SuppressWarnings("unchecked")
-    default <O> ContentStack<O> cast() {
-        return (ContentStack<O>) this;
-    }
-
-    default boolean isItem() {
-        return contentType() == CirrusContentTypes.ITEM;
-    }
-
-    default boolean isFluid() {
-        return contentType() == CirrusContentTypes.FLUID;
-    }
-
-    default boolean is(StackContentType<?> type) {
-        return contentType() == type;
-    }
-
-    default String asString() {
-        return contentType().asString(value());
-    }
+    //endregion
 
 }

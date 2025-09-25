@@ -1,4 +1,4 @@
 @NotNullByDefault
 package dev.vfyjxf.calculatorcirrus.recipe.lookup;
 
-import dev.vfyjxf.calculatorcirrus.api.annotation.NotNullByDefault;
+import dev.vfyjxf.cloudlib.api.annotation.NotNullByDefault;

@@ -32,3 +32,10 @@ type = "required"
 versionRange = "[${jei_version},)"
 ordering = "NONE"
 side = "BOTH"
+
+[[dependencies.${ mod_id }]]
+modId = "cloudlib"
+type = "required"
+versionRange = "[${cloudlib_version},)"
+ordering = "AFTER"
+side = "BOTH"

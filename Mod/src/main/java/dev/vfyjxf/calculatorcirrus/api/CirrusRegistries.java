@@ -1,20 +1,25 @@
 package dev.vfyjxf.calculatorcirrus.api;
 
-import dev.vfyjxf.calculatorcirrus.Constants;
-import net.minecraft.core.Registry;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import dev.vfyjxf.calculatorcirrus.CirrusConstants;
+import dev.vfyjxf.cloudlib.api.registry.util.RegistryRegister;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.registries.NewRegistryEvent;
 
+@EventBusSubscriber(modid = CirrusConstants.MOD_ID)
 public final class CirrusRegistries {
 
-    public static <T> ResourceKey<Registry<T>> createKey(String path) {
-        return ResourceKey.createRegistryKey(ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, path));
+    private static final RegistryRegister registryRegister = new RegistryRegister();
+
+
+    public interface Keys {
+
     }
 
-    public static <T> ResourceKey<Registry<T>> createKey(String namespace, String path) {
-        return ResourceKey.createRegistryKey(ResourceLocation.fromNamespaceAndPath(namespace, path));
+    @SubscribeEvent
+    private static void onRegister(NewRegistryEvent event) {
+        registryRegister.register(event);
     }
 
-    private CirrusRegistries() {
-    }
+    private CirrusRegistries() {}
 }

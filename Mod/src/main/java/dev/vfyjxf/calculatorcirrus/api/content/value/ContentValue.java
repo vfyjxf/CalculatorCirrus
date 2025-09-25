@@ -2,60 +2,45 @@ package dev.vfyjxf.calculatorcirrus.api.content.value;
 
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
-import dev.vfyjxf.calculatorcirrus.api.ui.RichTooltip;
-import dev.vfyjxf.calculatorcirrus.api.ui.TooltipContext;
+import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
+import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.function.BiConsumer;
 
-/**
- * Represents a content value and its type.
- *
- * @param <T> the type of the content value,it can be nullable type.
- */
-public sealed interface ContentValue<T>
-        permits BasicContentValue, ContentStack, TypedContentValue {
+public sealed interface ContentValue<T> extends ContentVariant permits EmptyContentValue, TypedContentValue {
 
-    static <T> ContentValue<T> create(ContentType<T> contentType, T value) {
-        return new TypedContentValue<>(contentType, value);
+    //region factory and constant
+
+    static <T> ContentValue<T> fromContent(ContentType<T> type, T value) {
+        return new TypedContentValue<>(type, value);
     }
 
-    static ContentValue<?> empty() {
-        return EmptyStackContentType.empty();
+    @SuppressWarnings("unchecked")
+    static <T> ContentValue<T> empty() {
+        return EmptyContentValue.instance;
     }
 
-    /**
-     * <b>If the content is empty, it should not be read!</b>
-     *
-     * @return the value of the content.
-     */
+    //endregion
+
+    //region content info
+
+    ContentType<T> type();
+
     T value();
-
-    ContentType<T> contentType();
 
     @Contract(pure = true)
     @Nullable
     default String getNamespace() {
-        return contentType().getNamespace(value());
+        return type().getNamespace(value());
     }
 
     @Contract(pure = true)
     @Nullable
     default ResourceLocation getLocation() {
-        return contentType().getLocation(value());
-    }
-
-    @Contract(" -> new")
-    default ContentValue<T> normalize() {
-        var contentType = contentType();
-        return create(contentType, contentType.normalize(value()));
-    }
-
-    default ContentValue<T> copy() {
-        var type = contentType();
-        return create(type, type.copy(value()));
+        return type().getLocation(value());
     }
 
     /**
@@ -66,20 +51,29 @@ public sealed interface ContentValue<T>
      * @return true if the value is empty, false otherwise
      */
     default boolean isEmpty() {
-        return contentType().isEmpty(value());
+        return type().isEmpty(value());
     }
 
-    default <C> boolean matches(ContentValue<C> other) {
-        return matches(other, MatchStrategy.ALL);
+    default boolean notEmpty() {
+        return !isEmpty();
     }
+
+    //endregion
+
+    //region match
 
     @SuppressWarnings("unchecked")
     default <C> boolean matches(ContentValue<C> other, MatchStrategy strategy) {
         if (this == other) return true;
         if (other.isEmpty()) return isEmpty();
-        if (contentType() != other.contentType()) return false;
-        return contentType().matches(this.value(), (T) other.value(), strategy);
+        if (type() != other.type()) return false;
+        return type().matches(this.value(), (T) other.value());
     }
+
+    //endregion
+
+    //region tooltip
+
 
     /**
      * Append tooltips to the content value.
@@ -110,18 +104,20 @@ public sealed interface ContentValue<T>
 
     /**
      * @param context the tooltip context.
-     * @return the rich tooltip for this content stack, or null if tooltip is not available or called from server side.
+     * @return the rich tooltip for this content value, or null if tooltip is not available or called from server side.
      */
     @Nullable
     RichTooltip getTooltip(TooltipContext context);
 
-    default Class<T> getTypeClass() {
-        return contentType().valueType();
-    }
+    //endregion
+
+    //region util
 
     @SuppressWarnings("unchecked")
     default <R> ContentValue<R> cast() {
         return (ContentValue<R>) this;
     }
+
+    //endregion
 
 }

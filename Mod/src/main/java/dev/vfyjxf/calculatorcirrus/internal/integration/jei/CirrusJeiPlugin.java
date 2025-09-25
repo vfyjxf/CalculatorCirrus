@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.internal.integration.jei;
 
-import dev.vfyjxf.calculatorcirrus.Constants;
+import dev.vfyjxf.calculatorcirrus.CirrusConstants;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
 import mezz.jei.api.recipe.IRecipeManager;
@@ -14,7 +14,7 @@ public class CirrusJeiPlugin implements IModPlugin {
 
     @Override
     public ResourceLocation getPluginUid() {
-        return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "jei_plugin");
+        return ResourceLocation.fromNamespaceAndPath(CirrusConstants.MOD_ID, "jei_plugin");
     }
 
     @Override

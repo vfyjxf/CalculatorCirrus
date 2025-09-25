@@ -1,8 +1,9 @@
 package dev.vfyjxf.calculatorcirrus.integration;
 
-import dev.vfyjxf.calculatorcirrus.api.PluginLoading;
+import dev.vfyjxf.calculatorcirrus.api.RegisterAdapterPlugin;
 import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
 import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
+import dev.vfyjxf.cloudlib.api.util.ServiceLoading;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import org.eclipse.collections.api.list.MutableList;
@@ -18,7 +19,7 @@ public abstract class CirrusIntegration {
 
     private void registerContent(RegisterContentEvent event) {
         if (this.plugins == null) {
-            this.plugins = PluginLoading.load(CirrusAdapter.class);
+            this.plugins = ServiceLoading.load(RegisterAdapterPlugin.class, CirrusAdapter.class);
         }
         for (CirrusAdapter plugin : plugins) {
             plugin.registerContent(event);
@@ -27,7 +28,7 @@ public abstract class CirrusIntegration {
 
     private void registerRecipeSystem(RegisterRecipeSystemEvent event) {
         if (this.plugins == null) {
-            this.plugins = PluginLoading.load(CirrusAdapter.class);
+            this.plugins = ServiceLoading.load(RegisterAdapterPlugin.class, CirrusAdapter.class);
         }
         for (CirrusAdapter plugin : plugins) {
             plugin.registerRecipeSystem(event);
