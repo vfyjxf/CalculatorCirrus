@@ -1,54 +1,41 @@
 package dev.vfyjxf.calculatorcirrus;
 
 import com.mojang.logging.LogUtils;
-import dev.vfyjxf.calculatorcirrus.api.ClientRegisterContentEvent;
-import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
-import dev.vfyjxf.calculatorcirrus.api.UnloadingContentEvent;
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
+import dev.vfyjxf.calculatorcirrus.api.plugin.ClientCirrusPlugin;
 import dev.vfyjxf.calculatorcirrus.content.ClientContentApiImpl;
 import dev.vfyjxf.calculatorcirrus.content.ClientContentRegistryBuilder;
-import dev.vfyjxf.calculatorcirrus.content.renderer.FluidStackRenderer;
-import dev.vfyjxf.calculatorcirrus.content.renderer.ItemStackRenderer;
-import dev.vfyjxf.calculatorcirrus.util.Singletons;
 import dev.vfyjxf.calculatorcirrus.util.StartEventObserver;
+import dev.vfyjxf.cloudlib.util.Singletons;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.ModLoader;
 import net.neoforged.fml.common.Mod;
+import org.eclipse.collections.api.list.MutableList;
 import org.slf4j.Logger;
 
 @Mod(value = CirrusConstants.MOD_ID, dist = Dist.CLIENT)
 public class CalculatorCirrusClient extends CalculatorCirrus {
 
     public static final Logger logger = LogUtils.getLogger();
+    private final MutableList<ClientCirrusPlugin> clientPlugins;
 
-    public CalculatorCirrusClient(ModContainer modContainer, IEventBus modEventBus) {
-        super(modContainer, modEventBus);
-        new StartEventObserver(
-                this::start,
-                () -> ModLoader.postEventWrapContainerInModOrder(new UnloadingContentEvent())
-        ).register();
-        modEventBus.addListener(this::onClientRegisterContent);
+    public CalculatorCirrusClient(ModContainer modContainer, IEventBus modBus) {
+        super(modContainer, modBus);
+        new StartEventObserver(this::load, this::unload).register();
+
+        clientPlugins = loadPlugin("Client Cirrus Plugin", ClientCirrusPlugin.class);
     }
 
     @Override
-    protected void fireContentRegisterEvent() {
+    protected void buildContentApi() {
         var contentRegistry = new ClientContentRegistryBuilder();
-        registerBuiltinContent(contentRegistry);
-        ModLoader.postEventWrapContainerInModOrder(new RegisterContentEvent(contentRegistry));
-        ModLoader.postEventWrapContainerInModOrder(new ClientRegisterContentEvent(contentRegistry));
+        buildCommonContentApi(contentRegistry);
+        for (var clientPlugin : clientPlugins) clientPlugin.registerContentRenderer(contentRegistry);
 
         var contentApi = new ClientContentApiImpl(contentRegistry);
         Singletons.attachInstance(ContentApi.class, contentApi);
         Singletons.attachInstance(ClientContentApiImpl.class, contentApi);
-    }
-
-    private void onClientRegisterContent(ClientRegisterContentEvent event) {
-        //TODO:Rewrite this
-        event.registerRenderer(CirrusTypes.ITEM_STACK, new ItemStackRenderer());
-        event.registerRenderer(CirrusTypes.FLUID_STACK, new FluidStackRenderer());
     }
 
 }

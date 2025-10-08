@@ -1,5 +1,25 @@
+//The MIT License (MIT)
+//
+//Copyright (c) 2014-2015 mezz
+//
+//Permission is hereby granted, free of charge, to any person obtaining a copy
+//of this software and associated documentation files (the "Software"), to deal
+//in the Software without restriction, including without limitation the rights
+//to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//copies of the Software, and to permit persons to whom the Software is
+//furnished to do so, subject to the following conditions:
+//
+//The above copyright notice and this permission notice shall be included in
+//all copies or substantial portions of the Software.
+//
+//THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+//THE SOFTWARE.
 package dev.vfyjxf.calculatorcirrus.util;
-
 
 import com.mojang.logging.LogUtils;
 import dev.vfyjxf.calculatorcirrus.event.EventListeners;
@@ -26,7 +46,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * From JEI
+ * Copy From Jei {@link mezz.jei.neoforge.startup.StartEventObserver}
+ * @author mezz
  */
 public class StartEventObserver implements ResourceManagerReloadListener {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -61,17 +82,17 @@ public class StartEventObserver implements ResourceManagerReloadListener {
             if (this.state != State.MOD_STARTED) {
                 Screen screen = event.getScreen();
                 Minecraft minecraft = screen.getMinecraft();
-                if (screen instanceof AbstractContainerScreen && minecraft != null && minecraft.player != null) {
+                if (screen instanceof AbstractContainerScreen && minecraft.player != null) {
                     var missingEvents = requiredEvents.stream()
-                            .filter(e -> !observedEvents.contains(e))
-                            .sorted()
-                            .toList();
+                        .filter(e -> !observedEvents.contains(e))
+                        .sorted()
+                        .toList();
 
                     LOGGER.error("""
-                            A Screen is opening but Calculator Cirrus hasn't started yet.
-                            Normally, Calculator Cirrus is started after ClientPlayerNetworkEvent.LoggedInEvent, TagsUpdatedEvent, and RecipesUpdatedEvent.
-                            Something has caused one or more of these events to fail, so Calculator Cirrus is starting very late.
-                            Missing events: {}""", missingEvents);
+                        A Screen is opening but Calculator Cirrus hasn't started yet.
+                        Normally, Calculator Cirrus is started after ClientPlayerNetworkEvent.LoggedInEvent, TagsUpdatedEvent, and RecipesUpdatedEvent.
+                        Something has caused one or more of these events to fail, so Calculator Cirrus is starting very late.
+                        Missing events: {}""", missingEvents);
                     transitionState(State.LISTENING);
                     transitionState(State.MOD_STARTED);
                 }
@@ -98,8 +119,8 @@ public class StartEventObserver implements ResourceManagerReloadListener {
         LOGGER.info("Calculator Cirrus StartEventObserver received {}", event.getClass());
         Class<? extends Event> eventClass = event.getClass();
         if (requiredEvents.contains(eventClass) &&
-                observedEvents.add(eventClass) &&
-                observedEvents.containsAll(requiredEvents)
+            observedEvents.add(eventClass) &&
+            observedEvents.containsAll(requiredEvents)
         ) {
             if (this.state == State.MOD_STARTED) {
                 restart();

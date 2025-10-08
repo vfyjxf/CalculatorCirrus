@@ -3,10 +3,13 @@ package dev.vfyjxf.calculatorcirrus.recipe;
 
 import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.RecipeContent;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystemExtension;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.FacetTransformer;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.RecipeFacet;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.RecipeFacetType;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.ViewTransformer;
+import dev.vfyjxf.calculatorcirrus.api.register.RecipeFacetRegister;
+import dev.vfyjxf.calculatorcirrus.api.register.RecipeSystemRegister;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.ApiStatus;
@@ -14,7 +17,7 @@ import org.jetbrains.annotations.ApiStatus;
 import java.util.concurrent.ConcurrentHashMap;
 
 @ApiStatus.Internal
-public class RecipeApiRegistryBuilder {
+public class RecipeApiRegistryBuilder implements RecipeSystemRegister, RecipeFacetRegister {
 
     final ConcurrentHashMap<ResourceLocation, RecipeSystem<?>> recipeSystems = new ConcurrentHashMap<>();
     final ConcurrentHashMap<ResourceLocation, RecipeFacetType> facets = new ConcurrentHashMap<>();
@@ -28,7 +31,12 @@ public class RecipeApiRegistryBuilder {
         recipeSystems.put(system.systemId(), system);
     }
 
-    public <T extends RecipeContent, F extends RecipeFacet> void registerFacet(RecipeFacetType type, FacetTransformer<T, F> transformer) {
+    @Override
+    public void registerExtension(ResourceLocation systemId, RecipeSystemExtension extension) {
+        throw new UnsupportedOperationException("Not Implemented");
+    }
+
+    public <T extends RecipeContent, F extends RecipeFacet> void registerFacetTransformer(RecipeFacetType type, FacetTransformer<T, F> transformer) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(transformer, "transformer");
         if (facets.containsKey(type.id())) {
@@ -38,7 +46,7 @@ public class RecipeApiRegistryBuilder {
         facetTransformers.put(type, transformer);
     }
 
-    public void registerFacet(RecipeFacetType type) {
+    public void registerFacetTransformer(RecipeFacetType type) {
         Checks.checkNotNull(type, "type");
         if (facets.containsKey(type.id())) {
             throw new IllegalArgumentException("Recipe facet with id: " + type.id() + " already registered");
