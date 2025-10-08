@@ -7,17 +7,19 @@ import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.VariantType;
+import dev.vfyjxf.calculatorcirrus.api.register.ContentResolverRegister;
+import dev.vfyjxf.calculatorcirrus.api.register.ContentTypeRegister;
+import dev.vfyjxf.calculatorcirrus.api.register.ContentVariantRegister;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.ApiStatus;
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @ApiStatus.Internal
-public class ContentRegistryBuilder {
+public class ContentRegistryBuilder implements ContentTypeRegister, ContentVariantRegister, ContentResolverRegister {
 
     final ConcurrentHashMap<ResourceLocation, ContentType<?>> contentTypes = new ConcurrentHashMap<>();
 
@@ -31,7 +33,11 @@ public class ContentRegistryBuilder {
     final ConcurrentHashMap<Object, VariantType<?, ?>> variantTypeByContent = new ConcurrentHashMap<>();
 
     final ConcurrentHashMap<ResolverType<?>, Set<ContentResolver<?, ?>>> contentResolvers = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<ResolverType<?>, Set<ContentResolver<?, ?>>> fallbackContentResolvers = new ConcurrentHashMap<>();
     final ConcurrentHashMap<ResolverType<?>, Set<StackResolver<?, ?, ?>>> stackResolvers = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<ResolverType<?>, Set<StackResolver<?, ?, ?>>> fallbackStackResolvers = new ConcurrentHashMap<>();
+
+    //region content and stack
 
     public <T> void registerContentType(ContentType<T> contentType) {
         Checks.checkNotNull(contentType, "contentType");
@@ -69,6 +75,10 @@ public class ContentRegistryBuilder {
         tagTypesById.put(tagType.typeId(), tagType);
     }
 
+    //endregion
+
+    //region variant
+
     public <T, S> void registerVariantType(StackType<T, S> stackType, VariantType<T, S> variantType) {
         Checks.checkNotNull(stackType, "stackType");
         Checks.checkNotNull(variantType, "variantType");
@@ -93,14 +103,42 @@ public class ContentRegistryBuilder {
         variantTypeByContent.put(content, variantType);
     }
 
-    public <T, S> void registerContentResolver(ContentResolver<T, S> resolver) {
+    //endregion
+
+    //region resolver
+
+    @Override
+    public <T, R> void registerContentResolver(ResolverType<R> type, ContentType<T> contentType, ContentResolver<T, R> resolver) {
+        Checks.checkNotNull(type, "type");
+        Checks.checkNotNull(contentType, "contentType");
         Checks.checkNotNull(resolver, "resolver");
-        contentResolvers.computeIfAbsent(resolver.type(), (type) -> Collections.synchronizedSet(new HashSet<>())).add(resolver);
+        contentResolvers.computeIfAbsent(type, (t) -> new HashSet<>()).add(resolver.cast());
     }
 
-    public <T, S, R> void registerStackResolver(StackResolver<T, S, R> resolver) {
+    @Override
+    public <T, R> void registerFallbackContentResolver(ResolverType<R> type, ContentType<T> contentType, ContentResolver<T, R> resolver) {
+        Checks.checkNotNull(type, "type");
+        Checks.checkNotNull(contentType, "contentType");
         Checks.checkNotNull(resolver, "resolver");
-        stackResolvers.computeIfAbsent(resolver.type(), (type) -> Collections.synchronizedSet(new HashSet<>())).add(resolver);
+        fallbackContentResolvers.computeIfAbsent(type, (t) -> new HashSet<>()).add(resolver.cast());
     }
+
+    @Override
+    public <T, S, R> void registerStackResolver(ResolverType<R> type, StackType<T, S> stackType, StackResolver<T, S, R> resolver) {
+        Checks.checkNotNull(type, "type");
+        Checks.checkNotNull(stackType, "stackType");
+        Checks.checkNotNull(resolver, "resolver");
+        stackResolvers.computeIfAbsent(type, (t) -> new HashSet<>()).add(resolver.cast());
+    }
+
+    @Override
+    public <T, S, R> void registerFallbackStackResolver(ResolverType<R> type, StackType<T, S> stackType, StackResolver<T, S, R> resolver) {
+        Checks.checkNotNull(type, "type");
+        Checks.checkNotNull(stackType, "stackType");
+        Checks.checkNotNull(resolver, "resolver");
+        fallbackStackResolvers.computeIfAbsent(type, (t) -> new HashSet<>()).add(resolver.cast());
+    }
+
+    //endregion
 
 }

@@ -4,10 +4,11 @@ import dev.vfyjxf.calculatorcirrus.api.content.render.ContentRenderer;
 import dev.vfyjxf.calculatorcirrus.api.content.render.StackRenderer;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
+import dev.vfyjxf.calculatorcirrus.api.register.ContentRendererRegister;
 
 import java.util.concurrent.ConcurrentHashMap;
 
-public class ClientContentRegistryBuilder extends ContentRegistryBuilder {
+public class ClientContentRegistryBuilder extends ContentRegistryBuilder implements ContentRendererRegister {
 
     final ConcurrentHashMap<ContentType<?>, ContentRenderer<?>> contentRenderers = new ConcurrentHashMap<>();
     final ConcurrentHashMap<StackType<?, ?>, StackRenderer<?, ?>> stackRenderers = new ConcurrentHashMap<>();
