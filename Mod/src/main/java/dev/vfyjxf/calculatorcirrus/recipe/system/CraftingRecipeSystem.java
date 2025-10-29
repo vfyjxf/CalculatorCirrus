@@ -7,12 +7,10 @@ import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.calculatorcirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.calculatorcirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeLookup;
-import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.RecipeView;
 import dev.vfyjxf.calculatorcirrus.helper.RecipeHelper;
 import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import dev.vfyjxf.cloudlib.util.Locations;
-import mezz.jei.api.constants.RecipeTypes;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -20,7 +18,6 @@ import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import org.eclipse.collections.api.RichIterable;
-import org.eclipse.collections.api.list.MutableList;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -46,11 +43,6 @@ public class CraftingRecipeSystem extends BasicVanillaSystem<CraftingRecipe> {
             OutputContent.fromItemStack(RecipeHelper.getOutput(recipe))
         );
         return new RecipeView(new RecipeEntry<>(this, recipeHolder), null, null);
-    }
-
-    @Override
-    public MutableList<ContentStack<Item, ItemStack>> getMachines() {
-        return RecipeSystem.getMachinesFromJei(RecipeTypes.CRAFTING);
     }
 
     @Override

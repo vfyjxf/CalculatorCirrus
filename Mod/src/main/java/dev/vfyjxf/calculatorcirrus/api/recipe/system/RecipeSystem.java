@@ -61,8 +61,14 @@ public interface RecipeSystem<R> {
     //TODO:provide a custom data query api.
     //  something like data component system,but for recipe system.
 
-    @Unmodifiable
-    MutableList<ContentStack<Item, ItemStack>> getMachines();
+    default boolean hasData(SystemDataType<?> type) {
+        return false;
+    }
+
+
+    default <T> @Nullable T getData(SystemDataType<T> type) throws IllegalStateException {
+        throw new IllegalStateException("No data for " + type.id());
+    }
 
     //endregion
 
