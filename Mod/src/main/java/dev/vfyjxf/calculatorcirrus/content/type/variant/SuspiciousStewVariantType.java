@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.content.type.variant;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
 import dev.vfyjxf.cloudlib.util.Locations;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.Item;
@@ -8,12 +8,14 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.SuspiciousStewEffects;
 
+import java.util.Objects;
+
 public class SuspiciousStewVariantType extends BasicVariantType<Item, ItemStack> {
 
     public static final SuspiciousStewVariantType instance = new SuspiciousStewVariantType();
 
     private SuspiciousStewVariantType() {
-        super(Locations.ofMc("suspicious_stew"), CirrusTypes.ITEM_STACK);
+        super(Locations.ofMc("suspicious_stew"), CirrusTypes.Contents.ITEM_STACK);
     }
 
     @Override
@@ -28,5 +30,10 @@ public class SuspiciousStewVariantType extends BasicVariantType<Item, ItemStack>
     public boolean matchesVariantIdentity(ItemStack stack1, ItemStack stack2) {
         return stack1.getOrDefault(DataComponents.SUSPICIOUS_STEW_EFFECTS, SuspiciousStewEffects.EMPTY)
             .equals(stack2.getOrDefault(DataComponents.SUSPICIOUS_STEW_EFFECTS, SuspiciousStewEffects.EMPTY));
+    }
+
+    @Override
+    public int hashIdentity(ItemStack stack) {
+        return Objects.hashCode(stack.get(DataComponents.SUSPICIOUS_STEW_EFFECTS));
     }
 }

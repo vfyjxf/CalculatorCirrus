@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.register;
 
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.RecipeContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.FacetTransformer;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.RecipeFacet;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.RecipeFacetType;

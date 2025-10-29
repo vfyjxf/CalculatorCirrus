@@ -3,7 +3,6 @@ package dev.vfyjxf.calculatorcirrus.api.content.render;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.content.ClientContentApiImpl;
-import dev.vfyjxf.calculatorcirrus.util.Singletons;
 import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
 import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
 import net.minecraft.client.Minecraft;
@@ -14,7 +13,7 @@ import net.minecraft.network.chat.Component;
 public interface StackRenderer<T, S> {
 
     static <T, S> StackRenderer<T, S> getStackRender(StackType<T, S> stackType) {
-        return Singletons.get(ClientContentApiImpl.class).getRenderer(stackType);
+        return ClientContentApiImpl.instance().getStackRenderer(stackType);
     }
 
     default void render(GuiGraphics graphics, S stack, int width, int height, float delta) {

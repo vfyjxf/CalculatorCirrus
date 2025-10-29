@@ -1,8 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.content.resolver.fluid;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusResolvers;
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
-import dev.vfyjxf.calculatorcirrus.api.content.resolver.ResolverType;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.content.resolver.ContentResolverType;
 import dev.vfyjxf.calculatorcirrus.api.content.resolver.StackResolver;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import net.minecraft.world.item.BottleItem;
@@ -26,13 +25,13 @@ public class VanillaFluidHandlerResolver implements StackResolver<Item, ItemStac
     private VanillaFluidHandlerResolver() {}
 
     @Override
-    public ResolverType<ItemStack> type() {
-        return CirrusResolvers.FLUID_CONTAINER;
+    public ContentResolverType<ItemStack> type() {
+        return CirrusTypes.ContentResolvers.FLUID_CONTAINER;
     }
 
     @Override
     public StackType<Item, ItemStack> stackType() {
-        return CirrusTypes.ITEM_STACK;
+        return CirrusTypes.Contents.ITEM_STACK;
     }
 
     @Override

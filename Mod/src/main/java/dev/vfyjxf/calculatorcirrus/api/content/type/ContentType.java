@@ -1,6 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.api.content.type;
 
 import com.mojang.serialization.Codec;
+import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
@@ -14,7 +15,7 @@ import java.util.Objects;
  * @param <T> the type content
  * @see TagType
  */
-public non-sealed interface ContentType<T> extends ContentKind {
+public interface ContentType<T> {
 
     //region CirrusConstants
 
@@ -23,6 +24,12 @@ public non-sealed interface ContentType<T> extends ContentKind {
     //endregion
 
     //region type info
+
+    /**
+     * @return the unique id of this type
+     */
+    @Contract(pure = true)
+    ResourceLocation typeId();
 
     @Contract(pure = true)
     Class<T> valueType();
@@ -56,6 +63,12 @@ public non-sealed interface ContentType<T> extends ContentKind {
     @Contract(pure = true)
     @Nullable
     ResourceLocation getLocation(T value);
+
+    default boolean supportComponents() {
+        return false;
+    }
+
+    default @Nullable DataComponentMap getComponents(T value) {return null;}
 
     //endregion
 

@@ -1,11 +1,11 @@
 package dev.vfyjxf.calculatorcirrus.recipe.system;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.InputContent;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.OutputContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeLookup;
 import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.RecipeView;
@@ -29,13 +29,11 @@ import java.util.function.Predicate;
 
 public class CraftingRecipeSystem extends BasicVanillaSystem<CraftingRecipe> {
 
-    public static final ResourceLocation SYSTEM_ID = Locations.ofMc("crafting");
+    public static final ResourceLocation systemId = Locations.ofMc("crafting");
 
     public CraftingRecipeSystem() {
-        super(SYSTEM_ID, RecipeType.CRAFTING);
+        super(systemId, RecipeType.CRAFTING);
     }
-
-    private CraftingRecipeSystem self() {return this;}
 
     @Override
     public RecipeView resolveRecipe(RecipeHolder<CraftingRecipe> recipeHolder) {
@@ -107,7 +105,7 @@ public class CraftingRecipeSystem extends BasicVanillaSystem<CraftingRecipe> {
             if (!output.isItem()) return this;
             Predicate<RecipeHolder<CraftingRecipe>> outputPredicate = recipeHolder -> {
                 CraftingRecipe recipe = recipeHolder.value();
-                return CirrusTypes.ITEM_STACK.matches(RecipeHelper.getOutput(recipe), output.<Item, ItemStack>cast().value(), MatchStrategy.ALL);
+                return CirrusTypes.Contents.ITEM_STACK.matches(RecipeHelper.getOutput(recipe), output.<Item, ItemStack>cast().value(), MatchStrategy.all);
             };
             this.predicate = this.predicate.and(outputPredicate);
             return this;

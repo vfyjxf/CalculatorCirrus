@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.content;
 
 import dev.vfyjxf.calculatorcirrus.api.content.resolver.ContentResolver;
-import dev.vfyjxf.calculatorcirrus.api.content.resolver.ResolverType;
+import dev.vfyjxf.calculatorcirrus.api.content.resolver.ContentResolverType;
 import dev.vfyjxf.calculatorcirrus.api.content.resolver.StackResolver;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
@@ -32,10 +32,10 @@ public class ContentRegistryBuilder implements ContentTypeRegister, ContentVaria
     final ConcurrentHashMap<ResourceLocation, VariantType<?, ?>> variantTypes = new ConcurrentHashMap<>();
     final ConcurrentHashMap<Object, VariantType<?, ?>> variantTypeByContent = new ConcurrentHashMap<>();
 
-    final ConcurrentHashMap<ResolverType<?>, Set<ContentResolver<?, ?>>> contentResolvers = new ConcurrentHashMap<>();
-    final ConcurrentHashMap<ResolverType<?>, Set<ContentResolver<?, ?>>> fallbackContentResolvers = new ConcurrentHashMap<>();
-    final ConcurrentHashMap<ResolverType<?>, Set<StackResolver<?, ?, ?>>> stackResolvers = new ConcurrentHashMap<>();
-    final ConcurrentHashMap<ResolverType<?>, Set<StackResolver<?, ?, ?>>> fallbackStackResolvers = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<ContentResolverType<?>, Set<ContentResolver<?, ?>>> contentResolvers = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<ContentResolverType<?>, Set<ContentResolver<?, ?>>> fallbackContentResolvers = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<ContentResolverType<?>, Set<StackResolver<?, ?, ?>>> stackResolvers = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<ContentResolverType<?>, Set<StackResolver<?, ?, ?>>> fallbackStackResolvers = new ConcurrentHashMap<>();
 
     //region content and stack
 
@@ -108,7 +108,7 @@ public class ContentRegistryBuilder implements ContentTypeRegister, ContentVaria
     //region resolver
 
     @Override
-    public <T, R> void registerContentResolver(ResolverType<R> type, ContentType<T> contentType, ContentResolver<T, R> resolver) {
+    public <T, R> void registerContentResolver(ContentResolverType<R> type, ContentType<T> contentType, ContentResolver<T, R> resolver) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(contentType, "contentType");
         Checks.checkNotNull(resolver, "resolver");
@@ -116,7 +116,7 @@ public class ContentRegistryBuilder implements ContentTypeRegister, ContentVaria
     }
 
     @Override
-    public <T, R> void registerFallbackContentResolver(ResolverType<R> type, ContentType<T> contentType, ContentResolver<T, R> resolver) {
+    public <T, R> void registerFallbackContentResolver(ContentResolverType<R> type, ContentType<T> contentType, ContentResolver<T, R> resolver) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(contentType, "contentType");
         Checks.checkNotNull(resolver, "resolver");
@@ -124,7 +124,7 @@ public class ContentRegistryBuilder implements ContentTypeRegister, ContentVaria
     }
 
     @Override
-    public <T, S, R> void registerStackResolver(ResolverType<R> type, StackType<T, S> stackType, StackResolver<T, S, R> resolver) {
+    public <T, S, R> void registerStackResolver(ContentResolverType<R> type, StackType<T, S> stackType, StackResolver<T, S, R> resolver) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(stackType, "stackType");
         Checks.checkNotNull(resolver, "resolver");
@@ -132,7 +132,7 @@ public class ContentRegistryBuilder implements ContentTypeRegister, ContentVaria
     }
 
     @Override
-    public <T, S, R> void registerFallbackStackResolver(ResolverType<R> type, StackType<T, S> stackType, StackResolver<T, S, R> resolver) {
+    public <T, S, R> void registerFallbackStackResolver(ContentResolverType<R> type, StackType<T, S> stackType, StackResolver<T, S, R> resolver) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(stackType, "stackType");
         Checks.checkNotNull(resolver, "resolver");

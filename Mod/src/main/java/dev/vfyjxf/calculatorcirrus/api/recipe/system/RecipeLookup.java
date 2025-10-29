@@ -26,7 +26,7 @@ public interface RecipeLookup<T> {
     RecipeLookup<T> filter(Predicate<T> predicate);
 
     default RecipeLookup<T> withInput(ContentStack<?, ?> input) {
-        return withInput(input, MatchStrategy.ALL);
+        return withInput(input, MatchStrategy.all);
     }
 
     @Contract("_,_->this")
@@ -36,7 +36,7 @@ public interface RecipeLookup<T> {
     RecipeLookup<T> withInput(Collection<? extends ContentStack<?, ?>> inputs, MatchStrategy strategy);
 
     default RecipeLookup<T> withOutput(ContentStack<?, ?> output) {
-        return withOutput(output, MatchStrategy.ALL);
+        return withOutput(output, MatchStrategy.all);
     }
 
     @Contract("_,_->this")

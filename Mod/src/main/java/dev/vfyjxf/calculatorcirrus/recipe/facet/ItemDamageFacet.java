@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.recipe.facet;
 
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.RecipeContent;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.StackContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.StackContent;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.FacetTransformer;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.RecipeFacet;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.RecipeFacetType;
@@ -28,8 +28,8 @@ public record ItemDamageFacet(
         this.damagePerRecipe = damagePerRecipe;
     }
 
-    public static final ResourceLocation ID = CirrusLocations.ofMod("item/damagePerRecipe");
-    public static final RecipeFacetType type = new RecipeFacetType(ID, (entry, content) -> checkContent(content));
+    public static final ResourceLocation id = CirrusLocations.ofMod("item/damagePerRecipe");
+    public static final RecipeFacetType type = new RecipeFacetType(id, (entry, content) -> checkContent(content));
 
     public static final FacetTransformer<StackContent<Item, ItemStack>, ItemDamageFacet> transformer = FacetTransformer.of(
         (context, view, content, asInput) -> checkContent(content),
@@ -53,6 +53,6 @@ public record ItemDamageFacet(
 
     @Override
     public ResourceLocation id() {
-        return ID;
+        return id;
     }
 }

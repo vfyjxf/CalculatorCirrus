@@ -2,6 +2,7 @@ package dev.vfyjxf.calculatorcirrus.api.recipe.system;
 
 
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.constraint.MachineConstraint;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.RecipeView;
 import dev.vfyjxf.calculatorcirrus.internal.integration.jei.CirrusJeiPlugin;
 import mezz.jei.api.recipe.RecipeType;
@@ -26,6 +27,9 @@ public interface RecipeSystem<R> {
     ResourceLocation systemId();
 
     Class<?> basicType();
+
+//    @Nullable
+//    default Codec<R> codec() {return null;}
 
     //endregion
 
@@ -65,16 +69,21 @@ public interface RecipeSystem<R> {
     //region util
 
     static MutableList<ContentStack<Item, ItemStack>> getMachinesFromJei(RecipeType<?> recipeType) {
-        return CirrusJeiPlugin.recipeManager.createRecipeCatalystLookup(recipeType)
-                .get()
-                .flatMap(i -> i.getItemStack().stream())
-                .map(ContentStack::fromStack)
-                .collect(Collectors2.toList());
+        return CirrusJeiPlugin.recipeManager()
+                              .createRecipeCatalystLookup(recipeType)
+                              .get()
+                              .flatMap(i -> i.getItemStack().stream())
+                              .map(ContentStack::fromStack)
+                              .collect(Collectors2.toList())
+                              .collect(ContentStack::normalize);
     }
 
     default RecipeLookup<R> createLookup() {
         return RecipeLookup.empty();
     }
+
+    //大部分场景下，我们都会假定存在一个标准机器约束，例如工作台和熔炉，我们称之为约定约束。
+    default @Nullable MachineConstraint conventionsConstraint() {return null;}
 
     @Unmodifiable
     RichIterable<R> allRecipes();

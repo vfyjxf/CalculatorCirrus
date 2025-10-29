@@ -12,7 +12,7 @@ plugins {
 
 include(":Mod")
 //include(':Integration')
-includeBuild("../CloudLib-Standalone"){
+includeBuild("../CloudLib-Standalone") {
     dependencySubstitution {
         substitute module('dev.vfyjxf:cloudlib') using project(':')
     }

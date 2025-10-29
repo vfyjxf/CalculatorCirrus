@@ -9,6 +9,9 @@ import net.minecraft.world.item.PotionItem;
  * Items like {@link EnchantedBookItem} and {@link PotionItem}  usually have only one item instance,
  * they share the same item instance, and special data on the ItemStack,
  * such as {@link DataComponents#POTION_CONTENTS}, determines what exactly they are.
+ *
+ * @see dev.vfyjxf.calculatorcirrus.api.register.ContentVariantRegister
+ * @see dev.vfyjxf.calculatorcirrus.api.content.ContentApi#findVariantType(StackType, Object)
  */
 public interface VariantType<T, S> {
 
@@ -24,11 +27,14 @@ public interface VariantType<T, S> {
 
     /**
      * Checks if two stacks are the same variant identity.
+     *
      * @param stack1 the first stack
      * @param stack2 the second stack
      * @return true if the two stacks are the same variant identity, false otherwise.
      */
     boolean matchesVariantIdentity(S stack1, S stack2);
+
+    int hashIdentity(S stack);
 
 
 }

@@ -1,6 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.internal.integration.jei;
 
 import dev.vfyjxf.calculatorcirrus.CirrusConstants;
+import dev.vfyjxf.cloudlib.util.Checks;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
 import mezz.jei.api.recipe.IRecipeManager;
@@ -10,7 +11,12 @@ import net.minecraft.resources.ResourceLocation;
 @JeiPlugin
 public class CirrusJeiPlugin implements IModPlugin {
 
-    public static IRecipeManager recipeManager;
+    private static IRecipeManager recipeManager;
+
+    public static IRecipeManager recipeManager() {
+        Checks.checkNotNull(recipeManager, "recipeManager");
+        return recipeManager;
+    }
 
     @Override
     public ResourceLocation getPluginUid() {
@@ -19,6 +25,6 @@ public class CirrusJeiPlugin implements IModPlugin {
 
     @Override
     public void onRuntimeAvailable(IJeiRuntime jeiRuntime) {
-        recipeManager = jeiRuntime.getRecipeManager();
+        CirrusJeiPlugin.recipeManager = jeiRuntime.getRecipeManager();
     }
 }

@@ -1,8 +1,8 @@
 package dev.vfyjxf.calculatorcirrus.api.recipe.view;
 
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.InputContent;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.OutputContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.FacetContainer;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.FacetedContent;
 import org.eclipse.collections.api.list.ImmutableList;

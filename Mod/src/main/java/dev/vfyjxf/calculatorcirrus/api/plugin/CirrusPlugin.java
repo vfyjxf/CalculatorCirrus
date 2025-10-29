@@ -1,10 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.plugin;
 
-import dev.vfyjxf.calculatorcirrus.api.register.ContentResolverRegister;
-import dev.vfyjxf.calculatorcirrus.api.register.ContentTypeRegister;
-import dev.vfyjxf.calculatorcirrus.api.register.ContentVariantRegister;
-import dev.vfyjxf.calculatorcirrus.api.register.RecipeFacetRegister;
-import dev.vfyjxf.calculatorcirrus.api.register.RecipeSystemRegister;
+import dev.vfyjxf.calculatorcirrus.api.register.*;
 import dev.vfyjxf.calculatorcirrus.util.CirrusLocations;
 import dev.vfyjxf.cloudlib.api.plugin.ModPlugin;
 import dev.vfyjxf.cloudlib.api.plugin.PluginDependency;
@@ -15,9 +11,11 @@ import java.util.ServiceLoader;
 
 /**
  * A plugin system entrypoint that use java spi to load plugins.
+ *
  * @see ServiceLoader
  * @see ModPlugin
  * @see PluginLoader
+ * @see ClientCirrusPlugin
  */
 public interface CirrusPlugin extends ModPlugin {
 
@@ -45,6 +43,24 @@ public interface CirrusPlugin extends ModPlugin {
     default void registerRecipeSystem(RecipeSystemRegister register) {}
 
     default void registerRecipeFacet(RecipeFacetRegister register) {}
+
+    //endregion
+
+    //region machine registry
+
+    default void registerMachineEntry(MachineEntryRegister register) {}
+
+    //endregion
+
+    //region jei bridge
+
+    default void registerJeiRecipeTypeBridge(JeiRecipeTypeBridgeRegister register) {}
+
+    //endregion
+
+    //region ingredient resolver
+
+    default void registerIngredientResolver(IngredientResolverRegister register) {}
 
     //endregion
 }

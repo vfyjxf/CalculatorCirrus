@@ -1,7 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.api.recipe.view.facet;
 
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.RecipeContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.RecipeContent;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.function.BiPredicate;

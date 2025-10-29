@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.content.type.variant;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
 import dev.vfyjxf.cloudlib.util.Locations;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.Item;
@@ -15,7 +15,7 @@ public class FireworkRocketVariantType extends BasicVariantType<Item, ItemStack>
     public static final FireworkRocketVariantType instance = new FireworkRocketVariantType();
 
     private FireworkRocketVariantType() {
-        super(Locations.ofMc("firework"), CirrusTypes.ITEM_STACK);
+        super(Locations.ofMc("firework"), CirrusTypes.Contents.ITEM_STACK);
     }
 
     @Override
@@ -33,5 +33,10 @@ public class FireworkRocketVariantType extends BasicVariantType<Item, ItemStack>
     @Override
     public boolean matchesVariantIdentity(ItemStack stack1, ItemStack stack2) {
         return Objects.equals(stack1.get(DataComponents.FIREWORKS), stack2.get(DataComponents.FIREWORKS));
+    }
+
+    @Override
+    public int hashIdentity(ItemStack stack) {
+        return Objects.hashCode(stack.get(DataComponents.FIREWORKS));
     }
 }

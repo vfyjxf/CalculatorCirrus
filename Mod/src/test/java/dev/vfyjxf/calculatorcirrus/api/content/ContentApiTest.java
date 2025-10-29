@@ -1,5 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.content;
 
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
@@ -37,7 +38,7 @@ class ContentApiTest {
 
     @Test
     void testContentMatches(MinecraftServer server) {
-        var itemType = CirrusTypes.ITEM_STACK;
+        var itemType = CirrusTypes.Contents.ITEM_STACK;
         var a = new ItemStack(Items.CANDLE);
         var b = new ItemStack(Items.CANDLE, 2);
         var c = new ItemStack(Items.WHEAT, 30);

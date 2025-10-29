@@ -9,6 +9,8 @@ import net.minecraft.world.item.crafting.RecipeManager;
 import net.minecraft.world.item.crafting.RecipeType;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.List;
+
 public interface VanillaRecipeSystem<T extends Recipe<?>> extends RecipeSystem<RecipeHolder<T>> {
 
     static RecipeManager recipeManager() {
@@ -44,9 +46,9 @@ public interface VanillaRecipeSystem<T extends Recipe<?>> extends RecipeSystem<R
     default RecipeHolder<T> findRecipe(ResourceLocation registryName) {
         RecipeType<T> recipeType = recipeType();
         return (RecipeHolder<T>) recipeManager().
-                byKey(registryName)
-                .filter(recipeHolder -> recipeHolder.value().getType() == recipeType)
-                .orElse(null);
+            byKey(registryName)
+            .filter(recipeHolder -> recipeHolder.value().getType() == recipeType)
+            .orElse(null);
     }
 
     @Nullable

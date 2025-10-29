@@ -1,12 +1,11 @@
 package dev.vfyjxf.calculatorcirrus;
 
 import com.mojang.logging.LogUtils;
-import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.plugin.ClientCirrusPlugin;
 import dev.vfyjxf.calculatorcirrus.content.ClientContentApiImpl;
 import dev.vfyjxf.calculatorcirrus.content.ClientContentRegistryBuilder;
+import dev.vfyjxf.calculatorcirrus.content.ContentApiImpl;
 import dev.vfyjxf.calculatorcirrus.util.StartEventObserver;
-import dev.vfyjxf.cloudlib.util.Singletons;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -34,8 +33,7 @@ public class CalculatorCirrusClient extends CalculatorCirrus {
         for (var clientPlugin : clientPlugins) clientPlugin.registerContentRenderer(contentRegistry);
 
         var contentApi = new ClientContentApiImpl(contentRegistry);
-        Singletons.attachInstance(ContentApi.class, contentApi);
-        Singletons.attachInstance(ClientContentApiImpl.class, contentApi);
+        ContentApiImpl.attach(contentApi);
     }
 
 }

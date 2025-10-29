@@ -23,6 +23,16 @@ public class ItemContentType extends BasicContentType<Item> {
     }
 
     @Override
+    public boolean supportComponents() {
+        return true;
+    }
+
+    @Override
+    public DataComponentMap getComponents(Item item) {
+        return item.components();
+    }
+
+    @Override
     public boolean isEmpty(Item item) {
         return item == Items.AIR;
     }

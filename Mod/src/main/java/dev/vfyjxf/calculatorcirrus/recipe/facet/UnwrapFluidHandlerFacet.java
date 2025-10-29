@@ -1,12 +1,11 @@
 package dev.vfyjxf.calculatorcirrus.recipe.facet;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusResolvers;
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.InputContent;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.RecipeContent;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.StackContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.StackContent;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.FacetTransformer;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.RecipeFacet;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.facet.RecipeFacetType;
@@ -21,8 +20,8 @@ import net.neoforged.neoforge.fluids.FluidStack;
 
 public final class UnwrapFluidHandlerFacet implements RecipeFacet {
 
-    public static final ResourceLocation ID = CirrusLocations.ofMod("facet/unwrap_fluid_handler");
-    public static final RecipeFacetType TYPE = new RecipeFacetType(ID, (entry, content) -> checkContent(content));
+    public static final ResourceLocation id = CirrusLocations.ofMod("facet/unwrap_fluid_handler");
+    public static final RecipeFacetType type = new RecipeFacetType(id, (entry, content) -> checkContent(content));
     public static final UnwrapFluidHandlerFacet instance = new UnwrapFluidHandlerFacet();
 
     //region transform
@@ -41,11 +40,11 @@ public final class UnwrapFluidHandlerFacet implements RecipeFacet {
             }
             var container = fluidHandler.getContainer();
             var api = ContentApi.instance();
-            var resolver = api.findStackResolver(CirrusResolvers.FLUID_CONTAINER, CirrusTypes.ITEM_STACK, container);
+            var resolver = api.findStackResolver(CirrusTypes.ContentResolvers.FLUID_CONTAINER, CirrusTypes.Contents.ITEM_STACK, container);
             if (resolver != null) {
                 container = resolver.resolve(container.getItem(), container);
             }
-            increment.injectInput(InputContent.fromItemStack(container, CirrusTypes.ITEM_STACK.quantity(), RecipeContent.MIN_CHANCE));
+            increment.injectInput(InputContent.fromItemStack(container, CirrusTypes.Contents.ITEM_STACK.quantity(), RecipeContent.MIN_CHANCE));
 
             if (fluids.isEmpty()) return;
             InputContent fluidContent;
@@ -75,7 +74,7 @@ public final class UnwrapFluidHandlerFacet implements RecipeFacet {
 
     @Override
     public ResourceLocation id() {
-        return ID;
+        return id;
     }
 
     //endregion

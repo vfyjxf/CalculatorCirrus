@@ -21,7 +21,7 @@ public class ItemStackType extends BasicStackType<Item, ItemStack> {
     public static final ItemStackType instance = new ItemStackType();
 
     private ItemStackType() {
-        super(Locations.ofMc("item_stack"), ItemContentType.instance, Integer.MAX_VALUE, ItemHelper.OPTIONAL_CODEC);
+        super(Locations.ofMc("item_stack"), ItemContentType.instance, Integer.MAX_VALUE, ItemHelper.optionalCodec);
     }
 
     //region stack properties
@@ -157,7 +157,7 @@ public class ItemStackType extends BasicStackType<Item, ItemStack> {
     @Override
     public boolean matches(ItemStack stack1, ItemStack stack2, MatchStrategy strategy) {
         if (stack1 == stack2) return true;
-        boolean identity = !strategy.withIdentity() || matches(stack1, stack2);
+        boolean identity = !strategy.withIdentity() || matchesIdentity(stack1, stack2);
         boolean amount = !strategy.withAmount() || stack1.getCount() == stack2.getCount();
         boolean components = !strategy.withComponent() || strategy.testComponents(stack1.getComponents(), stack2.getComponents());
         return identity && amount && components;

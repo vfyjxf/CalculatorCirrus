@@ -2,13 +2,14 @@ package dev.vfyjxf.calculatorcirrus.content;
 
 import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.content.resolver.ContentResolver;
-import dev.vfyjxf.calculatorcirrus.api.content.resolver.ResolverType;
+import dev.vfyjxf.calculatorcirrus.api.content.resolver.ContentResolverType;
 import dev.vfyjxf.calculatorcirrus.api.content.resolver.StackResolver;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.VariantType;
 import dev.vfyjxf.cloudlib.api.util.MutableSets;
+import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.impl.collection.mutable.CollectionAdapter;
@@ -24,6 +25,17 @@ import java.util.Set;
 @ApiStatus.Internal
 public sealed class ContentApiImpl implements ContentApi permits ClientContentApiImpl {
 
+    private static ContentApiImpl instance = null;
+
+    public static @Nullable ContentApiImpl instance() {
+        return instance;
+    }
+
+    public static void attach(ContentApiImpl api) {
+        Checks.checkNotNull(api, "api");
+        instance = api;
+    }
+
     private final Map<ResourceLocation, ContentType<?>> contentTypes;
 
     private final Map<ContentType<?>, StackType<?, ?>> stackTypesByType;
@@ -35,8 +47,8 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
     private final Map<ResourceLocation, VariantType<?, ?>> variantTypes;
     private final Map<Object, VariantType<?, ?>> variantTypeByContent;
 
-    private final Map<ResolverType<?>, Set<ContentResolver<?, ?>>> contentResolvers;
-    private final Map<ResolverType<?>, Set<StackResolver<?, ?, ?>>> stackResolvers;
+    private final Map<ContentResolverType<?>, Set<ContentResolver<?, ?>>> contentResolvers;
+    private final Map<ContentResolverType<?>, Set<StackResolver<?, ?, ?>>> stackResolvers;
 
     public ContentApiImpl(ContentRegistryBuilder builder) {
         this.contentTypes = new HashMap<>(builder.contentTypes);
@@ -161,18 +173,18 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
     }
 
     @Override
-    public boolean hasContentResolver(ResolverType<?> type) {
+    public boolean hasContentResolver(ContentResolverType<?> type) {
         return contentResolvers.containsKey(type);
     }
 
     @Override
-    public boolean hasStackResolver(ResolverType<?> type) {
+    public boolean hasStackResolver(ContentResolverType<?> type) {
         return stackResolvers.containsKey(type);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     @Override
-    public @UnmodifiableView <T, R> RichIterable<ContentResolver<T, R>> getResolver(ResolverType<R> type, ContentType<T> contentType) {
+    public @UnmodifiableView <T, R> RichIterable<ContentResolver<T, R>> getResolver(ContentResolverType<R> type, ContentType<T> contentType) {
         var resolvers = contentResolvers.get(type);
         if (resolvers == null) return MutableSets.empty();
         return (RichIterable) SetAdapter.adapt(resolvers)
@@ -182,7 +194,7 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     @Override
-    public @UnmodifiableView <T, S, R> RichIterable<StackResolver<T, S, R>> getStackResolver(ResolverType<R> type, StackType<T, S> stackType) {
+    public @UnmodifiableView <T, S, R> RichIterable<StackResolver<T, S, R>> getStackResolver(ContentResolverType<R> type, StackType<T, S> stackType) {
         var resolvers = stackResolvers.get(type);
         if (resolvers == null) return MutableSets.empty();
         return (RichIterable) SetAdapter.adapt(resolvers)
@@ -191,7 +203,7 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
     }
 
     @Override
-    public @Nullable <T, S, R> StackResolver<T, S, R> findStackResolver(ResolverType<R> type, StackType<T, S> stackType, S stack) {
+    public @Nullable <T, S, R> StackResolver<T, S, R> findStackResolver(ContentResolverType<R> type, StackType<T, S> stackType, S stack) {
         var resolvers = stackResolvers.get(type);
         if (resolvers == null) return null;
         var content = stackType.getContent(stack);
@@ -204,7 +216,7 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
     }
 
     @Override
-    public @Nullable <T, R> ContentResolver<T, R> findContentResolver(ResolverType<R> type, ContentType<T> contentType, T content) {
+    public @Nullable <T, R> ContentResolver<T, R> findContentResolver(ContentResolverType<R> type, ContentType<T> contentType, T content) {
         var resolvers = contentResolvers.get(type);
         if (resolvers == null) return null;
         for (var resolver : resolvers) {

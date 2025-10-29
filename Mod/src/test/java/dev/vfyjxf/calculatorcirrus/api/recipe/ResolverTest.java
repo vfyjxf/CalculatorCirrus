@@ -1,7 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.recipe;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusResolvers;
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.ItemStack;
@@ -18,7 +17,7 @@ public class ResolverTest {
     void testFluidContainer(MinecraftServer server) {
         ContentApi api = ContentApi.instance();
         var stack = new ItemStack(Items.BUCKET);
-        var resolver = api.findStackResolver(CirrusResolvers.FLUID_CONTAINER, CirrusTypes.ITEM_STACK, stack);
+        var resolver = api.findStackResolver(CirrusTypes.ContentResolvers.FLUID_CONTAINER, CirrusTypes.Contents.ITEM_STACK, stack);
         Assertions.assertNotNull(resolver);
         ItemStack resolved = resolver.resolve(stack.getItem(), stack);
         Assertions.assertSame(Items.BUCKET, resolved.getItem());

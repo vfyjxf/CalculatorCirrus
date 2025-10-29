@@ -1,8 +1,7 @@
 package dev.vfyjxf.calculatorcirrus.api.content.value;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
-import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.VariantType;
@@ -16,6 +15,8 @@ import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.function.BiConsumer;
+
+import static dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy.identityAndComponent;
 
 final class TypedContentStack<T, S> implements ContentStack<T, S> {
 
@@ -100,7 +101,7 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
     @Override
     public ContentStack<Item, ItemStack> cheatsStack() {
         ItemStack itemStack = type.toItemStack(this);
-        return new TypedContentStack<>(CirrusTypes.ITEM_STACK, itemStack, itemStack.getCount());
+        return new TypedContentStack<>(CirrusTypes.Contents.ITEM_STACK, itemStack, itemStack.getCount());
     }
 
     @SuppressWarnings("unchecked")
@@ -110,9 +111,10 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
         if (o == null || getClass() != o.getClass()) return false;
 
         TypedContentStack<?, ?> that = (TypedContentStack<?, ?>) o;
-        return (amount == that.amount) &&
-            type.equals(that.type) &&
-            type.matches(value, (S) that.value, MatchStrategy.IDENTITY_COMPONENT);
+        return type == that.type &&
+               amount == that.amount &&
+               type.matchesIdentity(value, (S) that.value, variantType) &&
+               identityAndComponent.testComponents(type.getComponents(value), type.getComponents((S) that.value));
     }
 
     @Override
@@ -121,16 +123,17 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
         int result = type.hashCode();
         result = 31 * result + Long.hashCode(amount);
         result = 31 * result + type.contentType().hash(type.getContent(value));
+        result = variantType != null ? 31 * result + variantType.hashIdentity(value) : result;
         return result;
     }
 
     @Override
     public String toString() {
         return "TypedContentStack{" +
-            "type=" + type +
-            ", amount=" + amount +
-            ", value=" + type.toString(value) +
-            '}';
+               "type=" + type +
+               ", amount=" + amount +
+               ", value=" + type.toString(value) +
+               '}';
     }
 }
 
@@ -187,7 +190,7 @@ final class EmptyContentStack<T, S> implements ContentStack<T, S> {
 
     @Override
     public ContentStack<Item, ItemStack> cheatsStack() {
-        return new TypedContentStack<>(CirrusTypes.ITEM_STACK, 0, ItemStack.EMPTY);
+        return new TypedContentStack<>(CirrusTypes.Contents.ITEM_STACK, 0, ItemStack.EMPTY);
     }
 
     @Override

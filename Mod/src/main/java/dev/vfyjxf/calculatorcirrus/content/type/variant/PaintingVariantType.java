@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.content.type.variant;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
 import dev.vfyjxf.cloudlib.util.Locations;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
@@ -16,7 +16,7 @@ public class PaintingVariantType extends BasicVariantType<Item, ItemStack> {
     public static final PaintingVariantType instance = new PaintingVariantType();
 
     private PaintingVariantType() {
-        super(Locations.ofMc("painting"), CirrusTypes.ITEM_STACK);
+        super(Locations.ofMc("painting"), CirrusTypes.Contents.ITEM_STACK);
     }
 
     @Override
@@ -38,5 +38,10 @@ public class PaintingVariantType extends BasicVariantType<Item, ItemStack> {
         if (properties1 == null || properties2 == null) return false;
         return Objects.equals(properties1.getUnsafe().get("variant"), properties2.getUnsafe().get("variant"));
 
+    }
+
+    @Override
+    public int hashIdentity(ItemStack stack) {
+        return Objects.hashCode(stack.get(DataComponents.ENTITY_DATA));
     }
 }

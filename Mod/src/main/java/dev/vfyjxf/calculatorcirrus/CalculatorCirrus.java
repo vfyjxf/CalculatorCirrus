@@ -29,10 +29,10 @@ public abstract class CalculatorCirrus {
         if (loadingResult.failures().notEmpty()) {
             var failureByType =
                 loadingResult.failures()
-                    .groupBy(PluginLoader.LoadingFailure::type);
+                             .groupBy(PluginLoader.LoadingFailure::type);
             var warnings = failureByType.get(PluginLoader.FailureType.WARNING);
             for (var warning : warnings) {
-                logger.warn("{} {} is skipped because : {}", className, warning.instance().pluginId(), warning.reason());
+                logger.warn("{}: {} is skipped because : {}", className, warning.instance().pluginId(), warning.reason());
             }
             var fatal = failureByType.get(PluginLoader.FailureType.FATAL);
             if (fatal.notEmpty()) {

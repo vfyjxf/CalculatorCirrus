@@ -1,24 +1,17 @@
 package dev.vfyjxf.calculatorcirrus.internal;
 
 import com.google.auto.service.AutoService;
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusResolvers;
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes.IngredientResolvers;
 import dev.vfyjxf.calculatorcirrus.api.plugin.CirrusPlugin;
-import dev.vfyjxf.calculatorcirrus.api.register.ContentResolverRegister;
-import dev.vfyjxf.calculatorcirrus.api.register.ContentTypeRegister;
-import dev.vfyjxf.calculatorcirrus.api.register.ContentVariantRegister;
-import dev.vfyjxf.calculatorcirrus.api.register.RecipeFacetRegister;
-import dev.vfyjxf.calculatorcirrus.api.register.RecipeSystemRegister;
+import dev.vfyjxf.calculatorcirrus.api.register.*;
 import dev.vfyjxf.calculatorcirrus.content.resolver.fluid.VanillaFluidHandlerResolver;
-import dev.vfyjxf.calculatorcirrus.content.type.variant.EnchantedBookVariantType;
-import dev.vfyjxf.calculatorcirrus.content.type.variant.FireworkRocketVariantType;
-import dev.vfyjxf.calculatorcirrus.content.type.variant.InstrumentVariantType;
-import dev.vfyjxf.calculatorcirrus.content.type.variant.OminousBottleVariantType;
-import dev.vfyjxf.calculatorcirrus.content.type.variant.PaintingVariantType;
-import dev.vfyjxf.calculatorcirrus.content.type.variant.PotionVariantType;
-import dev.vfyjxf.calculatorcirrus.content.type.variant.SuspiciousStewVariantType;
+import dev.vfyjxf.calculatorcirrus.content.type.variant.*;
+import dev.vfyjxf.calculatorcirrus.recipe.content.resolver.item.DataComponentIngredientResolver;
+import dev.vfyjxf.calculatorcirrus.recipe.content.resolver.item.DifferenceIngredientResolver;
 import dev.vfyjxf.calculatorcirrus.recipe.facet.UnwrapFluidHandlerFacet;
 import dev.vfyjxf.calculatorcirrus.recipe.system.CraftingRecipeSystem;
+import mezz.jei.api.constants.RecipeTypes;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Items;
 
@@ -32,15 +25,15 @@ public class InternalPlugin implements CirrusPlugin {
 
     @Override
     public void registerContentType(ContentTypeRegister register) {
-        register.registerContentType(CirrusTypes.ITEM);
-        register.registerContentType(CirrusTypes.FLUID);
+        register.registerContentType(CirrusTypes.Contents.ITEM);
+        register.registerContentType(CirrusTypes.Contents.FLUID);
 
-        register.registerTagType(CirrusTypes.ITEM, CirrusTypes.ITEM_TAG);
-        register.registerTagType(CirrusTypes.FLUID, CirrusTypes.FLUID_TAG);
+        register.registerTagType(CirrusTypes.Contents.ITEM, CirrusTypes.Contents.ITEM_TAG);
+        register.registerTagType(CirrusTypes.Contents.FLUID, CirrusTypes.Contents.FLUID_TAG);
 
 
-        register.registerStackType(CirrusTypes.ITEM, CirrusTypes.ITEM_STACK);
-        register.registerStackType(CirrusTypes.FLUID, CirrusTypes.FLUID_STACK);
+        register.registerStackType(CirrusTypes.Contents.ITEM, CirrusTypes.Contents.ITEM_STACK);
+        register.registerStackType(CirrusTypes.Contents.FLUID, CirrusTypes.Contents.FLUID_STACK);
     }
 
     @Override
@@ -69,7 +62,7 @@ public class InternalPlugin implements CirrusPlugin {
 
         //region stack
 
-        register.registerStackResolver(CirrusResolvers.FLUID_CONTAINER, CirrusTypes.ITEM_STACK, VanillaFluidHandlerResolver.instance);
+        register.registerStackResolver(CirrusTypes.ContentResolvers.FLUID_CONTAINER, CirrusTypes.Contents.ITEM_STACK, VanillaFluidHandlerResolver.instance);
 
         //endregion
     }
@@ -81,8 +74,17 @@ public class InternalPlugin implements CirrusPlugin {
 
     @Override
     public void registerRecipeFacet(RecipeFacetRegister register) {
-        register.registerFacetTransformer(UnwrapFluidHandlerFacet.TYPE, UnwrapFluidHandlerFacet.transformer);
+        register.registerFacetTransformer(UnwrapFluidHandlerFacet.type, UnwrapFluidHandlerFacet.transformer);
     }
 
+    @Override
+    public void registerJeiRecipeTypeBridge(JeiRecipeTypeBridgeRegister register) {
+        register.registerRecipeTypeForSystem(CraftingRecipeSystem.systemId, RecipeTypes.CRAFTING);
+    }
 
+    @Override
+    public void registerIngredientResolver(IngredientResolverRegister register) {
+        register.registerIngredientResolver(IngredientResolvers.CUSTOM, DataComponentIngredientResolver.instance);
+        register.registerIngredientResolver(IngredientResolvers.CUSTOM, DifferenceIngredientResolver.instance);
+    }
 }

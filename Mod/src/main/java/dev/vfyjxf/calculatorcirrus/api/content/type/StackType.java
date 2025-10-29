@@ -6,10 +6,12 @@ import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.component.DataComponentType;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
@@ -19,9 +21,15 @@ import java.util.function.Predicate;
  * @param <T> the type of content, see {@link ContentType}
  * @param <S> the type of stack,such as {@link ItemStack}, {@link FluidStack}, etc.
  */
-public non-sealed interface StackType<T, S> extends ContentKind {
+public interface StackType<T, S> {
 
     //region content
+
+    /**
+     * @return the unique id of this type
+     */
+    @Contract(pure = true)
+    ResourceLocation typeId();
 
     ContentType<T> contentType();
 
@@ -67,6 +75,10 @@ public non-sealed interface StackType<T, S> extends ContentKind {
 
     boolean isEmpty(S stack);
 
+    default boolean supportComponents() {
+        return true;
+    }
+
     /**
      * Returns the components of the stack, if the type supports components.
      * <p>
@@ -86,18 +98,17 @@ public non-sealed interface StackType<T, S> extends ContentKind {
     /**
      * Checks if the given stack has the specified data component.
      *
-     * @param stack the stack to check for the component
+     * @param stack         the stack to check for the component
      * @param componentType the data component type to check for
      * @return true if the stack has the specified component, false otherwise or if components are not supported.
      */
     boolean hasComponent(S stack, DataComponentType<?> componentType);
 
     /**
-     *
-     * @param stack the stack to get the component from
+     * @param stack         the stack to get the component from
      * @param componentType the data component type to get
+     * @param <C>           the component data type
      * @return the component of the specified type, or null if the stack does not have the component or components are not supported.
-     * @param <C> the component data type
      * @throws IllegalArgumentException if components are not supported for the stack type.
      */
     <C> C getComponent(S stack, DataComponentType<? extends C> componentType) throws IllegalArgumentException;
@@ -110,10 +121,10 @@ public non-sealed interface StackType<T, S> extends ContentKind {
 
     /**
      * Checks if the two stacks have the same identity.
+     *
      * @param stack1 the stack to match
      * @param stack2 the stack to match
      * @return true if the two stacks have the same identity, false otherwise.
-     * @see #matchesVariantIdentity(Object, Object, VariantType)
      */
     boolean matchesIdentity(S stack1, S stack2, @Nullable VariantType<T, S> variantType);
 
@@ -128,7 +139,7 @@ public non-sealed interface StackType<T, S> extends ContentKind {
     boolean matches(S stack1, S stack2, MatchStrategy strategy);
 
     default boolean matches(S stack1, S stack2) {
-        return matches(stack1, stack2, MatchStrategy.ALL);
+        return matches(stack1, stack2, MatchStrategy.all);
     }
 
     /**

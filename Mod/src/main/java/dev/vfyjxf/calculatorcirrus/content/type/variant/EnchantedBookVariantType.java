@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.content.type.variant;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
 import dev.vfyjxf.cloudlib.util.Locations;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.Item;
@@ -14,7 +14,7 @@ public class EnchantedBookVariantType extends BasicVariantType<Item, ItemStack> 
     public static final EnchantedBookVariantType instance = new EnchantedBookVariantType();
 
     private EnchantedBookVariantType() {
-        super(Locations.ofMc("enchanted_book"), CirrusTypes.ITEM_STACK);
+        super(Locations.ofMc("enchanted_book"), CirrusTypes.Contents.ITEM_STACK);
     }
 
     @Override
@@ -33,6 +33,11 @@ public class EnchantedBookVariantType extends BasicVariantType<Item, ItemStack> 
         var enchantments = EnchantmentHelper.getEnchantmentsForCrafting(stack1);
         var enchantments2 = EnchantmentHelper.getEnchantmentsForCrafting(stack2);
         return enchantments.equals(enchantments2);
+    }
+
+    @Override
+    public int hashIdentity(ItemStack stack) {
+        return EnchantmentHelper.getEnchantmentsForCrafting(stack).hashCode();
     }
 
 }

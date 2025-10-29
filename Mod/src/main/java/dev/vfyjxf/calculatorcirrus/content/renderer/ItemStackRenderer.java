@@ -17,6 +17,10 @@ import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
 
 public class ItemStackRenderer implements StackRenderer<Item, ItemStack> {
 
+    public static final ItemStackRenderer instance = new ItemStackRenderer();
+
+    private ItemStackRenderer() {}
+
     @Override
     public void render(GuiGraphics graphics, ItemStack stack, int width, int height, float delta) {
         renderBase(graphics, stack, width, height, delta);

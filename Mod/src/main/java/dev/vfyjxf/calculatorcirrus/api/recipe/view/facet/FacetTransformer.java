@@ -2,9 +2,9 @@ package dev.vfyjxf.calculatorcirrus.api.recipe.view.facet;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.InputContent;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.OutputContent;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.RecipeContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.RecipeContext;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.RecipeView;
 import org.jetbrains.annotations.Contract;

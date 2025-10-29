@@ -4,7 +4,7 @@ import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 
 public interface ContentResolver<T, R> {
 
-    ResolverType<R> type();
+    ContentResolverType<R> type();
 
     ContentType<T> contentType();
 

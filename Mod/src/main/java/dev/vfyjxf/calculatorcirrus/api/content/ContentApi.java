@@ -1,13 +1,13 @@
 package dev.vfyjxf.calculatorcirrus.api.content;
 
 import dev.vfyjxf.calculatorcirrus.api.content.resolver.ContentResolver;
-import dev.vfyjxf.calculatorcirrus.api.content.resolver.ResolverType;
+import dev.vfyjxf.calculatorcirrus.api.content.resolver.ContentResolverType;
 import dev.vfyjxf.calculatorcirrus.api.content.resolver.StackResolver;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.StackType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.TagType;
 import dev.vfyjxf.calculatorcirrus.api.content.type.VariantType;
-import dev.vfyjxf.calculatorcirrus.util.Singletons;
+import dev.vfyjxf.calculatorcirrus.content.ContentApiImpl;
 import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
 import org.jetbrains.annotations.ApiStatus;
@@ -18,7 +18,11 @@ import org.jetbrains.annotations.UnmodifiableView;
 public interface ContentApi {
 
     static ContentApi instance() {
-        return Singletons.get(ContentApi.class);
+        ContentApi instance = ContentApiImpl.instance();
+        if (instance == null) {
+            throw new IllegalStateException("ContentApi is not initialized");
+        }
+        return instance;
     }
 
     //region content type
@@ -77,19 +81,19 @@ public interface ContentApi {
 
     //region resolver
 
-    boolean hasContentResolver(ResolverType<?> type);
+    boolean hasContentResolver(ContentResolverType<?> type);
 
-    boolean hasStackResolver(ResolverType<?> type);
-
-    @UnmodifiableView
-    <T, R> RichIterable<ContentResolver<T, R>> getResolver(ResolverType<R> type, ContentType<T> contentType);
+    boolean hasStackResolver(ContentResolverType<?> type);
 
     @UnmodifiableView
-    <T, S, R> RichIterable<StackResolver<T, S, R>> getStackResolver(ResolverType<R> type, StackType<T, S> stackType);
+    <T, R> RichIterable<ContentResolver<T, R>> getResolver(ContentResolverType<R> type, ContentType<T> contentType);
 
-    @Nullable <T, S, R> StackResolver<T, S, R> findStackResolver(ResolverType<R> type, StackType<T, S> stackType, S stack);
+    @UnmodifiableView
+    <T, S, R> RichIterable<StackResolver<T, S, R>> getStackResolver(ContentResolverType<R> type, StackType<T, S> stackType);
 
-    @Nullable <T, R> ContentResolver<T, R> findContentResolver(ResolverType<R> type, ContentType<T> contentType, T content);
+    @Nullable <T, S, R> StackResolver<T, S, R> findStackResolver(ContentResolverType<R> type, StackType<T, S> stackType, S stack);
+
+    @Nullable <T, R> ContentResolver<T, R> findContentResolver(ContentResolverType<R> type, ContentType<T> contentType, T content);
 
     //endregion
 

@@ -31,6 +31,9 @@ public class FluidStackRenderer implements StackRenderer<Fluid, FluidStack> {
 
     private static final int TEXTURE_SIZE = 16;
 
+    public static final FluidStackRenderer instance = new FluidStackRenderer();
+
+    private FluidStackRenderer() {}
 
     @Override
     public void render(GuiGraphics graphics, FluidStack stack, int width, int height, float delta) {

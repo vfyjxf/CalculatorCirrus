@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.content.type.variant;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
 import dev.vfyjxf.cloudlib.util.Locations;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.Item;
@@ -14,7 +14,7 @@ public class InstrumentVariantType extends BasicVariantType<Item, ItemStack> {
     public static final InstrumentVariantType instance = new InstrumentVariantType();
 
     private InstrumentVariantType() {
-        super(Locations.ofMc("instrument"), CirrusTypes.ITEM_STACK);
+        super(Locations.ofMc("instrument"), CirrusTypes.Contents.ITEM_STACK);
     }
 
     @Override
@@ -28,5 +28,10 @@ public class InstrumentVariantType extends BasicVariantType<Item, ItemStack> {
     @Override
     public boolean matchesVariantIdentity(ItemStack stack1, ItemStack stack2) {
         return Objects.equals(stack1.get(DataComponents.INSTRUMENT), stack2.get(DataComponents.INSTRUMENT));
+    }
+
+    @Override
+    public int hashIdentity(ItemStack stack) {
+        return Objects.hashCode(stack.get(DataComponents.INSTRUMENT));
     }
 }

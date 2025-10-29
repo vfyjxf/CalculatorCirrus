@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.content.type.variant;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
 import dev.vfyjxf.cloudlib.util.Locations;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.Item;
@@ -8,12 +8,14 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionContents;
 
+import java.util.Objects;
+
 public class PotionVariantType extends BasicVariantType<Item, ItemStack> {
 
     public static final PotionVariantType instance = new PotionVariantType();
 
     private PotionVariantType() {
-        super(Locations.ofMc("potion"), CirrusTypes.ITEM_STACK);
+        super(Locations.ofMc("potion"), CirrusTypes.Contents.ITEM_STACK);
     }
 
     @Override
@@ -29,5 +31,10 @@ public class PotionVariantType extends BasicVariantType<Item, ItemStack> {
     public boolean matchesVariantIdentity(ItemStack stack1, ItemStack stack2) {
         return stack1.getOrDefault(DataComponents.POTION_CONTENTS, PotionContents.EMPTY)
             .equals(stack2.getOrDefault(DataComponents.POTION_CONTENTS, PotionContents.EMPTY));
+    }
+
+    @Override
+    public int hashIdentity(ItemStack stack) {
+        return Objects.hashCode(stack.get(DataComponents.POTION_CONTENTS));
     }
 }

@@ -1,6 +1,6 @@
 package dev.vfyjxf.calculatorcirrus.api.content.value;
 
-import dev.vfyjxf.calculatorcirrus.api.content.CirrusTypes;
+import dev.vfyjxf.calculatorcirrus.api.CirrusTypes;
 import dev.vfyjxf.calculatorcirrus.api.content.ContentApi;
 import dev.vfyjxf.calculatorcirrus.api.content.MatchStrategy;
 import dev.vfyjxf.calculatorcirrus.api.content.type.ContentType;
@@ -79,26 +79,26 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
 
     static ContentStack<Item, ItemStack> fromStack(@Nullable ItemStack stack) {
         if (stack == null || stack.isEmpty()) return empty();
-        var type = CirrusTypes.ITEM_STACK;
+        var type = CirrusTypes.Contents.ITEM_STACK;
         return fromStack(type, type.copy(stack), type.getAmount(stack));
     }
 
     static ContentStack<Item, ItemStack> fromStack(@Nullable ItemStack stack, long amount) {
         if (stack == null || stack.isEmpty()) return empty();
-        var type = CirrusTypes.ITEM_STACK;
+        var type = CirrusTypes.Contents.ITEM_STACK;
         return fromStack(type, type.copy(stack), amount);
     }
 
     static ContentStack<Item, ItemStack> fromContent(Item item, long amount, DataComponentPatch componentPatch) {
-        return fromContent(CirrusTypes.ITEM_STACK, item, amount, componentPatch);
+        return fromContent(CirrusTypes.Contents.ITEM_STACK, item, amount, componentPatch);
     }
 
     static ContentStack<Item, ItemStack> fromContent(Item item, long amount) {
-        return fromContent(CirrusTypes.ITEM_STACK, item, amount);
+        return fromContent(CirrusTypes.Contents.ITEM_STACK, item, amount);
     }
 
     static ContentStack<Item, ItemStack> fromContent(Item item) {
-        return fromContent(CirrusTypes.ITEM_STACK, item, CirrusTypes.ITEM_STACK.quantity());
+        return fromContent(CirrusTypes.Contents.ITEM_STACK, item, CirrusTypes.Contents.ITEM_STACK.quantity());
     }
 
     //endregion
@@ -107,26 +107,26 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
 
     static ContentStack<Fluid, FluidStack> fromStack(@Nullable FluidStack stack) {
         if (stack == null || stack.isEmpty()) return empty();
-        var type = CirrusTypes.FLUID_STACK;
+        var type = CirrusTypes.Contents.FLUID_STACK;
         return fromStack(type, type.copy(stack), type.getAmount(stack));
     }
 
     static ContentStack<Fluid, FluidStack> fromStack(@Nullable FluidStack stack, long amount) {
         if (stack == null || stack.isEmpty()) return empty();
-        var type = CirrusTypes.FLUID_STACK;
+        var type = CirrusTypes.Contents.FLUID_STACK;
         return fromStack(type, type.copy(stack), amount);
     }
 
     static ContentStack<Fluid, FluidStack> fromContent(Fluid fluid, long amount, DataComponentPatch componentPatch) {
-        return fromContent(CirrusTypes.FLUID_STACK, fluid, amount, componentPatch);
+        return fromContent(CirrusTypes.Contents.FLUID_STACK, fluid, amount, componentPatch);
     }
 
     static ContentStack<Fluid, FluidStack> fromContent(Fluid fluid, long amount) {
-        return fromContent(CirrusTypes.FLUID_STACK, fluid, amount);
+        return fromContent(CirrusTypes.Contents.FLUID_STACK, fluid, amount);
     }
 
     static ContentStack<Fluid, FluidStack> fromContent(Fluid fluid) {
-        return fromContent(CirrusTypes.FLUID_STACK, fluid, CirrusTypes.FLUID_STACK.quantity());
+        return fromContent(CirrusTypes.Contents.FLUID_STACK, fluid, CirrusTypes.Contents.FLUID_STACK.quantity());
     }
 
     //endregion
@@ -153,6 +153,14 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
 
     default boolean notEmpty() {
         return !isEmpty();
+    }
+
+    default boolean isValueEmpty() {
+        return this == empty() || type().isEmpty(value());
+    }
+
+    default boolean valueNotEmpty() {
+        return !isValueEmpty();
     }
 
     long amount();
@@ -196,20 +204,20 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
         if (type() != other.type()) return false;
 
         return (!strategy.withAmount() || amount() == other.amount()) &&
-            type().matches(value(), other.<T, S>cast().value(), strategy);
+               type().matches(value(), other.<T, S>cast().value(), strategy);
 
     }
 
     default boolean matches(ContentStack<?, ?> other) {
-        return matches(other, MatchStrategy.IDENTITY_COMPONENT);
+        return matches(other, MatchStrategy.identityAndComponent);
     }
 
-    default boolean matchesContent(ContentValue<?> value) {
-        if (this == empty() || value == ContentValue.empty()) {
-            return this == empty() && value == ContentValue.empty();
+    default boolean matchesContent(ContentObject<?> content) {
+        if (this == empty() || content == ContentObject.empty()) {
+            return this == empty() && content == ContentObject.empty();
         }
-        return contentType() == value.type() &&
-            contentType().matches(content(), value.<T>cast().value());
+        return contentType() == content.type() &&
+               contentType().matches(content(), content.<T>cast().value());
     }
 
     //endregion
@@ -278,14 +286,14 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
 
     //endregion
 
-    //region util
+    //region type util
 
     default boolean isItem() {
-        return type() == CirrusTypes.ITEM_STACK;
+        return type() == CirrusTypes.Contents.ITEM_STACK;
     }
 
     default boolean isFluid() {
-        return type() == CirrusTypes.FLUID_STACK;
+        return type() == CirrusTypes.Contents.FLUID_STACK;
     }
 
     default boolean is(StackType<?, ?> type) {
@@ -303,7 +311,7 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
 
     //region amount util
 
-    default ContentStack<T, S> addAmount(long amount) {
+    default ContentStack<T, S> increase(long amount) {
         return setAmount(Math.addExact(amount(), amount));
     }
 

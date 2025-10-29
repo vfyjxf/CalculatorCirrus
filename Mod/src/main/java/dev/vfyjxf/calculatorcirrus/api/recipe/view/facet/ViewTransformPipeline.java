@@ -2,9 +2,9 @@ package dev.vfyjxf.calculatorcirrus.api.recipe.view.facet;
 
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.calculatorcirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.InputContent;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.OutputContent;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.RecipeContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.calculatorcirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.RecipeContext;
 import dev.vfyjxf.calculatorcirrus.api.recipe.view.RecipeView;
 import dev.vfyjxf.cloudlib.api.util.MutableLists;
@@ -74,16 +74,16 @@ public final class ViewTransformPipeline {
         }
 
         MutableList<InputContent> transformedInputs = view.inputs()
-            .collect(FacetedContent::content)
-            .reject(decrement::rejected)
-            .newWithAll(increment.inputIncrements)
-            .toList();
+                                                          .collect(FacetedContent::content)
+                                                          .reject(decrement::rejected)
+                                                          .newWithAll(increment.inputIncrements)
+                                                          .toList();
 
         MutableList<OutputContent> transformedOutputs = view.outputs()
-            .collect(FacetedContent::content)
-            .reject(decrement::rejected)
-            .newWithAll(increment.outputIncrements)
-            .toList();
+                                                            .collect(FacetedContent::content)
+                                                            .reject(decrement::rejected)
+                                                            .newWithAll(increment.outputIncrements)
+                                                            .toList();
 
         return new TransformedRecipeView(view.recipe(), transformedInputs.toImmutable(), transformedOutputs.toImmutable());
     }
