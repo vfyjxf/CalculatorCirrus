@@ -1,0 +1,34 @@
+package dev.vfyjxf.cirrus.internal;
+
+import com.google.auto.service.AutoService;
+import dev.vfyjxf.cirrus.api.CirrusTypes;
+import dev.vfyjxf.cirrus.api.plugin.ClientCirrusPlugin;
+import dev.vfyjxf.cirrus.api.recipe.machine.EmptyMachineEntry;
+import dev.vfyjxf.cirrus.api.recipe.machine.ItemMachineEntry;
+import dev.vfyjxf.cirrus.api.register.ContentRendererRegister;
+import dev.vfyjxf.cirrus.api.register.MachineEntryRendererRegister;
+import dev.vfyjxf.cirrus.content.renderer.FluidStackRenderer;
+import dev.vfyjxf.cirrus.content.renderer.ItemStackRenderer;
+import dev.vfyjxf.cirrus.recipe.handler.EmptyMachineEntryRenderer;
+import dev.vfyjxf.cirrus.recipe.handler.ItemMachineEntryRenderer;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+
+@AutoService(ClientCirrusPlugin.class)
+public class InternalClientPlugin implements ClientCirrusPlugin {
+    @Override
+    public Namespace pluginId() {
+        return builtin;
+    }
+
+    @Override
+    public void registerContentRenderer(ContentRendererRegister register) {
+        register.registerRenderer(CirrusTypes.Contents.ITEM_STACK, ItemStackRenderer.instance);
+        register.registerRenderer(CirrusTypes.Contents.FLUID_STACK, FluidStackRenderer.instance);
+    }
+
+    @Override
+    public void registerHandlerEntryRenderer(MachineEntryRendererRegister register) {
+        register.registerHandlerRenderer(EmptyMachineEntry.class, EmptyMachineEntryRenderer.instance);
+        register.registerHandlerRenderer(ItemMachineEntry.class, ItemMachineEntryRenderer.instance);
+    }
+}

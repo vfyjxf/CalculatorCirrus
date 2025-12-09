@@ -1,4 +1,4 @@
-package dev.vfyjxf.calculatorcirrus.integration;
+package dev.vfyjxf.cirrus.integration;
 
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;

@@ -1,8 +1,8 @@
-package dev.vfyjxf.calculatorcirrus.integration;
+package dev.vfyjxf.cirrus.integration;
 
-import dev.vfyjxf.calculatorcirrus.api.RegisterAdapterPlugin;
-import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
-import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
+import dev.vfyjxf.cirrus.api.RegisterAdapterPlugin;
+import dev.vfyjxf.cirrus.api.RegisterContentEvent;
+import dev.vfyjxf.cirrus.api.RegisterRecipeSystemEvent;
 import dev.vfyjxf.cloudlib.api.util.ServiceLoading;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;

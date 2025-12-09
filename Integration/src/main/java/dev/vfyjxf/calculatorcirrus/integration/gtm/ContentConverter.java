@@ -1,7 +1,7 @@
-package dev.vfyjxf.calculatorcirrus.integration.gtm;
+package dev.vfyjxf.cirrus.integration.gtm;
 
 import com.gregtechceu.gtceu.api.recipe.content.Content;
-import dev.vfyjxf.calculatorcirrus.api.recipe.content.IngredientStack;
+import dev.vfyjxf.cirrus.api.recipe.content.IngredientStack;
 import org.jetbrains.annotations.Nullable;
 
 public interface ContentConverter {

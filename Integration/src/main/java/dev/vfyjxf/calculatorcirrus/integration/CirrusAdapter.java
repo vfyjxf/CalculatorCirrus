@@ -1,8 +1,8 @@
-package dev.vfyjxf.calculatorcirrus.integration;
+package dev.vfyjxf.cirrus.integration;
 
 
-import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
-import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
+import dev.vfyjxf.cirrus.api.RegisterContentEvent;
+import dev.vfyjxf.cirrus.api.RegisterRecipeSystemEvent;
 
 public interface CirrusAdapter {
 

@@ -1,15 +1,15 @@
-package dev.vfyjxf.calculatorcirrus.integration.gtm;
+package dev.vfyjxf.cirrus.integration.gtm;
 
 import com.gregtechceu.gtceu.api.capability.recipe.FluidRecipeCapability;
 import com.gregtechceu.gtceu.api.capability.recipe.ItemRecipeCapability;
 import com.gregtechceu.gtceu.api.recipe.GTRecipeType;
-import dev.vfyjxf.calculatorcirrus.api.RegisterContentEvent;
-import dev.vfyjxf.calculatorcirrus.api.RegisterAdapterPlugin;
-import dev.vfyjxf.calculatorcirrus.api.RegisterRecipeSystemEvent;
-import dev.vfyjxf.calculatorcirrus.integration.CirrusAdapter;
-import dev.vfyjxf.calculatorcirrus.integration.gtm.converter.FluidConverter;
-import dev.vfyjxf.calculatorcirrus.integration.gtm.converter.ItemConverter;
-import dev.vfyjxf.calculatorcirrus.integration.gtm.systems.GTMRecipeSystem;
+import dev.vfyjxf.cirrus.api.RegisterContentEvent;
+import dev.vfyjxf.cirrus.api.RegisterAdapterPlugin;
+import dev.vfyjxf.cirrus.api.RegisterRecipeSystemEvent;
+import dev.vfyjxf.cirrus.integration.CirrusAdapter;
+import dev.vfyjxf.cirrus.integration.gtm.converter.FluidConverter;
+import dev.vfyjxf.cirrus.integration.gtm.converter.ItemConverter;
+import dev.vfyjxf.cirrus.integration.gtm.systems.GTMRecipeSystem;
 import net.minecraft.core.registries.BuiltInRegistries;
 
 public class PluginRegister {

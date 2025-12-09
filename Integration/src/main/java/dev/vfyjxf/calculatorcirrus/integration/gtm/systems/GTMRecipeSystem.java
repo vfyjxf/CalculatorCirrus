@@ -1,17 +1,17 @@
-package dev.vfyjxf.calculatorcirrus.integration.gtm.systems;
+package dev.vfyjxf.cirrus.integration.gtm.systems;
 
 import com.gregtechceu.gtceu.api.capability.recipe.RecipeCapability;
 import com.gregtechceu.gtceu.api.recipe.GTRecipeType;
 import com.gregtechceu.gtceu.api.recipe.content.Content;
 import com.gregtechceu.gtceu.api.recipe.kind.GTRecipe;
 import com.gregtechceu.gtceu.api.registry.GTRegistries;
-import dev.vfyjxf.calculatorcirrus.api.content.value.ContentStack;
-import dev.vfyjxf.calculatorcirrus.api.recipe.view.RecipeView;
-import dev.vfyjxf.calculatorcirrus.api.recipe.content.IngredientGroup;
-import dev.vfyjxf.calculatorcirrus.api.recipe.content.IngredientStack;
-import dev.vfyjxf.calculatorcirrus.api.recipe.system.RecipeLookup;
-import dev.vfyjxf.calculatorcirrus.api.recipe.system.VanillaRecipeSystem;
-import dev.vfyjxf.calculatorcirrus.integration.gtm.ContentConverter;
+import dev.vfyjxf.cirrus.api.content.value.ContentStack;
+import dev.vfyjxf.cirrus.api.recipe.view.RecipeView;
+import dev.vfyjxf.cirrus.api.recipe.content.IngredientGroup;
+import dev.vfyjxf.cirrus.api.recipe.content.IngredientStack;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeLookup;
+import dev.vfyjxf.cirrus.api.recipe.system.VanillaRecipeSystem;
+import dev.vfyjxf.cirrus.integration.gtm.ContentConverter;
 import dev.vfyjxf.cloudlib.util.Locations;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
