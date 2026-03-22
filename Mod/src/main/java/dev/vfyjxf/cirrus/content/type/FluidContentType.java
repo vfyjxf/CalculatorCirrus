@@ -10,18 +10,17 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
-import org.jetbrains.annotations.Nullable;
 
 public final class FluidContentType extends BasicContentType<Fluid> {
 
     public static final FluidContentType instance = new FluidContentType();
 
     private FluidContentType() {
-        super(Namespace.ofMc("fluid"), Fluid.class, BuiltInRegistries.FLUID.byNameCodec());
+        super(Namespace.ofMc("fluid"), BuiltInRegistries.FLUID.byNameCodec());
     }
 
     @Override
-    public @Nullable ResourceLocation getLocation(Fluid fluid) {
+    public ResourceLocation getLocation(Fluid fluid) {
         return BuiltInRegistries.FLUID.getResourceKey(fluid)
                                       .map(ResourceKey::location)
                                       .orElseThrow(() -> new IllegalArgumentException("Unknown fluid: " + fluid));

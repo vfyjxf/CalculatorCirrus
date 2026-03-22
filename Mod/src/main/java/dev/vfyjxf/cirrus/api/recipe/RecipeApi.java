@@ -7,13 +7,15 @@ import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolverType;
 import dev.vfyjxf.cirrus.api.recipe.filter.RecipeFilter;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
-import dev.vfyjxf.cirrus.api.recipe.view.facet.FacetTransformer;
-import dev.vfyjxf.cirrus.api.recipe.view.facet.RecipeFacet;
-import dev.vfyjxf.cirrus.api.recipe.view.facet.RecipeFacetType;
-import dev.vfyjxf.cirrus.api.recipe.view.facet.ViewTransformer;
+import dev.vfyjxf.cirrus.api.recipe.system.VanillaRecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionTransformer;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import mezz.jei.api.recipe.RecipeType;
+import net.minecraft.world.item.crafting.Recipe;
 import org.eclipse.collections.api.RichIterable;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
@@ -22,6 +24,12 @@ import org.jetbrains.annotations.UnmodifiableView;
 @ApiStatus.NonExtendable
 public interface RecipeApi {
 
+    /**
+     * Get an instance of RecipeApi
+     *
+     * @return an instance of RecipeApi
+     * @throws IllegalStateException if RecipeApi is not initialized
+     */
     static RecipeApi instance() {
         RecipeApi instance = RecipeApiImpl.instance();
         if (instance == null) {
@@ -32,13 +40,47 @@ public interface RecipeApi {
 
     //region system
 
+    /**
+     * Check if a recipe system is registered
+     *
+     * @param systemId the id of the system
+     * @return true if the system is registered, false otherwise
+     */
     boolean hasSystem(Namespace systemId);
 
+    /**
+     * Get a recipe system
+     *
+     * @param systemId the id of the system
+     * @return the recipe system
+     * @throws IllegalArgumentException if the system is not registered
+     */
     RecipeSystem<?> getSystem(Namespace systemId);
 
+    /**
+     * Find a recipe system
+     *
+     * @param systemId the id of the system
+     * @return the recipe system if found, null otherwise
+     */
     @Nullable
     RecipeSystem<?> findSystem(Namespace systemId);
 
+    /**
+     * Find a vanilla recipe system
+     *
+     * @param recipeType the type of the recipe
+     * @param <T>        the type of the recipe
+     * @return the vanilla recipe system if found, null otherwise
+     */
+    @Nullable <T extends Recipe<?>> VanillaRecipeSystem<T> findVanillaSystem(net.minecraft.world.item.crafting.RecipeType<T> recipeType);
+
+    /**
+     * Get all recipe systems tagged with the given tag
+     *
+     * @param tag the tag of the system
+     * @return an unmodifiable view of all recipe systems tagged with the given tag
+     */
     RichIterable<? extends RecipeSystem<?>> getTaggedSystems(Namespace tag);
 
     /**
@@ -49,15 +91,43 @@ public interface RecipeApi {
 
     //endregion
 
-    //region facet
+    //region clause
 
-    boolean hasFacet(Namespace facetId);
+    /**
+     * Check if a recipe clause type is registered.
+     *
+     * @param clauseId the id of the clause type
+     * @return true if the clause type is registered, false otherwise
+     */
+    boolean hasClause(Namespace clauseId);
 
-    RecipeFacetType getFacetType(Namespace facetId) throws IllegalArgumentException;
+    /**
+     * Get a recipe clause type.
+     *
+     * @param clauseId the id of the clause type
+     * @return the clause type
+     * @throws IllegalArgumentException if the clause type is not registered
+     */
+    ClauseType getClauseType(Namespace clauseId) throws IllegalArgumentException;
 
-    <T extends RecipeContent, F extends RecipeFacet> @Nullable FacetTransformer<T, F> findFacetTransformer(RecipeFacetType type);
+    /**
+     * Find a content transformer for the given clause type.
+     *
+     * @param type the clause type
+     * @param <T>  the type of the content
+     * @param <F>  the type of the clause
+     * @return the transformer if found, null otherwise
+     */
+    <T extends RecipeContent, F extends RecipeClause> @Nullable ContentTransformer<T, F> findContentTransformer(ClauseType type);
 
-    <F extends RecipeFacet> @Nullable ViewTransformer<F> findViewTransformer(RecipeFacetType type);
+    /**
+     * Find a projection transformer for the given clause type.
+     *
+     * @param type the clause type
+     * @param <F>  the type of the clause
+     * @return the transformer if found, null otherwise
+     */
+    <F extends RecipeClause> @Nullable ProjectionTransformer<F> findProjectionTransformer(ClauseType type);
 
     //endregion
 
@@ -67,7 +137,7 @@ public interface RecipeApi {
      * @param systemId        the id of the system
      * @param withJeiFallback whether to include handlers from JEI's {@link mezz.jei.api.recipe.IRecipeManager#createRecipeCatalystLookup(RecipeType)} when {@link RecipeSystem} bind to a {@link RecipeType}
      * @return an unmodifiable view of all handlers for the given system
-     * @see RecipeApi#getJeiRecipeTypeForSystem(Namespace) (RecipeSystem)
+     * @see RecipeApi#getJeiRecipeTypeForSystem(Namespace)
      */
     RichIterable<MachineEntry> getMachines(Namespace systemId, boolean withJeiFallback);
 
@@ -75,21 +145,50 @@ public interface RecipeApi {
 
     //region ingredient
 
+    /**
+     * Get all ingredient resolvers for the given type
+     *
+     * @param type the type of the resolver
+     * @param <T>  the type of the ingredient
+     * @return an unmodifiable view of all ingredient resolvers for the given type
+     */
     <T> @UnmodifiableView RichIterable<IngredientResolver<T>> getIngredientResolver(IngredientResolverType<T> type);
 
+    /**
+     * Find an ingredient resolver for the given ingredient
+     *
+     * @param type       the type of the resolver
+     * @param ingredient the ingredient
+     * @param <T>        the type of the ingredient
+     * @return the ingredient resolver if found, null otherwise
+     */
     <T> @Nullable IngredientResolver<T> findIngredientResolver(IngredientResolverType<T> type, T ingredient);
 
     //endregion
 
     //region filter
 
+    /**
+     * Get all recipe filters for the given id and system
+     *
+     * @param id     the id of the filter
+     * @param system the recipe system
+     * @param <R>    the type of the recipe
+     * @return an unmodifiable view of all recipe filters for the given id and system
+     */
     <R> RichIterable<? extends RecipeFilter<R>> getFilter(Namespace id, RecipeSystem<R> system);
 
     //endregion
 
     //region jei bridge
 
-    RichIterable<RecipeType<?>> getJeiRecipeTypeForSystem(Namespace systemId);
+    /**
+     * Get all JEI recipe types for the given system
+     *
+     * @param systemId the id of the system
+     * @return an unmodifiable view of all JEI recipe types for the given system
+     */
+    RichIterable<? extends RecipeType<?>> getJeiRecipeTypeForSystem(Namespace systemId);
 
     //endregion
 

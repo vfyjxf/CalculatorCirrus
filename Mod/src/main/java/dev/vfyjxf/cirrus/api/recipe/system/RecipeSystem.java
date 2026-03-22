@@ -5,7 +5,7 @@ import com.mojang.serialization.Codec;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.constraint.RecipeConstraint;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
-import dev.vfyjxf.cirrus.api.recipe.view.RecipeView;
+import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import mezz.jei.api.recipe.RecipeType;
@@ -15,9 +15,8 @@ import net.minecraft.world.item.ItemStack;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.impl.collector.Collectors2;
+import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Unmodifiable;
-
-import javax.annotation.Nullable;
 
 /**
  * <li>
@@ -72,7 +71,8 @@ public interface RecipeSystem<R> {
 
     //region resolve
 
-    RecipeView resolveRecipe(R recipe);
+    //TODO:empty or failed?
+    RecipeProjection resolveRecipe(R recipe);
 
     //endregion
 

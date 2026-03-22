@@ -3,7 +3,9 @@ package dev.vfyjxf.cirrus.api.recipe.content;
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
+import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
+import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.value.EnergyValue;
 import dev.vfyjxf.cirrus.api.recipe.value.TimeValue;
@@ -19,6 +21,14 @@ public sealed interface OutputContent
     //region factory
 
     //region value factory
+
+    static <T> OutputContent fromValue(ContentValue<T> value, float chance) {
+        return new ValueContent<>(value.type(), value.content(), chance);
+    }
+
+    static <T> OutputContent fromValue(ContentValue<T> value) {
+        return fromValue(value, MAX_CHANCE);
+    }
 
     static <T> OutputContent fromValue(ValueType<T> type, T value, float chance) {
         return new ValueContent<>(type, value, chance);
@@ -63,6 +73,15 @@ public sealed interface OutputContent
     //endregion
 
     //region stack factory
+
+    static <T, S> OutputContent fromStack(ContentStack<T, S> stack, float chance) {
+        if (stack.isEmpty()) return empty;
+        return new StackContent<>(stack.type(), stack.copy(), chance);
+    }
+
+    static <T, S> OutputContent fromStack(ContentStack<T, S> stack) {
+        return fromStack(stack, MAX_CHANCE);
+    }
 
     static <T, S> OutputContent fromStack(StackType<T, S> type, S stack, long amount, float chance) {
         if (amount <= 0) return empty;
@@ -135,7 +154,7 @@ public sealed interface OutputContent
 
     //region util
 
-    default ContentVariant asContent() {
+    default ContentResource asResource() {
         return switch (this) {
             case EmptyRecipeContent ignored -> ContentStack.empty();
             case StackContent<?, ?> stack -> stack.content();

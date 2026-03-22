@@ -10,24 +10,17 @@ import org.jetbrains.annotations.Nullable;
 public abstract class BasicContentType<T> implements ContentType<T> {
 
     private final Namespace typeId;
-    private final Class<T> typeClass;
     private final @Nullable Codec<T> contentCodec;
     private @Nullable TagType<T> tagType;
 
-    public BasicContentType(Namespace typeId, Class<T> typeClass, @Nullable Codec<T> contentCodec) {
+    public BasicContentType(Namespace typeId, @Nullable Codec<T> contentCodec) {
         this.typeId = typeId;
-        this.typeClass = typeClass;
         this.contentCodec = contentCodec;
     }
 
     @Override
     public Namespace typeId() {
         return typeId;
-    }
-
-    @Override
-    public Class<T> valueType() {
-        return typeClass;
     }
 
     @Override

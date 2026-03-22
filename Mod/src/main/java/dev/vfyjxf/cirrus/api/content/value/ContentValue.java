@@ -3,7 +3,7 @@ package dev.vfyjxf.cirrus.api.content.value;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import org.jetbrains.annotations.Range;
 
-public sealed interface ContentValue<T> extends ContentVariant permits TypedContentValue {
+public sealed interface ContentValue<T> extends ContentVariant, ContentResource permits TypedContentValue {
 
     static <T> ContentValue<T> fromValue(ValueType<T> type, T content) {
         return new TypedContentValue<>(type, content);
@@ -21,6 +21,16 @@ public sealed interface ContentValue<T> extends ContentVariant permits TypedCont
 
     //endregion
 
+    @Override
+    default long amount() {
+        return value();
+    }
+
+    @Override
+    default ContentValue<T> normalize() {
+        return this;
+    }
+
     //region util
 
     default ContentValue<T> copy() {
@@ -29,6 +39,11 @@ public sealed interface ContentValue<T> extends ContentVariant permits TypedCont
 
     default boolean matches(ContentValue<?> other) {
         return type() == other.type();
+    }
+
+    @Override
+    default boolean matchesResource(ContentResource resource) {
+        return resource instanceof ContentValue<?> value && matches(value);
     }
 
     //endregion

@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.api.content.util;
 
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.TagType;
+import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.helper.TagHelper;
 import net.minecraft.tags.TagKey;
 import org.eclipse.collections.api.set.MutableSet;
@@ -20,6 +21,13 @@ public sealed interface TagLookup<T> permits TagLookupImpl {
         @Unmodifiable Collection<? extends S> stacks
     ) {
         return TagHelper.findTagMatchStacks(tagType, stackType, stacks);
+    }
+
+    static <T> @Nullable TagKey<T> findTagMatchStacks(
+        TagType<T> tagType,
+        @Unmodifiable Collection<? extends ContentStack<T, ?>> stacks
+    ) {
+        return TagHelper.findTagMatchStacks(tagType, stacks);
     }
 
     static <T> TagLookup<T> create(TagType<T> tagType) {

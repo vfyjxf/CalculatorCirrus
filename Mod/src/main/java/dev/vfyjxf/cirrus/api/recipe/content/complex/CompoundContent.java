@@ -1,12 +1,15 @@
 package dev.vfyjxf.cirrus.api.recipe.content.complex;
 
-import com.google.common.collect.ImmutableList;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.neoforged.neoforge.common.crafting.CompoundIngredient;
+import org.eclipse.collections.api.RichIterable;
+import org.eclipse.collections.api.factory.Lists;
+import org.eclipse.collections.api.list.ImmutableList;
+import org.eclipse.collections.impl.collector.Collectors2;
 import org.jetbrains.annotations.Range;
 
 import java.util.Collection;
@@ -19,7 +22,7 @@ public final class CompoundContent implements ComplexContent {
                                  .stream()
                                  .map(InputContent::fromItemIngredient)
                                  .filter(InputContent::notEmpty)
-                                 .collect(ImmutableList.toImmutableList());
+                                 .collect(Collectors2.toImmutableList());
         if (contents.isEmpty()) return empty;
         return new CompoundContent(contents, amount, chance);
     }
@@ -29,7 +32,7 @@ public final class CompoundContent implements ComplexContent {
         var collect = contents.stream()
                               .filter(InputContent::notEmpty)
                               .map(InputContent::copy)
-                              .collect(ImmutableList.toImmutableList());
+                              .collect(Collectors2.toImmutableList());
         if (collect.isEmpty()) return empty;
         return new CompoundContent(collect, amount, chance);
     }
@@ -100,5 +103,13 @@ public final class CompoundContent implements ComplexContent {
         return false;
     }
 
+    @Override
+    public boolean isEnumerable() {
+        return contents.allSatisfy(InputContent::isEnumerable);
+    }
 
+    @Override
+    public RichIterable<? extends ContentVariant> enumerate() {
+        return isEnumerable() ? contents.flatCollect(InputContent::enumerate).distinct() : Lists.immutable.empty();
+    }
 }

@@ -5,6 +5,8 @@ import dev.vfyjxf.cirrus.api.content.type.TagType;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.util.TagLookup;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
+import dev.vfyjxf.cirrus.api.content.value.ContentValue;
+import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.tags.TagKey;
@@ -18,8 +20,10 @@ import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.crafting.FluidIngredient;
 import net.neoforged.neoforge.fluids.crafting.SizedFluidIngredient;
 import net.neoforged.neoforge.fluids.crafting.TagFluidIngredient;
+import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.impl.collector.Collectors2;
 import org.eclipse.collections.impl.list.fixed.ArrayAdapter;
+import org.jetbrains.annotations.UnmodifiableView;
 
 import java.util.SequencedCollection;
 
@@ -161,6 +165,14 @@ public sealed interface InputContent
     //endregion
 
     //region value factory
+
+    static <T> InputContent fromValue(ContentValue<T> value, float chance) {
+        return new ValueContent<>(value.type(), value.content(), chance);
+    }
+
+    static <T> InputContent fromValue(ContentValue<T> value) {
+        return fromValue(value, MAX_CHANCE);
+    }
 
     static <T> InputContent fromValue(ValueType<T> type, T value, float chance) {
         return new ValueContent<>(type, value, chance);
@@ -345,13 +357,39 @@ public sealed interface InputContent
 
     //region input info
 
+    /**
+     * Whether this content is consumed.
+     *
+     * @return true if this content is consumed.
+     */
     default boolean consumed() {
         return chance() > MIN_CHANCE;
     }
 
+    /**
+     * Whether this content is not consumed.
+     *
+     * @return true if this content is not consumed.
+     */
     default boolean notConsumed() {
         return chance() == MIN_CHANCE;
     }
+
+    /**
+     * Whether this content can be enumerated in a strict way.
+     *
+     * @return true if this content can be enumerated.
+     */
+    boolean isEnumerable();
+
+    /**
+     * Enumerate all possible variants of this content,if {@link #isEnumerable()} returns false,an empty iterable will be returned.
+     *
+     * @return an unmodifiable view of all possible variants.
+     * @see #isEnumerable()
+     */
+    @UnmodifiableView
+    RichIterable<? extends ContentVariant> enumerate();
 
     //endregion
 

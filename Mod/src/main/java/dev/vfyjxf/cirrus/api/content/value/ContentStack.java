@@ -6,8 +6,6 @@ import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.VariantType;
-import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
-import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
@@ -22,9 +20,7 @@ import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnknownNullability;
 
-import java.util.function.BiConsumer;
-
-public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyContentStack, TypedContentStack {
+public sealed interface ContentStack<T, S> extends ContentVariant, ContentResource permits EmptyContentStack, TypedContentStack {
 
     @SuppressWarnings("unchecked")
     static <C, R> ContentStack<C, R> empty() {
@@ -149,8 +145,8 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
         return type().getContent(value());
     }
 
-    default ContentObject<T> contentObject() {
-        return ContentObject.fromContent(contentType(), content());
+    default ContentKind<T> kind() {
+        return ContentKind.fromContent(contentType(), content());
     }
 
     default boolean isEmpty() {
@@ -216,12 +212,17 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
         return matches(other, MatchStrategy.identityAndComponent);
     }
 
-    default boolean matchesContent(ContentObject<?> content) {
-        if (this == empty() || content == ContentObject.empty()) {
-            return this == empty() && content == ContentObject.empty();
+    default boolean matchesContent(ContentKind<?> content) {
+        if (this == empty() || content == ContentKind.empty()) {
+            return this == empty() && content == ContentKind.empty();
         }
         return contentType() == content.type() &&
                contentType().matches(content(), content.<T>cast().value());
+    }
+
+    @Override
+    default boolean matchesResource(ContentResource resource) {
+        return resource instanceof ContentStack<?, ?> stack && matches(stack);
     }
 
     //endregion
@@ -250,44 +251,6 @@ public sealed interface ContentStack<T, S> extends ContentVariant permits EmptyC
         if (isEmpty()) return empty();
         return fromStack(type(), type().wildcard(value()), type().quantity());
     }
-
-    //endregion
-
-    //region tooltip
-
-    /**
-     * Append tooltips to the content stack.
-     *
-     * @param configurator the builder to append tooltip to this content stack
-     * @return this content stack
-     */
-    @Contract("_ -> this")
-    ContentStack<T, S> appendTooltip(BiConsumer<RichTooltip, TooltipContext> configurator);
-
-    /**
-     * Same as {@link #appendTooltip(BiConsumer)} .
-     *
-     * @see #appendTooltip(BiConsumer)
-     */
-    @Contract("_ -> this")
-    default ContentStack<T, S> withTooltip(BiConsumer<RichTooltip, TooltipContext> configurator) {
-        return appendTooltip(configurator);
-    }
-
-    /**
-     * Configure the tooltip for this content stack.
-     *
-     * @param tooltip the rich tooltip to configure.
-     * @see #getTooltip(TooltipContext)
-     */
-    void configureTooltip(RichTooltip tooltip, TooltipContext context);
-
-    /**
-     * @param context the tooltip context.
-     * @return the rich tooltip for this content stack, or null if tooltip is not available or called from server side.
-     */
-    @Nullable
-    RichTooltip getTooltip(TooltipContext context);
 
     //endregion
 

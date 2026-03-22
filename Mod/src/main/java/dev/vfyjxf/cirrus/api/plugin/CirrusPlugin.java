@@ -1,29 +1,21 @@
 package dev.vfyjxf.cirrus.api.plugin;
 
-import dev.vfyjxf.cirrus.api.register.ContentResolverRegister;
-import dev.vfyjxf.cirrus.api.register.ContentTypeRegister;
-import dev.vfyjxf.cirrus.api.register.ContentVariantRegister;
-import dev.vfyjxf.cirrus.api.register.IngredientResolverRegister;
-import dev.vfyjxf.cirrus.api.register.JeiRecipeTypeBridgeRegister;
-import dev.vfyjxf.cirrus.api.register.MachineEntryRegister;
-import dev.vfyjxf.cirrus.api.register.RecipeFacetRegister;
-import dev.vfyjxf.cirrus.api.register.RecipeFilterRegister;
-import dev.vfyjxf.cirrus.api.register.RecipeSystemRegister;
-import dev.vfyjxf.cirrus.api.register.RecipeSystemTagRegister;
+import dev.vfyjxf.cirrus.api.register.*;
 import dev.vfyjxf.cirrus.util.CirrusNamespaces;
 import dev.vfyjxf.cloudlib.api.plugin.ModPlugin;
 import dev.vfyjxf.cloudlib.api.plugin.PluginDependency;
 import dev.vfyjxf.cloudlib.api.plugin.PluginDependency.Constraint;
 import dev.vfyjxf.cloudlib.api.plugin.PluginDependency.Order;
 import dev.vfyjxf.cloudlib.api.plugin.PluginLoader;
+import dev.vfyjxf.cloudlib.api.plugin.PluginMarker;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.ServiceLoader;
 
 /**
- * A plugin system entrypoint that use java spi to load plugins.
+ * A plugin system entrypoint that use cloudlib plugin system.
  *
- * @see com.google.auto.service.AutoService
+ * @see PluginMarker
  * @see ServiceLoader
  * @see ModPlugin
  * @see PluginLoader
@@ -40,7 +32,7 @@ public interface CirrusPlugin extends ModPlugin {
      */
     Namespace builtin = CirrusNamespaces.ofMod("builtin");
 
-    PluginDependency afterBuiltin = new PluginDependency(builtin, Order.AFTER, Constraint.REQUIRED);
+    PluginDependency afterBuiltin = new PluginDependency(builtin, Order.after, Constraint.required);
 
 
     //region content registryKey
@@ -57,7 +49,7 @@ public interface CirrusPlugin extends ModPlugin {
 
     default void registerRecipeSystem(RecipeSystemRegister register) {}
 
-    default void registerRecipeFacet(RecipeFacetRegister register) {}
+    default void registerRecipeClause(RecipeClauseRegister register) {}
 
     default void registerRecipeFilter(RecipeFilterRegister register) {}
 
@@ -80,6 +72,12 @@ public interface CirrusPlugin extends ModPlugin {
     //region ingredient resolver
 
     default void registerIngredientResolver(IngredientResolverRegister register) {}
+
+    //endregion
+
+    //region storage type
+
+    default void registerStorageType(StorageTypeRegister register) {}
 
     //endregion
 }

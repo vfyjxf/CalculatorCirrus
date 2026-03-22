@@ -17,7 +17,7 @@ public final class ItemContentType extends BasicContentType<Item> {
     public static final ItemContentType instance = new ItemContentType();
 
     private ItemContentType() {
-        super(Namespace.ofMc("item"), Item.class, BuiltInRegistries.ITEM.byNameCodec());
+        super(Namespace.ofMc("item"), BuiltInRegistries.ITEM.byNameCodec());
     }
 
     @Override

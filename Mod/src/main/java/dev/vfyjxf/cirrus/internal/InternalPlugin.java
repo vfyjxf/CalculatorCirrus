@@ -1,34 +1,23 @@
 package dev.vfyjxf.cirrus.internal;
 
-import com.google.auto.service.AutoService;
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.CirrusTypes.IngredientResolvers;
 import dev.vfyjxf.cirrus.api.plugin.CirrusPlugin;
-import dev.vfyjxf.cirrus.api.register.ContentResolverRegister;
-import dev.vfyjxf.cirrus.api.register.ContentTypeRegister;
-import dev.vfyjxf.cirrus.api.register.ContentVariantRegister;
-import dev.vfyjxf.cirrus.api.register.IngredientResolverRegister;
-import dev.vfyjxf.cirrus.api.register.JeiRecipeTypeBridgeRegister;
-import dev.vfyjxf.cirrus.api.register.RecipeFacetRegister;
-import dev.vfyjxf.cirrus.api.register.RecipeSystemRegister;
+import dev.vfyjxf.cirrus.api.register.*;
 import dev.vfyjxf.cirrus.content.resolver.fluid.VanillaFluidHandlerResolver;
-import dev.vfyjxf.cirrus.content.type.variant.EnchantedBookVariantType;
-import dev.vfyjxf.cirrus.content.type.variant.FireworkRocketVariantType;
-import dev.vfyjxf.cirrus.content.type.variant.InstrumentVariantType;
-import dev.vfyjxf.cirrus.content.type.variant.OminousBottleVariantType;
-import dev.vfyjxf.cirrus.content.type.variant.PaintingVariantType;
-import dev.vfyjxf.cirrus.content.type.variant.PotionVariantType;
-import dev.vfyjxf.cirrus.content.type.variant.SuspiciousStewVariantType;
+import dev.vfyjxf.cirrus.content.type.variant.*;
+import dev.vfyjxf.cirrus.recipe.clause.FluidContainerUnpackClause;
+import dev.vfyjxf.cirrus.recipe.clause.GuaranteedOutputClause;
 import dev.vfyjxf.cirrus.recipe.content.resolver.item.DataComponentIngredientResolver;
 import dev.vfyjxf.cirrus.recipe.content.resolver.item.DifferenceIngredientResolver;
-import dev.vfyjxf.cirrus.recipe.facet.SkipChancedOutputFacet;
-import dev.vfyjxf.cirrus.recipe.facet.UnwrapFluidHandlerFacet;
+import dev.vfyjxf.cirrus.recipe.storage.source.PlayerInventorySource;
 import dev.vfyjxf.cirrus.recipe.system.CraftingRecipeSystem;
+import dev.vfyjxf.cloudlib.api.plugin.PluginMarker;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import mezz.jei.api.constants.RecipeTypes;
 import net.minecraft.world.item.Items;
 
-@AutoService(CirrusPlugin.class)
+@PluginMarker
 public class InternalPlugin implements CirrusPlugin {
 
     @Override
@@ -86,9 +75,9 @@ public class InternalPlugin implements CirrusPlugin {
     }
 
     @Override
-    public void registerRecipeFacet(RecipeFacetRegister register) {
-        register.registerFacetTransformer(UnwrapFluidHandlerFacet.type, UnwrapFluidHandlerFacet.transformer);
-        register.registerViewTransformer(SkipChancedOutputFacet.type, SkipChancedOutputFacet.viewTransformer);
+    public void registerRecipeClause(RecipeClauseRegister register) {
+        register.registerContentTransformer(FluidContainerUnpackClause.type, FluidContainerUnpackClause.transformer);
+        register.registerProjectionTransformer(GuaranteedOutputClause.type, GuaranteedOutputClause.projectionTransformer);
     }
 
     @Override
@@ -100,5 +89,10 @@ public class InternalPlugin implements CirrusPlugin {
     public void registerIngredientResolver(IngredientResolverRegister register) {
         register.registerIngredientResolver(IngredientResolvers.CUSTOM, DataComponentIngredientResolver.instance);
         register.registerIngredientResolver(IngredientResolvers.CUSTOM, DifferenceIngredientResolver.instance);
+    }
+
+    @Override
+    public void registerStorageType(StorageTypeRegister register) {
+        register.registerStorageType(PlayerInventorySource.type);
     }
 }

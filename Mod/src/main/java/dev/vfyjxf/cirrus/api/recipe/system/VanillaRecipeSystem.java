@@ -4,7 +4,8 @@ import com.mojang.datafixers.util.Either;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import dev.vfyjxf.cirrus.util.GameInstances;
+import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
+import dev.vfyjxf.cloudlib.api.util.Games;
 import dev.vfyjxf.cloudlib.util.Locations;
 import mezz.jei.api.helpers.ICodecHelper;
 import net.minecraft.resources.ResourceLocation;
@@ -50,12 +51,12 @@ public interface VanillaRecipeSystem<T extends Recipe<?>> extends RecipeSystem<R
     });
 
     static RecipeManager recipeManager() {
-        return GameInstances.getRecipeManager();
+        return Games.recipeManager();
     }
 
     @Nullable
     static <T extends Recipe<?>> VanillaRecipeSystem<T> byRecipeType(RecipeType<T> recipeType) {
-        throw new UnsupportedOperationException("Not Implemented");
+        return RecipeApi.instance().findVanillaSystem(recipeType);
     }
 
     RecipeType<T> recipeType();
@@ -83,7 +84,8 @@ public interface VanillaRecipeSystem<T extends Recipe<?>> extends RecipeSystem<R
 
     @Override
     default boolean sameRecipe(RecipeHolder<T> r1, RecipeHolder<T> r2) {
-        return r1.id().equals(r2.id()) && r1.value().getType() == r2.value().getType();
+        return r1.value().getType() == r2.value().getType() &&
+               r1.id().equals(r2.id());
     }
 
     @Override

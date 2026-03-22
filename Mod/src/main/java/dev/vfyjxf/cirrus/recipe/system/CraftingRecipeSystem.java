@@ -5,8 +5,8 @@ import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeLookup;
-import dev.vfyjxf.cirrus.api.recipe.view.RecipeView;
 import dev.vfyjxf.cirrus.helper.RecipeHelper;
 import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
@@ -31,7 +31,7 @@ public class CraftingRecipeSystem extends BasicVanillaSystem<CraftingRecipe> {
     }
 
     @Override
-    public RecipeView resolveRecipe(RecipeHolder<CraftingRecipe> recipeHolder) {
+    public RecipeProjection resolveRecipe(RecipeHolder<CraftingRecipe> recipeHolder) {
         CraftingRecipe recipe = recipeHolder.value();
         List<InputContent> inputs = MutableLists.empty();
         for (var ingredient : recipe.getIngredients())
@@ -40,7 +40,7 @@ public class CraftingRecipeSystem extends BasicVanillaSystem<CraftingRecipe> {
         List<OutputContent> output = Collections.singletonList(
             OutputContent.fromItemStack(RecipeHelper.getOutput(recipe))
         );
-        return RecipeView.create(this, recipeHolder, inputs, output);
+        return RecipeProjection.create(this, recipeHolder, inputs, output);
     }
 
     @Override

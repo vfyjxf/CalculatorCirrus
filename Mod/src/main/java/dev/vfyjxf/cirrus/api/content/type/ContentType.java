@@ -30,9 +30,6 @@ public interface ContentType<T> {
     Namespace typeId();
 
     @Contract(pure = true)
-    Class<T> valueType();
-
-    @Contract(pure = true)
     @Nullable
     @Deterministic
     TagType<T> tagType();

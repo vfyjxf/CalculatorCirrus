@@ -6,12 +6,16 @@ import dev.vfyjxf.cirrus.api.content.resolver.StackResolver;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.TagType;
+import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.type.VariantType;
+import dev.vfyjxf.cirrus.api.recipe.integration.JeiValueTypeBridge;
 import dev.vfyjxf.cirrus.api.register.ContentResolverRegister;
 import dev.vfyjxf.cirrus.api.register.ContentTypeRegister;
 import dev.vfyjxf.cirrus.api.register.ContentVariantRegister;
+import dev.vfyjxf.cirrus.api.register.JeiTypeBridgeRegister;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
+import mezz.jei.api.ingredients.IIngredientType;
 import org.jetbrains.annotations.ApiStatus;
 
 import java.util.HashSet;
@@ -19,12 +23,18 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @ApiStatus.Internal
-public class ContentRegistryBuilder implements ContentTypeRegister, ContentVariantRegister, ContentResolverRegister {
+public class ContentRegistryBuilder implements
+                                    ContentTypeRegister,
+                                    ContentVariantRegister,
+                                    ContentResolverRegister,
+                                    JeiTypeBridgeRegister {
 
     final ConcurrentHashMap<Namespace, ContentType<?>> contentTypes = new ConcurrentHashMap<>();
 
     final ConcurrentHashMap<ContentType<?>, StackType<?, ?>> stackTypesByType = new ConcurrentHashMap<>();
     final ConcurrentHashMap<Namespace, StackType<?, ?>> stackTypesById = new ConcurrentHashMap<>();
+
+    final ConcurrentHashMap<Namespace, ValueType<?>> valueTypes = new ConcurrentHashMap<>();
 
     final ConcurrentHashMap<ContentType<?>, TagType<?>> tagTypesByType = new ConcurrentHashMap<>();
     final ConcurrentHashMap<Namespace, TagType<?>> tagTypesById = new ConcurrentHashMap<>();
@@ -36,6 +46,9 @@ public class ContentRegistryBuilder implements ContentTypeRegister, ContentVaria
     final ConcurrentHashMap<ContentResolverType<?>, Set<ContentResolver<?, ?>>> fallbackContentResolvers = new ConcurrentHashMap<>();
     final ConcurrentHashMap<ContentResolverType<?>, Set<StackResolver<?, ?, ?>>> stackResolvers = new ConcurrentHashMap<>();
     final ConcurrentHashMap<ContentResolverType<?>, Set<StackResolver<?, ?, ?>>> fallbackStackResolvers = new ConcurrentHashMap<>();
+
+    final ConcurrentHashMap<Namespace, IIngredientType<?>> stackTypeIngredientTypeBridges = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<IIngredientType<?>, JeiValueTypeBridge<?, ?>> valueTypeBridges = new ConcurrentHashMap<>();
 
     //region content and stack
 
@@ -59,6 +72,16 @@ public class ContentRegistryBuilder implements ContentTypeRegister, ContentVaria
         }
         stackTypesByType.put(contentType, stackType);
         stackTypesById.put(stackType.typeId(), stackType);
+    }
+
+    @Override
+    public <S> void registerValueType(ValueType<S> valueType) {
+        Checks.checkNotNull(valueType, "valueType");
+        Namespace id = valueType.typeId();
+        if (valueTypes.containsKey(id)) {
+            throw new IllegalArgumentException("Duplicate value type: " + id);
+        }
+        valueTypes.put(id, valueType);
     }
 
     public <T> void registerTagType(ContentType<T> contentType, TagType<T> tagType) {
@@ -140,5 +163,24 @@ public class ContentRegistryBuilder implements ContentTypeRegister, ContentVaria
     }
 
     //endregion
+
+    //region jei bridge
+
+    @Override
+    public void registerStackTypeBridge(Namespace typeId, IIngredientType<?> ingredientType) {
+        Checks.checkNotNull(typeId, "typeId");
+        Checks.checkNotNull(ingredientType, "ingredientType");
+        stackTypeIngredientTypeBridges.put(typeId, ingredientType);
+    }
+
+    @Override
+    public <S, T> void registerValueTypeBridge(IIngredientType<S> ingredientType, JeiValueTypeBridge<S, T> bridge) {
+        Checks.checkNotNull(ingredientType, "ingredientType");
+        Checks.checkNotNull(bridge, "bridge");
+        valueTypeBridges.put(ingredientType, bridge);
+    }
+
+    //endregion
+
 
 }

@@ -2,7 +2,7 @@ package dev.vfyjxf.cirrus.api.recipe.content.complex;
 
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
-import dev.vfyjxf.cirrus.api.content.value.ContentObject;
+import dev.vfyjxf.cirrus.api.content.value.ContentKind;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
@@ -163,12 +163,12 @@ public final class DataComponentContent<T> implements ComplexContent {
                 }
                 yield false;
             }
-            case ContentObject<?> object -> {
-                if (contentType != object.type()) yield false;
+            case ContentKind<?> kind -> {
+                if (contentType != kind.type()) yield false;
                 if (!contentType.supportComponents() && strict) yield false;
-                if (!contentObjects.contains(object.value())) yield false;
+                if (!contentObjects.contains(kind.value())) yield false;
 
-                DataComponentMap objectComponents = object.components();
+                DataComponentMap objectComponents = kind.components();
                 if (objectComponents == null) yield componentPatch.isEmpty();
 
                 if (!strict) yield predicate.test(objectComponents);

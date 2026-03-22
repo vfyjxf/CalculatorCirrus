@@ -1,7 +1,10 @@
 package dev.vfyjxf.cirrus;
 
+import dev.vfyjxf.cirrus.api.plugin.CirrusPlugin;
 import dev.vfyjxf.cirrus.content.ContentApiImpl;
 import dev.vfyjxf.cirrus.content.ContentRegistryBuilder;
+import dev.vfyjxf.cloudlib.api.plugin.ProgressTracker;
+import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
@@ -10,6 +13,7 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.TagsUpdatedEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import org.eclipse.collections.api.list.MutableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,14 +26,19 @@ public final class CirrusServer extends Cirrus {
     public static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Server");
 
     public CirrusServer(ModContainer modContainer, IEventBus modbus) {
-        super(modContainer, modbus);
+        super(modbus);
         registerLoadListener();
     }
 
     @Override
-    protected void buildContentApi() {
+    protected MutableList<CirrusPlugin> builtinPlugins() {
+        return MutableLists.empty();
+    }
+
+    @Override
+    protected void buildContentApi(ProgressTracker tracker) {
         var contentRegistry = new ContentRegistryBuilder();
-        buildCommonContentApi(contentRegistry);
+        buildCommonContentApi(contentRegistry, tracker);
         ContentApiImpl.attach(new ContentApiImpl(contentRegistry));
     }
 

@@ -1,10 +1,12 @@
 package dev.vfyjxf.cirrus.api.recipe.content.complex;
 
-import com.google.common.collect.ImmutableList;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import org.eclipse.collections.api.RichIterable;
+import org.eclipse.collections.api.factory.Lists;
+import org.eclipse.collections.api.list.ImmutableList;
 import org.jetbrains.annotations.Range;
 
 public final class IntersectionContent implements ComplexContent {
@@ -66,8 +68,24 @@ public final class IntersectionContent implements ComplexContent {
 
     @Override
     public boolean satisfy(ContentVariant actual) {
-        return false;
+        boolean ret = true;
+        for (var content : contents) {
+            ret &= content.satisfy(actual);
+        }
+        return ret;
     }
 
+
+    @Override
+    public boolean isEnumerable() {
+        return contents.allSatisfy(InputContent::isEnumerable);
+    }
+
+    @Override
+    public RichIterable<? extends ContentVariant> enumerate() {
+        if (!isEnumerable()) return Lists.immutable.empty();
+        return contents.flatCollect(InputContent::enumerate)
+                       .reject(content -> !satisfy(content));
+    }
 
 }

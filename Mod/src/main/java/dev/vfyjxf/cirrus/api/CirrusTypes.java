@@ -6,17 +6,19 @@ import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.TagType;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolverType;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
 import dev.vfyjxf.cirrus.api.recipe.value.EnergyContentType;
 import dev.vfyjxf.cirrus.api.recipe.value.EnergyValue;
 import dev.vfyjxf.cirrus.api.recipe.value.TimeValue;
 import dev.vfyjxf.cirrus.api.recipe.value.TimeValueType;
-import dev.vfyjxf.cirrus.api.recipe.view.facet.RecipeFacetType;
 import dev.vfyjxf.cirrus.content.type.FluidContentType;
 import dev.vfyjxf.cirrus.content.type.FluidStackType;
 import dev.vfyjxf.cirrus.content.type.ItemContentType;
 import dev.vfyjxf.cirrus.content.type.ItemStackType;
-import dev.vfyjxf.cirrus.recipe.facet.ItemDamageFacet;
-import dev.vfyjxf.cirrus.recipe.facet.UnwrapFluidHandlerFacet;
+import dev.vfyjxf.cirrus.recipe.clause.DurabilityCostClause;
+import dev.vfyjxf.cirrus.recipe.clause.FluidContainerUnpackClause;
+import dev.vfyjxf.cirrus.recipe.clause.GuaranteedOutputClause;
+import dev.vfyjxf.cirrus.recipe.clause.ResolvePolicyClause;
 import dev.vfyjxf.cirrus.util.CirrusNamespaces;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.core.registries.Registries;
@@ -29,11 +31,12 @@ import net.neoforged.neoforge.fluids.crafting.FluidIngredient;
 import net.neoforged.neoforge.internal.versions.neoforge.NeoForgeVersion;
 
 /**
- * All builtin {@link ContentType} & {@link StackType} & {@link TagType} & {@link RecipeFacetType} & {@link ContentResolverType} & {@link IngredientResolverType}
+ * All builtin {@link ContentType} & {@link StackType} & {@link TagType} & {@link ClauseType} & {@link ContentResolverType} & {@link IngredientResolverType}
  * For the purpose of reducing ambiguity, members here use uppercase names
  */
 public final class CirrusTypes {
 
+    //NOTE:这里用大写是因为小写歧义太多，用大写去歧义
     public final static class Contents {
 
         //region content
@@ -59,14 +62,17 @@ public final class CirrusTypes {
         private Contents() {throw new AssertionError("This class should not be instantiated!");}
     }
 
-    public final static class Facets {
+    public final static class Clauses {
 
-        //TODO:换个取名方案，这个太诡异了
-        public static final RecipeFacetType UNWRAP_FLUID_HANDLER = UnwrapFluidHandlerFacet.type;
+        public static final ClauseType fluidContainerUnpack = FluidContainerUnpackClause.type;
 
-        public static final RecipeFacetType ITEM_2_DAMAGE = ItemDamageFacet.type;
+        public static final ClauseType durabilityCost = DurabilityCostClause.type;
 
-        private Facets() {throw new AssertionError("This class should not be instantiated!");}
+        public static final ClauseType guaranteedOutput = GuaranteedOutputClause.type;
+
+        public static final ClauseType resolvePolicy = ResolvePolicyClause.type;
+
+        private Clauses() {throw new AssertionError("This class should not be instantiated!");}
     }
 
     public final static class ContentResolvers {

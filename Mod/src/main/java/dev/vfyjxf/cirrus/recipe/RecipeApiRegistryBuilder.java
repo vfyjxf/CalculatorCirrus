@@ -7,14 +7,14 @@ import dev.vfyjxf.cirrus.api.recipe.filter.RecipeFilter;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.extension.RecipeSystemExtension;
-import dev.vfyjxf.cirrus.api.recipe.view.facet.FacetTransformer;
-import dev.vfyjxf.cirrus.api.recipe.view.facet.RecipeFacet;
-import dev.vfyjxf.cirrus.api.recipe.view.facet.RecipeFacetType;
-import dev.vfyjxf.cirrus.api.recipe.view.facet.ViewTransformer;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionTransformer;
 import dev.vfyjxf.cirrus.api.register.IngredientResolverRegister;
 import dev.vfyjxf.cirrus.api.register.JeiRecipeTypeBridgeRegister;
 import dev.vfyjxf.cirrus.api.register.MachineEntryRegister;
-import dev.vfyjxf.cirrus.api.register.RecipeFacetRegister;
+import dev.vfyjxf.cirrus.api.register.RecipeClauseRegister;
 import dev.vfyjxf.cirrus.api.register.RecipeFilterRegister;
 import dev.vfyjxf.cirrus.api.register.RecipeSystemRegister;
 import dev.vfyjxf.cirrus.api.register.RecipeSystemTagRegister;
@@ -29,18 +29,18 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @ApiStatus.Internal
 public class RecipeApiRegistryBuilder
-    implements RecipeSystemRegister,
-               RecipeFacetRegister,
-               MachineEntryRegister,
-               IngredientResolverRegister,
-               JeiRecipeTypeBridgeRegister,
-               RecipeSystemTagRegister,
-               RecipeFilterRegister {
+        implements RecipeSystemRegister,
+                   RecipeClauseRegister,
+                   MachineEntryRegister,
+                   IngredientResolverRegister,
+                   JeiRecipeTypeBridgeRegister,
+                   RecipeSystemTagRegister,
+                   RecipeFilterRegister {
 
     final ConcurrentHashMap<Namespace, RecipeSystem<?>> recipeSystems = new ConcurrentHashMap<>();
-    final ConcurrentHashMap<Namespace, RecipeFacetType> facets = new ConcurrentHashMap<>();
-    final ConcurrentHashMap<RecipeFacetType, FacetTransformer<?, ?>> facetTransformers = new ConcurrentHashMap<>();
-    final ConcurrentHashMap<RecipeFacetType, ViewTransformer<?>> viewTransformers = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<Namespace, ClauseType> clauses = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<ClauseType, ContentTransformer<?, ?>> contentTransformers = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<ClauseType, ProjectionTransformer<?>> projectionTransformers = new ConcurrentHashMap<>();
     final ConcurrentHashMap<Namespace, Set<MachineEntry>> handlerEntries = new ConcurrentHashMap<>();
     final ConcurrentHashMap<Namespace, Set<RecipeType<?>>> jeiRecipeTypes = new ConcurrentHashMap<>();
     final ConcurrentHashMap<IngredientResolverType<?>, Set<IngredientResolver<?>>> ingredientResolvers = new ConcurrentHashMap<>();
@@ -59,32 +59,30 @@ public class RecipeApiRegistryBuilder
         throw new UnsupportedOperationException("Not Implemented");
     }
 
-    public <T extends RecipeContent, F extends RecipeFacet> void registerFacetTransformer(RecipeFacetType type, FacetTransformer<T, F> transformer) {
+    public <T extends RecipeContent, F extends RecipeClause> void registerContentTransformer(ClauseType type, ContentTransformer<T, F> transformer) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(transformer, "transformer");
-        if (facets.containsKey(type.id())) {
-            throw new IllegalArgumentException("Recipe facet with id: " + type.id() + " already registered");
-        }
-        facets.put(type.id(), type);
-        facetTransformers.put(type, transformer);
+        registerClauseType(type);
+        contentTransformers.put(type, transformer);
     }
 
-    public void registerFacetType(RecipeFacetType type) {
+    public void registerClauseType(ClauseType type) {
         Checks.checkNotNull(type, "type");
-        if (facets.containsKey(type.id())) {
-            throw new IllegalArgumentException("Recipe facet with id: " + type.id() + " already registered");
+        ClauseType existing = clauses.putIfAbsent(type.id(), type);
+        if (existing != null && !existing.equals(type)) {
+            throw new IllegalArgumentException("Recipe clause type with id: " + type.id() + " already registered");
         }
-        facets.put(type.id(), type);
     }
 
 
-    public <F extends RecipeFacet> void registerViewTransformer(RecipeFacetType type, ViewTransformer<F> transformer) {
+    public <F extends RecipeClause> void registerProjectionTransformer(ClauseType type, ProjectionTransformer<F> transformer) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(transformer, "transformer");
-        if (viewTransformers.containsKey(type)) {
-            throw new IllegalArgumentException("View transformer for facet with id: " + type.id() + " already registered");
+        registerClauseType(type);
+        if (projectionTransformers.containsKey(type)) {
+            throw new IllegalArgumentException("Projection transformer for clause with id: " + type.id() + " already registered");
         }
-        viewTransformers.put(type, transformer);
+        projectionTransformers.put(type, transformer);
     }
 
     @Override
@@ -136,7 +134,7 @@ public class RecipeApiRegistryBuilder
     }
 
     record FilterEntryType(
-        Namespace filterId,
-        Namespace systemId
+            Namespace filterId,
+            Namespace systemId
     ) {}
 }

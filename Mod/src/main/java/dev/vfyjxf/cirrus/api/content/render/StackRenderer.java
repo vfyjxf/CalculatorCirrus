@@ -3,8 +3,8 @@ package dev.vfyjxf.cirrus.api.content.render;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.content.ClientContentApiImpl;
-import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
-import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -44,7 +44,7 @@ public interface StackRenderer<T, S> {
 
     Font getFont(S stack, Minecraft minecraft);
 
-    RichTooltip getTooltip(S stack, TooltipContext context);
+    Tooltip getTooltip(S stack, TooltipContext context);
 
     Component getName(S stack);
 

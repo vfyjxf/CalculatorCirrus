@@ -4,63 +4,105 @@ import dev.vfyjxf.cirrus.api.plugin.CirrusPlugin;
 import dev.vfyjxf.cirrus.content.ContentRegistryBuilder;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.RecipeApiRegistryBuilder;
-import dev.vfyjxf.cloudlib.api.plugin.PluginLoader;
-import dev.vfyjxf.cloudlib.api.util.LoggedTimer;
+import dev.vfyjxf.cirrus.recipe.storage.StorageApiBuilder;
+import dev.vfyjxf.cirrus.recipe.storage.StorageApiImpl;
+import dev.vfyjxf.cloudlib.api.plugin.*;
 import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.ModContainer;
-import org.eclipse.collections.api.list.ImmutableList;
+import org.eclipse.collections.api.list.MutableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.ForkJoinPool;
 
 public sealed abstract class Cirrus permits CirrusClient, CirrusServer {
     private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus");
 
-    protected final ImmutableList<CirrusPlugin> plugins;
+    protected final PluginDispatcher<CirrusPlugin> plugins;
+    protected final ForkJoinPool pluginExecutor;
 
-    public Cirrus(ModContainer modContainer, IEventBus modBus) {
-        plugins = PluginLoader.loadPlugin(logger, "Cirrus Plugin", CirrusPlugin.class).toImmutable();
+    public Cirrus(IEventBus modBus) {
+        var pluginsWithBuiltin = PluginLoader.loadPlugin(logger, "Cirrus Plugin", AnnotationPluginLookup.of(CirrusPlugin.class));
+        pluginsWithBuiltin.addAll(builtinPlugins());
+        pluginExecutor = new ForkJoinPool(
+            Math.max(1, Runtime.getRuntime().availableProcessors() - 1),
+            pool -> {
+                var thread = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
+                thread.setName("cirrus-plugin-" + thread.getPoolIndex());
+                thread.setDaemon(true);
+                return thread;
+            },
+            null, false
+        );
+        plugins = PluginDispatcher.create(pluginsWithBuiltin, pluginExecutor);
     }
 
     protected final void load() {
-        LoggedTimer startTimer = new LoggedTimer();
-        startTimer.start("Calculator Cirrus Start");
+        ProgressTracker tracker = new ProgressTracker();
 
         //region content api
-        {
-            LoggedTimer timer = new LoggedTimer();
-            timer.start("Building Content Api Registry");
-            buildContentApi();
-            timer.stop();
-        }
+        buildContentApi(tracker);
         //endregion
 
         //region recipe api
         {
-            LoggedTimer timer = new LoggedTimer();
-            timer.start("Building Recipe Api Registry");
             var recipeApiRegistry = new RecipeApiRegistryBuilder();
-            for (CirrusPlugin plugin : plugins) {
-                plugin.registerRecipeSystem(recipeApiRegistry);
-            }
-            for (CirrusPlugin plugin : plugins) {
-                plugin.registerRecipeFacet(recipeApiRegistry);
-            }
+            plugins.dispatchLogged(
+                plugin -> plugin.registerRecipeSystem(recipeApiRegistry),
+                "Registering Recipe Systems",
+                logger,
+                tracker.phase("Registering Recipe Systems")
+            );
+            plugins.dispatchLogged(
+                plugin -> plugin.registerRecipeClause(recipeApiRegistry),
+                "Registering Recipe Facets",
+                logger,
+                tracker.phase("Registering Recipe Facets")
+            );
             RecipeApiImpl.attach(new RecipeApiImpl(recipeApiRegistry));
-            timer.stop();
         }
         //endregion
-        startTimer.stop();
+
+        //region storage api
+        {
+            var storageApiRegistry = new StorageApiBuilder();
+            plugins.dispatchLogged(
+                plugin -> plugin.registerStorageType(storageApiRegistry),
+                "Registering Storage Types",
+                logger,
+                tracker.phase("Registering Storage Types")
+            );
+            StorageApiImpl.attach(new StorageApiImpl(storageApiRegistry));
+        }
+        //endregion
+        tracker.logTimings(logger, "Cirrus Loading");
     }
 
     protected void unload() {
         //TODO:unload stuff
     }
 
-    protected abstract void buildContentApi();
+    protected abstract MutableList<CirrusPlugin> builtinPlugins();
 
-    protected final void buildCommonContentApi(ContentRegistryBuilder contentRegistry) {
-        for (CirrusPlugin plugin : plugins) plugin.registerContentType(contentRegistry);
-        for (CirrusPlugin plugin : plugins) plugin.registerContentVariant(contentRegistry);
-        for (CirrusPlugin plugin : plugins) plugin.registerContentResolver(contentRegistry);
+    protected abstract void buildContentApi(ProgressTracker tracker);
+
+    protected final void buildCommonContentApi(ContentRegistryBuilder contentRegistry, ProgressTracker tracker) {
+        plugins.dispatchLogged(
+            plugin -> plugin.registerContentType(contentRegistry),
+            "Registering Content Types",
+            logger,
+            tracker.phase("Registering Content Types")
+        );
+        plugins.dispatchLogged(
+            plugin -> plugin.registerContentVariant(contentRegistry),
+            "Registering Content Variants",
+            logger,
+            tracker.phase("Registering Content Variants")
+        );
+        plugins.dispatchLogged(
+            plugin -> plugin.registerContentResolver(contentRegistry),
+            "Registering Content Resolvers",
+            logger,
+            tracker.phase("Registering Content Resolvers")
+        );
     }
 }

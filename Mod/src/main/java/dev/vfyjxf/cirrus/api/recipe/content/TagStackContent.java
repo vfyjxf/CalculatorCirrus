@@ -3,13 +3,15 @@ package dev.vfyjxf.cirrus.api.recipe.content;
 import dev.vfyjxf.cirrus.api.content.ContentApi;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
 import dev.vfyjxf.cirrus.api.content.type.TagType;
-import dev.vfyjxf.cirrus.api.content.value.ContentObject;
+import dev.vfyjxf.cirrus.api.content.value.ContentKind;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.tags.TagKey;
+import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.jetbrains.annotations.Range;
+import org.jetbrains.annotations.UnmodifiableView;
 
 public final class TagStackContent<T> implements InputContent {
 
@@ -78,6 +80,16 @@ public final class TagStackContent<T> implements InputContent {
     }
 
     @Override
+    public boolean isEnumerable() {
+        return true;
+    }
+
+    @Override
+    public @UnmodifiableView RichIterable<? extends ContentVariant> enumerate() {
+        return values.collect(value -> ContentKind.fromContent(contentType, value));
+    }
+
+    @Override
     public TagStackContent<T> copyWithAmount(long amount) {
         return new TagStackContent<>(type, tagKey, amount, chance);
     }
@@ -102,15 +114,15 @@ public final class TagStackContent<T> implements InputContent {
     @SuppressWarnings("unchecked")
     @Override
     public boolean satisfy(ContentVariant actual) {
-        T contentObject = (T) switch (actual) {
-            case ContentObject<?> object when (object.type() == contentType) -> object.value();
+        T contentKind = (T) switch (actual) {
+            case ContentKind<?> kind when (kind.type() == contentType) -> kind.value();
             case ContentStack<?, ?> stack when (stack.contentType() == contentType) -> stack.content();
             default -> null;
         };
 
-        if (contentObject == null) return false;
+        if (contentKind == null) return false;
         for (T value : values) {
-            if (contentType.matches(value, contentObject)) return true;
+            if (contentType.matches(value, contentKind)) return true;
         }
         return false;
     }

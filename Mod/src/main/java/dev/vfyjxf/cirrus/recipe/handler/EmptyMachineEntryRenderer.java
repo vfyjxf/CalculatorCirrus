@@ -2,7 +2,7 @@ package dev.vfyjxf.cirrus.recipe.handler;
 
 import dev.vfyjxf.cirrus.api.recipe.machine.EmptyMachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntryRenderer;
-import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import net.minecraft.client.gui.GuiGraphics;
 
 public class EmptyMachineEntryRenderer implements MachineEntryRenderer<EmptyMachineEntry> {
@@ -16,7 +16,7 @@ public class EmptyMachineEntryRenderer implements MachineEntryRenderer<EmptyMach
     }
 
     @Override
-    public RichTooltip getTooltip(EmptyMachineEntry entry) {
-        return RichTooltip.empty();
+    public Tooltip getTooltip(EmptyMachineEntry entry) {
+        return Tooltip.create();
     }
 }

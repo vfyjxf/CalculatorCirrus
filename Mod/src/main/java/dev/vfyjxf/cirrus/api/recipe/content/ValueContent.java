@@ -4,7 +4,10 @@ import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cloudlib.util.Checks;
+import org.eclipse.collections.api.RichIterable;
+import org.eclipse.collections.api.factory.Lists;
 import org.jetbrains.annotations.Range;
+import org.jetbrains.annotations.UnmodifiableView;
 
 public final class ValueContent<T> implements InputContent, OutputContent {
 
@@ -52,6 +55,16 @@ public final class ValueContent<T> implements InputContent, OutputContent {
     @Override
     public ValueContent<T> copy() {
         return new ValueContent<>(content.copy(), chance);
+    }
+
+    @Override
+    public boolean isEnumerable() {
+        return true;
+    }
+
+    @Override
+    public @UnmodifiableView RichIterable<? extends ContentVariant> enumerate() {
+        return Lists.immutable.of(content);
     }
 
     @Override

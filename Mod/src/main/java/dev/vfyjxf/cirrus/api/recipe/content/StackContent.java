@@ -5,7 +5,10 @@ import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cloudlib.util.Checks;
+import org.eclipse.collections.api.RichIterable;
+import org.eclipse.collections.impl.factory.Lists;
 import org.jetbrains.annotations.Range;
+import org.jetbrains.annotations.UnmodifiableView;
 
 public final class StackContent<T, S> implements InputContent, OutputContent {
 
@@ -53,6 +56,16 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
     @Override
     public StackContent<T, S> copy() {
         return new StackContent<>(type, stack, chance);
+    }
+
+    @Override
+    public boolean isEnumerable() {
+        return true;
+    }
+
+    @Override
+    public @UnmodifiableView RichIterable<? extends ContentVariant> enumerate() {
+        return Lists.immutable.of(stack);
     }
 
     @Override

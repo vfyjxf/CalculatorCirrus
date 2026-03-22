@@ -1,8 +1,8 @@
 package dev.vfyjxf.cirrus.api.recipe;
 
 import dev.vfyjxf.cirrus.api.recipe.content.constraint.RecipeConstraint;
+import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
-import dev.vfyjxf.cirrus.api.recipe.view.RecipeView;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.resources.ResourceLocation;
@@ -31,7 +31,7 @@ public record RecipeEntry<R>(
         return system.getRecipeConstraint(recipe);
     }
 
-    public RecipeView resolve() {
+    public RecipeProjection resolve() {
         return system.resolveRecipe(recipe);
     }
 

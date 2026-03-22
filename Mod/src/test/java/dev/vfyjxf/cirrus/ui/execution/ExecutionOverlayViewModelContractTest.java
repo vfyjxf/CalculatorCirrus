@@ -110,9 +110,9 @@ class ExecutionOverlayViewModelContractTest {
         assertEquals("running", viewModel.statusText());
         assertEquals(1, viewModel.completedStepCount());
         assertEquals(3, viewModel.totalStepCount());
-        assertEquals("Client", viewModel.sideHint().getString());
+        assertEquals("cirrus.ui.execution.overlay.side.client", viewModel.sideHint().getString());
         assertEquals(
-            Lists.mutable.of("target", "recipe:active", "acquire", "execute", "recipe:idle"),
+            Lists.mutable.of("target", "recipe:active", "acquire", "execute", "recipe:idle", "idle-acquire"),
             viewModel.visibleNodes().collect(ExecutionOverlayNode::nodeId)
         );
 
@@ -126,7 +126,9 @@ class ExecutionOverlayViewModelContractTest {
 
         var idleRecipeNode = viewModel.visibleNodes().detect(node -> node.nodeId().equals("recipe:idle"));
         assertFalse(idleRecipeNode.activeBranch());
-        assertFalse(idleRecipeNode.expanded());
+        assertTrue(idleRecipeNode.expanded());
+        var idleAcquireNode = viewModel.visibleNodes().detect(node -> node.nodeId().equals("idle-acquire"));
+        assertFalse(idleAcquireNode.activeBranch());
     }
 
     @Test
@@ -174,7 +176,7 @@ class ExecutionOverlayViewModelContractTest {
         var viewModel = ExecutionOverlayViewModel.derive(session);
 
         assertEquals("paused", viewModel.statusText());
-        assertEquals("Player action", viewModel.sideHint().getString());
+        assertEquals("cirrus.ui.execution.overlay.side.player", viewModel.sideHint().getString());
         assertEquals("Press A", viewModel.footerSummary().getString());
         assertEquals("Open the machine and confirm the craft", viewModel.footerDetail().getString());
         assertEquals("Keep the machine screen open", viewModel.footerSteps().get(0).getString());

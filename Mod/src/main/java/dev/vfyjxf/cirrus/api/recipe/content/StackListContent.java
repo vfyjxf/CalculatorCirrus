@@ -4,9 +4,11 @@ import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cloudlib.util.Checks;
+import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.impl.collection.mutable.CollectionAdapter;
 import org.jetbrains.annotations.Range;
+import org.jetbrains.annotations.UnmodifiableView;
 
 import java.util.SequencedCollection;
 
@@ -59,6 +61,16 @@ public final class StackListContent implements InputContent {
     @Override
     public StackListContent copy() {
         return new StackListContent(this.stacks, this.amount, this.chance);
+    }
+
+    @Override
+    public boolean isEnumerable() {
+        return true;
+    }
+
+    @Override
+    public @UnmodifiableView RichIterable<? extends ContentVariant> enumerate() {
+        return stacks;
     }
 
     @Override

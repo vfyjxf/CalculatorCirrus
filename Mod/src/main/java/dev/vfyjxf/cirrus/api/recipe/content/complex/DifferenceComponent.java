@@ -5,6 +5,8 @@ import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cloudlib.util.Checks;
+import org.eclipse.collections.api.RichIterable;
+import org.eclipse.collections.api.factory.Lists;
 import org.jetbrains.annotations.Range;
 
 public final class DifferenceComponent implements ComplexContent {
@@ -86,4 +88,13 @@ public final class DifferenceComponent implements ComplexContent {
         return required.satisfy(actual) && !rejected.satisfy(actual);
     }
 
+    @Override
+    public boolean isEnumerable() {
+        return required.isEnumerable() && rejected.isEnumerable();
+    }
+
+    @Override
+    public RichIterable<? extends ContentVariant> enumerate() {
+        return isEnumerable() ? required.enumerate().reject(rejected::satisfy) : Lists.immutable.empty();
+    }
 }

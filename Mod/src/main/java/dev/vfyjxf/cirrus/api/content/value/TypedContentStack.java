@@ -5,20 +5,11 @@ import dev.vfyjxf.cirrus.api.content.ContentApi;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.VariantType;
-import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
-import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
-import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.fml.loading.FMLEnvironment;
-import org.eclipse.collections.api.list.MutableList;
-import org.jetbrains.annotations.Nullable;
-
-import java.util.function.BiConsumer;
 
 final class TypedContentStack<T, S> implements ContentStack<T, S> {
 
-    private final MutableList<BiConsumer<RichTooltip, TooltipContext>> tooltipConfigurers = MutableLists.empty();
     private final StackType<T, S> type;
     private final VariantType<T, S> variantType;
     private final S value;
@@ -73,27 +64,25 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
         return this;
     }
 
-    @Nullable
+    @SuppressWarnings("unchecked")
     @Override
-    public RichTooltip getTooltip(TooltipContext context) {
-        if (FMLEnvironment.dist.isDedicatedServer()) return null;
-        RichTooltip richTooltip = RichTooltip.create();
-        this.configureTooltip(richTooltip, context);
-        return richTooltip;
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+
+        TypedContentStack<?, ?> that = (TypedContentStack<?, ?>) o;
+        return type == that.type &&
+               variantType == that.variantType &&
+               amount == that.amount &&
+               type.contentType().matches(content(), (T) that.content());
     }
 
     @Override
-    public void configureTooltip(RichTooltip tooltip, TooltipContext context) {
-        for (var configurer : tooltipConfigurers) {
-            configurer.accept(tooltip, context);
-        }
-    }
-
-    @Override
-    public ContentStack<T, S> appendTooltip(BiConsumer<RichTooltip, TooltipContext> configurator) {
-        if (FMLEnvironment.dist.isDedicatedServer()) return this;
-        this.tooltipConfigurers.add(configurator);
-        return this;
+    public int hashCode() {
+        int result = type.hashCode();
+        result = 31 * result + variantType.hashCode();
+        result = 31 * result + type.contentType().hash(content());
+        result = 31 * result + Long.hashCode(amount);
+        return result;
     }
 
     @Override
@@ -146,21 +135,6 @@ final class EmptyContentStack<T, S> implements ContentStack<T, S> {
     @Override
     public ContentStack<T, S> setAmount(long amount) {
         throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
-    }
-
-    @Override
-    public ContentStack<T, S> appendTooltip(BiConsumer<RichTooltip, TooltipContext> configurator) {
-        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
-    }
-
-    @Override
-    public void configureTooltip(RichTooltip tooltip, TooltipContext context) {
-        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
-    }
-
-    @Override
-    public @Nullable RichTooltip getTooltip(TooltipContext context) {
-        return null;
     }
 
     @Override

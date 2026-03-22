@@ -10,6 +10,7 @@ tasks.named('wrapper', Wrapper).configure {
 
 allprojects {
     repositories {
+        mavenLocal()
         mavenCentral()
         maven { url = "https://maven.quiltmc.org/repository/release/" }
         maven { url = "https://jitpack.io" }
@@ -22,6 +23,7 @@ allprojects {
         maven { url = "https://maven.tterrag.com/" }
         maven { url = "https://oss.sonatype.org/content/repositories/snapshots/" }
         maven { url = 'https://thedarkcolour.github.io/KotlinForForge/' }
+        maven { url = "https://maven.firstdark.dev/snapshots" }
         maven {
             name = "Azure-SLP"
             url = "https://pkgs.dev.azure.com/Kotori316/minecraft/_packaging/mods/maven/v1"
@@ -35,8 +37,14 @@ allprojects {
             url = "https://storage.googleapis.com/kotori316-maven-test-storage/maven/"
         }
         maven {
-            name = "Kotori316 main"
-            url = "https://maven.kotori316.com"
+            name = "kotori316"
+            url = uri("https://maven.kotori316.com")
+            content {
+                includeModule("com.kotori316", "ScalableCatsForce".toLowerCase())
+                includeModule("org.typelevel", "cats-core_3")
+                includeModule("org.typelevel", "cats-kernel_3")
+                includeModule("org.typelevel", "cats-free_3")
+            }
         }
         maven {
             url = "https://cursemaven.com"

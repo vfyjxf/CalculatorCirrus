@@ -2,7 +2,7 @@ package dev.vfyjxf.cirrus.api.content;
 
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.VariantType;
-import dev.vfyjxf.cirrus.api.content.value.ContentObject;
+import dev.vfyjxf.cirrus.api.content.value.ContentKind;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import net.minecraft.core.component.DataComponentMap;
 import org.jetbrains.annotations.Nullable;
@@ -12,7 +12,7 @@ import java.util.function.BiPredicate;
 /**
  * {@code Identity}:
  * <ul>
- *     <li> {@link ContentObject}: {@link ContentObject#value()} and  {@link ContentObject#type()}.
+ *     <li> {@link ContentKind}: {@link ContentKind#value()} and  {@link ContentKind#type()}.
  *     <li> {@link ContentStack}: The {@link ContentStack#type()} and result of {@link StackType#getContent(Object)} and internal data handled by {@link VariantType}</li>
  * </ul>
  * <p>
@@ -20,7 +20,7 @@ import java.util.function.BiPredicate;
  * <p>
  * {@code Component}:{@link ContentStack#components()}  and {@link StackType#getComponents(Object)}
  *
- * @see ContentObject
+ * @see ContentKind
  * @see ContentStack
  * @see VariantType
  */

@@ -9,15 +9,19 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import dev.vfyjxf.cirrus.api.content.render.StackRenderer;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.util.NumberUtils;
-import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
-import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipContext;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
@@ -107,22 +111,22 @@ public class FluidStackRenderer implements StackRenderer<Fluid, FluidStack> {
     }
 
     @Override
-    public RichTooltip getTooltip(FluidStack stack, TooltipContext context) {
-        RichTooltip tooltip = RichTooltip.create();
+    public Tooltip getTooltip(FluidStack stack, TooltipContext context) {
+        Tooltip tooltip = Tooltip.create();
         Fluid fluid = stack.getFluid();
         if (fluid.isSame(Fluids.EMPTY)) {
             return tooltip;
         }
         tooltip.add(stack.getHoverName());
-//        if (context.flag().isAdvanced()) {
-//            ResourceLocation resourceLocation = BuiltInRegistries.FLUID.getKey(fluid);
-//            ResourceLocation defaultResourceLocation = BuiltInRegistries.FLUID.getDefaultKey();
-//            if (resourceLocation != defaultResourceLocation) {
-//                MutableComponent advancedId = Component.literal(resourceLocation.toString())
-//                        .withStyle(ChatFormatting.DARK_GRAY);
-//                tooltip.add(advancedId);
-//            }
-//        }
+        if (context.flag().isAdvanced()) {
+            ResourceLocation resourceLocation = BuiltInRegistries.FLUID.getKey(fluid);
+            ResourceLocation defaultResourceLocation = BuiltInRegistries.FLUID.getDefaultKey();
+            if (resourceLocation != defaultResourceLocation) {
+                MutableComponent advancedId = Component.literal(resourceLocation.toString())
+                                                       .withStyle(ChatFormatting.DARK_GRAY);
+                tooltip.add(advancedId);
+            }
+        }
         return tooltip;
     }
 

@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.ui.execution;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowStatus;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.jetbrains.annotations.Nullable;
 
@@ -13,6 +14,7 @@ public record ExecutionOverlayNode(
     String nodeId,
     Component label,
     @Nullable Component subtitle,
+    @Nullable ItemStack iconStack,
     ExecutionFlowStatus status,
     int depth,
     boolean activeBranch,
@@ -28,6 +30,9 @@ public record ExecutionOverlayNode(
         Checks.checkArgument(depth >= 0, "depth must be non-negative");
         Checks.checkNotNull(laneSegments, "laneSegments");
         Checks.checkNotNull(children, "children");
+        if (iconStack != null) {
+            iconStack = iconStack.copy();
+        }
     }
 
     //region derived state

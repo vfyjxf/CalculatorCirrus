@@ -7,10 +7,14 @@ import dev.vfyjxf.cirrus.api.content.resolver.StackResolver;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.TagType;
+import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.type.VariantType;
+import dev.vfyjxf.cirrus.api.recipe.integration.JeiValueTypeBridge;
 import dev.vfyjxf.cloudlib.api.util.MutableSets;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
+import mezz.jei.api.ingredients.IIngredientType;
+import mezz.jei.api.ingredients.IIngredientTypeWithSubtypes;
 import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.impl.collection.mutable.CollectionAdapter;
@@ -50,6 +54,8 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
     private final Map<ContentType<?>, StackType<?, ?>> stackTypesByType;
     private final Map<Namespace, StackType<?, ?>> stackTypesById;
 
+    private final Map<Namespace, ValueType<?>> valueTypeById;
+
     private final Map<Namespace, TagType<?>> tagTypesById;
     private final Map<ContentType<?>, TagType<?>> tagTypesByType;
 
@@ -60,12 +66,17 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
     private final Map<ContentResolverType<?>, Set<ContentResolver<?, ?>>> contentResolvers;
     private final Map<ContentResolverType<?>, Set<StackResolver<?, ?, ?>>> stackResolvers;
 
+    private final Map<IIngredientType<?>, StackType<?, ?>> stackTypeByIngredientType;
+    private final Map<IIngredientType<?>, JeiValueTypeBridge<?, ?>> valueTypeByIngredientType;
+
     @SuppressWarnings({"rawtypes", "unchecked"})
     public ContentApiImpl(ContentRegistryBuilder builder) {
         this.contentTypes = new HashMap<>(builder.contentTypes);
 
         this.stackTypesByType = new HashMap<>(builder.stackTypesByType);
         this.stackTypesById = new HashMap<>(builder.stackTypesById);
+
+        this.valueTypeById = new HashMap<>(builder.valueTypes);
 
         this.tagTypesByType = new HashMap<>(builder.tagTypesByType);
         this.tagTypesById = new HashMap<>(builder.tagTypesById);
@@ -85,6 +96,17 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
 
         this.contentResolvers = new HashMap<>(builder.contentResolvers);
         this.stackResolvers = new HashMap<>(builder.stackResolvers);
+
+        this.stackTypeByIngredientType =
+            builder.stackTypeIngredientTypeBridges.entrySet()
+                                                  .stream()
+                                                  .map(entry -> {
+                                                      var stackType = findStackType(entry.getKey());
+                                                      return Pair.of(entry.getValue(), stackType);
+                                                  }).filter(pair -> pair.getValue() != null)
+                                                  .collect(Collectors.toMap(Pair::getKey, Pair::getValue));
+
+        this.valueTypeByIngredientType = new HashMap<>(builder.valueTypeBridges);
     }
 
     //endregion
@@ -105,6 +127,12 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
             throw new IllegalArgumentException("Unknown content type id: " + typeId);
         }
         return result;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> ContentType<T> findContentType(Namespace typeId) {
+        return (ContentType<T>) contentTypes.get(typeId);
     }
     //endregion
 
@@ -138,6 +166,38 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
             throw new IllegalArgumentException("Unknown stack type for: " + contentType.typeId());
         }
         return result;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T, S> StackType<T, S> findStackType(Namespace typeId) {
+        return (StackType<T, S>) stackTypesById.get(typeId);
+
+    }
+
+    //endregion
+
+    //region value type
+
+    @Override
+    public boolean hasValueType(Namespace typeId) {
+        return valueTypeById.containsKey(typeId);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <S> ValueType<S> getValueType(Namespace typeId) {
+        ValueType<S> result = (ValueType<S>) valueTypeById.get(typeId);
+        if (result == null) {
+            throw new IllegalArgumentException("Unknown value type id: " + typeId);
+        }
+        return result;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <S> ValueType<S> findValueType(Namespace typeId) {
+        return (ValueType<S>) valueTypeById.get(typeId);
     }
 
     //endregion
@@ -280,6 +340,28 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
             }
         }
         return null;
+    }
+
+    //endregion
+
+    //region jei bridge
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public @Nullable <T, S> StackType<T, S> findStackTypeForIngredientType(IIngredientTypeWithSubtypes<T, S> ingredientType) {
+        return (StackType<T, S>) stackTypeByIngredientType.get(ingredientType);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public @Nullable <S> StackType<?, S> findStackTypeForIngredientType(IIngredientType<S> ingredientType) {
+        return (StackType<?, S>) stackTypeByIngredientType.get(ingredientType);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public @Nullable <S, T> JeiValueTypeBridge<S, T> findValueTypeBridge(IIngredientType<S> ingredientType) {
+        return (JeiValueTypeBridge<S, T>) valueTypeByIngredientType.get(ingredientType);
     }
 
     //endregion

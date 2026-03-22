@@ -4,9 +4,10 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import dev.vfyjxf.cirrus.api.content.render.StackRenderer;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.util.NumberUtils;
-import dev.vfyjxf.cloudlib.api.ui.text.RichTooltip;
-import dev.vfyjxf.cloudlib.api.ui.text.TooltipEntry;
-import dev.vfyjxf.cloudlib.api.ui.widget.TooltipContext;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipContext;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipEntry;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipLocator;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -38,9 +39,8 @@ public class ItemStackRenderer implements StackRenderer<Item, ItemStack> {
         if (stack.isEmpty()) return;
         graphics.pose().pushPose();
         RenderSystem.enableDepthTest();
-        graphics.pose().scale(width / 16f, height / 16f, 0f);
+        graphics.pose().scale(width / 16f, height / 16f, 1f);
         graphics.renderFakeItem(stack, 0, 0);
-        RenderSystem.disableBlend();
         graphics.pose().popPose();
     }
 
@@ -79,16 +79,13 @@ public class ItemStackRenderer implements StackRenderer<Item, ItemStack> {
     }
 
     @Override
-    public RichTooltip getTooltip(ItemStack stack, TooltipContext context) {
-        if (stack.isEmpty()) return RichTooltip.empty();
-        var tooltip = RichTooltip.create();
+    public Tooltip getTooltip(ItemStack stack, TooltipContext context) {
+        if (stack.isEmpty()) return new Tooltip();
+        var tooltip = new Tooltip();
         var lines = stack.getTooltipLines(context, context.player(), context.flag());
         for (var line : lines) tooltip.add(line);
         var tooltipImage = stack.getTooltipImage();
-        //noinspection OptionalIsPresent
-        if (tooltipImage.isPresent()) {
-            tooltip.add(1, TooltipEntry.of(tooltipImage.get()));
-        }
+        tooltipImage.ifPresent(tooltipComponent -> tooltip.insert(TooltipEntry.component(tooltipComponent), Tooltip.body, TooltipLocator.after(Tooltip.title)));
         return tooltip;
     }
 

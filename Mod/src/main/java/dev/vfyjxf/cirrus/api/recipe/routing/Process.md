@@ -21,7 +21,7 @@
 
 ## Fork:Graph ReTransform/Update
 
-出于优化目的，我们需要在计算上下文变动时（RecipeContent/RecipeView#facets/TransformPipeline打开的Transformer变动）
+出于优化目的，我们需要在计算上下文变动时（RecipeContent/RecipeProjection#facets/TransformPipeline打开的Transformer变动）
 更新RecipeGraph,由于并不是大部分配方都会发生变动，因此我们选择复用大部分节点，只更新部分节点。
 
 ## 3.PathFinder

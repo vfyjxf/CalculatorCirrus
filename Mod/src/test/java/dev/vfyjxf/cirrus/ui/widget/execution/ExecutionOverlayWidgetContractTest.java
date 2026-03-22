@@ -30,15 +30,16 @@ class ExecutionOverlayWidgetContractTest {
 
     @Test
     void preferredWidthIsClampedForOverlayUsage() {
-        assertEquals(132, ExecutionOverlayWidget.preferredPanelWidth(240));
-        assertEquals(166, ExecutionOverlayWidget.preferredPanelWidth(520));
-        assertEquals(220, ExecutionOverlayWidget.preferredPanelWidth(960));
+        assertEquals(180, ExecutionOverlayWidget.preferredPanelWidth(240));
+        assertEquals(180, ExecutionOverlayWidget.preferredPanelWidth(520));
+        assertEquals(288, ExecutionOverlayWidget.preferredPanelWidth(960));
+        assertEquals(300, ExecutionOverlayWidget.preferredPanelWidth(1200));
     }
 
     @Test
     void bodyHeightKeepsHeaderAndFooterFixed() {
         assertEquals(
-            106,
+            102,
             ExecutionOverlayWidget.bodyHeight(
                 180,
                 ExecutionOverlayWidget.headerHeight,

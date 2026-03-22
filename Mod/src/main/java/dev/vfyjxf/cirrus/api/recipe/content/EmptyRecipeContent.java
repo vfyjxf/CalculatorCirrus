@@ -2,7 +2,10 @@ package dev.vfyjxf.cirrus.api.recipe.content;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import org.eclipse.collections.api.RichIterable;
+import org.eclipse.collections.api.factory.Lists;
 import org.jetbrains.annotations.Range;
+import org.jetbrains.annotations.UnmodifiableView;
 
 public final class EmptyRecipeContent implements InputContent, OutputContent {
 
@@ -26,6 +29,16 @@ public final class EmptyRecipeContent implements InputContent, OutputContent {
     @Override
     public EmptyRecipeContent copy() {
         return this;
+    }
+
+    @Override
+    public boolean isEnumerable() {
+        return true;
+    }
+
+    @Override
+    public @UnmodifiableView RichIterable<? extends ContentVariant> enumerate() {
+        return Lists.immutable.empty();
     }
 
     @Override

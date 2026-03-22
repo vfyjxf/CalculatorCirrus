@@ -7,13 +7,15 @@ import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolverType;
 import dev.vfyjxf.cirrus.api.recipe.filter.RecipeFilter;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
-import dev.vfyjxf.cirrus.api.recipe.view.facet.FacetTransformer;
-import dev.vfyjxf.cirrus.api.recipe.view.facet.RecipeFacet;
-import dev.vfyjxf.cirrus.api.recipe.view.facet.RecipeFacetType;
-import dev.vfyjxf.cirrus.api.recipe.view.facet.ViewTransformer;
+import dev.vfyjxf.cirrus.api.recipe.system.VanillaRecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionTransformer;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import mezz.jei.api.recipe.RecipeType;
+import net.minecraft.world.item.crafting.Recipe;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Maps;
 import org.eclipse.collections.api.factory.Sets;
@@ -21,6 +23,7 @@ import org.eclipse.collections.api.map.ImmutableMap;
 import org.eclipse.collections.api.set.ImmutableSet;
 import org.eclipse.collections.api.set.MutableSet;
 import org.eclipse.collections.impl.collector.Collectors2;
+import org.eclipse.collections.impl.map.mutable.MapAdapter;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnmodifiableView;
 
@@ -41,53 +44,57 @@ public class RecipeApiImpl implements RecipeApi {
 
 
     private final ImmutableMap<Namespace, RecipeSystem<?>> systems;
-    private final ImmutableMap<Namespace, RecipeFacetType> facets;
-    private final ImmutableMap<RecipeFacetType, FacetTransformer<?, ?>> facetTransformers;
-    private final ImmutableMap<RecipeFacetType, ViewTransformer<?>> viewTransformers;
+    private final ImmutableMap<Namespace, ClauseType> clauses;
+    private final ImmutableMap<ClauseType, ContentTransformer<?, ?>> contentTransformers;
+    private final ImmutableMap<ClauseType, ProjectionTransformer<?>> projectionTransformers;
     private final ImmutableMap<Namespace, ImmutableSet<MachineEntry>> handlerEntries;
     private final ImmutableMap<Namespace, ImmutableSet<RecipeType<?>>> jeiRecipeTypes;
     private final ImmutableMap<IngredientResolverType<?>, ImmutableSet<IngredientResolver<?>>> ingredientResolvers;
     private final ImmutableMap<RecipeApiRegistryBuilder.FilterEntryType, ImmutableSet<RecipeFilter<?>>> recipeFilters;
     private final ImmutableMap<Namespace, ImmutableSet<RecipeSystem<?>>> recipeSystemTags;
+    private final ImmutableMap<net.minecraft.world.item.crafting.RecipeType<?>, VanillaRecipeSystem<?>> vanillaRecipeSystemByType;
 
     public RecipeApiImpl(RecipeApiRegistryBuilder builder) {
         this.systems = Maps.immutable.ofMap(builder.recipeSystems);
-        this.facets = Maps.immutable.ofMap(builder.facets);
-        this.facetTransformers = Maps.immutable.ofMap(builder.facetTransformers);
-        this.viewTransformers = Maps.immutable.ofMap(builder.viewTransformers);
+        this.clauses = Maps.immutable.ofMap(builder.clauses);
+        this.contentTransformers = Maps.immutable.ofMap(builder.contentTransformers);
+        this.projectionTransformers = Maps.immutable.ofMap(builder.projectionTransformers);
         this.handlerEntries = builder.handlerEntries.entrySet().stream().collect(
-            Collectors2.toImmutableMap(
-                Map.Entry::getKey,
-                entry -> Sets.immutable.withAll(entry.getValue())
-            ));
+                Collectors2.toImmutableMap(
+                        Map.Entry::getKey,
+                        entry -> Sets.immutable.withAll(entry.getValue())
+                ));
         this.jeiRecipeTypes = builder.jeiRecipeTypes.entrySet().stream().collect(
-            Collectors2.toImmutableMap(
-                Map.Entry::getKey,
-                entry -> Sets.immutable.withAll(entry.getValue())
-            ));
+                Collectors2.toImmutableMap(
+                        Map.Entry::getKey,
+                        entry -> Sets.immutable.withAll(entry.getValue())
+                ));
         this.ingredientResolvers = builder.ingredientResolvers.entrySet().stream().collect(
-            Collectors2.toImmutableMap(
-                Map.Entry::getKey,
-                entry -> Sets.immutable.withAll(entry.getValue())
-            ));
+                Collectors2.toImmutableMap(
+                        Map.Entry::getKey,
+                        entry -> Sets.immutable.withAll(entry.getValue())
+                ));
         this.recipeFilters = builder.recipeFilters.entrySet().stream().collect(
-            Collectors2.toImmutableMap(
-                Map.Entry::getKey,
-                entry -> Sets.immutable.withAll(entry.getValue())
-            ));
+                Collectors2.toImmutableMap(
+                        Map.Entry::getKey,
+                        entry -> Sets.immutable.withAll(entry.getValue())
+                ));
         this.recipeSystemTags = builder.recipeSystemTags.entrySet().stream().collect(
-            Collectors2.toImmutableMap(
-                Map.Entry::getKey,
-                entry -> {
-                    MutableSet<RecipeSystem<?>> tagValues = Sets.mutable.empty();
-                    for (Namespace namespace : entry.getValue()) {
-                        var system = findSystem(namespace);
-                        if (system != null) tagValues.add(system);
-                    }
-                    return tagValues.toImmutable();
-                }
-            )
+                Collectors2.toImmutableMap(
+                        Map.Entry::getKey,
+                        entry -> {
+                            MutableSet<RecipeSystem<?>> tagValues = Sets.mutable.empty();
+                            for (Namespace namespace : entry.getValue()) {
+                                var system = findSystem(namespace);
+                                if (system != null) tagValues.add(system);
+                            }
+                            return tagValues.toImmutable();
+                        }
+                )
         );
+        this.vanillaRecipeSystemByType = MapAdapter.adapt(builder.recipeSystems)
+                                                   .select((k, v) -> v instanceof VanillaRecipeSystem)
+                                                   .toImmutableMap(v -> ((VanillaRecipeSystem<?>) v).recipeType(), v -> (VanillaRecipeSystem<?>) v);
     }
 
     @Override
@@ -109,6 +116,11 @@ public class RecipeApiImpl implements RecipeApi {
         return systems.get(systemId);
     }
 
+    @SuppressWarnings("unchecked")
+    @Override
+    public @Nullable <T extends Recipe<?>> VanillaRecipeSystem<T> findVanillaSystem(net.minecraft.world.item.crafting.RecipeType<T> recipeType) {
+        return (VanillaRecipeSystem<T>) vanillaRecipeSystemByType.get(recipeType);
+    }
 
     @Override
     public RichIterable<? extends RecipeSystem<?>> getTaggedSystems(Namespace tag) {
@@ -122,29 +134,29 @@ public class RecipeApiImpl implements RecipeApi {
     }
 
     @Override
-    public boolean hasFacet(Namespace facetId) {
-        return facets.containsKey(facetId);
+    public boolean hasClause(Namespace clauseId) {
+        return clauses.containsKey(clauseId);
     }
 
     @Override
-    public RecipeFacetType getFacetType(Namespace facetId) throws IllegalArgumentException {
-        var ret = facets.get(facetId);
+    public ClauseType getClauseType(Namespace clauseId) throws IllegalArgumentException {
+        var ret = clauses.get(clauseId);
         if (ret == null) {
-            throw new IllegalArgumentException("No facet found with id: " + facetId);
+            throw new IllegalArgumentException("No clause type found with id: " + clauseId);
         }
         return ret;
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public @Nullable <T extends RecipeContent, F extends RecipeFacet> FacetTransformer<T, F> findFacetTransformer(RecipeFacetType type) {
-        return (FacetTransformer<T, F>) facetTransformers.get(type);
+    public @Nullable <T extends RecipeContent, F extends RecipeClause> ContentTransformer<T, F> findContentTransformer(ClauseType type) {
+        return (ContentTransformer<T, F>) contentTransformers.get(type);
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public @Nullable <F extends RecipeFacet> ViewTransformer<F> findViewTransformer(RecipeFacetType type) {
-        return (ViewTransformer<F>) viewTransformers.get(type);
+    public @Nullable <F extends RecipeClause> ProjectionTransformer<F> findProjectionTransformer(ClauseType type) {
+        return (ProjectionTransformer<F>) projectionTransformers.get(type);
     }
 
     @Override
@@ -192,7 +204,7 @@ public class RecipeApiImpl implements RecipeApi {
     }
 
     @Override
-    public RichIterable<RecipeType<?>> getJeiRecipeTypeForSystem(Namespace systemId) {
+    public RichIterable<? extends RecipeType<?>> getJeiRecipeTypeForSystem(Namespace systemId) {
         var recipeTypes = jeiRecipeTypes.get(systemId);
         return recipeTypes == null ? Sets.immutable.empty() : recipeTypes;
     }
