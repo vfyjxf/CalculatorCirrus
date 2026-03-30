@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.ui.widget.flowchart;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import dev.vfyjxf.cirrus.content.renderer.FluidStackRenderer;
+import dev.vfyjxf.cirrus.ui.CirrusTextures;
 import dev.vfyjxf.cirrus.ui.widget.flowchart.model.ProcessNode.MaterialSlot;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -42,6 +43,18 @@ public final class FlowChartTooltipComponent implements TooltipComponent {
         record IconText(@Nullable ItemStack icon, int fallbackColor,
                         String text, int textColor,
                         @Nullable String rightText, int rightColor) implements Entry {}
+
+        /** Compact recipe card entry with inputs, outputs, catalysts, and an optional machine. */
+        record RecipeCard(
+                List<MaterialSlot> inputs,
+                List<MaterialSlot> outputs,
+                List<MaterialSlot> catalysts,
+                @Nullable MaterialSlot machine
+        ) implements Entry {
+            static RecipeCard empty() {
+                return new RecipeCard(List.of(), List.of(), List.of(), null);
+            }
+        }
     }
 
     private final List<Entry> entries;
@@ -136,6 +149,11 @@ public final class FlowChartTooltipComponent implements TooltipComponent {
             return this;
         }
 
+        public Builder recipeCard(Entry.RecipeCard card) {
+            entries.add(card);
+            return this;
+        }
+
         public FlowChartTooltipComponent build() {
             return new FlowChartTooltipComponent(entries);
         }
@@ -146,6 +164,16 @@ public final class FlowChartTooltipComponent implements TooltipComponent {
     public static ClientTooltipComponent toClient(FlowChartTooltipComponent data) {
         return new Client(data);
     }
+
+    public static RecipeCardLayout recipeCardLayout(int maxWidth, int inputCount, int outputCount) {
+        int slotStep = 18;
+        int minCols = Math.max(1, maxWidth / slotStep);
+        int inputRows = (int) Math.ceil(inputCount / (double) minCols);
+        int outputRows = (int) Math.ceil(outputCount / (double) minCols);
+        return new RecipeCardLayout(minCols, inputRows, outputRows);
+    }
+
+    public record RecipeCardLayout(int columns, int inputRows, int outputRows) {}
 
     // ─── Client rendering implementation ───
 
@@ -167,6 +195,12 @@ public final class FlowChartTooltipComponent implements TooltipComponent {
         private static final int BAR_BD = 0xFF333366;
         private static final int KV_GAP = 12;
         private static final int ACCENT_W = 3;
+        private static final int RECIPE_CARD_MAX_COLS = 7;
+        private static final int RECIPE_ARROW_GAP = ICON_STEP;
+        private static final int RECIPE_SUBSECTION_GAP = 3;
+        private static final int RECIPE_CATALYST_BG = 0x241B102C;
+        private static final int RECIPE_MACHINE_BG = 0x20122A3A;
+        private static final int RECIPE_CARD_FRAME_PAD = 3;
 
         private final FlowChartTooltipComponent data;
 
@@ -195,6 +229,20 @@ public final class FlowChartTooltipComponent implements TooltipComponent {
                         if (it.rightText() != null) iw += 10 + font.width(it.rightText());
                         yield iw;
                     }
+                    case Entry.RecipeCard rc -> {
+                        int maxSlots = Math.max(1, Math.max(rc.inputs().size(), rc.outputs().size()));
+                        int maxWidth = Math.min(ICON_STEP * maxSlots, ICON_STEP * RECIPE_CARD_MAX_COLS);
+                        RecipeCardLayout layout = recipeCardLayout(maxWidth, rc.inputs().size(), rc.outputs().size());
+                        int columns = Math.max(1, layout.columns());
+                        int gridWidth = columns * ICON_STEP;
+                        int mainWidth = gridWidth * 2 + RECIPE_ARROW_GAP;
+                        int catalystsWidth = 0;
+                        if (!rc.catalysts().isEmpty()) {
+                            int catalystColumns = Math.max(1, Math.min(columns * 2 + 1, rc.catalysts().size()));
+                            catalystsWidth = catalystColumns * ICON_STEP;
+                        }
+                        yield Math.max(mainWidth, catalystsWidth);
+                    }
                 };
                 max = Math.max(max, w);
             }
@@ -214,6 +262,20 @@ public final class FlowChartTooltipComponent implements TooltipComponent {
                     case Entry.KeyValue ignored -> KV_H;
                     case Entry.ProgressBar ignored -> BAR_H;
                     case Entry.IconText ignored -> ICON_TEXT_H;
+                    case Entry.RecipeCard rc -> {
+                        int maxSlots = Math.max(1, Math.max(rc.inputs().size(), rc.outputs().size()));
+                        int maxWidth = Math.min(ICON_STEP * maxSlots, ICON_STEP * RECIPE_CARD_MAX_COLS);
+                        RecipeCardLayout layout = recipeCardLayout(maxWidth, rc.inputs().size(), rc.outputs().size());
+                        int columns = Math.max(1, layout.columns());
+                        int rows = Math.max(1, Math.max(layout.inputRows(), layout.outputRows()));
+                        int height = rows * ICON_STEP;
+                        if (!rc.catalysts().isEmpty()) {
+                            int catalystColumns = Math.max(1, Math.min(columns * 2 + 1, rc.catalysts().size()));
+                            int catalystRows = (int) Math.ceil(rc.catalysts().size() / (double) catalystColumns);
+                            height += RECIPE_SUBSECTION_GAP + catalystRows * ICON_STEP;
+                        }
+                        yield height + RECIPE_CARD_FRAME_PAD * 2;
+                    }
                 };
             }
             return h;
@@ -239,39 +301,7 @@ public final class FlowChartTooltipComponent implements TooltipComponent {
                         // Render each slot as an icon with a mini-slot background
                         int iconX = x + PAD_X;
                         for (MaterialSlot slot : sr.slots()) {
-                            // Slot background (dark inset rectangle)
-                            graphics.fill(iconX, curY, iconX + ICON_SIZE, curY + ICON_SIZE, SLOT_BG);
-                            // Slot border
-                            drawRect(graphics, iconX - 1, curY - 1, ICON_SIZE + 2, ICON_SIZE + 2, SLOT_BD);
-
-                            // Render item icon
-                            if (slot.itemStack() != null && !slot.itemStack().isEmpty()) {
-                                graphics.renderItem(slot.itemStack(), iconX, curY);
-                                graphics.renderItemDecorations(font, slot.itemStack(), iconX, curY);
-                            } else if (slot.fluidStack() != null && !slot.fluidStack().isEmpty()) {
-                                // Render fluid texture
-                                var pose = graphics.pose();
-                                pose.pushPose();
-                                pose.translate(iconX, curY, 0);
-                                FluidStackRenderer.instance.renderBase(
-                                        graphics, slot.fluidStack(), ICON_SIZE, ICON_SIZE, 0);
-                                pose.popPose();
-                                // Amount overlay
-                                String amt = shortAmount(slot.amount());
-                                graphics.drawString(font, amt,
-                                        iconX + ICON_SIZE - font.width(amt),
-                                        curY + ICON_SIZE - 8, 0xFFFFFFFF, true);
-                            } else {
-                                // Fallback: colored rectangle with type initial
-                                int typeColor = slot.type().color;
-                                graphics.fill(iconX + 1, curY + 1,
-                                        iconX + ICON_SIZE - 1, curY + ICON_SIZE - 1, typeColor);
-                                String initial = slot.type().name().substring(0, 1);
-                                int tw = font.width(initial);
-                                graphics.drawString(font, initial,
-                                        iconX + (ICON_SIZE - tw) / 2,
-                                        curY + 4, 0xFFFFFFFF, true);
-                            }
+                            renderSlot(font, graphics, slot, iconX, curY);
                             iconX += ICON_STEP;
                         }
                         curY += ICON_STEP;
@@ -334,7 +364,114 @@ public final class FlowChartTooltipComponent implements TooltipComponent {
                         }
                         curY += ICON_TEXT_H;
                     }
+                    case Entry.RecipeCard rc -> {
+                        int maxSlots = Math.max(1, Math.max(rc.inputs().size(), rc.outputs().size()));
+                        int maxWidth = Math.min(ICON_STEP * maxSlots, ICON_STEP * RECIPE_CARD_MAX_COLS);
+                        RecipeCardLayout layout = recipeCardLayout(maxWidth, rc.inputs().size(), rc.outputs().size());
+                        int columns = Math.max(1, layout.columns());
+                        int inputRows = Math.max(1, layout.inputRows());
+                        int outputRows = Math.max(1, layout.outputRows());
+                        int rows = Math.max(inputRows, outputRows);
+                        int gridWidth = columns * ICON_STEP;
+                        int rowHeight = rows * ICON_STEP;
+                        int recipeW = Math.max(ICON_STEP * 2 + RECIPE_ARROW_GAP, gridWidth * 2 + RECIPE_ARROW_GAP);
+
+                        int frameW = recipeW + RECIPE_CARD_FRAME_PAD * 2;
+                        int frameX = x + PAD_X;
+                        int contentX = frameX + RECIPE_CARD_FRAME_PAD;
+                        int contentY = curY + RECIPE_CARD_FRAME_PAD;
+                        int recipeH = rowHeight;
+                        if (!rc.catalysts().isEmpty()) {
+                            int catalystColumns = Math.max(1, Math.min(columns * 2 + 1, rc.catalysts().size()));
+                            int catalystRows = (int) Math.ceil(rc.catalysts().size() / (double) catalystColumns);
+                            recipeH += RECIPE_SUBSECTION_GAP + catalystRows * ICON_STEP;
+                        }
+                        int frameH = recipeH + RECIPE_CARD_FRAME_PAD * 2;
+                        CirrusTextures.Background.Outlined.flat.render(graphics, frameX, curY, frameW, frameH);
+                        CirrusTextures.Background.dark.render(graphics, frameX + 1, curY + 1, Math.max(1, frameW - 2), Math.max(1, frameH - 2));
+                        CirrusTextures.Background.Sign.bar.render(graphics, frameX + 2, curY + 2, Math.max(8, frameW - 4), 2);
+
+                        int leftX = contentX + RECIPE_CARD_FRAME_PAD;
+                        int rightX = leftX + gridWidth + RECIPE_ARROW_GAP;
+                        int centerX = leftX + gridWidth;
+                        int centerW = RECIPE_ARROW_GAP;
+
+                        renderSlotGrid(font, graphics, rc.inputs(), columns, leftX, contentY);
+                        renderSlotGrid(font, graphics, rc.outputs(), columns, rightX, contentY);
+
+                        if (rc.machine() != null) {
+                            int machineX = centerX + (centerW - ICON_SIZE) / 2;
+                            int machineY = contentY;
+                            graphics.fill(machineX - 1, machineY - 1, machineX + ICON_SIZE + 1, machineY + ICON_SIZE + 1, RECIPE_MACHINE_BG);
+                            renderSlot(font, graphics, rc.machine(), machineX, machineY);
+                        }
+
+                        String arrow = "→";
+                        int arrowW = font.width(arrow);
+                        int arrowX = centerX + (centerW - arrowW) / 2;
+                        int arrowCenterY = contentY + (rowHeight - font.lineHeight) / 2;
+                        int arrowY = rc.machine() == null ? arrowCenterY : Math.max(contentY + ICON_STEP + 1, arrowCenterY);
+                        graphics.drawString(font, arrow, arrowX, arrowY, 0xFFFFFFFF, true);
+
+                        int sectionY = contentY + rowHeight;
+                        if (!rc.catalysts().isEmpty()) {
+                            sectionY += RECIPE_SUBSECTION_GAP;
+                            int catalystColumns = Math.max(1, Math.min(columns * 2 + 1, rc.catalysts().size()));
+                            int catalystRows = (int) Math.ceil(rc.catalysts().size() / (double) catalystColumns);
+                            int catalystWidth = catalystColumns * ICON_STEP;
+                            graphics.fill(leftX - 1, sectionY - 1, leftX + catalystWidth + 1, sectionY + catalystRows * ICON_STEP + 1, RECIPE_CATALYST_BG);
+                            renderSlotGrid(font, graphics, rc.catalysts(), catalystColumns, leftX, sectionY);
+                            sectionY += catalystRows * ICON_STEP;
+                        }
+                        curY += frameH;
+                    }
                 }
+            }
+        }
+
+        private static void renderSlotGrid(Font font, GuiGraphics graphics,
+                                           List<MaterialSlot> slots, int columns,
+                                           int startX, int startY) {
+            int safeCols = Math.max(1, columns);
+            for (int i = 0; i < slots.size(); i++) {
+                int col = i % safeCols;
+                int row = i / safeCols;
+                int iconX = startX + col * ICON_STEP;
+                int iconY = startY + row * ICON_STEP;
+                renderSlot(font, graphics, slots.get(i), iconX, iconY);
+            }
+        }
+
+        private static void renderSlot(Font font, GuiGraphics graphics, MaterialSlot slot, int iconX, int iconY) {
+            CirrusTextures.Background.Slot.dark.render(graphics, iconX, iconY, ICON_SIZE, ICON_SIZE);
+
+            // Render item icon
+            if (slot.itemStack() != null && !slot.itemStack().isEmpty()) {
+                graphics.renderItem(slot.itemStack(), iconX, iconY);
+                graphics.renderItemDecorations(font, slot.itemStack(), iconX, iconY);
+            } else if (slot.fluidStack() != null && !slot.fluidStack().isEmpty()) {
+                // Render fluid texture
+                var pose = graphics.pose();
+                pose.pushPose();
+                pose.translate(iconX, iconY, 0);
+                FluidStackRenderer.instance.renderBase(
+                        graphics, slot.fluidStack(), ICON_SIZE, ICON_SIZE, 0);
+                pose.popPose();
+                // Amount overlay
+                String amt = shortAmount(slot.amount());
+                graphics.drawString(font, amt,
+                        iconX + ICON_SIZE - font.width(amt),
+                        iconY + ICON_SIZE - 8, 0xFFFFFFFF, true);
+            } else {
+                // Fallback: colored rectangle with type initial
+                int typeColor = slot.type().color;
+                graphics.fill(iconX + 1, iconY + 1,
+                        iconX + ICON_SIZE - 1, iconY + ICON_SIZE - 1, typeColor);
+                String initial = slot.type().name().substring(0, 1);
+                int tw = font.width(initial);
+                graphics.drawString(font, initial,
+                        iconX + (ICON_SIZE - tw) / 2,
+                        iconY + 4, 0xFFFFFFFF, true);
             }
         }
 

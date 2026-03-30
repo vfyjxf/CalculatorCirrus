@@ -8,10 +8,12 @@ import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionCapability;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionRuntime;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSideRequirement;
+import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionTelemetrySnapshot;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionExecutionPlan;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionApi;
@@ -32,7 +34,10 @@ import dev.vfyjxf.cirrus.api.recipe.storage.StorageSourceType;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageTransferRequest;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageTransferResult;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
-import dev.vfyjxf.cirrus.ui.widget.execution.ExecutionOverlayHost;
+import dev.vfyjxf.cirrus.api.recipe.system.VanillaRecipeSystem;
+import dev.vfyjxf.cirrus.recipe.system.CraftingRecipeSystem;
+import dev.vfyjxf.cirrus.ui.widget.execution.ExecutionOverlayController;
+import dev.vfyjxf.cirrus.ui.widget.execution.ExecutionOverlayControlsWidget;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
@@ -48,6 +53,11 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.item.crafting.ShapedRecipe;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.factory.Sets;
@@ -56,31 +66,50 @@ import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnmodifiableView;
 
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Runtime-backed workbench executor used by the crafting-screen overlay.
  * It validates live inventory state on client and keeps a deterministic fallback for tests.
  */
-public final class WorkbenchExecutionDemoController implements ExecutionOverlayHost {
+public final class WorkbenchExecutionDemoController implements ExecutionOverlayController {
 
     //region runtime constants
 
-    private static final int autoAdvanceIntervalTicks = 8;
-    private static final int craftCycleCount = 6;
-    private static final int logsPerCraftAmount = 1;
-    private static final int planksPerCraftAmount = 4;
-    private static final int totalLogAmount = logsPerCraftAmount * craftCycleCount;
+    private static final int craftCycleCount = 20;
+    private static final int logsPerCraftAmount = 2;
+    private static final int sticksPerCraftAmount = 3;
+    private static final int sticksFromLogPerCraftAmount = 4;
+    private static final int planksFromLogsPerCraftAmount = 8;
+    private static final int planksPerCraftAmount = planksFromLogsPerCraftAmount;
+    private static final int logsForTargetCraftAmount = logsPerCraftAmount * craftCycleCount;
+    private static final int totalStickAmount = sticksPerCraftAmount * craftCycleCount;
+    private static final int stickCraftCycleCount = ceilDiv(totalStickAmount, sticksFromLogPerCraftAmount);
+    private static final int logsForStickCraftAmount = stickCraftCycleCount;
+    private static final int totalLogAmount = logsForTargetCraftAmount + logsForStickCraftAmount;
     private static final int totalPlankAmount = planksPerCraftAmount * craftCycleCount;
 
     private static final ItemStack oakLogStack = new ItemStack(Items.OAK_LOG);
+    private static final ItemStack stickStack = new ItemStack(Items.STICK);
     private static final ItemStack oakPlankStack = new ItemStack(Items.OAK_PLANKS);
     private static final ValueType<Long> fallbackLogAmountType = new FallbackAmountType(Namespace.of("cirrus", "workbench_fallback_log"));
+    private static final ValueType<Long> fallbackStickAmountType = new FallbackAmountType(Namespace.of("cirrus", "workbench_fallback_stick"));
     private static final ValueType<Long> fallbackPlankAmountType = new FallbackAmountType(Namespace.of("cirrus", "workbench_fallback_plank"));
+    private static final ResourceLocation workbenchDatapackLogToPlanksRecipeId = ResourceLocation.fromNamespaceAndPath("calculator_cirrus", "workbench_oak_planks_demo");
+    private static final ResourceLocation workbenchDatapackLogToSticksRecipeId = ResourceLocation.fromNamespaceAndPath("calculator_cirrus", "workbench_oak_sticks_demo");
 
-    private static final DemoRecipeSystem recipeSystem = new DemoRecipeSystem();
-    private static final RecipeEntry<DemoRecipe> workbenchRecipe = RecipeEntry.of(recipeSystem, new DemoRecipe("oak_planks_batch"));
+    private static final DemoRecipeSystem fallbackRecipeSystem = new DemoRecipeSystem();
+    private static final RecipeEntry<DemoRecipe> fallbackWorkbenchLogToSticksRecipe = RecipeEntry.of(
+        fallbackRecipeSystem,
+        new DemoRecipe("oak_sticks_from_log_batch")
+    );
+    private static final RecipeEntry<DemoRecipe> fallbackWorkbenchLogToPlanksRecipe = RecipeEntry.of(
+        fallbackRecipeSystem,
+        new DemoRecipe("oak_planks_from_log_and_stick_batch")
+    );
 
     private static final ExecutionGuidance openWorkbenchGuidance = new ExecutionGuidance(
         Component.translatable("cirrus.ui.execution.workbench.manual.open.summary"),
@@ -92,27 +121,28 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
         Sets.immutable.empty()
     );
 
-    private static final ExecutionGuidance autoCraftGuidance = ExecutionGuidance.simple(
-        Component.translatable("cirrus.ui.execution.workbench.flow.execute.detail")
-    );
-
     //endregion
 
     //region state
 
     private final SessionEnvironment environment;
     private final ContentResource oakLogResource;
+    private final ContentResource stickResource;
     private final ContentResource oakPlankResource;
     private final InputContent oakLogInput;
+    private final InputContent stickInput;
+    private final InputContent oakPlankInput;
+    private RecipeEntry<?> workbenchLogToSticksRecipe;
+    private RecipeEntry<?> workbenchLogToPlanksRecipe;
     private final WorkbenchStorageApi storageApi;
     private final WorkbenchInteractionApi interactionApi;
     private final ExecutionRuntime runtime;
-    private final ExecutionSession initialSession;
     private final boolean forceFallbackResources;
+    private double overlayRatePerSecond = 5.0d;
 
     private ExecutionSession session;
     private boolean autoAdvance;
-    private int autoAdvanceTicks;
+    private double autoAdvanceProgress;
 
     //endregion
 
@@ -121,11 +151,31 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
     }
 
     WorkbenchExecutionDemoController(long simulatedLogs, long simulatedPlanks, int simulatedEmptySlots) {
-        this(new SimulatedEnvironment(simulatedLogs, simulatedPlanks, simulatedEmptySlots, true), false);
+        this(new SimulatedEnvironment(simulatedLogs, totalStickAmount, simulatedPlanks, simulatedEmptySlots, true), false);
     }
 
     WorkbenchExecutionDemoController(long simulatedLogs, long simulatedPlanks, int simulatedEmptySlots, boolean forceFallbackResources) {
-        this(new SimulatedEnvironment(simulatedLogs, simulatedPlanks, simulatedEmptySlots, true), forceFallbackResources);
+        this(new SimulatedEnvironment(simulatedLogs, totalStickAmount, simulatedPlanks, simulatedEmptySlots, true), forceFallbackResources);
+    }
+
+    WorkbenchExecutionDemoController(
+        long simulatedLogs,
+        long simulatedSticks,
+        long simulatedPlanks,
+        int simulatedEmptySlots,
+        boolean simulatedInteractionOpen,
+        boolean forceFallbackResources
+    ) {
+        this(
+            new SimulatedEnvironment(
+                simulatedLogs,
+                simulatedSticks,
+                simulatedPlanks,
+                simulatedEmptySlots,
+                simulatedInteractionOpen
+            ),
+            forceFallbackResources
+        );
     }
 
     private WorkbenchExecutionDemoController(SessionEnvironment environment, boolean forceFallbackResources) {
@@ -133,14 +183,15 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
         this.forceFallbackResources = forceFallbackResources;
         var fixtures = createRuntimeFixtures();
         oakLogResource = fixtures.logResource();
+        stickResource = fixtures.stickResource();
         oakPlankResource = fixtures.plankResource();
         oakLogInput = fixtures.logInput();
-        storageApi = new WorkbenchStorageApi(environment, oakLogResource, oakPlankResource);
+        stickInput = fixtures.stickInput();
+        oakPlankInput = fixtures.plankInput();
+        storageApi = new WorkbenchStorageApi(environment, oakLogResource, stickResource, oakPlankResource);
         interactionApi = new WorkbenchInteractionApi(environment);
         runtime = new ExecutionRuntime(storageApi, interactionApi);
-        var plan = buildPlan();
-        initialSession = ExecutionSession.start(plan, buildFlowRoot(plan));
-        session = initialSession;
+        session = rebuildSession();
     }
 
     //region access
@@ -158,7 +209,160 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
         return autoAdvance;
     }
 
+    @Override
+    public boolean overlayAutoAdvanceEnabled() {
+        return autoAdvance();
+    }
+
+    @Override
+    public double overlayRatePerSecond() {
+        return overlayRatePerSecond;
+    }
+
+    @Override
+    public void overlaySetRatePerSecond(double value) {
+        overlayRatePerSecond = ExecutionOverlayControlsWidget.clampRate(value);
+    }
+
+    @Override
+    public ExecutionTelemetrySnapshot overlayTelemetrySnapshot() {
+        return ExecutionTelemetrySnapshot.from(session, overlayRatePerSecond, autoAdvance);
+    }
+
+    @Override
+    public ImmutableList<OverlayMaterialRequirement> overlayMaterialRequirements() {
+        return collectRemainingMaterialRequirements(session);
+    }
+
+    @Override
+    public @Nullable OverlayTargetProgress overlayTargetProgress() {
+        if (session == null || session.plan() == null || session.plan().isEmpty()) {
+            return null;
+        }
+        RecipeEntry<?> targetRecipe = session.plan().targetRecipe();
+        if (targetRecipe == null) {
+            return null;
+        }
+        ImmutableList<ItemRequirement> targetOutputs = collapseOutputRequirements(resolveTargetRecipeOutputs(targetRecipe));
+        if (targetOutputs.isEmpty()) {
+            targetOutputs = collapseOutputRequirements(resolveTargetRecipeExecuteOutputs(targetRecipe));
+        }
+        if (targetOutputs.isEmpty()) {
+            return null;
+        }
+
+        ItemRequirement selected = targetOutputs.getFirst();
+        if (selected.template().isEmpty()) {
+            return null;
+        }
+
+        long bestScore = Long.MIN_VALUE;
+        for (ItemRequirement candidate : targetOutputs) {
+            ItemStack stack = candidate.template();
+            if (stack == null || stack.isEmpty()) {
+                continue;
+            }
+            long required = Math.max(0L, candidate.amount());
+            long current = environment.count(stack);
+            long missing = Math.max(0L, required - current);
+            long score = missing * 1_000_000L + required;
+            if (score > bestScore) {
+                bestScore = score;
+                selected = candidate;
+            }
+        }
+
+        ItemStack displayStack = selected.template();
+        if (displayStack == null || displayStack.isEmpty()) {
+            return null;
+        }
+        long required = Math.max(0L, selected.amount());
+        long current = environment.count(displayStack);
+        return new OverlayTargetProgress(displayStack, required, current);
+    }
+
     //endregion
+
+    private ImmutableList<PlanAction.OutputBinding> resolveTargetRecipeOutputs(RecipeEntry<?> targetRecipe) {
+        if (session == null || session.plan() == null || session.plan().steps().isEmpty() || targetRecipe == null) {
+            return Lists.immutable.empty();
+        }
+        MutableList<PlanAction.OutputBinding> outputs = Lists.mutable.empty();
+        for (InteractionStep step : session.plan().steps()) {
+            if (!(step instanceof InteractionStep.CollectOutputsStep collectOutputsStep)) {
+                continue;
+            }
+            if (!targetRecipe.equals(collectOutputsStep.recipe())) {
+                continue;
+            }
+            outputs.addAllIterable(collectOutputsStep.expectedOutputs());
+        }
+        return outputs.toImmutable();
+    }
+
+    private ImmutableList<PlanAction.OutputBinding> resolveTargetRecipeExecuteOutputs(RecipeEntry<?> targetRecipe) {
+        if (session == null || session.plan() == null || session.plan().steps().isEmpty() || targetRecipe == null) {
+            return Lists.immutable.empty();
+        }
+        MutableList<PlanAction.OutputBinding> outputs = Lists.mutable.empty();
+        for (InteractionStep step : session.plan().steps()) {
+            if (!(step instanceof InteractionStep.ExecuteRecipeStep executeRecipeStep)) {
+                continue;
+            }
+            if (!targetRecipe.equals(executeRecipeStep.recipe())) {
+                continue;
+            }
+            long times = Math.max(1L, executeRecipeStep.times());
+            for (PlanAction.OutputBinding output : executeRecipeStep.expectedOutputs()) {
+                outputs.add(new PlanAction.OutputBinding(output.resource(), safeMultiply(Math.max(1L, output.amount()), times)));
+            }
+        }
+        return outputs.toImmutable();
+    }
+
+    private ImmutableList<OverlayMaterialRequirement> collectRemainingMaterialRequirements(ExecutionSession sourceSession) {
+        if (sourceSession == null || sourceSession.plan() == null || sourceSession.plan().steps().isEmpty()) {
+            return Lists.immutable.empty();
+        }
+        LinkedHashMap<String, RequirementAccumulator> grouped = new LinkedHashMap<>();
+        ImmutableList<InteractionStep> steps = sourceSession.plan().steps();
+        int startIndex = Math.max(0, Math.min(sourceSession.nextStepIndex(), Math.max(0, steps.size() - 1)));
+        for (int i = startIndex; i < steps.size(); i++) {
+            if (!(steps.get(i) instanceof InteractionStep.ExecuteRecipeStep executeRecipeStep)) {
+                continue;
+            }
+            long stepTimes = Math.max(1L, executeRecipeStep.times());
+            for (PlanAction.InputBinding input : executeRecipeStep.inputs()) {
+                ItemStack stack = stackFromInputContent(input.input());
+                if (stack.isEmpty()) {
+                    continue;
+                }
+                long required = safeMultiply(Math.max(1L, input.amount()), stepTimes);
+                String key = stack.getDescriptionId();
+                RequirementAccumulator accumulator = grouped.computeIfAbsent(key, ignored -> new RequirementAccumulator(stack.copy(), 0L));
+                accumulator.required = safeAdd(accumulator.required, required);
+            }
+        }
+        if (grouped.isEmpty()) {
+            return Lists.immutable.empty();
+        }
+        MutableList<OverlayMaterialRequirement> out = Lists.mutable.empty();
+        for (RequirementAccumulator accumulator : grouped.values()) {
+            ItemStack display = accumulator.stack.copy();
+            display.setCount(1);
+            long available = environment.count(display);
+            long missing = Math.max(0L, accumulator.required - available);
+            out.add(new OverlayMaterialRequirement(display, accumulator.required, available, missing));
+        }
+        var sorted = out.toSortedList(
+            Comparator.comparingLong(OverlayMaterialRequirement::missing)
+                .reversed()
+                .thenComparingLong(OverlayMaterialRequirement::required)
+                .reversed()
+                .thenComparing(requirement -> requirement.stack().getHoverName().getString(), String.CASE_INSENSITIVE_ORDER)
+        );
+        return sorted.toImmutable();
+    }
 
     //region control
 
@@ -185,7 +389,7 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
 
         if (session.completed()) {
             autoAdvance = false;
-            autoAdvanceTicks = 0;
+            autoAdvanceProgress = 0.0d;
         }
         return advanced;
     }
@@ -196,26 +400,58 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
             return false;
         }
         autoAdvance = !autoAdvance;
-        autoAdvanceTicks = 0;
+        autoAdvanceProgress = 0.0d;
         return autoAdvance;
     }
 
     public void reset() {
-        session = initialSession;
+        session = rebuildSession();
         autoAdvance = false;
-        autoAdvanceTicks = 0;
+        autoAdvanceProgress = 0.0d;
+    }
+
+    private ExecutionSession rebuildSession() {
+        RecipeChain recipeChain = resolveWorkbenchRecipeChain();
+        workbenchLogToSticksRecipe = recipeChain.logToSticks();
+        workbenchLogToPlanksRecipe = recipeChain.logToPlanks();
+        var plan = buildPlan();
+        return ExecutionSession.start(plan, buildFlowRoot(plan));
+    }
+
+    @Override
+    public void overlayAdvanceSteps(int steps) {
+        advanceSteps(steps);
+    }
+
+    @Override
+    public void overlayToggleAutoAdvance() {
+        toggleAutoAdvance();
+    }
+
+    @Override
+    public void overlayReset() {
+        reset();
     }
 
     public void tick() {
-        if (!autoAdvance) {
+        if (!autoAdvance || session.completed() || overlayRatePerSecond <= 0.0d) {
+            if (session.completed()) {
+                autoAdvance = false;
+                autoAdvanceProgress = 0.0d;
+            }
             return;
         }
-        autoAdvanceTicks++;
-        if (autoAdvanceTicks < autoAdvanceIntervalTicks) {
+        autoAdvanceProgress += overlayRatePerSecond / 20.0d;
+        int stepsToAdvance = (int) Math.floor(autoAdvanceProgress);
+        if (stepsToAdvance <= 0) {
             return;
         }
-        autoAdvanceTicks = 0;
-        advanceSteps(1);
+        autoAdvanceProgress -= stepsToAdvance;
+        while (stepsToAdvance-- > 0 && autoAdvance && !session.completed()) {
+            if (advanceSteps(1) <= 0) {
+                break;
+            }
+        }
     }
 
     //endregion
@@ -227,8 +463,13 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
         if (step == null || !canResumeStep(step)) {
             return pausedSession;
         }
-        if (step instanceof InteractionStep.ExecuteRecipeStep ignored) {
-            var result = environment.performCraft(oakLogStack, logsPerCraftAmount, oakPlankStack, planksPerCraftAmount);
+        if (step instanceof InteractionStep.ExecuteRecipeStep executeRecipeStep) {
+            var result = environment.performCraft(
+                executeRecipeStep.recipe(),
+                executeRecipeStep.times(),
+                executeRecipeStep.inputs(),
+                executeRecipeStep.expectedOutputs()
+            );
             if (!(result instanceof InteractionPerformResult.Performed)) {
                 return pausedSession;
             }
@@ -250,7 +491,12 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
             ).completed();
             case InteractionStep.OpenInteractionStep ignored -> environment.interactionOpen();
             case InteractionStep.ManualCheckpointStep ignored -> environment.interactionOpen();
-            case InteractionStep.ExecuteRecipeStep ignored -> environment.canAutoCraft(oakLogStack, logsPerCraftAmount, oakPlankStack, planksPerCraftAmount);
+            case InteractionStep.ExecuteRecipeStep executeRecipeStep -> environment.canAutoCraft(
+                executeRecipeStep.recipe(),
+                executeRecipeStep.times(),
+                executeRecipeStep.inputs(),
+                executeRecipeStep.expectedOutputs()
+            );
             default -> true;
         };
     }
@@ -271,17 +517,164 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
         return first + second;
     }
 
-    private ContentResource requestSourceVariant(ContentResource source, int variant) {
-        if ((variant & 1) == 0) {
-            return source;
+    private static long safeMultiply(long first, long second) {
+        if (first <= 0L || second <= 0L) {
+            return 0L;
         }
-        if (source instanceof ContentStack<?, ?> stack) {
-            return stack.copy();
+        if (first > Long.MAX_VALUE / second) {
+            return Long.MAX_VALUE;
         }
-        if (source instanceof ContentValue<?> value) {
-            return value.copy();
+        return first * second;
+    }
+
+    private static int ceilDiv(int numerator, int denominator) {
+        if (numerator <= 0 || denominator <= 0) {
+            return 0;
         }
-        return source;
+        return (numerator + denominator - 1) / denominator;
+    }
+
+    private static ImmutableList<ItemRequirement> collapseInputRequirements(ImmutableList<PlanAction.InputBinding> inputs) {
+        return collapseInputRequirements(inputs, 1L);
+    }
+
+    private static ImmutableList<ItemRequirement> collapseInputRequirements(
+        ImmutableList<PlanAction.InputBinding> inputs,
+        long multiplier
+    ) {
+        if (inputs == null || inputs.isEmpty()) {
+            return Lists.immutable.empty();
+        }
+        long normalizedMultiplier = Math.max(1L, multiplier);
+        LinkedHashMap<String, RequirementAccumulator> grouped = new LinkedHashMap<>();
+        for (PlanAction.InputBinding input : inputs) {
+            ItemStack stack = stackFromInputContent(input.input());
+            if (stack.isEmpty()) {
+                continue;
+            }
+            long amount = safeMultiply(Math.max(1L, input.amount()), normalizedMultiplier);
+            String key = stack.getDescriptionId();
+            RequirementAccumulator accumulator = grouped.computeIfAbsent(key, ignored -> new RequirementAccumulator(stack.copy(), 0L));
+            accumulator.required = safeAdd(accumulator.required, amount);
+        }
+        MutableList<ItemRequirement> out = Lists.mutable.empty();
+        for (RequirementAccumulator accumulator : grouped.values()) {
+            out.add(new ItemRequirement(accumulator.stack, accumulator.required));
+        }
+        return out.toImmutable();
+    }
+
+    private static ImmutableList<ItemRequirement> collapseOutputRequirements(ImmutableList<PlanAction.OutputBinding> outputs) {
+        return collapseOutputRequirements(outputs, 1L);
+    }
+
+    private static ImmutableList<ItemRequirement> collapseOutputRequirements(
+        ImmutableList<PlanAction.OutputBinding> outputs,
+        long multiplier
+    ) {
+        if (outputs == null || outputs.isEmpty()) {
+            return Lists.immutable.empty();
+        }
+        long normalizedMultiplier = Math.max(1L, multiplier);
+        LinkedHashMap<String, RequirementAccumulator> grouped = new LinkedHashMap<>();
+        for (PlanAction.OutputBinding output : outputs) {
+            ItemStack stack = stackFromContentResource(output.resource());
+            if (stack.isEmpty()) {
+                continue;
+            }
+            long amount = safeMultiply(Math.max(1L, output.amount()), normalizedMultiplier);
+            String key = stack.getDescriptionId();
+            RequirementAccumulator accumulator = grouped.computeIfAbsent(key, ignored -> new RequirementAccumulator(stack.copy(), 0L));
+            accumulator.required = safeAdd(accumulator.required, amount);
+        }
+        MutableList<ItemRequirement> out = Lists.mutable.empty();
+        for (RequirementAccumulator accumulator : grouped.values()) {
+            out.add(new ItemRequirement(accumulator.stack, accumulator.required));
+        }
+        return out.toImmutable();
+    }
+
+    private static ItemStack stackFromInputContent(InputContent input) {
+        if (input.isEnumerable()) {
+            for (ContentVariant variant : input.enumerate()) {
+                if (variant instanceof ContentStack<?, ?> contentStack && contentStack.isItem()) {
+                    ItemStack itemStack = contentStack.<Item, ItemStack>cast().value().copy();
+                    if (!itemStack.isEmpty()) {
+                        itemStack.setCount(1);
+                        return itemStack;
+                    }
+                }
+                if (variant instanceof ContentValue<?> value) {
+                    ItemStack fallbackStack = fallbackStackFromValueType(value.type());
+                    if (!fallbackStack.isEmpty()) {
+                        return fallbackStack;
+                    }
+                }
+            }
+        }
+        return ItemStack.EMPTY;
+    }
+
+    private static ItemStack stackFromContentResource(ContentResource resource) {
+        if (resource instanceof ContentValue<?> value) {
+            return fallbackStackFromValueType(value.type());
+        }
+        if (!(resource instanceof ContentStack<?, ?> contentStack) || !contentStack.isItem()) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack stack = contentStack.<Item, ItemStack>cast().value().copy();
+        if (stack.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        stack.setCount(1);
+        return stack;
+    }
+
+    private static ItemStack fallbackStackFromValueType(ValueType<?> valueType) {
+        if (valueType == null) {
+            return ItemStack.EMPTY;
+        }
+        if (valueType == fallbackLogAmountType || valueType.equals(fallbackLogAmountType)) {
+            return oakLogStack.copy();
+        }
+        if (valueType == fallbackStickAmountType || valueType.equals(fallbackStickAmountType)) {
+            return stickStack.copy();
+        }
+        if (valueType == fallbackPlankAmountType || valueType.equals(fallbackPlankAmountType)) {
+            return oakPlankStack.copy();
+        }
+        return ItemStack.EMPTY;
+    }
+
+    private static final class RequirementAccumulator {
+        private final ItemStack stack;
+        private long required;
+
+        private RequirementAccumulator(ItemStack stack, long required) {
+            this.stack = stack;
+            this.required = Math.max(0L, required);
+        }
+    }
+
+    private record ItemRequirement(ItemStack template, long amount) {
+        private ItemRequirement {
+            template = template == null ? ItemStack.EMPTY : template.copy();
+            if (!template.isEmpty()) {
+                template.setCount(1);
+            }
+            amount = Math.max(0L, amount);
+        }
+    }
+
+    private record GridPlacement(int slotId, ItemStack template, long amountPerCraft) {
+        private GridPlacement {
+            slotId = Math.max(1, Math.min(9, slotId));
+            template = template == null ? ItemStack.EMPTY : template.copy();
+            if (!template.isEmpty()) {
+                template.setCount(1);
+            }
+            amountPerCraft = Math.max(1L, amountPerCraft);
+        }
     }
 
     //endregion
@@ -290,6 +683,28 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
 
     private InteractionExecutionPlan buildPlan() {
         MutableList<InteractionStep> steps = Lists.mutable.empty();
+        ImmutableList<PlanAction.InputBinding> stickCraftInputs = Lists.immutable.of(
+            new PlanAction.InputBinding(oakLogInput, 1)
+        );
+        ImmutableList<PlanAction.OutputBinding> stickCraftPerCraftOutputs = Lists.immutable.of(
+            new PlanAction.OutputBinding(stickResource, sticksFromLogPerCraftAmount)
+        );
+        long totalStickCraftOutput = safeMultiply(sticksFromLogPerCraftAmount, stickCraftCycleCount);
+        ImmutableList<PlanAction.OutputBinding> stickCraftBatchOutputs = Lists.immutable.of(
+            new PlanAction.OutputBinding(stickResource, totalStickCraftOutput)
+        );
+        ImmutableList<PlanAction.InputBinding> logCraftInputs = Lists.immutable.of(
+            new PlanAction.InputBinding(oakLogInput, logsPerCraftAmount),
+            new PlanAction.InputBinding(stickInput, sticksPerCraftAmount)
+        );
+        ImmutableList<PlanAction.OutputBinding> logCraftPerCraftOutputs = Lists.immutable.of(
+            new PlanAction.OutputBinding(oakPlankResource, planksFromLogsPerCraftAmount)
+        );
+        long totalLogCraftOutput = safeMultiply(planksFromLogsPerCraftAmount, craftCycleCount);
+        ImmutableList<PlanAction.OutputBinding> logCraftBatchOutputs = Lists.immutable.of(
+            new PlanAction.OutputBinding(oakPlankResource, totalLogCraftOutput)
+        );
+
         steps.add(
             new InteractionStep.EnsureAccessibleStep(
                 ExecutionSideRequirement.client,
@@ -310,15 +725,15 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
             new InteractionStep.EnsureCapacityStep(
                 ExecutionSideRequirement.client,
                 ExecutionCapability.inventoryCapacity,
-                oakPlankResource,
-                totalPlankAmount
+                stickResource,
+                totalStickCraftOutput
             )
         );
         steps.add(
             new InteractionStep.OpenInteractionStep(
                 ExecutionSideRequirement.player,
                 ExecutionCapability.interactionAccess,
-                workbenchRecipe,
+                workbenchLogToSticksRecipe,
                 1,
                 "minecraft:crafting_table"
             )
@@ -330,54 +745,102 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
                 openWorkbenchGuidance
             )
         );
-        for (int cycle = 0; cycle < craftCycleCount; cycle++) {
-            ContentResource cycleLogRequest = requestSourceVariant(oakLogResource, cycle);
-            ContentResource cyclePlankRequest = requestSourceVariant(oakPlankResource, cycle + craftCycleCount);
-            ImmutableList<PlanAction.InputBinding> inputs = Lists.immutable.of(new PlanAction.InputBinding(oakLogInput, logsPerCraftAmount));
-            ImmutableList<PlanAction.OutputBinding> outputs = Lists.immutable.of(new PlanAction.OutputBinding(cyclePlankRequest, planksPerCraftAmount));
-            steps.add(
-                new InteractionStep.EnsureAccessibleStep(
-                    ExecutionSideRequirement.client,
-                    ExecutionCapability.storageAccess,
-                    new InteractionStep.AccessTarget.Resource(cycleLogRequest),
-                    logsPerCraftAmount
-                )
-            );
-            steps.add(
-                new InteractionStep.EnsureCapacityStep(
-                    ExecutionSideRequirement.client,
-                    ExecutionCapability.inventoryCapacity,
-                    cyclePlankRequest,
-                    planksPerCraftAmount
-                )
-            );
-            steps.add(
-                new InteractionStep.PrepareInputsStep(
-                    ExecutionSideRequirement.client,
-                    ExecutionCapability.inventoryTransfer,
-                    workbenchRecipe,
-                    inputs
-                )
-            );
-            steps.add(
-                new InteractionStep.ExecuteRecipeStep(
-                    ExecutionSideRequirement.client,
-                    ExecutionCapability.interactionPerform,
-                    workbenchRecipe,
-                    1,
-                    inputs,
-                    outputs
-                )
-            );
-            steps.add(
-                new InteractionStep.CollectOutputsStep(
-                    ExecutionSideRequirement.client,
-                    ExecutionCapability.inventoryTransfer,
-                    workbenchRecipe,
-                    outputs
-                )
-            );
-        }
+
+        // Batched execution: one stage per recipe, repeat count carried by ExecuteRecipeStep#times.
+        steps.add(
+            new InteractionStep.EnsureAccessibleStep(
+                ExecutionSideRequirement.client,
+                ExecutionCapability.storageAccess,
+                new InteractionStep.AccessTarget.Resource(oakLogResource),
+                logsForStickCraftAmount
+            )
+        );
+        steps.add(
+            new InteractionStep.EnsureCapacityStep(
+                ExecutionSideRequirement.client,
+                ExecutionCapability.inventoryCapacity,
+                stickResource,
+                totalStickCraftOutput
+            )
+        );
+        steps.add(
+            new InteractionStep.PrepareInputsStep(
+                ExecutionSideRequirement.client,
+                ExecutionCapability.inventoryTransfer,
+                workbenchLogToSticksRecipe,
+                stickCraftInputs
+            )
+        );
+        steps.add(
+            new InteractionStep.ExecuteRecipeStep(
+                ExecutionSideRequirement.client,
+                ExecutionCapability.interactionPerform,
+                workbenchLogToSticksRecipe,
+                stickCraftCycleCount,
+                stickCraftInputs,
+                stickCraftPerCraftOutputs
+            )
+        );
+        steps.add(
+            new InteractionStep.CollectOutputsStep(
+                ExecutionSideRequirement.client,
+                ExecutionCapability.inventoryTransfer,
+                workbenchLogToSticksRecipe,
+                stickCraftBatchOutputs
+            )
+        );
+
+        steps.add(
+            new InteractionStep.EnsureAccessibleStep(
+                ExecutionSideRequirement.client,
+                ExecutionCapability.storageAccess,
+                new InteractionStep.AccessTarget.Resource(oakLogResource),
+                logsForTargetCraftAmount
+            )
+        );
+        steps.add(
+            new InteractionStep.EnsureAccessibleStep(
+                ExecutionSideRequirement.client,
+                ExecutionCapability.storageAccess,
+                new InteractionStep.AccessTarget.Resource(stickResource),
+                totalStickAmount
+            )
+        );
+        steps.add(
+            new InteractionStep.EnsureCapacityStep(
+                ExecutionSideRequirement.client,
+                ExecutionCapability.inventoryCapacity,
+                oakPlankResource,
+                totalLogCraftOutput
+            )
+        );
+        steps.add(
+            new InteractionStep.PrepareInputsStep(
+                ExecutionSideRequirement.client,
+                ExecutionCapability.inventoryTransfer,
+                workbenchLogToPlanksRecipe,
+                logCraftInputs
+            )
+        );
+        steps.add(
+            new InteractionStep.ExecuteRecipeStep(
+                ExecutionSideRequirement.client,
+                ExecutionCapability.interactionPerform,
+                workbenchLogToPlanksRecipe,
+                craftCycleCount,
+                logCraftInputs,
+                logCraftPerCraftOutputs
+            )
+        );
+        steps.add(
+            new InteractionStep.CollectOutputsStep(
+                ExecutionSideRequirement.client,
+                ExecutionCapability.inventoryTransfer,
+                workbenchLogToPlanksRecipe,
+                logCraftBatchOutputs
+            )
+        );
+
         steps.add(
             new InteractionStep.EnsureAccessibleStep(
                 ExecutionSideRequirement.client,
@@ -395,108 +858,93 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
             )
         );
         return new InteractionExecutionPlan(
-            workbenchRecipe,
-            1,
+            workbenchLogToPlanksRecipe,
+            craftCycleCount,
             steps.toImmutable()
         );
     }
 
     private ExecutionFlowNode buildFlowRoot(InteractionExecutionPlan plan) {
-        int craftStartIndex = 5;
-        int craftStepCount = craftCycleCount * 5;
-        int cleanupStartIndex = craftStartIndex + craftStepCount;
-        MutableList<InteractionStep> craftSteps = Lists.mutable.empty();
-        MutableList<ExecutionFlowNode> craftCycles = Lists.mutable.empty();
-        for (int cycle = 0; cycle < craftCycleCount; cycle++) {
-            int stepIndex = craftStartIndex + cycle * 5;
-            InteractionStep ensureAccess = plan.steps().get(stepIndex);
-            InteractionStep ensureCapacity = plan.steps().get(stepIndex + 1);
-            InteractionStep prepare = plan.steps().get(stepIndex + 2);
-            InteractionStep execute = plan.steps().get(stepIndex + 3);
-            InteractionStep collect = plan.steps().get(stepIndex + 4);
-            craftSteps.add(ensureAccess);
-            craftSteps.add(ensureCapacity);
-            craftSteps.add(prepare);
-            craftSteps.add(execute);
-            craftSteps.add(collect);
-            craftCycles.add(
-                ExecutionFlowNode.pending(
-                    "craft-cycle-" + (cycle + 1),
-                    Component.translatable("cirrus.ui.execution.workbench.flow.cycle", cycle + 1, craftCycleCount),
-                    Lists.immutable.of(ensureAccess, ensureCapacity, prepare, execute, collect),
-                    ExecutionGuidance.simple(Component.translatable("cirrus.ui.execution.workbench.flow.cycle.detail", logsPerCraftAmount, planksPerCraftAmount)),
-                    Lists.immutable.of(
-                        ExecutionFlowNode.pending(
-                            "craft-cycle-" + (cycle + 1) + "-access",
-                            Component.translatable("cirrus.ui.execution.step.ensure_access"),
-                            Lists.immutable.of(ensureAccess),
-                            null,
-                            Lists.immutable.empty()
-                        ),
-                        ExecutionFlowNode.pending(
-                            "craft-cycle-" + (cycle + 1) + "-capacity",
-                            Component.translatable("cirrus.ui.execution.step.ensure_capacity"),
-                            Lists.immutable.of(ensureCapacity),
-                            null,
-                            Lists.immutable.empty()
-                        ),
-                        ExecutionFlowNode.pending(
-                            "craft-cycle-" + (cycle + 1) + "-prepare",
-                            Component.translatable("cirrus.ui.execution.step.prepare"),
-                            Lists.immutable.of(prepare),
-                            null,
-                            Lists.immutable.empty()
-                        ),
-                        ExecutionFlowNode.pending(
-                            "craft-cycle-" + (cycle + 1) + "-execute",
-                            Component.translatable("cirrus.ui.execution.step.execute"),
-                            Lists.immutable.of(execute),
-                            autoCraftGuidance,
-                            Lists.immutable.empty()
-                        ),
-                        ExecutionFlowNode.pending(
-                            "craft-cycle-" + (cycle + 1) + "-collect",
-                            Component.translatable("cirrus.ui.execution.step.collect"),
-                            Lists.immutable.of(collect),
-                            null,
-                            Lists.immutable.empty()
-                        )
-                    )
-                )
-            );
-        }
+        InteractionStep stickBatchEnsureLogAccess = plan.steps().get(4);
+        InteractionStep stickBatchEnsureCapacity = plan.steps().get(5);
+        InteractionStep stickBatchPrepare = plan.steps().get(6);
+        InteractionStep stickBatchExecute = plan.steps().get(7);
+        InteractionStep stickBatchCollect = plan.steps().get(8);
+
+        InteractionStep logBatchEnsureLogAccess = plan.steps().get(9);
+        InteractionStep logBatchEnsureStickAccess = plan.steps().get(10);
+        InteractionStep logBatchEnsureCapacity = plan.steps().get(11);
+        InteractionStep logBatchPrepare = plan.steps().get(12);
+        InteractionStep logBatchExecute = plan.steps().get(13);
+        InteractionStep logBatchCollect = plan.steps().get(14);
+
+        int cleanupStartIndex = 15;
+        ImmutableList<InteractionStep> stickCraftSteps = Lists.immutable.of(
+            stickBatchEnsureLogAccess,
+            stickBatchEnsureCapacity,
+            stickBatchPrepare,
+            stickBatchExecute,
+            stickBatchCollect
+        );
+        ImmutableList<InteractionStep> plankCraftSteps = Lists.immutable.of(
+            logBatchEnsureLogAccess,
+            logBatchEnsureStickAccess,
+            logBatchEnsureCapacity,
+            logBatchPrepare,
+            logBatchExecute,
+            logBatchCollect
+        );
         return ExecutionFlowNode.pending(
             "workbench-target",
-            Component.translatable("cirrus.ui.execution.workbench.flow.target", totalPlankAmount),
+            Component.literal("Oak Planks x" + totalPlankAmount),
             Lists.immutable.empty(),
             null,
             Lists.immutable.of(
                 ExecutionFlowNode.pending(
                     "gather",
-                    Component.translatable("cirrus.ui.execution.workbench.flow.gather"),
+                    Component.literal("Gather Materials"),
                     Lists.immutable.of(plan.steps().get(0), plan.steps().get(1)),
-                    ExecutionGuidance.simple(Component.translatable("cirrus.ui.execution.workbench.flow.gather.detail")),
+                    ExecutionGuidance.simple(Component.literal("Collect logs from inventory/storage.")),
                     Lists.immutable.empty()
                 ),
                 ExecutionFlowNode.pending(
                     "setup",
-                    Component.translatable("cirrus.ui.execution.workbench.flow.setup"),
-                    Lists.immutable.of(plan.steps().get(2), plan.steps().get(3), plan.steps().get(4)),
-                    ExecutionGuidance.simple(Component.translatable("cirrus.ui.execution.workbench.flow.setup.detail")),
+                    Component.literal("Workbench Setup"),
+                    Lists.immutable.of(plan.steps().get(2), plan.steps().get(3)),
+                    ExecutionGuidance.simple(Component.literal("Open crafting table and verify capacity.")),
                     Lists.immutable.empty()
                 ),
                 ExecutionFlowNode.pending(
                     "craft",
-                    Component.translatable("cirrus.ui.execution.workbench.flow.craft"),
-                    craftSteps.toImmutable(),
-                    ExecutionGuidance.simple(Component.translatable("cirrus.ui.execution.workbench.flow.craft.detail", craftCycleCount)),
-                    craftCycles.toImmutable()
+                    Component.literal("Craft Batches"),
+                    stickCraftSteps.newWithAll(plankCraftSteps).toImmutable(),
+                    ExecutionGuidance.simple(Component.literal("Batch craft " + craftCycleCount + " times.")),
+                    Lists.immutable.of(
+                        ExecutionFlowNode.pending(
+                            "craft-stick-batch",
+                            Component.literal("Log -> Sticks x" + stickCraftCycleCount),
+                            stickCraftSteps,
+                            ExecutionGuidance.simple(Component.literal(
+                                "1 log -> " + sticksFromLogPerCraftAmount + " sticks"
+                            )),
+                            Lists.immutable.empty()
+                        ),
+                        ExecutionFlowNode.pending(
+                            "craft-log-batch",
+                            Component.literal("Log -> Planks x" + craftCycleCount),
+                            plankCraftSteps,
+                            ExecutionGuidance.simple(Component.literal(
+                                logsPerCraftAmount + " log + " + sticksPerCraftAmount + " stick -> " + planksFromLogsPerCraftAmount + " planks"
+                            )),
+                            Lists.immutable.empty()
+                        )
+                    )
                 ),
                 ExecutionFlowNode.pending(
                     "cleanup",
-                    Component.translatable("cirrus.ui.execution.workbench.flow.cleanup"),
+                    Component.literal("Store Outputs"),
                     Lists.immutable.of(plan.steps().get(cleanupStartIndex), plan.steps().get(cleanupStartIndex + 1)),
-                    ExecutionGuidance.simple(Component.translatable("cirrus.ui.execution.workbench.flow.cleanup.detail")),
+                    ExecutionGuidance.simple(Component.literal("Move final planks to storage.")),
                     Lists.immutable.empty()
                 )
             )
@@ -510,24 +958,92 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
     private RuntimeFixtures createRuntimeFixtures() {
         if (forceFallbackResources) {
             ContentResource logResource = ContentValue.fromValue(fallbackLogAmountType, 1L);
+            ContentResource stickResource = ContentValue.fromValue(fallbackStickAmountType, 2L);
             ContentResource plankResource = ContentValue.fromValue(fallbackPlankAmountType, 2L);
             InputContent logInput = InputContent.fromValue(fallbackLogAmountType, 1L);
-            return new RuntimeFixtures(logResource, plankResource, logInput);
+            InputContent stickInput = InputContent.fromValue(fallbackStickAmountType, 1L);
+            InputContent plankInput = InputContent.fromValue(fallbackPlankAmountType, 1L);
+            return new RuntimeFixtures(logResource, stickResource, plankResource, logInput, stickInput, plankInput);
         }
         try {
             ContentResource logResource = ContentStack.fromStack(oakLogStack);
+            ContentResource stickResource = ContentStack.fromStack(stickStack);
             ContentResource plankResource = ContentStack.fromStack(oakPlankStack);
             InputContent logInput = InputContent.fromItemStack(oakLogStack, 1);
-            return new RuntimeFixtures(logResource, plankResource, logInput);
+            InputContent stickInput = InputContent.fromItemStack(stickStack, 1);
+            InputContent plankInput = InputContent.fromItemStack(oakPlankStack, 1);
+            return new RuntimeFixtures(logResource, stickResource, plankResource, logInput, stickInput, plankInput);
         } catch (Throwable ignored) {
             ContentResource logResource = ContentValue.fromValue(fallbackLogAmountType, 1L);
+            ContentResource stickResource = ContentValue.fromValue(fallbackStickAmountType, 2L);
             ContentResource plankResource = ContentValue.fromValue(fallbackPlankAmountType, 2L);
             InputContent logInput = InputContent.fromValue(fallbackLogAmountType, 1L);
-            return new RuntimeFixtures(logResource, plankResource, logInput);
+            InputContent stickInput = InputContent.fromValue(fallbackStickAmountType, 1L);
+            InputContent plankInput = InputContent.fromValue(fallbackPlankAmountType, 1L);
+            return new RuntimeFixtures(logResource, stickResource, plankResource, logInput, stickInput, plankInput);
         }
     }
 
-    private record RuntimeFixtures(ContentResource logResource, ContentResource plankResource, InputContent logInput) {
+    private RecipeChain resolveWorkbenchRecipeChain() {
+        RecipeEntry<?> logToSticks = null;
+        RecipeEntry<?> logToPlanks = null;
+        if (!forceFallbackResources) {
+            logToSticks = resolveDatapackWorkbenchRecipe(workbenchDatapackLogToSticksRecipeId);
+            logToPlanks = resolveDatapackWorkbenchRecipe(workbenchDatapackLogToPlanksRecipeId);
+        }
+        return new RecipeChain(
+            logToSticks == null ? fallbackWorkbenchLogToSticksRecipe : logToSticks,
+            logToPlanks == null ? fallbackWorkbenchLogToPlanksRecipe : logToPlanks
+        );
+    }
+
+    private static @Nullable RecipeEntry<?> resolveDatapackWorkbenchRecipe(ResourceLocation recipeId) {
+        RecipeHolder<CraftingRecipe> holder = lookupCraftingRecipe(recipeId);
+        if (holder == null) {
+            return null;
+        }
+        RecipeSystem<RecipeHolder<CraftingRecipe>> system = craftingRecipeSystem();
+        return RecipeEntry.of(system, holder);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static @Nullable RecipeHolder<CraftingRecipe> lookupCraftingRecipe(ResourceLocation recipeId) {
+        try {
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft == null || minecraft.level == null) {
+                return null;
+            }
+            return (RecipeHolder<CraftingRecipe>) minecraft.level.getRecipeManager()
+                                                                .byKey(recipeId)
+                                                                .filter(recipeHolder -> recipeHolder.value().getType() == RecipeType.CRAFTING)
+                                                                .orElse(null);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static RecipeSystem<RecipeHolder<CraftingRecipe>> craftingRecipeSystem() {
+        VanillaRecipeSystem<CraftingRecipe> system = VanillaRecipeSystem.byRecipeType(RecipeType.CRAFTING);
+        if (system != null) {
+            return system;
+        }
+        return new CraftingRecipeSystem();
+    }
+
+    private record RuntimeFixtures(
+        ContentResource logResource,
+        ContentResource stickResource,
+        ContentResource plankResource,
+        InputContent logInput,
+        InputContent stickInput,
+        InputContent plankInput
+    ) {
+    }
+
+    private record RecipeChain(
+        RecipeEntry<?> logToSticks,
+        RecipeEntry<?> logToPlanks
+    ) {
     }
 
     //endregion
@@ -542,7 +1058,7 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
             }
         } catch (Throwable ignored) {
         }
-        return new SimulatedEnvironment(totalLogAmount, 0L, 6, true);
+        return new SimulatedEnvironment(totalLogAmount, totalStickAmount, 0L, 6, true);
     }
 
     private sealed interface SessionEnvironment permits LiveEnvironment, SimulatedEnvironment {
@@ -554,9 +1070,19 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
 
         StorageAccessibility inventoryAccessibility();
 
-        boolean canAutoCraft(ItemStack inputTemplate, long inputAmount, ItemStack outputTemplate, long outputAmount);
+        boolean canAutoCraft(
+            RecipeEntry<?> recipe,
+            int times,
+            ImmutableList<PlanAction.InputBinding> inputs,
+            ImmutableList<PlanAction.OutputBinding> outputs
+        );
 
-        InteractionPerformResult performCraft(ItemStack inputTemplate, long inputAmount, ItemStack outputTemplate, long outputAmount);
+        InteractionPerformResult performCraft(
+            RecipeEntry<?> recipe,
+            int times,
+            ImmutableList<PlanAction.InputBinding> inputs,
+            ImmutableList<PlanAction.OutputBinding> outputs
+        );
     }
 
     private static final class LiveEnvironment implements SessionEnvironment {
@@ -616,25 +1142,73 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
         }
 
         @Override
-        public boolean canAutoCraft(ItemStack inputTemplate, long inputAmount, ItemStack outputTemplate, long outputAmount) {
+        public boolean canAutoCraft(
+            RecipeEntry<?> recipe,
+            int times,
+            ImmutableList<PlanAction.InputBinding> inputs,
+            ImmutableList<PlanAction.OutputBinding> outputs
+        ) {
             if (!interactionOpen()) {
                 return false;
             }
-            if (count(inputTemplate) < inputAmount) {
+            int batchTimes = Math.max(1, times);
+            ImmutableList<ItemRequirement> inputRequirements = collapseInputRequirements(inputs, batchTimes);
+            ImmutableList<ItemRequirement> outputRequirements = collapseOutputRequirements(outputs, batchTimes);
+            if (inputRequirements.isEmpty() || outputRequirements.isEmpty()) {
                 return false;
             }
-            return insertCapacity(outputTemplate) >= outputAmount;
+            ImmutableList<GridPlacement> gridPlacements = resolveGridPlacements(recipe, this, inputs);
+            if (gridPlacements.isEmpty()) {
+                return false;
+            }
+            for (GridPlacement placement : gridPlacements) {
+                long targetCount = safeMultiply(placement.amountPerCraft(), batchTimes);
+                if (targetCount > placement.template().getMaxStackSize()) {
+                    return false;
+                }
+            }
+            for (ItemRequirement inputRequirement : inputRequirements) {
+                if (count(inputRequirement.template()) < inputRequirement.amount()) {
+                    return false;
+                }
+            }
+            for (ItemRequirement outputRequirement : outputRequirements) {
+                if (insertCapacity(outputRequirement.template()) < outputRequirement.amount()) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         @Override
-        public InteractionPerformResult performCraft(ItemStack inputTemplate, long inputAmount, ItemStack outputTemplate, long outputAmount) {
+        public InteractionPerformResult performCraft(
+            RecipeEntry<?> recipe,
+            int times,
+            ImmutableList<PlanAction.InputBinding> inputs,
+            ImmutableList<PlanAction.OutputBinding> outputs
+        ) {
             Minecraft minecraft = Minecraft.getInstance();
             LocalPlayer player = minecraft == null ? null : minecraft.player;
             MultiPlayerGameMode gameMode = minecraft == null ? null : minecraft.gameMode;
             if (player == null || gameMode == null || !(player.containerMenu instanceof CraftingMenu menu)) {
                 return new InteractionPerformResult.Failed(openWorkbenchGuidance);
             }
-
+            int batchTimes = Math.max(1, times);
+            ImmutableList<ItemRequirement> inputRequirements = collapseInputRequirements(inputs, batchTimes);
+            ImmutableList<ItemRequirement> outputRequirements = collapseOutputRequirements(outputs, batchTimes);
+            if (inputRequirements.isEmpty() || outputRequirements.isEmpty()) {
+                return new InteractionPerformResult.Failed(guidance(
+                    "cirrus.ui.execution.workbench.warning.result_waiting.summary",
+                    "cirrus.ui.execution.workbench.warning.result_waiting.detail"
+                ));
+            }
+            ImmutableList<GridPlacement> gridPlacements = resolveGridPlacements(recipe, this, inputs);
+            if (gridPlacements.isEmpty()) {
+                return new InteractionPerformResult.Failed(guidance(
+                    "cirrus.ui.execution.workbench.warning.grid_blocked.summary",
+                    "cirrus.ui.execution.workbench.warning.grid_blocked.detail"
+                ));
+            }
             if (!menu.getCarried().isEmpty()) {
                 return new InteractionPerformResult.Failed(guidance(
                     "cirrus.ui.execution.workbench.warning.cursor_occupied.summary",
@@ -642,69 +1216,119 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
                 ));
             }
 
-            long availableInput = count(inputTemplate);
-            if (availableInput < inputAmount) {
-                return new InteractionPerformResult.Failed(toGuidance(missingStockGuidance(inputTemplate, availableInput, inputAmount)));
-            }
-
-            long capacity = insertCapacity(outputTemplate);
-            if (capacity < outputAmount) {
-                return new InteractionPerformResult.Failed(toGuidance(missingCapacityGuidance(outputTemplate, capacity, outputAmount)));
-            }
-
-            long outputBefore = count(outputTemplate);
-            if (hasCraftResult(menu, outputTemplate) && collectCraftResult(gameMode, player, menu, outputTemplate, outputAmount, outputBefore)) {
-                return new InteractionPerformResult.Performed();
-            }
-
-            int existingInputSlot = findCraftGridInputSlot(menu, inputTemplate);
-            if (existingInputSlot >= 0) {
-                if (!click(gameMode, player, menu, existingInputSlot, 0, ClickType.QUICK_MOVE)) {
-                    return new InteractionPerformResult.Failed(clickFailedGuidance());
-                }
-                existingInputSlot = findCraftGridInputSlot(menu, inputTemplate);
-                if (existingInputSlot >= 0) {
-                    return new InteractionPerformResult.Failed(guidance(
-                        "cirrus.ui.execution.workbench.warning.result_waiting.summary",
-                        "cirrus.ui.execution.workbench.warning.result_waiting.detail"
-                    ));
+            for (ItemRequirement inputRequirement : inputRequirements) {
+                long availableInput = count(inputRequirement.template());
+                if (availableInput < inputRequirement.amount()) {
+                    return new InteractionPerformResult.Failed(
+                        toGuidance(missingStockGuidance(inputRequirement.template(), availableInput, inputRequirement.amount()))
+                    );
                 }
             }
 
-            int sourceSlot = findInventorySlot(menu, inputTemplate);
-            if (sourceSlot < 0) {
-                return new InteractionPerformResult.Failed(toGuidance(missingStockGuidance(inputTemplate, availableInput, inputAmount)));
+            for (ItemRequirement outputRequirement : outputRequirements) {
+                long capacity = insertCapacity(outputRequirement.template());
+                if (capacity < outputRequirement.amount()) {
+                    return new InteractionPerformResult.Failed(
+                        toGuidance(missingCapacityGuidance(outputRequirement.template(), capacity, outputRequirement.amount()))
+                    );
+                }
             }
-            int gridSlot = findCraftGridSlot(menu, inputTemplate);
-            if (gridSlot < 0) {
+
+            if (!canAutoCraft(recipe, batchTimes, inputs, outputs)) {
+                return new InteractionPerformResult.Failed(clickFailedGuidance());
+            }
+
+            if (!clearCraftGrid(gameMode, player, menu)) {
                 return new InteractionPerformResult.Failed(guidance(
                     "cirrus.ui.execution.workbench.warning.grid_blocked.summary",
                     "cirrus.ui.execution.workbench.warning.grid_blocked.detail"
                 ));
             }
 
-            if (!click(gameMode, player, menu, sourceSlot, 0, ClickType.PICKUP)) {
-                return new InteractionPerformResult.Failed(clickFailedGuidance());
-            }
-            if (menu.getCarried().isEmpty()) {
-                return new InteractionPerformResult.Failed(clickFailedGuidance());
-            }
-            if (!click(gameMode, player, menu, gridSlot, 1, ClickType.PICKUP)) {
-                restoreCarryToInventory(gameMode, player, menu, sourceSlot);
-                return new InteractionPerformResult.Failed(clickFailedGuidance());
-            }
-            if (!menu.getCarried().isEmpty() && !click(gameMode, player, menu, sourceSlot, 0, ClickType.PICKUP)) {
-                restoreCarryToInventory(gameMode, player, menu, sourceSlot);
-                return new InteractionPerformResult.Failed(clickFailedGuidance());
+            for (GridPlacement placement : gridPlacements) {
+                long targetCount = safeMultiply(placement.amountPerCraft(), batchTimes);
+                if (!placeInputRequirementToSlot(gameMode, player, menu, placement, targetCount)) {
+                    return new InteractionPerformResult.Failed(clickFailedGuidance());
+                }
             }
 
-            if (!collectCraftResult(gameMode, player, menu, outputTemplate, outputAmount, outputBefore)) {
+            ItemRequirement primaryOutput = resolvePrimaryOutputRequirement(menu, outputRequirements, batchTimes);
+            if (primaryOutput.template().isEmpty() || primaryOutput.amount() <= 0L) {
+                return new InteractionPerformResult.Failed(guidance(
+                    "cirrus.ui.execution.workbench.warning.result_waiting.summary",
+                    "cirrus.ui.execution.workbench.warning.result_waiting.detail"
+                ));
+            }
+            long outputBefore = count(primaryOutput.template());
+            if (!collectCraftResult(gameMode, player, menu, primaryOutput.template(), primaryOutput.amount(), outputBefore, batchTimes)) {
                 return new InteractionPerformResult.Failed(guidance(
                     "cirrus.ui.execution.workbench.warning.result_waiting.summary",
                     "cirrus.ui.execution.workbench.warning.result_waiting.detail"
                 ));
             }
             return new InteractionPerformResult.Performed();
+        }
+
+        private static boolean clearCraftGrid(MultiPlayerGameMode gameMode, LocalPlayer player, CraftingMenu menu) {
+            for (int slotId = 1; slotId <= 9; slotId++) {
+                ItemStack stack = menu.getSlot(slotId).getItem();
+                if (stack.isEmpty()) {
+                    continue;
+                }
+                if (!click(gameMode, player, menu, slotId, 0, ClickType.QUICK_MOVE)) {
+                    return false;
+                }
+                if (!menu.getSlot(slotId).getItem().isEmpty()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static boolean placeInputRequirementToSlot(
+            MultiPlayerGameMode gameMode,
+            LocalPlayer player,
+            CraftingMenu menu,
+            GridPlacement placement,
+            long targetCount
+        ) {
+            if (placement.template().isEmpty() || targetCount <= 0L) {
+                return false;
+            }
+            if (targetCount > placement.template().getMaxStackSize()) {
+                return false;
+            }
+            int gridSlot = placement.slotId();
+            Slot slot = menu.getSlot(gridSlot);
+            ItemStack slotStack = slot.getItem();
+            if (!slotStack.isEmpty() && !ItemStack.isSameItemSameComponents(slotStack, placement.template())) {
+                return false;
+            }
+            while (menu.getSlot(gridSlot).getItem().getCount() < targetCount) {
+                int sourceSlot = findInventorySlot(menu, placement.template());
+                if (sourceSlot < 0) {
+                    return false;
+                }
+                if (!click(gameMode, player, menu, sourceSlot, 0, ClickType.PICKUP)) {
+                    return false;
+                }
+                if (menu.getCarried().isEmpty()) {
+                    return false;
+                }
+                if (!click(gameMode, player, menu, gridSlot, 1, ClickType.PICKUP)) {
+                    restoreCarryToInventory(gameMode, player, menu, sourceSlot);
+                    return false;
+                }
+                if (!menu.getCarried().isEmpty() && !click(gameMode, player, menu, sourceSlot, 0, ClickType.PICKUP)) {
+                    restoreCarryToInventory(gameMode, player, menu, sourceSlot);
+                    return false;
+                }
+                ItemStack after = menu.getSlot(gridSlot).getItem();
+                if (after.isEmpty() || !ItemStack.isSameItemSameComponents(after, placement.template())) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private static long slotInsertCapacity(ItemStack stack, ItemStack template, int maxStackSize) {
@@ -750,37 +1374,167 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
             return -1;
         }
 
-        private static int findCraftGridSlot(CraftingMenu menu, ItemStack template) {
-            int fallbackEmpty = -1;
-            for (int slotId = 1; slotId <= 9; slotId++) {
-                Slot slot = menu.getSlot(slotId);
-                ItemStack stack = slot.getItem();
-                if (stack.isEmpty()) {
-                    if (fallbackEmpty < 0) {
-                        fallbackEmpty = slotId;
-                    }
-                    continue;
-                }
-                if (ItemStack.isSameItemSameComponents(stack, template) && stack.getCount() < stack.getMaxStackSize()) {
-                    return slotId;
-                }
+        private static ImmutableList<GridPlacement> resolveGridPlacements(
+            @Nullable RecipeEntry<?> recipe,
+            SessionEnvironment environment,
+            ImmutableList<PlanAction.InputBinding> inputs
+        ) {
+            ImmutableList<GridPlacement> fromRecipe = resolveRecipeGridPlacements(recipe, environment);
+            if (!fromRecipe.isEmpty()) {
+                return fromRecipe;
             }
-            return fallbackEmpty;
+            return splitInputRequirementsToGridPlacements(collapseInputRequirements(inputs));
         }
 
-        private static int findCraftGridInputSlot(CraftingMenu menu, ItemStack template) {
-            for (int slotId = 1; slotId <= 9; slotId++) {
-                ItemStack stack = menu.getSlot(slotId).getItem();
-                if (!stack.isEmpty() && ItemStack.isSameItemSameComponents(stack, template)) {
-                    return slotId;
+        private static ImmutableList<GridPlacement> resolveRecipeGridPlacements(
+            @Nullable RecipeEntry<?> recipe,
+            SessionEnvironment environment
+        ) {
+            if (recipe == null || !(recipe.recipe() instanceof RecipeHolder<?> holder)) {
+                return Lists.immutable.empty();
+            }
+            if (!(holder.value() instanceof CraftingRecipe craftingRecipe)) {
+                return Lists.immutable.empty();
+            }
+            if (craftingRecipe instanceof ShapedRecipe shapedRecipe) {
+                return resolveShapedPlacements(shapedRecipe, environment);
+            }
+            return resolveIngredientPlacements(craftingRecipe.getIngredients(), environment);
+        }
+
+        private static ImmutableList<GridPlacement> resolveShapedPlacements(ShapedRecipe shapedRecipe, SessionEnvironment environment) {
+            int width = shapedRecipe.getWidth();
+            int height = shapedRecipe.getHeight();
+            if (width <= 0 || width > 3 || height <= 0 || height > 3) {
+                return Lists.immutable.empty();
+            }
+            List<Ingredient> ingredients = shapedRecipe.getIngredients();
+            MutableList<GridPlacement> placements = Lists.mutable.empty();
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int ingredientIndex = y * width + x;
+                    if (ingredientIndex < 0 || ingredientIndex >= ingredients.size()) {
+                        continue;
+                    }
+                    Ingredient ingredient = ingredients.get(ingredientIndex);
+                    if (ingredient == null || ingredient.isEmpty()) {
+                        continue;
+                    }
+                    ItemStack template = selectIngredientTemplate(ingredient, environment);
+                    if (template.isEmpty()) {
+                        return Lists.immutable.empty();
+                    }
+                    int slotId = 1 + x + y * 3;
+                    placements.add(new GridPlacement(slotId, template, 1L));
                 }
             }
-            return -1;
+            return placements.toImmutable();
+        }
+
+        private static ImmutableList<GridPlacement> resolveIngredientPlacements(
+            List<Ingredient> ingredients,
+            SessionEnvironment environment
+        ) {
+            if (ingredients == null || ingredients.isEmpty()) {
+                return Lists.immutable.empty();
+            }
+            MutableList<GridPlacement> placements = Lists.mutable.empty();
+            int slotId = 1;
+            for (Ingredient ingredient : ingredients) {
+                if (ingredient == null || ingredient.isEmpty()) {
+                    continue;
+                }
+                if (slotId > 9) {
+                    return Lists.immutable.empty();
+                }
+                ItemStack template = selectIngredientTemplate(ingredient, environment);
+                if (template.isEmpty()) {
+                    return Lists.immutable.empty();
+                }
+                placements.add(new GridPlacement(slotId, template, 1L));
+                slotId++;
+            }
+            return placements.toImmutable();
+        }
+
+        private static ItemStack selectIngredientTemplate(Ingredient ingredient, SessionEnvironment environment) {
+            if (ingredient == null || ingredient.isEmpty()) {
+                return ItemStack.EMPTY;
+            }
+            ItemStack[] options = ingredient.getItems();
+            if (options == null || options.length == 0) {
+                return ItemStack.EMPTY;
+            }
+            ItemStack selected = ItemStack.EMPTY;
+            long bestAvailable = -1L;
+            for (ItemStack option : options) {
+                if (option == null || option.isEmpty()) {
+                    continue;
+                }
+                ItemStack template = option.copy();
+                template.setCount(1);
+                long available = environment.count(template);
+                if (available > bestAvailable) {
+                    selected = template;
+                    bestAvailable = available;
+                }
+            }
+            return selected;
+        }
+
+        private static ImmutableList<GridPlacement> splitInputRequirementsToGridPlacements(
+            ImmutableList<ItemRequirement> requirements
+        ) {
+            if (requirements == null || requirements.isEmpty()) {
+                return Lists.immutable.empty();
+            }
+            MutableList<GridPlacement> placements = Lists.mutable.empty();
+            int slotId = 1;
+            for (ItemRequirement requirement : requirements) {
+                if (requirement.template().isEmpty() || requirement.amount() <= 0L) {
+                    continue;
+                }
+                if (requirement.amount() > 9L) {
+                    return Lists.immutable.empty();
+                }
+                if (slotId + requirement.amount() - 1L > 9L) {
+                    return Lists.immutable.empty();
+                }
+                for (long index = 0L; index < requirement.amount(); index++) {
+                    placements.add(new GridPlacement(slotId, requirement.template(), 1L));
+                    slotId++;
+                }
+            }
+            return placements.toImmutable();
         }
 
         private static boolean hasCraftResult(CraftingMenu menu, ItemStack outputTemplate) {
             ItemStack resultStack = menu.getSlot(0).getItem();
             return !resultStack.isEmpty() && ItemStack.isSameItemSameComponents(resultStack, outputTemplate);
+        }
+
+        private static ItemRequirement resolvePrimaryOutputRequirement(
+            CraftingMenu menu,
+            ImmutableList<ItemRequirement> outputRequirements,
+            int batchTimes
+        ) {
+            ItemStack resultStack = menu.getSlot(0).getItem();
+            if (!resultStack.isEmpty()) {
+                ItemStack resultTemplate = resultStack.copy();
+                resultTemplate.setCount(1);
+                for (ItemRequirement requirement : outputRequirements) {
+                    if (!requirement.template().isEmpty()
+                        && ItemStack.isSameItemSameComponents(requirement.template(), resultTemplate)
+                    ) {
+                        return requirement;
+                    }
+                }
+                long fallbackAmount = safeMultiply(Math.max(1L, resultStack.getCount()), Math.max(1L, batchTimes));
+                return new ItemRequirement(resultTemplate, fallbackAmount);
+            }
+            return outputRequirements.isEmpty()
+                ? new ItemRequirement(ItemStack.EMPTY, 0L)
+                : outputRequirements.getFirst();
         }
 
         private static boolean collectCraftResult(
@@ -789,16 +1543,27 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
             CraftingMenu menu,
             ItemStack outputTemplate,
             long outputAmount,
-            long outputBefore
+            long outputBefore,
+            int batchTimes
         ) {
-            if (!hasCraftResult(menu, outputTemplate)) {
-                return false;
+            long target = safeAdd(outputBefore, Math.max(1L, outputAmount));
+            int maxAttempts = Math.max(1, Math.min(96, Math.max(batchTimes, 1) * 3));
+            boolean clicked = false;
+            for (int attempt = 0; attempt < maxAttempts; attempt++) {
+                long current = countInventory(player.getInventory(), outputTemplate);
+                if (current >= target) {
+                    return true;
+                }
+                if (!hasCraftResult(menu, outputTemplate) && clicked) {
+                    // Result slot already drained after at least one successful pickup dispatch.
+                    return true;
+                }
+                if (!click(gameMode, player, menu, 0, 0, ClickType.QUICK_MOVE)) {
+                    return false;
+                }
+                clicked = true;
             }
-            if (!click(gameMode, player, menu, 0, 0, ClickType.QUICK_MOVE)) {
-                return false;
-            }
-            long outputAfter = countInventory(player.getInventory(), outputTemplate);
-            return outputAfter >= safeAdd(outputBefore, outputAmount);
+            return countInventory(player.getInventory(), outputTemplate) >= target;
         }
 
         private static boolean click(
@@ -863,12 +1628,14 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
 
     private static final class SimulatedEnvironment implements SessionEnvironment {
         private long logCount;
+        private long stickCount;
         private long plankCount;
         private final int emptySlots;
         private final boolean interactionOpen;
 
-        private SimulatedEnvironment(long logCount, long plankCount, int emptySlots, boolean interactionOpen) {
+        private SimulatedEnvironment(long logCount, long stickCount, long plankCount, int emptySlots, boolean interactionOpen) {
             this.logCount = Math.max(0L, logCount);
+            this.stickCount = Math.max(0L, stickCount);
             this.plankCount = Math.max(0L, plankCount);
             this.emptySlots = Math.max(0, emptySlots);
             this.interactionOpen = interactionOpen;
@@ -878,6 +1645,9 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
         public long count(ItemStack template) {
             if (ItemStack.isSameItemSameComponents(template, oakLogStack)) {
                 return logCount;
+            }
+            if (ItemStack.isSameItemSameComponents(template, stickStack)) {
+                return stickCount;
             }
             if (ItemStack.isSameItemSameComponents(template, oakPlankStack)) {
                 return plankCount;
@@ -905,48 +1675,109 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
         }
 
         @Override
-        public boolean canAutoCraft(ItemStack inputTemplate, long inputAmount, ItemStack outputTemplate, long outputAmount) {
+        public boolean canAutoCraft(
+            RecipeEntry<?> recipe,
+            int times,
+            ImmutableList<PlanAction.InputBinding> inputs,
+            ImmutableList<PlanAction.OutputBinding> outputs
+        ) {
             if (!interactionOpen) {
                 return false;
             }
-            if (!ItemStack.isSameItemSameComponents(inputTemplate, oakLogStack)
-                || !ItemStack.isSameItemSameComponents(outputTemplate, oakPlankStack)) {
+            int batchTimes = Math.max(1, times);
+            ImmutableList<ItemRequirement> inputRequirements = collapseInputRequirements(inputs, batchTimes);
+            ImmutableList<ItemRequirement> outputRequirements = collapseOutputRequirements(outputs, batchTimes);
+            if (inputRequirements.isEmpty() || outputRequirements.isEmpty()) {
                 return false;
             }
-            return logCount >= inputAmount && insertCapacity(outputTemplate) >= outputAmount;
+            for (ItemRequirement inputRequirement : inputRequirements) {
+                if (count(inputRequirement.template()) < inputRequirement.amount()) {
+                    return false;
+                }
+            }
+            for (ItemRequirement outputRequirement : outputRequirements) {
+                if (insertCapacity(outputRequirement.template()) < outputRequirement.amount()) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         @Override
-        public InteractionPerformResult performCraft(ItemStack inputTemplate, long inputAmount, ItemStack outputTemplate, long outputAmount) {
+        public InteractionPerformResult performCraft(
+            RecipeEntry<?> recipe,
+            int times,
+            ImmutableList<PlanAction.InputBinding> inputs,
+            ImmutableList<PlanAction.OutputBinding> outputs
+        ) {
             if (!interactionOpen) {
                 return new InteractionPerformResult.Failed(openWorkbenchGuidance);
             }
-            if (!canAutoCraft(inputTemplate, inputAmount, outputTemplate, outputAmount)) {
-                long available = count(inputTemplate);
-                if (available < inputAmount) {
+            int batchTimes = Math.max(1, times);
+            ImmutableList<ItemRequirement> inputRequirements = collapseInputRequirements(inputs, batchTimes);
+            ImmutableList<ItemRequirement> outputRequirements = collapseOutputRequirements(outputs, batchTimes);
+            if (inputRequirements.isEmpty() || outputRequirements.isEmpty()) {
+                return new InteractionPerformResult.Failed(openWorkbenchGuidance);
+            }
+            if (!canAutoCraft(recipe, batchTimes, inputs, outputs)) {
+                for (ItemRequirement inputRequirement : inputRequirements) {
+                    long available = count(inputRequirement.template());
+                    if (available >= inputRequirement.amount()) {
+                        continue;
+                    }
                     return new InteractionPerformResult.Failed(new ExecutionGuidance(
-                        missingStockGuidance(inputTemplate, available, inputAmount).summary(),
-                        missingStockGuidance(inputTemplate, available, inputAmount).detail(),
+                        missingStockGuidance(inputRequirement.template(), available, inputRequirement.amount()).summary(),
+                        missingStockGuidance(inputRequirement.template(), available, inputRequirement.amount()).detail(),
                         Lists.immutable.empty(),
                         Sets.immutable.empty()
                     ));
                 }
-                long capacity = insertCapacity(outputTemplate);
-                return new InteractionPerformResult.Failed(new ExecutionGuidance(
-                    missingCapacityGuidance(outputTemplate, capacity, outputAmount).summary(),
-                    missingCapacityGuidance(outputTemplate, capacity, outputAmount).detail(),
-                    Lists.immutable.empty(),
-                    Sets.immutable.empty()
-                ));
+                for (ItemRequirement outputRequirement : outputRequirements) {
+                    long capacity = insertCapacity(outputRequirement.template());
+                    if (capacity >= outputRequirement.amount()) {
+                        continue;
+                    }
+                    return new InteractionPerformResult.Failed(new ExecutionGuidance(
+                        missingCapacityGuidance(outputRequirement.template(), capacity, outputRequirement.amount()).summary(),
+                        missingCapacityGuidance(outputRequirement.template(), capacity, outputRequirement.amount()).detail(),
+                        Lists.immutable.empty(),
+                        Sets.immutable.empty()
+                    ));
+                }
             }
-
-            if (ItemStack.isSameItemSameComponents(inputTemplate, oakLogStack)) {
-                logCount = Math.max(0L, logCount - inputAmount);
+            for (ItemRequirement inputRequirement : inputRequirements) {
+                adjustTrackedCount(inputRequirement.template(), -inputRequirement.amount());
             }
-            if (ItemStack.isSameItemSameComponents(outputTemplate, oakPlankStack)) {
-                plankCount = safeAdd(plankCount, outputAmount);
+            for (ItemRequirement outputRequirement : outputRequirements) {
+                adjustTrackedCount(outputRequirement.template(), outputRequirement.amount());
             }
             return new InteractionPerformResult.Performed();
+        }
+
+        private void adjustTrackedCount(ItemStack template, long delta) {
+            if (ItemStack.isSameItemSameComponents(template, oakLogStack)) {
+                if (delta >= 0L) {
+                    logCount = safeAdd(logCount, delta);
+                } else {
+                    logCount = Math.max(0L, logCount - Math.abs(delta));
+                }
+                return;
+            }
+            if (ItemStack.isSameItemSameComponents(template, stickStack)) {
+                if (delta >= 0L) {
+                    stickCount = safeAdd(stickCount, delta);
+                } else {
+                    stickCount = Math.max(0L, stickCount - Math.abs(delta));
+                }
+                return;
+            }
+            if (ItemStack.isSameItemSameComponents(template, oakPlankStack)) {
+                if (delta >= 0L) {
+                    plankCount = safeAdd(plankCount, delta);
+                } else {
+                    plankCount = Math.max(0L, plankCount - Math.abs(delta));
+                }
+            }
         }
     }
 
@@ -958,8 +1789,13 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
         private final PlayerInventoryStorageSource playerInventorySource;
         private final ImmutableList<PlayerInventoryStorageSource> sources;
 
-        private WorkbenchStorageApi(SessionEnvironment environment, ContentResource logResource, ContentResource plankResource) {
-            playerInventorySource = new PlayerInventoryStorageSource(environment, logResource, plankResource);
+        private WorkbenchStorageApi(
+            SessionEnvironment environment,
+            ContentResource logResource,
+            ContentResource stickResource,
+            ContentResource plankResource
+        ) {
+            playerInventorySource = new PlayerInventoryStorageSource(environment, logResource, stickResource, plankResource);
             sources = Lists.immutable.of(playerInventorySource);
         }
 
@@ -997,6 +1833,7 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
     private record PlayerInventoryStorageSource(
         SessionEnvironment environment,
         ContentResource logResource,
+        ContentResource stickResource,
         ContentResource plankResource
     ) implements StorageSource {
         @SuppressWarnings("unchecked")
@@ -1019,6 +1856,10 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
             long logAmount = environment.count(oakLogStack);
             if (logAmount > 0) {
                 variants.add(logResourceAmount(logAmount));
+            }
+            long stickAmount = environment.count(stickStack);
+            if (stickAmount > 0) {
+                variants.add(stickResourceAmount(stickAmount));
             }
             long plankAmount = environment.count(oakPlankStack);
             if (plankAmount > 0) {
@@ -1047,7 +1888,7 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
             if (!accessibility().accessible()) {
                 return StorageTransferResult.none(this, request, accessibility().guidance());
             }
-            ItemStack template = itemTemplate(request.resource(), logResource, plankResource);
+            ItemStack template = itemTemplate(request.resource(), logResource, stickResource, plankResource);
             if (template == null) {
                 return StorageTransferResult.none(this, request, null);
             }
@@ -1064,7 +1905,7 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
             if (!accessibility().accessible()) {
                 return StorageTransferResult.none(this, request, accessibility().guidance());
             }
-            ItemStack template = itemTemplate(request.resource(), logResource, plankResource);
+            ItemStack template = itemTemplate(request.resource(), logResource, stickResource, plankResource);
             if (template == null) {
                 return StorageTransferResult.none(this, request, null);
             }
@@ -1087,6 +1928,12 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
                 ? stack.copyWithAmount(amount)
                 : ContentValue.fromValue(fallbackPlankAmountType, amount);
         }
+
+        private ContentVariant stickResourceAmount(long amount) {
+            return stickResource instanceof ContentStack<?, ?> stack
+                ? stack.copyWithAmount(amount)
+                : ContentValue.fromValue(fallbackStickAmountType, amount);
+        }
     }
 
     //endregion
@@ -1096,19 +1943,27 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
     private static @Nullable ItemStack itemTemplate(
         ContentResource resource,
         ContentResource logResource,
+        ContentResource stickResource,
         ContentResource plankResource
     ) {
         if (!(resource instanceof ContentStack<?, ?> contentStack) || !contentStack.isItem()) {
             boolean matchesLog = resource.matchesResource(logResource);
+            boolean matchesStick = resource.matchesResource(stickResource);
             boolean matchesPlank = resource.matchesResource(plankResource);
-            if (matchesLog && !matchesPlank) {
+            if (matchesLog && !matchesStick && !matchesPlank) {
                 return oakLogStack.copy();
             }
-            if (matchesPlank && !matchesLog) {
+            if (matchesStick && !matchesLog && !matchesPlank) {
+                return stickStack.copy();
+            }
+            if (matchesPlank && !matchesLog && !matchesStick) {
                 return oakPlankStack.copy();
             }
             if (resource == logResource) {
                 return oakLogStack.copy();
+            }
+            if (resource == stickResource) {
+                return stickStack.copy();
             }
             if (resource == plankResource) {
                 return oakPlankStack.copy();
@@ -1161,7 +2016,7 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
             if (!environment.interactionOpen()) {
                 return new InteractionPerformResult.Failed(openWorkbenchGuidance);
             }
-            return environment.performCraft(oakLogStack, logsPerCraftAmount, oakPlankStack, planksPerCraftAmount);
+            return environment.performCraft(context.recipe(), context.times(), context.inputs(), context.expectedOutputs());
         }
     }
 
@@ -1200,7 +2055,12 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
     }
 
     private static final class DemoRecipeSystem implements RecipeSystem<DemoRecipe> {
-        private final Map<String, DemoRecipe> byId = new ConcurrentHashMap<>();
+        private static final DemoRecipe logToSticksRecipe = new DemoRecipe("oak_sticks_from_log_batch");
+        private static final DemoRecipe logToPlanksRecipe = new DemoRecipe("oak_planks_from_log_and_stick_batch");
+        private static final Map<String, DemoRecipe> recipesById = Map.of(
+            logToSticksRecipe.id(), logToSticksRecipe,
+            logToPlanksRecipe.id(), logToPlanksRecipe
+        );
 
         @Override
         public Namespace systemId() {
@@ -1214,18 +2074,17 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
 
         @Override
         public ResourceLocation getId(DemoRecipe recipe) {
-            byId.put(recipe.id(), recipe);
             return ResourceLocation.fromNamespaceAndPath("cirrus", recipe.id());
         }
 
         @Override
         public DemoRecipe findRecipe(String uniqueId) {
-            return byId.get(uniqueId);
+            return recipesById.get(uniqueId);
         }
 
         @Override
         public DemoRecipe findRecipe(ResourceLocation registryName) {
-            return byId.get(registryName.getPath());
+            return recipesById.get(registryName.getPath());
         }
 
         @Override
@@ -1240,12 +2099,28 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayH
 
         @Override
         public RecipeProjection resolveRecipe(DemoRecipe recipe) {
-            throw new UnsupportedOperationException("Workbench overlay recipe has no projection");
+            if (logToSticksRecipe.id().equals(recipe.id())) {
+                return RecipeProjection.create(
+                    this,
+                    recipe,
+                    List.of(InputContent.fromItemStack(oakLogStack, 1)),
+                    List.of(OutputContent.fromItemStack(stickStack, sticksFromLogPerCraftAmount))
+                );
+            }
+            return RecipeProjection.create(
+                this,
+                recipe,
+                List.of(
+                    InputContent.fromItemStack(oakLogStack, logsPerCraftAmount),
+                    InputContent.fromItemStack(stickStack, sticksPerCraftAmount)
+                ),
+                List.of(OutputContent.fromItemStack(oakPlankStack, planksFromLogsPerCraftAmount))
+            );
         }
 
         @Override
         public RichIterable<DemoRecipe> allRecipes() {
-            return Lists.immutable.ofAll(byId.values());
+            return Lists.immutable.of(logToSticksRecipe, logToPlanksRecipe);
         }
     }
 

@@ -118,6 +118,7 @@ public record ExecutionOverlayViewModel(
             subtitle(source, laneSegments, session, focusStep, depth, activeBranch),
             iconFromNode(source, focusStep),
             nodeStatus(source, laneSegments, immutableChildren, session, activeBranch),
+            nodeKind(source),
             depth,
             activeBranch,
             expanded,
@@ -139,6 +140,13 @@ public record ExecutionOverlayViewModel(
             stepStatus(step, session, focusStep, globalStepIndex),
             globalStepIndex >= 0 && globalStepIndex == session.nextStepIndex()
         );
+    }
+
+    private static ExecutionOverlayNodeKind nodeKind(ExecutionFlowNode source) {
+        return source.steps().anySatisfy(step -> step instanceof InteractionStep.ExecuteRecipeStep)
+            && (source.steps().size() > 1 || source.children().notEmpty())
+            ? ExecutionOverlayNodeKind.RECIPE
+            : ExecutionOverlayNodeKind.OPERATIONAL;
     }
 
     private static void flattenVisible(ExecutionOverlayNode node, MutableList<ExecutionOverlayNode> out) {

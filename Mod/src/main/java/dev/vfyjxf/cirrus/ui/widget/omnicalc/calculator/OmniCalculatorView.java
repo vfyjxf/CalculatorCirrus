@@ -1,19 +1,17 @@
 package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 
-import dev.vfyjxf.cirrus.ui.widget.NumberInputWidget;
-import dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors;
-import dev.vfyjxf.cirrus.ui.widget.flowchart.RecipeStepsWidget;
+import dev.vfyjxf.cirrus.ui.CirrusTextures.Background;
 import dev.vfyjxf.cirrus.ui.widget.calculator.calc.DebugRecipeProvider;
+import dev.vfyjxf.cirrus.ui.widget.flowchart.model.ProcessGraph;
+import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.ui.base.CompositeWidget;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
-import dev.vfyjxf.cloudlib.api.ui.texture.ColorTexture;
-import dev.vfyjxf.cloudlib.ui.widget.ButtonWidget;
-import dev.vfyjxf.cloudlib.ui.widget.DividerWidget;
+import dev.vfyjxf.cloudlib.api.ui.effect.UIEffects;
 import dev.vfyjxf.cloudlib.ui.widget.LabelWidget;
-import dev.vfyjxf.cloudlib.ui.widget.RowWidget;
-import dev.vfyjxf.cloudlib.ui.widget.SpacerWidget;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
+import org.lwjgl.glfw.GLFW;
 
 import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.*;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.*;
@@ -36,33 +34,51 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.*;
  */
 public class OmniCalculatorView extends CompositeWidget<Widget> {
 
+    //region Types
     public enum ProcessView { TREE, MATRIX, MILESTONES }
+    //endregion
 
-    // ── State ──
+    //region State
     private ProcessView processView = ProcessView.TREE;
     private boolean calculated = false;
     private long amount = 1;
+    private final ProcessGraph graph = DebugRecipeProvider.createDebugProcessGraph();
+    //endregion
 
-    // ── Widgets ──
+    //region Widgets
     private final ControlBarWidget controlBar;
     private final WidgetGroup<Widget> bodyArea;
 
-    // Post-calculation widgets
     private ViewSwitcherWidget viewSwitcher;
     private WidgetGroup<Widget> processViewArea;
+    private TreeViewWidget treeView;
+    private MatrixViewWidget matrixView;
+    private MilestonesViewWidget milestonesView;
 
-    // Pre-calculation widgets
     private WidgetGroup<Widget> emptyState;
+    //endregion
 
+    //region Init
     public OmniCalculatorView() {
+        setFocusable(true);
+        useEffect(UIEffects.autoFocus());
         useStyle(
                 flexColumn(),
                 sizeFull(),
-                background(OmniCalcColors.TEX_BG_PRIMARY)
+                background(Background.inset)
         );
+        onKeyPressed((input, context) -> {
+            int key = input.key().getValue();
+            if (key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) {
+                onCalculate();
+                return EventDispatch.consumed;
+            }
+            return EventDispatch.pass;
+        });
 
         // ── Control Bar (top, sticky) ──
         controlBar = new ControlBarWidget(this);
+        controlBar.setTargetItem(resolveTargetItem(graph));
         addWidget(controlBar);
 
         // ── Body area (below control bar) ──
@@ -70,16 +86,20 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
         bodyArea.useStyle(
                 flexRow(),
                 flexGrow(1),
-                minHeight(0)
+                minHeight(0),
+                background(Background.inset)
         );
         addWidget(bodyArea);
 
-        // Show empty state initially
-        showEmptyState();
+        if ("true".equalsIgnoreCase(System.getenv("CIRRUS_OMNICALL_AUTO_CALC"))) {
+            showCalculationResult();
+        } else {
+            showEmptyState();
+        }
     }
+    //endregion
 
-    // ═══════════════════ View Management ═══════════════════
-
+    //region View Management
     private void showEmptyState() {
         bodyArea.clear();
         calculated = false;
@@ -101,7 +121,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 
         // Ready text
         var readyLabel = LabelWidget.of(Component.literal("Ready: Awaiting Calculation"))
-                .setColor(TEXT_MUTED)
+                .setColor(textMuted)
                 .setShadow(false);
         emptyState.addWidget(readyLabel);
 
@@ -111,6 +131,9 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
     void showCalculationResult() {
         bodyArea.clear();
         calculated = true;
+        treeView = null;
+        matrixView = null;
+        milestonesView = null;
 
         // ── Left area: View Switcher + Process View ──
         var leftArea = new WidgetGroup<>();
@@ -143,16 +166,21 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
         processViewArea.clear();
 
         Widget viewWidget = switch (view) {
-            case TREE -> createTreeView();
-            case MATRIX -> createMatrixView();
-            case MILESTONES -> createMilestonesView();
+            case TREE -> treeView = createTreeView();
+            case MATRIX -> matrixView = createMatrixView();
+            case MILESTONES -> milestonesView = createMilestonesView();
         };
         viewWidget.useStyle(flexGrow(1));
         processViewArea.addWidget(viewWidget);
 
-        if (viewSwitcher != null) viewSwitcher.setActiveView(view);
+        if (viewSwitcher != null) {
+            viewSwitcher.setActiveView(view);
+            viewSwitcher.setTreeActionsVisible(view == ProcessView.TREE);
+        }
     }
+    //endregion
 
+    //region Public API
     ProcessView currentProcessView() {
         return processView;
     }
@@ -168,32 +196,70 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
     void setAmount(long amount) {
         this.amount = amount;
     }
+    //endregion
 
-    // ═══════════════════ View Factories ═══════════════════
-
-    private Widget createTreeView() {
+    //region View Factory
+    private TreeViewWidget createTreeView() {
         var treeView = new TreeViewWidget();
-        // Connect to debug data for now
-        var graph = DebugRecipeProvider.createDebugProcessGraph();
         treeView.setGraph(graph);
         return treeView;
     }
 
-    private Widget createMatrixView() {
+    private MatrixViewWidget createMatrixView() {
         return new MatrixViewWidget();
     }
 
-    private Widget createMilestonesView() {
+    private MilestonesViewWidget createMilestonesView() {
         return new MilestonesViewWidget();
     }
+    //endregion
 
-    // ═══════════════════ Actions ═══════════════════
-
+    //region Actions
     public void onCalculate() {
+        amount = controlBar.getAmount();
         if (calculated) {
             // Re-calculate
             showEmptyState();
         }
         showCalculationResult();
     }
+    //endregion
+
+    //region Helpers
+    private static ItemStack resolveTargetItem(ProcessGraph graph) {
+        if (graph.sinks().isEmpty()) return ItemStack.EMPTY;
+        var sink = graph.sinks().getFirst();
+        if (sink.outputs().isEmpty()) return ItemStack.EMPTY;
+        var output = sink.outputs().getFirst();
+        return output.itemStack() == null ? ItemStack.EMPTY : output.itemStack();
+    }
+
+    void toggleTreeMaterialPanel() {
+        if (treeView != null) {
+            treeView.toggleMaterialPanel();
+        }
+    }
+
+    void resetTreeViewFocus() {
+        if (treeView != null) {
+            treeView.resetToFullTree();
+        }
+    }
+
+    boolean isTreeMaterialPanelVisible() {
+        return treeView != null && treeView.debugIsMaterialPanelVisible();
+    }
+
+    boolean isTreeFocusedSubgraph() {
+        return treeView != null && !treeView.debugIsRootFocused();
+    }
+
+    int debugTreeHeaderActionCount() {
+        return viewSwitcher == null ? 0 : viewSwitcher.debugTreeActionCount();
+    }
+
+    boolean debugTreeHeaderActionsVisible() {
+        return viewSwitcher != null && viewSwitcher.debugTreeActionsVisible();
+    }
+    //endregion
 }

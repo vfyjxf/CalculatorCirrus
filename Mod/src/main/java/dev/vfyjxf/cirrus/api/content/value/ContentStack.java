@@ -20,7 +20,9 @@ import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnknownNullability;
 
-public sealed interface ContentStack<T, S> extends ContentVariant, ContentResource permits EmptyContentStack, TypedContentStack {
+public sealed interface ContentStack<T, S>
+        extends ContentVariant, ContentResource
+        permits EmptyContentStack, TypedContentStack {
 
     @SuppressWarnings("unchecked")
     static <C, R> ContentStack<C, R> empty() {
@@ -205,7 +207,7 @@ public sealed interface ContentStack<T, S> extends ContentVariant, ContentResour
         if (type() != other.type()) return false;
 
         return (!strategy.withAmount() || amount() == other.amount()) &&
-               type().matches(value(), other.<T, S>cast().value(), variantType(), strategy);
+                type().matches(value(), other.<T, S>cast().value(), variantType(), strategy);
     }
 
     default boolean matches(ContentStack<?, ?> other) {
@@ -217,7 +219,7 @@ public sealed interface ContentStack<T, S> extends ContentVariant, ContentResour
             return this == empty() && content == ContentKind.empty();
         }
         return contentType() == content.type() &&
-               contentType().matches(content(), content.<T>cast().value());
+                contentType().matches(content(), content.<T>cast().value());
     }
 
     @Override

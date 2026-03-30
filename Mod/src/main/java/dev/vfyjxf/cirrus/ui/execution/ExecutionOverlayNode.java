@@ -16,6 +16,7 @@ public record ExecutionOverlayNode(
     @Nullable Component subtitle,
     @Nullable ItemStack iconStack,
     ExecutionFlowStatus status,
+    ExecutionOverlayNodeKind kind,
     int depth,
     boolean activeBranch,
     boolean expanded,
@@ -27,6 +28,7 @@ public record ExecutionOverlayNode(
         Checks.checkNotNull(nodeId, "nodeId");
         Checks.checkNotNull(label, "label");
         Checks.checkNotNull(status, "status");
+        Checks.checkNotNull(kind, "kind");
         Checks.checkArgument(depth >= 0, "depth must be non-negative");
         Checks.checkNotNull(laneSegments, "laneSegments");
         Checks.checkNotNull(children, "children");

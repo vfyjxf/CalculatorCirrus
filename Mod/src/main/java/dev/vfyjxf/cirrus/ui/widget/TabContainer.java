@@ -2,7 +2,7 @@ package dev.vfyjxf.cirrus.ui.widget;
 
 import dev.vfyjxf.cirrus.ui.CirrusTextures.Background;
 import dev.vfyjxf.cirrus.ui.CirrusTextures.Icon;
-import dev.vfyjxf.cirrus.ui.widget.calculator.calc.CalculatorWidget;
+import dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator.OmniCalculatorView;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.ui.base.CompositeWidget;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
@@ -21,11 +21,13 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.*;
 public class TabContainer extends CompositeWidget<Widget> {
 
     private Tab selectedTab;
+    private final Tab calculatorTab;
     private final WidgetGroup<Widget> content;
 
     public TabContainer() {
         useStyle(
-            flexRow()
+            flexRow(),
+            sizeOf(501, 360)
         );
         var tabs = ColumnWidget.create();
         tabs.useStyle(
@@ -35,18 +37,36 @@ public class TabContainer extends CompositeWidget<Widget> {
             marginRight(-2),
             boxSizingBorderBox()
         );
-        tabs.addWidget(new Tab(Icon.calculatorSelect, Icon.calculatorHover, Icon.calculatorUnselect, CalculatorWidget::new));
+        calculatorTab = new Tab(Icon.calculatorSelect, Icon.calculatorHover, Icon.calculatorUnselect, this::createCalculatorContent);
+        tabs.addWidget(calculatorTab);
         tabs.addWidget(new Tab(Icon.databaseSelect, Icon.databaseHover, Icon.databaseUnselect, () -> null));
         tabs.addWidget(new Tab(Icon.contextSelect, Icon.contextHover, Icon.contextUnselect, () -> null));
         tabs.addWidget(new Tab(Icon.settingsSelect, Icon.settingsHover, Icon.settingsUnselect, () -> null));
         addWidget(tabs);
         content = new WidgetGroup<>();
         content.useStyle(
+            flexColumn(),
+            flexGrow(1),
+            minWidth(0),
+            minHeight(0),
             background(Background.frame),
             padding(8, 8, 10, 8),
             sizeOf(480, 360)
         );
         addWidget(content);
+        selectTab(calculatorTab);
+    }
+
+    Widget debugCreateRegisteredCalculatorContent() {
+        return calculatorTab.contentFactory.get();
+    }
+
+    Widget debugCurrentContent() {
+        return content.children().isEmpty() ? null : content.children().getFirst();
+    }
+
+    private Widget createCalculatorContent() {
+        return new OmniCalculatorView();
     }
 
     void selectTab(Tab tab) {
@@ -54,7 +74,11 @@ public class TabContainer extends CompositeWidget<Widget> {
         selectedTab = tab;
         tab.selected = true;
         content.clear();
-        content.addWidget(tab.contentFactory.get());
+        Widget currentContent = tab.contentFactory.get();
+        if (currentContent != null) {
+            currentContent.useStyle(flexGrow(1), minWidth(0), minHeight(0));
+            content.addWidget(currentContent);
+        }
     }
 
     private class Tab extends CompositeWidget<ImageWidget> {

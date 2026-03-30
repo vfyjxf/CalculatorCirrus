@@ -14,6 +14,7 @@ public final class CirrusTextures {
         public static final NineSliceTexture flat = NineSliceTexture.sprite(ofMod("background/flat"), 18, 18, 4, 4, 4, 4);
         public static final NineSliceTexture inset = NineSliceTexture.sprite(ofMod("background/inset"), 18, 18, 4, 4, 4, 4);
         public static final NineSliceTexture dark = NineSliceTexture.sprite(ofMod("background/dark"), 16, 16, 4, 4, 4, 4);
+        public static final NineSliceTexture controlBar = NineSliceTexture.sprite(ofMod("background/control_bar"), 90, 20, 3, 3, 3, 3);
 
         public static final class Outlined {
             public static final NineSliceTexture inset = NineSliceTexture.sprite(ofMod("background/outlined/inset"), 20, 20, 4, 4, 4, 4);
@@ -98,6 +99,12 @@ public final class CirrusTextures {
         }
     }
 
+    public static final class Button {
+        public static final class Calc {
+            public static final NineSliceTexture primary = NineSliceTexture.sprite(ofMod("button/calc/primary"), 62, 10, 3, 3, 3, 3);
+        }
+    }
+
     // ═══════════════════ Icon ═══════════════════
 
     public static final class Icon {
@@ -165,6 +172,10 @@ public final class CirrusTextures {
                 public static final ImageTexture tabSelected = ImageTexture.sprite(ofMod("icon/calc/tree/tab_selected"), 16, 16);
                 public static final ImageTexture tabUnselected = ImageTexture.sprite(ofMod("icon/calc/tree/tab_unselected"), 16, 16);
             }
+
+            // Use existing complete icons from the atlas (no ad-hoc slicing).
+            public static final ImageTexture layerNav = ImageTexture.sprite(ofMod("icon/calc/path/tree_path"), 16, 16);
+            public static final ImageTexture calculate = ImageTexture.sprite(ofMod("icon/arrow_right"), 10, 10);
         }
 
         // Sign icons

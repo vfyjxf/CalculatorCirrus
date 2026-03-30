@@ -2,7 +2,9 @@ package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 
 import com.mojang.blaze3d.platform.Lighting;
 import dev.vfyjxf.cirrus.content.renderer.FluidStackRenderer;
+import dev.vfyjxf.cirrus.ui.CirrusTextures.Background;
 import dev.vfyjxf.cirrus.ui.CirrusTextures.Icon;
+import dev.vfyjxf.cirrus.ui.CirrusTextures.Sign;
 import dev.vfyjxf.cirrus.ui.widget.flowchart.FlowChartTooltipComponent;
 import dev.vfyjxf.cirrus.ui.widget.flowchart.model.ProcessEdge;
 import dev.vfyjxf.cirrus.ui.widget.flowchart.model.ProcessGraph;
@@ -19,6 +21,8 @@ import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.jetbrains.annotations.Nullable;
@@ -30,73 +34,68 @@ import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.*;
 
 /**
  * Tree diagram widget — renders a node-based tree matching the web app's TreeDiagram.
- * Each node is a compact card (NODE_W × NODE_H) connected by Manhattan-routed lines.
- * Uses only canvas primitives (fill, roundedRect, shadow) — no MC textures.
+ * Each node is a compact card (nodeW × nodeH) connected by Manhattan-routed lines.
  */
 public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
-    // ═══════════════════ Node Dimensions (world-space pixels) ═══════════════════
-    private static final int NODE_W      = 220;
-    private static final int NODE_H      = 72;
-    private static final int GAP_X       = 24;
-    private static final int ROW_H       = 120;
-    private static final int HDR_H       = 28;
+    //region Metrics
+    // Node dimensions (world-space pixels)
+    private static final int nodeW = 220;
+    private static final int nodeH = 82;
+    private static final int gapX = 24;
+    private static final int rowH = 128;
+    private static final int focusBtnW = 18;
+    private static final int focusBtnH = 18;
+    private static final int stepSectionGap = 8;
 
-    // ═══════════════════ Colors ═══════════════════
-    private static final int BG             = TREE_CANVAS_BG;   // 0xFF0A0E17
-    private static final int NODE_BG        = 0xFF111827;
-    private static final int NODE_BD        = 0xFF374151;
-    private static final int NODE_BD_HOVER  = 0xFF4B5563;
-    private static final int NODE_HDR_BG    = 0xFF0A0F1A;
-    private static final int NODE_BODY_BG   = 0xFF111827;
-    private static final int CATALYST_BD    = 0xFF8B5CF6;
-    private static final int CATALYST_BG_T  = 0x194C1D95;
-    private static final int TRACKED_RING   = ACCENT;           // blue
-    private static final int TRACKED_GLOW   = 0x403B82F6;
-    private static final int LINK_DEFAULT   = 0xFF1E3A6A;
-    private static final int LINK_CATALYST  = 0xFF5B3CB6;
-    private static final int LINK_TRACKED   = 0xFF3B82F6;
-    private static final int LAYER_LINE     = 0x401E3A8A;
-    private static final int DOT_CLR        = 0xFF6B7280;
-    private static final int DOT_CLR_ROOT   = ACCENT;
-    private static final int LEAF_BG        = 0xFF111827;
-    private static final int LEAF_BD        = 0xFF374151;
-    private static final int COLLAPSE_BG    = 0xFF1F2937;
-    private static final int COLLAPSE_BD    = 0xFF4B5563;
-    private static final int MM_BG          = 0xF0111827;
-    private static final int MM_BD          = 0xFF374151;
-    private static final int MM_VP          = 0x884488DD;
-    private static final int PANEL_BG_CLR   = 0xF0111827;
+    // Color accents still used by line/text overlays
+    private static final int trackedRing = 0xFFEEF3F8;
+    private static final int externalSelectedRing = 0xFF7FAFD6;
+    private static final int linkDefault = 0xFF6B7077;
+    private static final int linkCatalyst = 0xFF8E939A;
+    private static final int linkTracked = 0xFFFFFFFF;
+    private static final int layerLine = 0x70A9A9A9;
+    private static final int dotClr = 0xFF666666;
+    private static final int dotClrRoot = 0xFFFFFFFF;
+    private static final int mmVp = 0xCFFFFFFF;
+    private static final int matBaseFill = 0xFFCFCFCF;
+    private static final int matShadow = 0xFF555555;
+    private static final int matHighlight = 0xFFFFFFFF;
+    private static final int matFrame = 0xFFE6E6E6;
 
-    // ═══════════════════ Layout ═══════════════════
-    private static final int GRID_SPACING   = 40;
-    private static final int MM_W           = 160;
-    private static final int MM_H           = 100;
-    private static final int MM_PAD         = 8;
-    private static final int PANEL_W        = 200;
-    private static final int PANEL_PAD      = 5;
-    private static final int BAR_H          = 3;
-    private static final int BOX_H          = 30;
-    private static final int ENTRY_H        = BOX_H + BAR_H;
-    private static final int ENTRY_GAP      = 2;
-    private static final int SEC_HDR_H      = 16;
-    private static final int TOTALS_H       = 52;
-    private static final int PANEL_ICON_SZ  = 16;
-    private static final int ICON_SLOT_SZ   = 22;
-    private static final int SCROLLBAR_W    = 8;
-    private static final int MAX_TREE_WIDTH = 3500;  // Width cap for auto-collapse
-    private static final float MIN_ZOOM     = 0.15f;
-    private static final float MAX_ZOOM     = 3.0f;
-    private static final float ITEM_LOD_ZOOM   = 0.20f;
-    private static final float TEXT_LOD_ZOOM   = 0.15f;
-    private static final float DETAIL_LOD_ZOOM = 0.10f;
-    private static final float ZOOM_SNAP         = 0.001f;
-    private static final float ZOOM_SMOOTH_SPEED = 0.6f;
-    private static final float MAT_SCROLL_SPEED  = 25f;
-    private static final float MAT_SCROLL_SMOOTH = 0.35f;
-    private static final long CYCLE_INTERVAL_TICKS = 40;
+    // Layout
+    private static final int mmW = 160;
+    private static final int mmH = 100;
+    private static final int mmPad = 8;
+    private static final int mmContentPad = 6;
+    private static final double mmScaleShrink = 0.92;
+    private static final int panelW = 200;
+    private static final int panelPad = 5;
+    private static final int barH = 3;
+    private static final int boxH = 40;
+    private static final int entryH = boxH + barH;
+    private static final int entryGap = 3;
+    private static final int secHdrH = 16;
+    private static final int totalsH = 52;
+    private static final int panelIconSz = 16;
+    private static final int iconSlotSz = 22;
+    private static final int indCellSz = 10;
+    private static final int scrollbarW = 8;
+    private static final int maxTreeWidth = 3500;  // Width cap for auto-collapse
+    private static final float minZoom = 0.15f;
+    private static final float maxZoom = 3.0f;
+    private static final float detailLodZoom = 0.10f;
+    private static final float zoomSnap = 0.001f;
+    private static final float zoomSmoothSpeed = 0.6f;
+    private static final float matScrollSpeed = 25f;
+    private static final float matScrollSmooth = 0.35f;
+    private static final long cycleIntervalTicks = 40;
+    private static final int cardTitleText = 0xFF555D65;
+    private static final int cardMetaText = 0xFF656E77;
+    private static final int cardMinorText = 0xFF7A838C;
+    //endregion
 
-    // ═══════════════════ Inner Types ═══════════════════
+    //region Inner Types
 
     /** A laid-out tree node with position. */
     private static class LayoutNode {
@@ -123,7 +122,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         EXTERNAL_INPUT("外部输入", 0xFF55FFAA),
         BYPRODUCT("副产物 / 多余", 0xFFFFCC44),
         CATALYST("催化剂 / 工具", 0xFFBB77FF),
-        INTERMEDIATE("中间产物", 0xFF88AACC);
+        INTERMEDIATE("中间产物", 0xFF9EA7AF);
         final String label;
         final int color;
         MatCategory(String l, int c) { this.label = l; this.color = c; }
@@ -140,8 +139,14 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     /** Breadcrumb entry for path context / trace display. */
     public record BreadcrumbEntry(String name, String pathId) {}
+    public record MaterialPanelPalette(int baseFill, int shadow, int highlight, int frame) {}
+    public record StepCardChrome(int machineTitleColor, boolean machineTitleShadow,
+                                 boolean usesSlotBackedMachineIcon, boolean usesSlotBackedOutputIcon,
+                                 boolean usesDrawnSeparator, boolean focusButtonUsesForkGlyph, int sectionGap) {}
+    public record MinimapViewportRect(int x, int y, int w, int h) {}
+    //endregion
 
-    // ═══════════════════ State ═══════════════════
+    //region State
 
     private ProcessGraph graph;
     private @Nullable ProcessNode targetNode;
@@ -173,9 +178,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     // Hover
     private @Nullable String hoveredNodeId = null;
-    private boolean widgetHovered = false;
+    private @Nullable String externalHoveredNodeId = null;
+    private @Nullable String externalSelectedNodeId = null;
     private boolean minimapDragging = false;
-    private int lastHoverMouseX = Integer.MIN_VALUE, lastHoverMouseY = Integer.MIN_VALUE;
 
     // Material panel
     private boolean showMaterialPanel = false;
@@ -202,8 +207,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private long truncationFrameId = 0;
     private final List<DeferredItem> deferredItems = new ArrayList<>();
     private final List<DeferredFluid> deferredFluids = new ArrayList<>();
+    //endregion
 
-    // ═══════════════════ Constructor ═══════════════════
+    //region Constructor
     public TreeCanvasWidget() {
         setFocusable(true);
         onMouseClicked((input, ctx) -> {
@@ -212,8 +218,8 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             if (mx < 0 || my < 0 || mx > width() || my > height()) return EventDispatch.pass;
             // Search icon click in material panel header
             if (input.isLeftClick() && showMaterialPanel && isInMaterialPanel(mx, my)) {
-                int px = width() - PANEL_W;
-                int iconX = px + PANEL_W - 28;
+                int px = width() - panelW;
+                int iconX = px + panelW - 28;
                 if (mx >= iconX && mx <= iconX + 14 && my >= 3 && my <= 17) {
                     matSearchActive = !matSearchActive;
                     if (!matSearchActive) { matFilterText = ""; updateFilteredContentH(); }
@@ -243,16 +249,15 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
                 if (clicked != null && clicked.originalChildCount > 0) {
                     double wx = panX + mx / zoom, wy = panY + my / zoom;
                     // Focus subgraph button (top-right of header)
-                    double fbX = clicked.x + NODE_W - 18;
-                    double fbY = clicked.y + 5;
-                    if (wx >= fbX && wx <= fbX + 16 && wy >= fbY && wy <= fbY + 16) {
+                    int[] focusBounds = focusButtonBounds(clicked.x, clicked.y);
+                    if (containsWorldPoint(focusBounds, wx, wy)) {
                         focusSubgraph(clicked.pathId);
                         ctx.cancel();
                         return EventDispatch.consumed;
                     }
                     // Collapse/expand button (bottom center)
-                    double btnX = clicked.x + NODE_W / 2.0 - 10;
-                    double btnY = clicked.y + NODE_H - 2;
+                    double btnX = clicked.x + nodeW / 2.0 - 10;
+                    double btnY = clicked.y + nodeH - 2;
                     if (wx >= btnX && wx <= btnX + 20 && wy >= btnY && wy <= btnY + 20) {
                         toggleCollapse(clicked.pathId);
                         ctx.cancel();
@@ -302,6 +307,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             if (dragging) {
                 panX = dragPanStartX - (mx - dragStartX) / zoom;
                 panY = dragPanStartY - (my - dragStartY) / zoom;
+                snapPanToPixelGrid();
                 ctx.cancel();
             }
             return EventDispatch.consumed;
@@ -312,16 +318,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             if (mx < 0 || my < 0 || mx > width() || my > height()) return EventDispatch.pass;
             if (showMaterialPanel && isInMaterialPanel(mx, my)) {
                 int maxScroll = Math.max(0, matFilteredContentH - panelContentVisibleH());
-                if (scrollY > 0) matScrollTargetY = Math.max(0, matScrollTargetY - MAT_SCROLL_SPEED);
-                else if (scrollY < 0) matScrollTargetY = Math.min(maxScroll, matScrollTargetY + MAT_SCROLL_SPEED);
+                if (scrollY > 0) matScrollTargetY = Math.max(0, matScrollTargetY - matScrollSpeed);
+                else if (scrollY < 0) matScrollTargetY = Math.min(maxScroll, matScrollTargetY + matScrollSpeed);
                 ctx.cancel();
                 return EventDispatch.consumed;
             }
             zoomFocusWX = panX + mx / (double) zoom;
             zoomFocusWY = panY + my / (double) zoom;
             zoomFocusSX = mx; zoomFocusSY = my;
-            if (scrollY > 0) targetZoom = Math.min(MAX_ZOOM, targetZoom * 1.15f);
-            else if (scrollY < 0) targetZoom = Math.max(MIN_ZOOM, targetZoom / 1.15f);
+            if (scrollY > 0) targetZoom = Math.min(maxZoom, targetZoom * 1.15f);
+            else if (scrollY < 0) targetZoom = Math.max(minZoom, targetZoom / 1.15f);
             ctx.cancel();
             return EventDispatch.consumed;
         });
@@ -350,15 +356,14 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             }
             return EventDispatch.pass;
         });
-        onMouseEnter((mouseX, mouseY, ctx) -> widgetHovered = true);
         onMouseLeave((mouseX, mouseY, ctx) -> {
-            widgetHovered = false;
             hoveredNodeId = null;
             scene().setHoverTooltip(Tooltip.create());
         });
     }
+    //endregion
 
-    // ═══════════════════ Public API ═══════════════════
+    //region Public API
 
     public TreeCanvasWidget setCraftCount(long count) {
         this.craftCount = Math.max(1, count);
@@ -374,10 +379,35 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     public boolean isMaterialPanelVisible() { return showMaterialPanel; }
 
+    static MaterialPanelPalette debugMaterialPanelPalette() {
+        return new MaterialPanelPalette(matBaseFill, matShadow, matHighlight, matFrame);
+    }
+
+    static StepCardChrome debugStepCardChrome() {
+        return new StepCardChrome(textWhite, true, true, true, true, true, stepSectionGap);
+    }
+
+    static boolean debugMinimapShowsTitle() {
+        return false;
+    }
+
+    static boolean debugTrackedLinksUseGlow() {
+        return false;
+    }
+
+    static MinimapViewportRect debugClampMinimapViewportRect(int contentX, int contentY, int contentW, int contentH,
+                                                             int rawX, int rawY, int rawW, int rawH) {
+        return clampMinimapViewportRect(contentX, contentY, contentW, contentH, rawX, rawY, rawW, rawH);
+    }
+
+    int debugMaterialEntryCount() {
+        return materialByCategory.values().stream().mapToInt(List::size).sum();
+    }
+
     /** Direct viewport manipulation for dump tests. */
     public void setViewport(double px, double py, float z) {
         this.panX = px; this.panY = py;
-        this.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+        this.zoom = Math.max(minZoom, Math.min(maxZoom, z));
         this.targetZoom = this.zoom;
     }
 
@@ -388,6 +418,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     /** Scroll material panel programmatically. */
     public void setMaterialScroll(float scrollY) {
         int maxScroll = Math.max(0, matFilteredContentH - panelContentVisibleH());
+        if (Float.isNaN(scrollY) || Float.isInfinite(scrollY)) {
+            scrollY = 0;
+        }
         float clamped = Math.max(0, Math.min(scrollY, maxScroll));
         this.matScrollY = clamped;
         this.matScrollTargetY = clamped;
@@ -398,7 +431,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         this.matSearchActive = !text.isEmpty();
         this.matFilterText = text;
         updateFilteredContentH();
-        matScrollY = 0; matScrollTargetY = 0;
+        sanitizeMaterialScroll();
     }
 
     /** Track a specific node by path ID. */
@@ -411,10 +444,10 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     /** Center viewport on the root node at the given zoom level. */
     public void centerOnRoot(float z) {
         if (rootLayout == null) return;
-        this.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+        this.zoom = Math.max(minZoom, Math.min(maxZoom, z));
         this.targetZoom = this.zoom;
-        this.panX = rootLayout.x + NODE_W / 2.0 - viewportW() / (2.0 * zoom);
-        this.panY = rootLayout.y + NODE_H / 2.0 - height() / (2.0 * zoom);
+        this.panX = rootLayout.x + nodeW / 2.0 - viewportW() / (2.0 * zoom);
+        this.panY = rootLayout.y + nodeH / 2.0 - height() / (2.0 * zoom);
     }
 
     /** Center viewport on a node in the given layer at the given zoom level.
@@ -422,19 +455,28 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     public void centerOnLayer(int layer, float z) {
         var nodes = layerNodes.getOrDefault(layer, List.of());
         if (nodes.isEmpty()) return;
-        this.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+        this.zoom = Math.max(minZoom, Math.min(maxZoom, z));
         this.targetZoom = this.zoom;
-        double avgX = nodes.stream().mapToInt(n -> n.x + NODE_W / 2).average().orElse(0);
+        double avgX = nodes.stream().mapToInt(n -> n.x + nodeW / 2).average().orElse(0);
         // Pick the node closest to the centroid (guarantees a node is on screen)
         LayoutNode closest = nodes.stream()
-                .min(java.util.Comparator.comparingDouble(n -> Math.abs(n.x + NODE_W / 2.0 - avgX)))
+                .min(java.util.Comparator.comparingDouble(n -> Math.abs(n.x + nodeW / 2.0 - avgX)))
                 .orElse(nodes.get(0));
-        this.panX = closest.x + NODE_W / 2.0 - viewportW() / (2.0 * zoom);
-        this.panY = closest.y + NODE_H / 2.0 - height() / (2.0 * zoom);
+        this.panX = closest.x + nodeW / 2.0 - viewportW() / (2.0 * zoom);
+        this.panY = closest.y + nodeH / 2.0 - height() / (2.0 * zoom);
     }
 
     /** Get the maximum tree depth (layer count - 1). */
     public int getMaxDepth() { return maxDepth; }
+
+    /** Layer index at current viewport center (for layer-nav tracking). */
+    public int getViewportCenterLayer() {
+        if (maxDepth <= 0) return 0;
+        double centerWorldY = panY + (height() / zoom) * 0.5;
+        int layer = (int) Math.floor(centerWorldY / rowH);
+        if (layer < 0) return 0;
+        return Math.min(layer, maxDepth);
+    }
 
     /** Set the highlighted (active) layer. -1 = none. */
     public void setHighlightedLayer(int layer) {
@@ -452,6 +494,49 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     public int getLayerNodeCount(int layer) {
         return layerNodes.getOrDefault(layer, List.of()).size();
+    }
+
+    /** Highlight a node from external UI (e.g., path breadcrumbs). */
+    public void setExternalHoveredNode(@Nullable String pathId) {
+        externalHoveredNodeId = pathId;
+    }
+
+    /** Persistently select a node from external UI without mutating tracked/root path states. */
+    public void setExternalSelectedNode(@Nullable String pathId) {
+        externalSelectedNodeId = pathId;
+    }
+
+    /** Build recipe tooltip for a specific node path; null when path not found. */
+    public @Nullable Tooltip buildNodeTooltipForPath(String pathId) {
+        return buildNodeTooltipForPath(pathId, null);
+    }
+
+    /** Build recipe tooltip for a specific node path with breadcrumb source metadata. */
+    public @Nullable Tooltip buildNodeTooltipForPath(String pathId, @Nullable String sourceLabel) {
+        LayoutNode ln = findLayoutNode(pathId);
+        LayoutNode fullNode = fullRootLayout != null ? findInTree(fullRootLayout, pathId) : null;
+        LayoutNode node = ln != null ? ln : fullNode;
+        if (node == null || node.processNode == null) return null;
+
+        Tooltip tip = Tooltip.create();
+        var crumbs = getBreadcrumbs(pathId);
+        var pathInfo = FlowChartTooltipComponent.builder();
+        pathInfo.section(sourceLabel != null ? sourceLabel : "路径信息", 0xFF7D8791);
+        pathInfo.kv("Path", 0xFF888888, pathId, 0xFF6E7882);
+        pathInfo.kv("层级", 0xFF888888, "L" + node.depth, 0xFF6E7882);
+        pathInfo.kv("深度", 0xFF888888, String.valueOf(Math.max(0, crumbs.size() - 1)), 0xFF6E7882);
+        if (!crumbs.isEmpty()) {
+            pathInfo.kv("节点", 0xFF888888, crumbs.get(crumbs.size() - 1).name(), 0xFF6E7882);
+        }
+        int branchCount = Math.max(0, node.originalChildCount);
+        pathInfo.kv("分叉", 0xFF888888, String.valueOf(branchCount), 0xFF6E7882);
+        if (branchCount > 1) {
+            pathInfo.kv("支点", 0xFF888888, "是", 0xFF88C070);
+        }
+        pathInfo.divider();
+        tip.add(pathInfo.build());
+        appendNodeTooltip(tip, node.processNode);
+        return tip;
     }
 
     /** Get pathIds of all nodes in a given layer. */
@@ -495,8 +580,22 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     public void centerOnNode(String pathId) {
         LayoutNode node = fullRootLayout != null ? findInTree(fullRootLayout, pathId) : null;
         if (node == null) return;
-        this.panX = node.x + NODE_W / 2.0 - viewportW() / (2.0 * zoom);
-        this.panY = node.y + NODE_H / 2.0 - height() / (2.0 * zoom);
+        this.panX = node.x + nodeW / 2.0 - viewportW() / (2.0 * zoom);
+        this.panY = node.y + nodeH / 2.0 - height() / (2.0 * zoom);
+    }
+
+    /**
+     * Navigate the path-context breadcrumb to its corresponding subtree root and
+     * keep the clicked node centered after the root switch.
+     */
+    public void navigatePathContextTo(String pathId) {
+        if ("root".equals(pathId)) {
+            resetToFullTree();
+            centerOnNode("root");
+            return;
+        }
+        focusSubgraph(pathId);
+        centerOnNode(pathId);
     }
 
     /** Expand ancestors, set tracked node, and center on it. */
@@ -513,6 +612,34 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         float keepZoom = this.zoom;
         trackedNodeId = pathId;
         rebuildTree(false); // don't auto-collapse, preserve user state
+        notifyTreeStructureChanged();
+        this.zoom = keepZoom;
+        this.targetZoom = keepZoom;
+        centerOnNode(pathId);
+    }
+
+    /** Select and jump to a node from path breadcrumbs in a full-tree context. */
+    public void selectAndJumpToPath(String pathId) {
+        if (!"root".equals(currentRootPathId)) {
+            resetToFullTree();
+        }
+        scrollToNode(pathId);
+    }
+
+    /** Expand ancestors and focus node, but do not change tracked node or root/subgraph context. */
+    public void focusNodeWithoutCropping(String pathId) {
+        String[] parts = pathId.split("-");
+        StringBuilder current = new StringBuilder();
+        for (int i = 0; i < parts.length - 1; i++) {
+            if (i == 0) current.append(parts[i]);
+            else current.append("-").append(parts[i]);
+            String ancestor = current.toString();
+            collapsedPaths.remove(ancestor);
+            userExpandedPaths.add(ancestor);
+        }
+        float keepZoom = this.zoom;
+        rebuildTree(false);
+        notifyTreeStructureChanged();
         this.zoom = keepZoom;
         this.targetZoom = keepZoom;
         centerOnNode(pathId);
@@ -527,7 +654,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     public List<BreadcrumbEntry> getTraceBreadcrumbs() {
         return trackedNodeId != null ? getBreadcrumbs(trackedNodeId) : List.of();
     }
+    //endregion
 
+    //region Internals
     private List<BreadcrumbEntry> getBreadcrumbs(String pathId) {
         if (fullRootLayout == null) return List.of();
         List<BreadcrumbEntry> result = new ArrayList<>();
@@ -568,23 +697,28 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (!fNodes.isEmpty()) {
             mmWorldMinX = fNodes.stream().mapToInt(n -> n.x).min().orElse(0);
             mmWorldMinY = fNodes.stream().mapToInt(n -> n.y).min().orElse(0);
-            int maxX = fNodes.stream().mapToInt(n -> n.x + NODE_W).max().orElse(0);
-            int maxY = fNodes.stream().mapToInt(n -> n.y + NODE_H).max().orElse(0);
+            int maxX = fNodes.stream().mapToInt(n -> n.x + nodeW).max().orElse(0);
+            int maxY = fNodes.stream().mapToInt(n -> n.y + nodeH).max().orElse(0);
             mmWorldW = Math.max(1, maxX - mmWorldMinX);
             mmWorldH = Math.max(1, maxY - mmWorldMinY);
         }
         this.layoutWidth = Math.max(500, mmWorldW + 200);
-        this.layoutHeight = Math.max(500, (maxDepth + 1) * ROW_H + 200);
+        this.layoutHeight = Math.max(500, (maxDepth + 1) * rowH + 200);
     }
 
     private int viewportW() {
-        return showMaterialPanel ? width() - PANEL_W - 2 : width();
+        return showMaterialPanel ? width() - panelW - 2 : width();
     }
 
     // ═══════════════════ Data Setup ═══════════════════
 
     public TreeCanvasWidget setGraph(ProcessGraph graph) {
         this.graph = graph;
+        this.showMaterialPanel = false;
+        this.matSearchActive = false;
+        this.matFilterText = "";
+        this.matScrollY = 0;
+        this.matScrollTargetY = 0;
         List<ProcessNode> sinks = graph.sinks();
         this.targetNode = sinks.isEmpty() ? null : sinks.get(0);
         rebuildTree();
@@ -616,7 +750,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             for (int attempt = 0; attempt < 6; attempt++) {
                 fullRootLayout = buildLayoutTree(targetNode, 0, "root");
                 computeWidths(fullRootLayout);
-                if (fullRootLayout.treeWidth <= MAX_TREE_WIDTH) break;
+                if (fullRootLayout.treeWidth <= maxTreeWidth) break;
                 collapseLevel++;
             }
         } else {
@@ -625,7 +759,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             computeWidths(fullRootLayout);
         }
 
-        int offsetX = Math.max(0, (Math.min(2000, MAX_TREE_WIDTH) - fullRootLayout.treeWidth) / 2);
+        int offsetX = Math.max(0, (Math.min(2000, maxTreeWidth) - fullRootLayout.treeWidth) / 2);
         assignPositions(fullRootLayout, offsetX);
 
         // Use subtree root if set
@@ -648,14 +782,14 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         this.layerNodes = lNodes;
         this.maxDepth = fNodes.stream().mapToInt(n -> n.depth).max().orElse(0);
         this.layoutWidth = Math.max(500, fullRootLayout.treeWidth + offsetX * 2);
-        this.layoutHeight = Math.max(500, (maxDepth + 1) * ROW_H + 200);
+        this.layoutHeight = Math.max(500, (maxDepth + 1) * rowH + 200);
 
         // Compute minimap bounding box from actual visible nodes
         if (!fNodes.isEmpty()) {
             mmWorldMinX = fNodes.stream().mapToInt(n -> n.x).min().orElse(0);
             mmWorldMinY = fNodes.stream().mapToInt(n -> n.y).min().orElse(0);
-            int maxX = fNodes.stream().mapToInt(n -> n.x + NODE_W).max().orElse(0);
-            int maxY = fNodes.stream().mapToInt(n -> n.y + NODE_H).max().orElse(0);
+            int maxX = fNodes.stream().mapToInt(n -> n.x + nodeW).max().orElse(0);
+            int maxY = fNodes.stream().mapToInt(n -> n.y + nodeH).max().orElse(0);
             mmWorldW = Math.max(1, maxX - mmWorldMinX);
             mmWorldH = Math.max(1, maxY - mmWorldMinY);
         }
@@ -709,29 +843,29 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     private void computeWidths(LayoutNode n) {
         if (n.children.isEmpty() || n.collapsed) {
-            n.treeWidth = NODE_W;
+            n.treeWidth = nodeW;
         } else {
             int w = 0;
             for (int i = 0; i < n.children.size(); i++) {
                 computeWidths(n.children.get(i));
                 w += n.children.get(i).treeWidth;
-                if (i > 0) w += GAP_X;
+                if (i > 0) w += gapX;
             }
-            n.treeWidth = Math.max(NODE_W, w);
+            n.treeWidth = Math.max(nodeW, w);
         }
     }
 
     private void assignPositions(LayoutNode n, int startX) {
-        n.x = startX + n.treeWidth / 2 - NODE_W / 2;
-        n.y = n.depth * ROW_H + (ROW_H / 2 - NODE_H / 2);
+        n.x = startX + n.treeWidth / 2 - nodeW / 2;
+        n.y = n.depth * rowH + (rowH / 2 - nodeH / 2);
 
         if (!n.collapsed && !n.children.isEmpty()) {
             int childrenSum = n.children.stream().mapToInt(c -> c.treeWidth).sum()
-                    + Math.max(0, n.children.size() - 1) * GAP_X;
+                    + Math.max(0, n.children.size() - 1) * gapX;
             int offset = startX + (n.treeWidth - childrenSum) / 2;
             for (LayoutNode c : n.children) {
                 assignPositions(c, offset);
-                offset += c.treeWidth + GAP_X;
+                offset += c.treeWidth + gapX;
             }
         }
     }
@@ -769,6 +903,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             userExpandedPaths.remove(pathId);
         }
         rebuildTree(false);  // user-initiated: keep collapseLevel, don't re-run width constraint
+        notifyTreeStructureChanged();
     }
 
     /** Toggle collapse state of a node by pathId. For dump tests. */
@@ -784,9 +919,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     public @Nullable Pos getCollapseButtonScreenPos(String pathId) {
         for (LayoutNode ln : flatNodes) {
             if (ln.pathId.equals(pathId) && ln.originalChildCount > 0) {
-                // Button center in world coords: x + NODE_W/2, y + NODE_H - 2 + 10
-                double wx = ln.x + NODE_W / 2.0;
-                double wy = ln.y + NODE_H - 2 + 10;
+                // Button center in world coords: x + nodeW/2, y + nodeH - 2 + 10
+                double wx = ln.x + nodeW / 2.0;
+                double wy = ln.y + nodeH - 2 + 10;
                 // Transform to screen coords relative to this widget
                 double sx = (wx - panX) * zoom;
                 double sy = (wy - panY) * zoom;
@@ -812,7 +947,12 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         collapsedPaths.clear();
         userExpandedPaths.clear();
         rebuildTree();
+        notifyTreeStructureChanged();
         resetView();
+    }
+
+    private void notifyTreeStructureChanged() {
+        if (onSubtreeChanged != null) onSubtreeChanged.run();
     }
 
     public void resetView() {
@@ -830,7 +970,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         // Compute zoom to fit content with padding
         float zx = (float) vw / (contentW + 60);
         float zy = (float) vh / (contentH + 60);
-        zoom = Math.max(MIN_ZOOM, Math.min(1.0f, Math.min(zx, zy)));
+        zoom = Math.max(minZoom, Math.min(1.0f, Math.min(zx, zy)));
         targetZoom = zoom;
         // Center content in viewport
         double contentCenterX = mmWorldMinX + contentW / 2.0;
@@ -903,11 +1043,11 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         this.materialByCategory = byCategory;
         int h = 0;
         for (var entry : byCategory.entrySet()) {
-            h += SEC_HDR_H + 2;
-            h += entry.getValue().size() * (ENTRY_H + ENTRY_GAP);
+            h += secHdrH + 2;
+            h += entry.getValue().size() * (entryH + entryGap);
             h += 6;
         }
-        h += TOTALS_H + 10;
+        h += totalsH + 10;
         this.materialPanelContentH = h;
         updateFilteredContentH();
     }
@@ -915,6 +1055,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private void updateFilteredContentH() {
         if (matFilterText.isEmpty()) {
             matFilteredContentH = materialPanelContentH;
+            sanitizeMaterialScroll();
             return;
         }
         String lower = matFilterText.toLowerCase();
@@ -924,24 +1065,39 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
                     .filter(e -> e.name().toLowerCase().contains(lower))
                     .count();
             if (matchCount > 0) {
-                h += SEC_HDR_H + 2 + (int) (matchCount * (ENTRY_H + ENTRY_GAP)) + 6;
+                h += secHdrH + 2 + (int) (matchCount * (entryH + entryGap)) + 6;
             }
         }
-        h += TOTALS_H + 10;
+        h += totalsH + 10;
         matFilteredContentH = h;
+        sanitizeMaterialScroll();
+    }
+
+    private void sanitizeMaterialScroll() {
+        int maxScroll = Math.max(0, matFilteredContentH - panelContentVisibleH());
+        if (Float.isNaN(matScrollY) || Float.isInfinite(matScrollY)) {
+            matScrollY = 0;
+        }
+        if (Float.isNaN(matScrollTargetY) || Float.isInfinite(matScrollTargetY)) {
+            matScrollTargetY = 0;
+        }
+        matScrollY = Math.max(0, Math.min(matScrollY, maxScroll));
+        matScrollTargetY = Math.max(0, Math.min(matScrollTargetY, maxScroll));
     }
 
     // ═══════════════════ Animation ═══════════════════
 
     private void animateSmooth() {
-        if (Math.abs(targetZoom - zoom) >= ZOOM_SNAP) {
-            zoom += (targetZoom - zoom) * ZOOM_SMOOTH_SPEED;
-            if (Math.abs(targetZoom - zoom) < ZOOM_SNAP) zoom = targetZoom;
+        sanitizeMaterialScroll();
+        if (Math.abs(targetZoom - zoom) >= zoomSnap) {
+            zoom += (targetZoom - zoom) * zoomSmoothSpeed;
+            if (Math.abs(targetZoom - zoom) < zoomSnap) zoom = targetZoom;
             panX = zoomFocusWX - zoomFocusSX / zoom;
             panY = zoomFocusWY - zoomFocusSY / zoom;
         }
+        snapPanToPixelGrid();
         if (Math.abs(matScrollTargetY - matScrollY) > 0.5f) {
-            matScrollY += (matScrollTargetY - matScrollY) * MAT_SCROLL_SMOOTH;
+            matScrollY += (matScrollTargetY - matScrollY) * matScrollSmooth;
             if (Math.abs(matScrollTargetY - matScrollY) < 0.5f) matScrollY = matScrollTargetY;
         }
     }
@@ -951,8 +1107,8 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     @Override
     protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
         if (graph == null || flatNodes.isEmpty()) {
-            canvas.fill(0, 0, width(), height(), BG);
-            canvas.drawCenteredString("无配方数据", width() / 2, height() / 2 - 4, TEXT_WEAK);
+            canvas.fill(0, 0, width(), height(), bgPanel);
+            canvas.drawCenteredString("无配方数据", width() / 2, height() / 2 - 4, textWeak);
             return;
         }
         Font font = Minecraft.getInstance().font;
@@ -960,18 +1116,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         truncationFrameId++;
         truncationCache.clear();
 
-        if (mouseX != lastHoverMouseX || mouseY != lastHoverMouseY) {
-            lastHoverMouseX = mouseX; lastHoverMouseY = mouseY;
-            updateHover(mouseX, mouseY);
-        }
+        updateHover(mouseX, mouseY);
         updateTooltip(mouseX, mouseY);
         machineCycleTicks++;
 
         int vw = viewportW();
-        canvas.fill(0, 0, vw, height(), BG);
+        canvas.fill(0, 0, vw, height(), bgPanel);
 
         Pos abs = absolutePos();
         canvas.withClip(abs.x(), abs.y(), vw, height(), () -> {
+            drawLayerOverlay(canvas, font);
             canvas.pushTransform();
             canvas.scale(zoom);
             canvas.translate((float) -panX, (float) -panY);
@@ -980,7 +1134,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             drawLayerBands(canvas, font);
             drawConnections(canvas);
             for (LayoutNode ln : flatNodes) {
-                double nRight = ln.x + NODE_W, nBot = ln.y + NODE_H;
+                double nRight = ln.x + nodeW, nBot = ln.y + nodeH;
                 double visMinX = panX, visMinY = panY;
                 double visMaxX = panX + vw / zoom, visMaxY = panY + height() / zoom;
                 if (nRight < visMinX || ln.x > visMaxX || nBot < visMinY || ln.y > visMaxY) continue;
@@ -990,38 +1144,14 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             canvas.popTransform();
         });
 
-        drawMinimap(canvas);
+        drawMinimap(canvas, mouseX, mouseY);
         if (showMaterialPanel) drawMaterialPanel(canvas, font, mouseX, mouseY, partialTicks);
-        drawStatusBar(canvas, font);
     }
 
     // ═══════════════════ Grid & Layer Bands ═══════════════════
 
     private void drawGrid(SceneCanvas canvas) {
-        double visW = viewportW() / zoom, visH = height() / zoom;
-        float pixelSpacing = GRID_SPACING * zoom;
-        boolean drawMinor = pixelSpacing >= 6;
-        int sx = ((int) (panX / GRID_SPACING) - 1) * GRID_SPACING;
-        int sy = ((int) (panY / GRID_SPACING) - 1) * GRID_SPACING;
-        int ex = (int) (panX + visW) + GRID_SPACING;
-        int ey = (int) (panY + visH) + GRID_SPACING;
-        // Dot grid matching web app style (dots at intersections, not full lines)
-        int dotMinor = 0xFF1A1F2E;
-        int dotMajor = 0xFF232A3A;
-        int dotSz = Math.max(1, (int)(1.5f / zoom)); // 1-2px dots in world space
-        for (int gx = sx; gx <= ex; gx += GRID_SPACING) {
-            int idxX = gx / GRID_SPACING;
-            for (int gy = sy; gy <= ey; gy += GRID_SPACING) {
-                int idxY = gy / GRID_SPACING;
-                boolean major = (idxX % 5 == 0) && (idxY % 5 == 0);
-                boolean minor = drawMinor;
-                if (major) {
-                    canvas.fill(gx, gy, dotSz + 1, dotSz + 1, dotMajor);
-                } else if (minor) {
-                    canvas.fill(gx, gy, dotSz, dotSz, dotMinor);
-                }
-            }
-        }
+        // Intentionally left blank: user requested removing background dot grid.
     }
 
     private void drawLayerBands(SceneCanvas canvas, Font font) {
@@ -1030,39 +1160,63 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         int bandW = (int) (viewportW() / zoom + 400);
 
         for (int i = 0; i <= maxDepth; i++) {
-            int bandTop = i * ROW_H;
-            int bandBot = bandTop + ROW_H;
+            int bandTop = i * rowH;
+            int bandBot = bandTop + rowH;
             if (bandBot < visMinY || bandTop > visMaxY) continue;
 
             boolean isHighlighted = (i == highlightedLayer);
 
             // Alternating band background (even layers slightly lighter)
             if (isHighlighted) {
-                canvas.fill(bandX, bandTop, bandW, ROW_H, 0xFF0F1B2E);
+                canvas.fill(bandX, bandTop, bandW, rowH, withAlpha(green, 0x30));
             } else if (i % 2 == 0) {
-                canvas.fill(bandX, bandTop, bandW, ROW_H, 0xFF101520);
+                canvas.fill(bandX, bandTop, bandW, rowH, 0x30FFFFFF);
             }
 
             // Horizontal divider line at top of layer
-            canvas.fill(bandX, bandTop, bandW, 1, isHighlighted ? 0xFF1E3A8A : LAYER_LINE);
-            // Bottom divider for highlighted layer
+            canvas.fill(bandX, bandTop, bandW, 1, isHighlighted ? withAlpha(green, 0xD8) : layerLine);
             if (isHighlighted) {
-                canvas.fill(bandX, bandBot - 1, bandW, 1, 0xFF1E3A8A);
+                canvas.fill(bandX, bandBot - 1, bandW, 1, withAlpha(green, 0xD8));
             }
 
-            // Repeating watermark text tiled at fixed screen intervals (like browser background)
-            int textColor = isHighlighted ? 0x40B0C4FF : 0x18FFFFFF;
-            String layerLabel = "Layer " + i;
-            int labelW = font.width(layerLabel);
-            // Tile spacing in screen pixels, convert to world coords
-            float tileSpacingScreen = Math.max(labelW + 60, 160);
-            float tileSpacing = tileSpacingScreen / zoom;
-            // Compute start x aligned to tile grid so tiles stay fixed when panning
-            float startX = (float) (Math.floor(panX / tileSpacing) * tileSpacing);
-            float endX = (float) (panX + viewportW() / zoom);
-            float labelY = bandTop + ROW_H / 2f - 4;
-            for (float tx = startX; tx < endX; tx += tileSpacing) {
-                canvas.drawString(layerLabel, (int) tx, (int) labelY, textColor, false);
+        }
+    }
+
+    private void drawLayerOverlay(SceneCanvas canvas, Font font) {
+        int labelX = 23;
+        // Watermark scale is reduced by ~0.15 ratio to keep it lighter/smaller at all zoom levels.
+        float bgScale = Math.max(0.78f, Math.min(1.03f, 0.87f + (zoom - 0.7f) * 0.06f));
+        double visMinWX = panX;
+        double visMaxWX = panX + viewportW() / zoom;
+        int worldRepeatAnchorX = 320;
+        int worldRepeatSpacing = 500;
+
+        for (int i = 0; i <= maxDepth; i++) {
+            int bandTopWorld = i * rowH;
+            int bandBottomWorld = bandTopWorld + rowH;
+            int bandTop = (int) Math.round((bandTopWorld - panY) * zoom);
+            int bandBottom = (int) Math.round((bandBottomWorld - panY) * zoom);
+            if (bandBottom < 0 || bandTop > height()) continue;
+
+            boolean isHighlighted = (i == highlightedLayer);
+            String layerLabel = "LAYER " + i;
+            int scaledLabelW = Math.max(1, (int) Math.round(font.width(layerLabel) * bgScale));
+            int bgLabelY = bandTop + Math.max(8, (bandBottom - bandTop) / 2 - 8);
+            int bgLabelColor = isHighlighted ? withAlpha(0xFF7F9589, 0x90) : withAlpha(0xFF7A7A7A, 0x58);
+
+            int firstRepeatIndex = (int) Math.floor((visMinWX - worldRepeatAnchorX) / worldRepeatSpacing) - 1;
+            int lastRepeatIndex = (int) Math.ceil((visMaxWX - worldRepeatAnchorX) / worldRepeatSpacing) + 1;
+            for (int repeatIndex = firstRepeatIndex; repeatIndex <= lastRepeatIndex; repeatIndex++) {
+                double worldX = worldRepeatAnchorX + (double) repeatIndex * worldRepeatSpacing;
+                int x = (int) Math.round((worldX - panX) * zoom);
+                // Only cull labels that are fully outside. Partially visible labels should
+                // still render and let clip do natural edge trimming.
+                if (x + scaledLabelW < labelX + 2 || x > viewportW() - 8) continue;
+                canvas.pushTransform();
+                canvas.translate(x, bgLabelY);
+                canvas.scale(bgScale);
+                canvas.drawString(layerLabel, 0, 0, bgLabelColor, false);
+                canvas.popTransform();
             }
         }
     }
@@ -1081,9 +1235,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         sorted.sort(Comparator.comparingInt(l -> isNodeInTrackedPath(l.target.pathId) ? 1 : 0));
 
         for (LayoutLink link : sorted) {
-            int startX = link.source.x + NODE_W / 2;
-            int startY = link.source.y + NODE_H;
-            int endX = link.target.x + NODE_W / 2;
+            int startX = link.source.x + nodeW / 2;
+            int startY = link.source.y + nodeH;
+            int endX = link.target.x + nodeW / 2;
             int endY = link.target.y;
             int midY = (startY + endY) / 2;
 
@@ -1091,7 +1245,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             boolean isCatalyst = link.target.processNode != null
                     && link.target.processNode.inputs().stream().anyMatch(MaterialSlot::isCatalyst);
 
-            int color = tracked ? LINK_TRACKED : (isCatalyst ? LINK_CATALYST : LINK_DEFAULT);
+            int color = tracked ? linkTracked : (isCatalyst ? linkCatalyst : linkDefault);
             int thickness = tracked ? 3 : 2;
 
             // Manhattan routing: down, horizontal, down
@@ -1104,43 +1258,108 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             // Vertical segment from midY to target top
             canvas.fill(endX - thickness / 2, midY, thickness, endY - midY, color);
 
-            // Tracked glow effect
-            if (tracked) {
-                int glowColor = withAlpha(LINK_TRACKED, 0x30);
-                int glowThick = thickness + 6;
-                canvas.fill(startX - glowThick / 2, startY, glowThick, midY - startY, glowColor);
-                canvas.fill(hx1 - 3, midY - glowThick / 2, hx2 - hx1 + 6, glowThick, glowColor);
-                canvas.fill(endX - glowThick / 2, midY, glowThick, endY - midY, glowColor);
-            }
         }
+    }
+
+    private int nodeAccent(LayoutNode ln) {
+        if (ln.pathId.equals(trackedNodeId)) return linkTracked;
+        if (ln.depth == 0) return dotClrRoot;
+        ProcessNode pn = ln.processNode;
+        if (pn == null) return dotClr;
+        if (pn.inputs().stream().anyMatch(MaterialSlot::isCatalyst)) return 0xFF95AED4;
+        if (!pn.outputs().isEmpty()) {
+            return switch (pn.outputs().get(0).type()) {
+                case ITEM -> 0xFFA8BAD8;
+                case FLUID -> 0xFF8EC3DC;
+                case ENERGY -> 0xFFB4A3E8;
+                case GAS -> 0xFF8CC9BF;
+                case CATALYST -> 0xFFC1B3E8;
+            };
+        }
+        return dotClr;
+    }
+
+    private int minimapNodeColor(LayoutNode ln) {
+        if (ln.pathId.equals(trackedNodeId)) return linkTracked;
+        if (ln.depth == 0) return withAlpha(dotClrRoot, 0xE0);
+        return withAlpha(0xFFA1ACBA, 0xD2);
     }
 
     // ═══════════════════ Minimap ═══════════════════
 
-    private void drawMinimap(SceneCanvas canvas) {
+    private int minimapX() {
+        return viewportW() - mmW - mmPad;
+    }
+
+    private int minimapY() {
+        return mmPad;
+    }
+
+    private record MinimapProjection(int contentX, int contentY, int contentW, int contentH,
+                                     double scale, double drawX, double drawY, double drawW, double drawH) {}
+
+    private static MinimapViewportRect clampMinimapViewportRect(int contentX, int contentY, int contentW, int contentH,
+                                                                int rawX, int rawY, int rawW, int rawH) {
+        if (contentW <= 0 || contentH <= 0) {
+            return new MinimapViewportRect(contentX, contentY, 1, 1);
+        }
+        int vpW = Math.max(1, Math.min(rawW, contentW));
+        int vpH = Math.max(1, Math.min(rawH, contentH));
+        int minX = contentX;
+        int minY = contentY;
+        int maxX = contentX + contentW - vpW;
+        int maxY = contentY + contentH - vpH;
+        int x = Math.max(minX, Math.min(rawX, maxX));
+        int y = Math.max(minY, Math.min(rawY, maxY));
+        int right = Math.min(contentX + contentW, x + vpW);
+        int bottom = Math.min(contentY + contentH, y + vpH);
+        return new MinimapViewportRect(x, y, Math.max(1, right - x), Math.max(1, bottom - y));
+    }
+
+    private @Nullable MinimapProjection minimapProjection() {
+        if (mmWorldW <= 0 || mmWorldH <= 0) return null;
+        int mmX = minimapX();
+        int mmY = minimapY();
+        int contentX = mmX + mmContentPad;
+        int contentY = mmY + mmContentPad;
+        int contentH = mmH - mmContentPad * 2;
+        int contentW = mmW - mmContentPad * 2;
+        if (contentW <= 0 || contentH <= 0) return null;
+        double fitScale = Math.min((double) contentW / mmWorldW, (double) contentH / mmWorldH);
+        double scale = fitScale * mmScaleShrink;
+        if (scale <= 0) return null;
+        double drawW = mmWorldW * scale;
+        double drawH = mmWorldH * scale;
+        double drawX = contentX + (contentW - drawW) * 0.5;
+        double drawY = contentY + (contentH - drawH) * 0.5;
+        return new MinimapProjection(contentX, contentY, contentW, contentH, scale, drawX, drawY, drawW, drawH);
+    }
+
+    private void drawMinimap(SceneCanvas canvas, int mouseX, int mouseY) {
         if (flatNodes.isEmpty() || mmWorldW <= 0 || mmWorldH <= 0) return;
-        int mmX = viewportW() - MM_W - MM_PAD;
-        int mmY = MM_PAD;
+        MinimapProjection proj = minimapProjection();
+        if (proj == null) return;
 
-        canvas.roundedRect(mmX, mmY, MM_W, MM_H, 0, MM_BG, 1f, MM_BD);
+        int contentX = proj.contentX;
+        int contentY = proj.contentY;
+        int contentH = proj.contentH;
+        int contentW = proj.contentW;
+        // Keep minimap with a single background layer (no extra chrome frame).
+        canvas.texture(Background.inset, contentX, contentY, contentW, contentH);
 
-        int contentX = mmX + 4;
-        int contentY = mmY + 4;
-        int contentH = MM_H - 8;
-        int contentW = MM_W - 8;
-
-        // Scale based on actual visible-node bounding box
-        double sx = (double) contentW / mmWorldW;
-        double sy = (double) contentH / mmWorldH;
+        double sx = proj.scale;
+        double sy = proj.scale;
+        double ox = proj.drawX;
+        double oy = proj.drawY;
 
         // Draw connections first (behind nodes), right-angle routing
-        int linkColor = 0xFF2A3A50;
-        int linkTracked = 0xFF2266AA;
+        int linkColor = 0xFF6F747B;
+        int linkTracked = 0xFF9BA8B6;
         for (LayoutLink link : flatLinks) {
-            int lsx = contentX + (int) ((link.source.x + NODE_W / 2.0 - mmWorldMinX) * sx);
-            int lsy = contentY + (int) ((link.source.y + NODE_H - mmWorldMinY) * sy);
-            int lex = contentX + (int) ((link.target.x + NODE_W / 2.0 - mmWorldMinX) * sx);
-            int ley = contentY + (int) ((link.target.y - mmWorldMinY) * sy);
+            int lsx = (int) (ox + (link.source.x + nodeW / 2.0 - mmWorldMinX) * sx);
+            int lsy = (int) (oy + (link.source.y + nodeH - mmWorldMinY) * sy);
+            int lex = (int) (ox + (link.target.x + nodeW / 2.0 - mmWorldMinX) * sx);
+            int ley = (int) (oy + (link.target.y - mmWorldMinY) * sy);
             boolean tracked = isNodeInTrackedPath(link.target.pathId);
             int c = tracked ? linkTracked : linkColor;
             int midY = (lsy + ley) / 2;
@@ -1151,49 +1370,53 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
         // Draw nodes
         for (LayoutNode ln : flatNodes) {
-            int rx = contentX + (int) ((ln.x - mmWorldMinX) * sx);
-            int ry = contentY + (int) ((ln.y - mmWorldMinY) * sy);
-            int rw = Math.max(1, (int) (NODE_W * sx));
-            int rh = Math.max(1, (int) (NODE_H * sy));
-            boolean isTracked = isNodeInTrackedPath(ln.pathId);
-            int color = isTracked ? LINK_TRACKED : (ln.processNode != null ? withAlpha(ln.processNode.tierColor(), 0xFF) : 0xFF4B5563);
+            int rx = (int) (ox + (ln.x - mmWorldMinX) * sx);
+            int ry = (int) (oy + (ln.y - mmWorldMinY) * sy);
+            int rw = Math.max(1, (int) Math.round(nodeW * sx));
+            int rh = Math.max(1, (int) Math.round(nodeH * sy));
+            int color = minimapNodeColor(ln);
             canvas.fill(rx, ry, rw, rh, color);
         }
 
         // Viewport indicator (pan is in world-space, offset by bounding box origin)
-        int vpW = Math.min(contentW, Math.max(4, (int) ((viewportW() / zoom) * sx)));
-        int vpH = Math.min(contentH, Math.max(4, (int) ((height() / zoom) * sy)));
-        int ivpX = contentX + (int) ((panX - mmWorldMinX) * sx);
-        int ivpY = contentY + (int) ((panY - mmWorldMinY) * sy);
-        ivpX = Math.max(contentX, Math.min(ivpX, contentX + contentW - vpW));
-        ivpY = Math.max(contentY, Math.min(ivpY, contentY + contentH - vpH));
-        canvas.fill(ivpX, ivpY, vpW, 1, MM_VP);
-        canvas.fill(ivpX, ivpY + vpH - 1, vpW, 1, MM_VP);
-        canvas.fill(ivpX, ivpY, 1, vpH, MM_VP);
-        canvas.fill(ivpX + vpW - 1, ivpY, 1, vpH, MM_VP);
+        int rawVpW = Math.max(4, (int) Math.round((viewportW() / zoom) * sx));
+        int rawVpH = Math.max(4, (int) Math.round((height() / zoom) * sy));
+        int rawVpX = (int) Math.round(ox + (panX - mmWorldMinX) * sx);
+        int rawVpY = (int) Math.round(oy + (panY - mmWorldMinY) * sy);
+        MinimapViewportRect vp = clampMinimapViewportRect(contentX, contentY, contentW, contentH,
+                rawVpX, rawVpY, rawVpW, rawVpH);
+        canvas.fill(vp.x() + 1, vp.y() + 1, Math.max(1, vp.w() - 2), Math.max(1, vp.h() - 2), 0x1AFFFFFF);
+        canvas.fill(vp.x(), vp.y(), vp.w(), 1, mmVp);
+        canvas.fill(vp.x(), vp.y() + vp.h() - 1, vp.w(), 1, mmVp);
+        canvas.fill(vp.x(), vp.y(), 1, vp.h(), mmVp);
+        canvas.fill(vp.x() + vp.w() - 1, vp.y(), 1, vp.h(), mmVp);
     }
 
     private boolean isInMinimap(double mx, double my) {
-        int mmX = viewportW() - MM_W - MM_PAD;
-        return mx >= mmX && mx <= mmX + MM_W && my >= MM_PAD && my <= MM_PAD + MM_H;
+        int mmX = minimapX();
+        int mmY = minimapY();
+        return mx >= mmX && mx <= mmX + mmW && my >= mmY && my <= mmY + mmH;
     }
 
     private void minimapClickToPan(double mx, double my) {
-        if (mmWorldW <= 0 || mmWorldH <= 0) return;
-        int mmX = viewportW() - MM_W - MM_PAD;
-        int contentX = mmX + 4;
-        int contentY = MM_PAD + 4;
-        int contentH = MM_H - 8;
-        int contentW = MM_W - 8;
-        double sx = (double) contentW / mmWorldW;
-        double sy = (double) contentH / mmWorldH;
-        double clampedMx = Math.max(contentX, Math.min(mx, contentX + contentW));
-        double clampedMy = Math.max(contentY, Math.min(my, contentY + contentH));
-        double worldX = (clampedMx - contentX) / sx + mmWorldMinX;
-        double worldY = (clampedMy - contentY) / sy + mmWorldMinY;
+        MinimapProjection proj = minimapProjection();
+        if (proj == null) return;
+        double clampedMx = Math.max(proj.drawX, Math.min(mx, proj.drawX + proj.drawW));
+        double clampedMy = Math.max(proj.drawY, Math.min(my, proj.drawY + proj.drawH));
+        double worldX = (clampedMx - proj.drawX) / proj.scale + mmWorldMinX;
+        double worldY = (clampedMy - proj.drawY) / proj.scale + mmWorldMinY;
         double vpWorldW = viewportW() / zoom, vpWorldH = height() / zoom;
         panX = Math.max(0, Math.min(worldX - vpWorldW / 2.0, layoutWidth - vpWorldW));
         panY = Math.max(0, Math.min(worldY - vpWorldH / 2.0, layoutHeight - vpWorldH));
+        snapPanToPixelGrid();
+    }
+
+    private void snapPanToPixelGrid() {
+        if (zoom <= 0f || Double.isNaN(panX) || Double.isNaN(panY)) return;
+        double snappedX = Math.round(panX * zoom) / zoom;
+        double snappedY = Math.round(panY * zoom) / zoom;
+        panX = snappedX;
+        panY = snappedY;
     }
 
     // ═══════════════════ Node Card ═══════════════════
@@ -1203,32 +1426,34 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         ProcessNode pn = ln.processNode;
         if (pn == null) return;
 
-        boolean hovered = ln.pathId.equals(hoveredNodeId);
+        boolean hovered = isNodeHovered(ln.pathId);
         boolean tracked = ln.pathId.equals(trackedNodeId);
-        boolean isRoot = ln.depth == 0;
+        boolean externallySelected = Objects.equals(ln.pathId, externalSelectedNodeId);
         boolean isCatalystNode = pn.inputs().stream().anyMatch(MaterialSlot::isCatalyst);
         boolean isLeaf = ln.originalChildCount == 0;
+        int accent = nodeAccent(ln);
 
         // Very low zoom: simplified rectangle
-        if (zoom < DETAIL_LOD_ZOOM) {
-            int bgC = hovered ? 0xFF1F2937 : NODE_BG;
-            canvas.fill(x, y, NODE_W, NODE_H, bgC);
-            canvas.fill(x, y, NODE_W, 2, pn.tierColor());
+        if (zoom < detailLodZoom) {
+            canvas.texture(hovered ? Background.Border.light : Background.frame, x, y, nodeW, nodeH);
+            canvas.texture(Background.flat, x + 2, y + 2, nodeW - 4, nodeH - 4);
+            canvas.texture(Background.Sign.bar, x + 2, y + 2, nodeW - 4, 2);
+            canvas.fill(x + 2, y + 3, nodeW - 4, 1, accent);
             return;
         }
 
-        // Shadow + card bg
-        canvas.shadow(x, y, NODE_W, NODE_H, 6, 2, 5, 0x40000000);
-
-        int bgC = isCatalystNode ? CATALYST_BG_T : NODE_BG;
-        int bdC = isCatalystNode ? CATALYST_BD : (hovered ? NODE_BD_HOVER : NODE_BD);
-        canvas.roundedRect(x, y, NODE_W, NODE_H, isLeaf ? 6 : 8, bgC, 1f, bdC);
+        canvas.texture(hovered ? Background.Border.light : Background.frame, x, y, nodeW, nodeH);
+        canvas.texture(Background.flat, x + 2, y + 2, nodeW - 4, nodeH - 4);
+        if (isCatalystNode) {
+            canvas.texture(Sign.Group.catalyst, x + 5, y + 5, 3, nodeH - 10);
+        }
 
         // Tracked ring + glow
         if (tracked) {
-            canvas.roundedRect(x - 2, y - 2, NODE_W + 4, NODE_H + 4, 10,
-                    0x00000000, 2f, TRACKED_RING);
-            canvas.shadow(x - 2, y - 2, NODE_W + 4, NODE_H + 4, 10, 4, 12, TRACKED_GLOW);
+            drawOutline(canvas, x - 1, y - 1, nodeW + 2, nodeH + 2, trackedRing);
+        }
+        if (externallySelected) {
+            drawOutline(canvas, x - 2, y - 2, nodeW + 4, nodeH + 4, externalSelectedRing);
         }
 
         if (isLeaf) {
@@ -1239,111 +1464,143 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
         // Collapse/expand button at bottom center
         if (ln.originalChildCount > 0) {
-            int btnX = x + NODE_W / 2 - 10;
-            int btnY = y + NODE_H - 2;
-            canvas.roundedRect(btnX, btnY, 20, 20, 10, COLLAPSE_BG, 1f, COLLAPSE_BD);
-            String sym = ln.collapsed ? "+" : "-";
-            canvas.drawCenteredString(sym, btnX + 10, btnY + 6, TEXT_SECONDARY);
+            int btnX = x + nodeW / 2 - 10;
+            int btnY = y + nodeH - 2;
+            canvas.texture(Background.flat, btnX, btnY, 20, 18);
+            canvas.drawCenteredString(ln.collapsed ? "+" : "-", btnX + 10, btnY + 5, cardMetaText);
 
             if (ln.collapsed) {
                 String badge = "+ " + ln.originalChildCount + " Inputs";
                 int bw = font.width(badge) + 8;
-                int bx = x + NODE_W / 2 - bw / 2;
+                int bx = x + nodeW / 2 - bw / 2;
                 int by = btnY + 22;
-                canvas.roundedRect(bx, by, bw, 14, 4,
-                        withAlpha(ACCENT, 0x40), 1f, withAlpha(ACCENT, 0x50));
-                canvas.drawCenteredString(badge, bx + bw / 2, by + 3, ACCENT);
+                canvas.drawString(badge, bx + 2, by + 3, cardMetaText, false);
             }
         }
     }
 
     private void drawLeafCard(SceneCanvas canvas, Font font, LayoutNode ln, int x, int y, float pt) {
         ProcessNode pn = ln.processNode;
-        // Simple leaf: icon + name + amount
-        int pad = 8;
-        int iconSz = 24;
+        int pad = 10;
+        int iconSz = 18;
         int iconX = x + pad;
-        int iconY = y + (NODE_H - iconSz) / 2;
+        int iconY = y + 31;
+        canvas.texture(Background.Slot.dark, iconX - 1, iconY - 1, iconSz + 2, iconSz + 2);
 
         if (!pn.outputs().isEmpty()) {
             MaterialSlot slot = pn.outputs().get(0);
             drawSlotIcon(canvas, slot, iconX, iconY, iconSz / 16.0f, pt);
         }
 
-        int textX = iconX + iconSz + 8;
-        int textW = NODE_W - textX + x - pad;
-        String name = pn.name();
-        canvas.drawString(cachedTruncate(name, textW, font), textX, y + 24, TEXT_PRIMARY, true);
+        int textX = iconX + iconSz + 10;
+        int textW = nodeW - textX + x - pad;
+        canvas.drawString(cachedTruncate(pn.machine(), textW, font), textX, y + 12, cardMetaText, false);
+        canvas.drawString(cachedTruncate(pn.name(), textW, font), textX, y + 25, cardTitleText, false);
 
-        String amtStr = "Amount: " + fmtNum(pn.outputs().isEmpty() ? 0 : pn.outputs().get(0).amount());
-        canvas.drawString(cachedTruncate(amtStr, textW, font), textX, y + 40, TEXT_WEAK, false);
+        String amtStr = "+" + fmtNum(pn.outputs().isEmpty() ? 0 : pn.outputs().get(0).amount());
+        canvas.drawString(cachedTruncate(amtStr, textW, font), textX, y + 41, green, false);
+        canvas.drawString(cachedTruncate(pn.durationTicks() + "t", textW, font), textX, y + 56, cardMinorText, false);
     }
 
     private void drawStepCard(SceneCanvas canvas, Font font, LayoutNode ln, int x, int y, float pt) {
         ProcessNode pn = ln.processNode;
-        boolean isRoot = ln.depth == 0;
-
-        // ── Colored top stripe (tier color bar) ──
-        canvas.fill(x + 4, y + 2, NODE_W - 8, 3, pn.tierColor());
-
-        // ── Header bar ──
-        canvas.roundedRect(x + 2, y + 5, NODE_W - 4, HDR_H - 3, 4f, 2f, 2f, 4f, NODE_HDR_BG, 0, 0);
-
-        // Depth indicator dot
-        int dotX = x + 8;
-        int dotY = y + 5 + (HDR_H - 3) / 2;
-        int dotC = isRoot ? DOT_CLR_ROOT : DOT_CLR;
-        canvas.fill(dotX, dotY - 2, 4, 4, dotC);
-
-        // Machine name
         MachineInfo displayMachine = getDisplayMachine(pn);
-        String machineName = displayMachine != null ? displayMachine.name() : pn.machine();
-        int nameX = dotX + 10;
-        int nameMaxW = NODE_W - nameX + x - 66;
-        canvas.drawString(cachedTruncate(machineName, nameMaxW, font), nameX, y + 8, TEXT_PRIMARY, true);
+        int accent = nodeAccent(ln);
+        int headerX = x + 5;
+        int headerY = y + 8;
+        int headerW = nodeW - 10;
+        int machineIconX = x + 11;
+        int machineIconY = y + 11;
+        int[] focusBounds = focusButtonBounds(x, y);
+        String machineName = buildMachineLabel(pn, displayMachine);
+        int nameX = machineIconX + 20;
+        int nameMaxW = focusBounds[0] - nameX - 5;
 
-        // Focus subgraph button (top-right, for non-leaf with children)
+        canvas.texture(Background.Sign.bar, x + 4, y + 4, nodeW - 8, 3);
+        canvas.fill(x + 4, y + 4, nodeW - 8, 1, accent);
+        canvas.texture(Background.dark, headerX, headerY, headerW, 22);
+        drawMachineIcon(canvas, displayMachine, machineIconX, machineIconY);
+        canvas.drawString(cachedTruncate(machineName, nameMaxW, font), nameX, y + 12, textWhite, true);
+        canvas.drawString(cachedTruncate(pn.name(), nameMaxW, font), nameX, y + 22, 0xFFD9D9D9, true);
+
         if (ln.originalChildCount > 0) {
-            int fbX = x + NODE_W - 18;
-            int fbY = y + 6;
-            canvas.roundedRect(fbX, fbY, 14, 14, 3, 0xFF1F2937, 1f, NODE_BD);
-            canvas.drawCenteredString("\u2295", fbX + 7, fbY + 3, ACCENT);
+            drawFocusButton(canvas, focusBounds, isNodeHovered(ln.pathId));
         }
 
-        // Tier badge at right (before focus button)
-        String tierStr = pn.tierName();
-        int tierW = font.width(tierStr) + 8;
-        int tierX = x + NODE_W - tierW - (ln.originalChildCount > 0 ? 22 : 8);
-        int tierY = y + 6;
-        canvas.roundedRect(tierX, tierY, tierW, 14, 3, 0xFF1F2937, 1f, NODE_BD);
-        canvas.drawCenteredString(tierStr, tierX + tierW / 2, tierY + 3, pn.tierColor());
+        int separatorY = headerY + 22 + stepSectionGap / 2;
+        canvas.fill(x + 10, separatorY, nodeW - 20, 1, 0xFF8F959C);
+        canvas.fill(x + 10, separatorY + 1, nodeW - 20, 1, 0x40FFFFFF);
 
-        // ── Body ──
-        int bodyY = y + HDR_H + 2;
-        int bodyH = NODE_H - HDR_H - 2;
-
-        // Item icon (scaled small)
-        int itemIconSz = 16;
-        int itemX = x + 8;
-        int itemY = bodyY + (bodyH - itemIconSz) / 2;
+        int bodyY = separatorY + stepSectionGap;
+        int itemIconSz = 18;
+        int itemX = x + 11;
+        int itemY = bodyY + 1;
+        canvas.texture(Background.Slot.dark, itemX - 1, itemY - 1, itemIconSz + 2, itemIconSz + 2);
         if (!pn.outputs().isEmpty()) {
             MaterialSlot outSlot = pn.outputs().get(0);
-            drawSlotIcon(canvas, outSlot, itemX - 2, itemY, itemIconSz / 16.0f * 0.75f, pt);
+            drawSlotIcon(canvas, outSlot, itemX, itemY, itemIconSz / 16.0f, pt);
         }
 
-        // Output amount + name
-        int outTextX = itemX + itemIconSz + 4;
-        int outTextW = NODE_W - (outTextX - x) - 40;
+        int outTextX = itemX + itemIconSz + 10;
+        int outTextW = nodeW - (outTextX - x) - 10;
         if (!pn.outputs().isEmpty()) {
             MaterialSlot out = pn.outputs().get(0);
-            String outStr = "+" + fmtNum(out.amount()) + " " + out.materialName();
-            canvas.drawString(cachedTruncate(outStr, outTextW, font), outTextX, bodyY + 8, GREEN, true);
+            canvas.drawString(cachedTruncate(out.materialName(), outTextW, font), outTextX, bodyY + 2, cardTitleText, false);
+            String amountText = "+" + fmtNum(out.amount());
+            if (out.chance() < 1.0) {
+                amountText += "  " + (int) Math.round(out.chance() * 100) + "%";
+            }
+            canvas.drawString(cachedTruncate(amountText, outTextW, font), outTextX, bodyY + 13, green, false);
         }
 
-        // Duration at right
-        String durStr = pn.durationTicks() + "t";
-        int durW = font.width(durStr);
-        canvas.drawString(durStr, x + NODE_W - durW - 8, bodyY + bodyH / 2 - 4, TEXT_WEAK, false);
+        List<String> metaLines = buildStepMetaLines(pn);
+        for (int i = 0; i < Math.min(2, metaLines.size()); i++) {
+            canvas.drawString(cachedTruncate(metaLines.get(i), outTextW, font),
+                    outTextX, bodyY + 25 + i * 10, cardMinorText, false);
+        }
+    }
+
+    static int[] focusButtonBounds(int nodeX, int nodeY) {
+        return new int[] { nodeX + nodeW - focusBtnW - 6, nodeY + 6, focusBtnW, focusBtnH };
+    }
+
+    static List<String> buildStepMetaLines(ProcessNode node) {
+        List<String> lines = new ArrayList<>(2);
+        lines.add(node.tierName() + " · " + node.durationFormatted());
+
+        List<String> detail = new ArrayList<>(3);
+        if (node.euPerTick() > 0) {
+            detail.add(node.euFormatted());
+        }
+        if (node.machineOptions().size() > 1) {
+            detail.add("+" + (node.machineOptions().size() - 1) + " alt");
+        }
+        if (node.outputs().size() > 1) {
+            detail.add(node.outputs().size() + " outputs");
+        }
+        if (!detail.isEmpty()) {
+            lines.add(String.join(" · ", detail));
+        }
+        return lines;
+    }
+
+    private static boolean containsWorldPoint(int[] bounds, double wx, double wy) {
+        return wx >= bounds[0] && wx <= bounds[0] + bounds[2]
+                && wy >= bounds[1] && wy <= bounds[1] + bounds[3];
+    }
+
+    private static String buildMachineLabel(ProcessNode node, @Nullable MachineInfo displayMachine) {
+        String machineName = displayMachine != null ? displayMachine.name() : node.machine();
+        if (node.machineOptions().size() > 1) {
+            machineName += " +" + (node.machineOptions().size() - 1);
+        }
+        return machineName;
+    }
+
+    private void drawFocusButton(SceneCanvas canvas, int[] bounds, boolean hovered) {
+        var bg = hovered ? Background.Outlined.inset : Background.flat;
+        canvas.texture(bg, bounds[0], bounds[1], bounds[2], bounds[3]);
+        canvas.texture(Icon.Calc.Path.branch, bounds[0] + 3, bounds[1] + 3, 12, 12);
     }
 
     // ═══════════════════ Slot Icons ═══════════════════
@@ -1356,7 +1613,15 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             deferredFluids.add(new DeferredFluid(slot.fluidStack(), ix, iy, scale, pt));
         } else {
             int sz = (int)(16 * scale);
-            canvas.roundedRect(ix, iy, sz, sz, 3, 0xFF0D1117, 1, 0xFF2D3748);
+            canvas.texture(Background.Slot.dark, ix, iy, sz, sz);
+        }
+    }
+
+    private void drawMachineIcon(SceneCanvas canvas, @Nullable MachineInfo machine, int ix, int iy) {
+        canvas.texture(Background.Slot.dark, ix - 1, iy - 1, 18, 18);
+        ItemStack stack = machine == null ? ItemStack.EMPTY : machine.icon();
+        if (stack != null && !stack.isEmpty()) {
+            deferredItems.add(new DeferredItem(stack, ix + 1, iy + 1, 0.875f));
         }
     }
 
@@ -1385,27 +1650,18 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         deferredFluids.clear();
     }
 
-    private void drawStatusBar(SceneCanvas canvas, Font font) {
-        String s = String.format("节点: %d | 缩放: %.0f%% | 中键拖动: 平移, 滚轮: 缩放",
-                flatNodes.size(), zoom * 100);
-        int barH = 14;
-        int vw = viewportW();
-        canvas.fill(0, height() - barH, vw, barH, 0xCC111827);
-        canvas.drawString(s, 4, height() - barH + 3, TEXT_PRIMARY, false);
-    }
-
     // ═══════════════════ Material Panel ═══════════════════
 
-    private static final int SEARCH_BAR_H = 16;
+    private static final int searchBarH = 16;
 
     private int panelContentVisibleH() {
-        int base = height() - 22 - 2;
-        return matSearchActive ? base - SEARCH_BAR_H : base;
+        int contentTop = 26 + (matSearchActive ? searchBarH : 0);
+        return Math.max(0, height() - contentTop - 4);
     }
 
     private boolean isInMaterialPanel(double mx, double my) {
         if (!showMaterialPanel) return false;
-        int px = width() - PANEL_W;
+        int px = width() - panelW;
         return mx >= px && mx <= width() && my >= 0 && my <= height();
     }
 
@@ -1413,145 +1669,103 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (!showMaterialPanel) return false;
         int maxScroll = Math.max(0, matFilteredContentH - panelContentVisibleH());
         if (maxScroll <= 0) return false;
-        int px = width() - PANEL_W;
-        int contentY = 24 + 4;
+        int px = width() - panelW;
+        int contentY = 26 + (matSearchActive ? searchBarH : 0);
         int visibleH = panelContentVisibleH();
-        int sbX = px + PANEL_W - SCROLLBAR_W - 3;
+        int sbX = px + panelW - scrollbarW - 3;
         int sbH = visibleH - 2;
         int thumbH = Math.max(16, (int) ((float) visibleH / materialPanelContentH * sbH));
         float progress = matScrollTargetY / maxScroll;
         int thumbY = contentY + 1 + (int) (progress * (sbH - thumbH));
-        return mx >= sbX && mx <= sbX + SCROLLBAR_W && my >= thumbY && my <= thumbY + thumbH;
+        return mx >= sbX && mx <= sbX + scrollbarW && my >= thumbY && my <= thumbY + thumbH;
     }
 
     private void drawMaterialPanel(SceneCanvas canvas, Font font,
                                     int mouseX, int mouseY, float pt) {
-        int px = width() - PANEL_W;
+        sanitizeMaterialScroll();
+        int px = width() - panelW;
         int ph = height();
-        canvas.shadow(px - 2, 0, PANEL_W + 2, ph, 4, 2, 8, 0x60000000);
-        canvas.roundedRect(px, 0, PANEL_W, ph, 0, PANEL_BG_CLR, 1, BORDER_MAIN);
+        canvas.shadow(px - 2, 0, panelW + 2, ph, 4, 2, 8, 0x60000000);
+        canvas.texture(Background.frame, px, 0, panelW, ph);
+        canvas.texture(Background.inset, px + 4, 4, panelW - 8, ph - 8);
 
         int headerH = 20;
-        canvas.fill(px, 0, PANEL_W, headerH, 0xFF0D1520);
-        canvas.fill(px, headerH - 1, PANEL_W, 1, BORDER_MAIN);
-        // Accent bar on left side of header
-        canvas.fill(px, 0, 3, headerH, ACCENT);
-        canvas.drawString("材料统计", px + 8, 6, ACCENT_TEXT, true);
+        canvas.texture(Background.Outlined.inset, px + 4, 4, panelW - 8, headerH);
+        canvas.texture(Sign.Group.item, px + 6, 6, 3, headerH - 4);
+        canvas.drawString("材料清单", px + 14, 11, textPrimary, false);
         // Search icon
-        int searchIconX = px + PANEL_W - 28;
+        int searchIconX = px + panelW - 28;
         boolean searchHover = mouseX >= searchIconX && mouseX <= searchIconX + 14
                 && mouseY >= 3 && mouseY <= 17;
         canvas.texture(matSearchActive || searchHover ? Icon.searchSelected : Icon.search,
-                searchIconX, 5, 10, 10);
+                searchIconX, 9, 10, 10);
         // Item count badge
         int totalItems = materialByCategory.values().stream().mapToInt(List::size).sum();
         String badge = String.valueOf(totalItems);
         int badgeW = font.width(badge) + 6;
         int badgeX = searchIconX - badgeW - 4;
-        canvas.roundedRect(badgeX, 4, badgeW, 12, 6, 0xFF1E293B, 0, 0);
-        canvas.drawCenteredString(badge, badgeX + badgeW / 2, 6, TEXT_SECONDARY);
+        canvas.texture(Background.Outlined.inset, badgeX, 8, badgeW, 12);
+        canvas.drawCenteredString(badge, badgeX + badgeW / 2, 11, textPrimary);
 
         // Search bar (below header, when active)
-        int searchBarBottom = headerH;
+        int searchBarBottom = 4 + headerH;
         if (matSearchActive) {
-            searchBarBottom = headerH + SEARCH_BAR_H;
-            canvas.fill(px, headerH, PANEL_W, SEARCH_BAR_H, 0xFF0F1824);
-            canvas.fill(px, searchBarBottom - 1, PANEL_W, 1, BORDER_MAIN);
+            searchBarBottom = 4 + headerH + searchBarH;
+            canvas.texture(Background.inset, px + 4, 4 + headerH + 2, panelW - 8, searchBarH - 2);
             // Search text field
-            int sfX = px + 6, sfY = headerH + 2, sfW = PANEL_W - 12, sfH = SEARCH_BAR_H - 4;
-            canvas.roundedRect(sfX, sfY, sfW, sfH, 4, 0xFF1A2332, 1, BORDER_SEC);
+            int sfX = px + 8, sfY = 4 + headerH + 4, sfW = panelW - 16, sfH = searchBarH - 6;
+            canvas.texture(Background.Outlined.inset, sfX, sfY, sfW, sfH);
             if (matFilterText.isEmpty()) {
-                canvas.drawString("搜索物料...", sfX + 4, sfY + 2, TEXT_WEAK, false);
+                canvas.drawString("搜索物料...", sfX + 4, sfY + 2, textWeak, false);
             } else {
                 String displayText = matFilterText;
                 int maxTextW = sfW - 8;
                 while (font.width(displayText) > maxTextW && displayText.length() > 1) {
                     displayText = displayText.substring(1);
                 }
-                canvas.drawString(displayText, sfX + 4, sfY + 2, TEXT_PRIMARY, false);
+                canvas.drawString(displayText, sfX + 4, sfY + 2, textPrimary, false);
                 // Cursor blink
                 if ((System.currentTimeMillis() / 500) % 2 == 0) {
                     int cursorX = sfX + 4 + font.width(displayText);
-                    canvas.fill(cursorX, sfY + 2, 1, sfH - 4, TEXT_PRIMARY);
+                    canvas.fill(cursorX, sfY + 2, 1, sfH - 4, textPrimary);
                 }
             }
         }
 
         int contentY = searchBarBottom + 2;
         int visibleH = panelContentVisibleH();
-        Pos absP = absolutePos();
         stickyHeaderCat = null;
 
-        // Render scrollable content with translate (no withClip due to rendering bug)
+        Pos absP = absolutePos();
+        canvas.pushClip(absP.x() + px + 4, absP.y() + contentY, panelW - 8, visibleH);
         canvas.pushTransform();
-        canvas.translate(px + PANEL_PAD, contentY - matScrollY);
-        renderMaterialContent(canvas, font, mouseX - px - PANEL_PAD, (int) (mouseY - contentY + matScrollY), pt,
+        canvas.translate(px + panelPad, contentY - matScrollY);
+        renderMaterialContent(canvas, font, mouseX - px - panelPad, (int) (mouseY - contentY + matScrollY), pt,
                 matScrollY, matScrollY + visibleH);
         flushDeferredIcons(canvas);
         canvas.popTransform();
-
-        // ── Overlay clipping: paint over overflow areas ──
-        // Cover overflow above content area (panel header zone)
-        canvas.fill(px, 0, PANEL_W, headerH, 0xFF0D1520);
-        canvas.fill(px, headerH - 1, PANEL_W, 1, BORDER_MAIN);
-        canvas.fill(px, 0, 3, headerH, ACCENT);
-        canvas.drawString("材料统计", px + 8, 6, ACCENT_TEXT, true);
-        canvas.texture(matSearchActive || searchHover ? Icon.searchSelected : Icon.search,
-                searchIconX, 5, 10, 10);
-        canvas.roundedRect(badgeX, 4, badgeW, 12, 6, 0xFF1E293B, 0, 0);
-        canvas.drawCenteredString(badge, badgeX + badgeW / 2, 6, TEXT_SECONDARY);
-        // Cover search bar area
-        if (matSearchActive) {
-            canvas.fill(px, headerH, PANEL_W, SEARCH_BAR_H, 0xFF0F1824);
-            canvas.fill(px, searchBarBottom - 1, PANEL_W, 1, BORDER_MAIN);
-            int sfX = px + 6, sfY = headerH + 2, sfW = PANEL_W - 12, sfH = SEARCH_BAR_H - 4;
-            canvas.roundedRect(sfX, sfY, sfW, sfH, 4, 0xFF1A2332, 1, BORDER_SEC);
-            if (matFilterText.isEmpty()) {
-                canvas.drawString("搜索物料...", sfX + 4, sfY + 2, TEXT_WEAK, false);
-            } else {
-                String displayText = matFilterText;
-                int maxTextW = sfW - 8;
-                while (font.width(displayText) > maxTextW && displayText.length() > 1)
-                    displayText = displayText.substring(1);
-                canvas.drawString(displayText, sfX + 4, sfY + 2, TEXT_PRIMARY, false);
-                if ((System.currentTimeMillis() / 500) % 2 == 0) {
-                    int cursorX = sfX + 4 + font.width(displayText);
-                    canvas.fill(cursorX, sfY + 2, 1, sfH - 4, TEXT_PRIMARY);
-                }
-            }
-        }
-        // Cover contentY gap
-        canvas.fill(px, searchBarBottom, PANEL_W, 2, PANEL_BG_CLR);
-        // Cover overflow below content area
-        canvas.fill(px, contentY + visibleH, PANEL_W, ph - contentY - visibleH, PANEL_BG_CLR);
-        // Re-draw panel border on edges
-        canvas.fill(px, ph - 1, PANEL_W, 1, BORDER_MAIN);
+        canvas.popClip();
 
         // Draw sticky category header ON TOP of the clipped content, in widget-local coords
         boolean hasScrollbar = matFilteredContentH > visibleH;
-        int innerW = PANEL_W - 2 * PANEL_PAD - (hasScrollbar ? SCROLLBAR_W + 4 : 0);
+        int innerW = panelW - 2 * panelPad - (hasScrollbar ? scrollbarW + 4 : 0);
         if (stickyHeaderCat != null) {
             int stickyDrawY = contentY + stickyHeaderOffsetY;
-            canvas.fill(px + PANEL_PAD, stickyDrawY - 1, innerW, SEC_HDR_H + 3, PANEL_BG_CLR);
+            canvas.texture(Background.inset, px + panelPad, stickyDrawY - 1, innerW, secHdrH + 3);
             drawCategoryHeader(canvas, font, stickyHeaderCat, stickyHeaderCount,
-                    px + PANEL_PAD, stickyDrawY, innerW);
-            // Bottom shadow for depth
-            for (int i = 0; i < 3; i++) {
-                canvas.fill(px + PANEL_PAD, stickyDrawY + SEC_HDR_H + i, innerW, 1,
-                        0xFF0A0F18);
-            }
+                    px + panelPad, stickyDrawY, innerW);
         }
 
         int maxScroll = Math.max(0, matFilteredContentH - visibleH);
         if (maxScroll > 0) {
-            int sbX = px + PANEL_W - SCROLLBAR_W - 2;
+            int sbX = px + panelW - scrollbarW - 2;
             int sbY = contentY + 1;
             int sbH = visibleH - 2;
-            canvas.roundedRect(sbX, sbY, SCROLLBAR_W, sbH, 4, 0xFF0D1117, 0, 0);
+            canvas.texture(Background.inset, sbX, sbY, scrollbarW, sbH);
             int thumbH = Math.max(16, (int) ((float) visibleH / matFilteredContentH * sbH));
             float progress = maxScroll > 0 ? matScrollY / maxScroll : 0;
             int thumbY = sbY + (int) (progress * (sbH - thumbH));
-            canvas.roundedRect(sbX + 1, thumbY, SCROLLBAR_W - 2, thumbH, 3, BG_ELEVATED, 1, BORDER_SEC);
+            canvas.texture(Icon.scrollBar, sbX + 1, thumbY, scrollbarW - 2, thumbH);
         }
     }
 
@@ -1560,7 +1774,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
                                         float visMinY, float visMaxY) {
         int drawY = 0;
         boolean hasScrollbar = matFilteredContentH > (int) (visMaxY - visMinY);
-        int innerW = PANEL_W - 2 * PANEL_PAD - (hasScrollbar ? SCROLLBAR_W + 4 : 0);
+        int innerW = panelW - 2 * panelPad - (hasScrollbar ? scrollbarW + 4 : 0);
         hoveredMatName = null;
         String filterLower = matFilterText.isEmpty() ? null : matFilterText.toLowerCase();
 
@@ -1573,14 +1787,14 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             int headerY = drawY;
 
             // Draw category header (only if visible)
-            if (drawY + SEC_HDR_H >= visMinY && drawY <= visMaxY) {
+            if (drawY + secHdrH >= visMinY && drawY <= visMaxY) {
                 drawCategoryHeader(canvas, font, cat, entries.size(), 0, drawY, innerW);
             }
-            drawY += SEC_HDR_H + 2;
+            drawY += secHdrH + 2;
             for (MaterialEntry entry : entries) {
-                if (drawY + ENTRY_H >= visMinY && drawY <= visMaxY)
+                if (drawY + entryH >= visMinY && drawY <= visMaxY)
                     drawMaterialEntry(canvas, font, entry, 0, drawY, innerW, pt, mouseX, mouseY);
-                drawY += ENTRY_H + ENTRY_GAP;
+                drawY += entryH + entryGap;
             }
             int sectionEnd = drawY;
             drawY += 6;
@@ -1591,129 +1805,129 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
                 stickyHeaderCount = entries.size();
                 // Calculate offset for "push up" effect when next section approaches
                 int distToEnd = (int) (sectionEnd - visMinY);
-                stickyHeaderOffsetY = distToEnd < SEC_HDR_H + 6 ? distToEnd - SEC_HDR_H - 6 : 0;
+                stickyHeaderOffsetY = distToEnd < secHdrH + 6 ? distToEnd - secHdrH - 6 : 0;
             }
         }
 
         drawY += 2;
-        if (drawY + TOTALS_H + 6 >= visMinY && drawY <= visMaxY) {
-            canvas.fill(4, drawY, innerW - 8, 1, 0xFF2D3748);
+        if (drawY + totalsH + 6 >= visMinY && drawY <= visMaxY) {
+            canvas.texture(Background.Sign.bar, 4, drawY, Math.max(16, innerW - 8), 2);
             drawY += 6;
-            canvas.roundedRect(0, drawY, innerW, TOTALS_H, 4, BG_SURFACE, 1, BORDER_MAIN);
+            canvas.texture(Background.inset, 0, drawY, innerW, totalsH);
             int txL = 6, txR = innerW - 8;
             int r0 = drawY + 6, r1 = drawY + 20, r2 = drawY + 36;
             canvas.texture(Icon.Sign.Energy.time, txL, r0, 9, 9);
-            canvas.drawString("总时间", txL + 12, r0, TEXT_WEAK, false);
+            canvas.drawString("总时间", txL + 12, r0, textWeak, false);
             String timeStr = formatDuration(totalTimeTicks);
-            canvas.drawString(timeStr, txR - font.width(timeStr), r0, TEXT_PRIMARY, false);
+            canvas.drawString(timeStr, txR - font.width(timeStr), r0, textPrimary, false);
             canvas.texture(Icon.Sign.Energy.eu, txL, r1, 9, 9);
-            canvas.drawString("总能量", txL + 12, r1, TEXT_WEAK, false);
+            canvas.drawString("总能量", txL + 12, r1, textWeak, false);
             String euStr = fmtNum(totalEU) + " EU";
-            canvas.drawString(euStr, txR - font.width(euStr), r1, ORANGE, true);
-            canvas.fill(txL, r2 + 3, 6, 3, GREEN);
-            canvas.drawString("步骤数", txL + 10, r2, TEXT_WEAK, false);
+            canvas.drawString(euStr, txR - font.width(euStr), r1, orange, false);
+            canvas.texture(Icon.Sign.Amount.available, txL + 1, r2 + 3, 5, 5);
+            canvas.drawString("步骤数", txL + 10, r2, textWeak, false);
             String stepStr = String.valueOf(flatNodes.size());
-            canvas.drawString(stepStr, txR - font.width(stepStr), r2, GREEN, false);
+            canvas.drawString(stepStr, txR - font.width(stepStr), r2, green, false);
         }
+    }
+
+    private static dev.vfyjxf.cloudlib.api.ui.texture.ImageTexture categoryMarker(MatCategory cat) {
+        return switch (cat) {
+            case BYPRODUCT -> Sign.Group.fluid;
+            case CATALYST -> Sign.Group.catalyst;
+            case EXTERNAL_INPUT, INTERMEDIATE -> Sign.Group.item;
+        };
     }
 
     private void drawCategoryHeader(SceneCanvas canvas, Font font,
                                      MatCategory cat, int count, int x, int y, int w) {
-        canvas.fill(x, y, w, SEC_HDR_H, 0xFF141E2E);
-        canvas.fill(x, y + SEC_HDR_H - 1, w, 1, 0xFF1E293B);
-        canvas.fill(x, y, 3, SEC_HDR_H, cat.color);
-        canvas.drawString(cat.label, x + 7, y + 4, cat.color, true);
+        canvas.texture(Background.Outlined.inset, x, y, w, secHdrH);
+        canvas.texture(categoryMarker(cat), x + 2, y + 2, 3, secHdrH - 4);
+        canvas.drawString(cat.label, x + 8, y + 4, textSecondary, false);
         String countStr = String.valueOf(count);
         int cw = font.width(countStr);
-        canvas.drawString(countStr, x + w - cw - 4, y + 4, TEXT_WEAK, false);
+        canvas.drawString(countStr, x + w - cw - 4, y + 4, textSecondary, false);
     }
 
     private void drawMaterialEntry(SceneCanvas canvas, Font font,
                                     MaterialEntry entry, int x, int y, int w,
                                     float pt, int mouseX, int mouseY) {
-        boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + ENTRY_H;
+        boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + entryH;
         if (hovered) hoveredMatName = entry.name();
 
-        int bgC = hovered ? BG_HOVER : BG_SURFACE;
-        canvas.roundedRect(x, y, w, BOX_H, 3, bgC, 1, hovered ? BORDER_SEC : BORDER_MAIN);
+        canvas.texture(hovered ? Background.Border.light : Background.Slot.dark, x, y, w, boxH);
+        canvas.texture(categoryMarker(entry.category()), x + 1, y + 1, 3, boxH - 2);
 
-        // Row 1: icon + material name
         int pad = 3;
         int slotX = x + pad, slotY = y + pad;
-        // Icon slot background
-        canvas.roundedRect(slotX, slotY, ICON_SLOT_SZ, ICON_SLOT_SZ, 3, 0xFF0D1117, 1, 0xFF2D3748);
-        int iconX = slotX + (ICON_SLOT_SZ - PANEL_ICON_SZ) / 2;
-        int iconY = slotY + (ICON_SLOT_SZ - PANEL_ICON_SZ) / 2;
+        canvas.texture(Background.Slot.dark, slotX, slotY, iconSlotSz, iconSlotSz);
+        int iconX = slotX + (iconSlotSz - panelIconSz) / 2;
+        int iconY = slotY + (iconSlotSz - panelIconSz) / 2;
         drawPanelSlotIcon(canvas, entry.refSlot(), iconX, iconY, pt);
 
-        // Material name (truncated to fit)
-        int nameX = slotX + ICON_SLOT_SZ + 3;
-        int nameMaxW = w - (nameX - x) - pad;
-        String displayName = cachedTruncate(entry.name(), nameMaxW, font);
-        int nameColor = hovered ? 0xFFE2E8F0 : TEXT_PRIMARY;
-        canvas.drawString(displayName, nameX, y + 4, nameColor, false);
+        int nameX = slotX + iconSlotSz + 4;
+        int nameW = w - (nameX - x) - pad;
+        String name = cachedTruncate(entry.name(), nameW, font);
+        canvas.drawString(name, nameX, y + 3, textPrimary, false);
 
-        // Row 2: +amount (green) / -amount (red) inline with mini progress bar
-        int row2Y = y + 15;
-        int numX = nameX;
+        int indX = slotX + iconSlotSz + 2;
+        int row1Y = y + 18;
+        int row2Y = y + 29;
+        int textX = indX + indCellSz + 2;
+        int textW = w - (textX - x) - pad;
 
-        String availStr, needStr;
+        canvas.texture(Background.inset, indX, row1Y, indCellSz, indCellSz);
+        canvas.texture(entry.category() == MatCategory.CATALYST ? Icon.Sign.Amount.catalyst : Icon.Sign.Amount.available,
+                indX + 2, row1Y + 2, 6, 6);
+        canvas.texture(Background.inset, textX, row1Y, textW, indCellSz);
+        String row1Value = switch (entry.category()) {
+            case EXTERNAL_INPUT -> "0";
+            case INTERMEDIATE -> fmtNum(entry.produced());
+            case BYPRODUCT -> fmtNum(entry.produced());
+            case CATALYST -> fmtNum(entry.needed());
+        };
+        canvas.drawString(cachedTruncate(row1Value, textW - 6, font), textX + 3, row1Y + 1,
+                entry.category() == MatCategory.CATALYST ? purple : green, false);
+
+        canvas.texture(Background.inset, indX, row2Y, indCellSz, indCellSz);
+        canvas.texture(Icon.Sign.Amount.missing, indX + 2, row2Y + 2, 6, 6);
+        canvas.texture(Background.inset, textX, row2Y, textW, indCellSz);
+        String row2Value = switch (entry.category()) {
+            case EXTERNAL_INPUT -> fmtNum(entry.needed());
+            case INTERMEDIATE -> entry.missing() > 0 ? fmtNum(entry.missing()) : "0";
+            case BYPRODUCT -> entry.chance() < 1.0 ? (int) (entry.chance() * 100) + "%" : "0";
+            case CATALYST -> "0";
+        };
+        canvas.drawString(cachedTruncate(row2Value, textW - 6, font), textX + 3, row2Y + 1,
+                entry.category() == MatCategory.BYPRODUCT ? orange : red, false);
+
+        int barY = y + boxH;
+        int barX = x;
+        int barW = w;
+        canvas.texture(Background.inset, barX, barY, barW, barH + 1);
+        int barInnerW = Math.max(0, barW - 2);
+        if (barInnerW <= 0) return;
         switch (entry.category()) {
-            case EXTERNAL_INPUT -> { availStr = ""; needStr = fmtNum(entry.needed()); }
-            case INTERMEDIATE -> {
-                availStr = fmtNum(entry.produced());
-                needStr = entry.missing() > 0 ? fmtNum(entry.missing()) : "0";
-            }
-            case BYPRODUCT -> { availStr = fmtNum(entry.produced()); needStr = ""; }
-            case CATALYST -> { availStr = fmtNum(entry.needed()); needStr = ""; }
-            default -> { availStr = ""; needStr = ""; }
-        }
-
-        // Draw amounts: "+N" green, "-N" red
-        int textEndX = numX;
-        if (!availStr.isEmpty()) {
-            String plusStr = "+" + availStr;
-            canvas.drawString(plusStr, numX, row2Y, GREEN, false);
-            textEndX = numX + font.width(plusStr) + 2;
-        }
-        if (!needStr.isEmpty()) {
-            String minusStr = "-" + needStr;
-            canvas.drawString(minusStr, textEndX, row2Y, RED, false);
-            textEndX += font.width(minusStr) + 2;
-        }
-
-        // Chance indicator for byproducts
-        if (entry.category() == MatCategory.BYPRODUCT && entry.chance() < 1.0) {
-            String chStr = (int) (entry.chance() * 100) + "%%";
-            int chW = font.width(chStr);
-            canvas.drawString(chStr, w - chW - pad, row2Y, ORANGE, false);
-        }
-
-        // Progress bar at bottom of entry
-        int barY = y + BOX_H;
-        int barX = x, barW = w;
-        canvas.fill(barX, barY, barW, BAR_H, 0xFF0D1117);
-        switch (entry.category()) {
-            case EXTERNAL_INPUT -> canvas.fill(barX, barY, barW, BAR_H, RED);
+            case EXTERNAL_INPUT -> canvas.fill(barX + 1, barY, barInnerW, barH, red);
             case INTERMEDIATE -> {
                 long total = Math.max(entry.needed(), entry.produced());
                 if (total > 0) {
-                    int greenW = (int) (barW * Math.min(1.0, (double) entry.produced() / total));
-                    if (greenW > 0) canvas.fill(barX, barY, greenW, BAR_H, GREEN);
+                    int greenW = (int) (barInnerW * Math.min(1.0, (double) entry.produced() / total));
+                    if (greenW > 0) canvas.fill(barX + 1, barY, greenW, barH, green);
                     if (entry.missing() > 0) {
-                        int redW = (int) (barW * ((double) entry.missing() / total));
-                        canvas.fill(barX + greenW, barY, Math.max(1, redW), BAR_H, RED);
+                        int redW = (int) (barInnerW * ((double) entry.missing() / total));
+                        canvas.fill(barX + 1 + greenW, barY, Math.max(1, redW), barH, red);
                     }
                 }
             }
-            case BYPRODUCT -> canvas.fill(barX, barY, barW, BAR_H,
-                    withAlpha(ORANGE, entry.chance() < 1.0 ? 0x88 : 0xBB));
-            case CATALYST -> canvas.fill(barX, barY, barW, BAR_H, withAlpha(PURPLE, 0x88));
+            case BYPRODUCT -> canvas.fill(barX + 1, barY, barInnerW, barH,
+                    withAlpha(orange, entry.chance() < 1.0 ? 0x88 : 0xBB));
+            case CATALYST -> canvas.fill(barX + 1, barY, barInnerW, barH, withAlpha(purple, 0x88));
         }
     }
 
     private void drawPanelSlotIcon(SceneCanvas canvas, MaterialSlot slot, int ix, int iy, float pt) {
-        float iconScale = PANEL_ICON_SZ / 16.0f;
+        float iconScale = panelIconSz / 16.0f;
         ItemStack stack = slot.itemStack();
         if (stack != null && !stack.isEmpty()) {
             deferredItems.add(new DeferredItem(stack, ix, iy, iconScale));
@@ -1721,9 +1935,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             deferredFluids.add(new DeferredFluid(slot.fluidStack(), ix, iy, iconScale, pt));
         } else {
             int c = slot.type().color;
-            canvas.roundedRect(ix, iy, PANEL_ICON_SZ, PANEL_ICON_SZ, 3, 0xFF0D1117, 1, 0xFF2D3748);
+            canvas.texture(Background.Slot.dark, ix, iy, panelIconSz, panelIconSz);
             canvas.drawCenteredString(slot.type().name().substring(0, 1),
-                    ix + PANEL_ICON_SZ / 2, iy + (PANEL_ICON_SZ - 9) / 2, c);
+                    ix + panelIconSz / 2, iy + (panelIconSz - 9) / 2, c);
         }
     }
 
@@ -1734,15 +1948,19 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         double lx = mouseX, ly = mouseY;
         if (lx < 0 || ly < 0 || lx > width() || ly > height()) return;
         if (showMaterialPanel && isInMaterialPanel(lx, ly)) return;
-        LayoutNode found = findNodeAt(lx, ly);
+        LayoutNode found = findNodeWithButtonAt(lx, ly);
         if (found != null) hoveredNodeId = found.pathId;
+    }
+
+    private boolean isNodeHovered(String pathId) {
+        return Objects.equals(pathId, hoveredNodeId) || Objects.equals(pathId, externalHoveredNodeId);
     }
 
     private @Nullable LayoutNode findNodeAt(double screenX, double screenY) {
         double wx = panX + screenX / zoom;
         double wy = panY + screenY / zoom;
         for (LayoutNode ln : flatNodes) {
-            if (wx >= ln.x && wx <= ln.x + NODE_W && wy >= ln.y && wy <= ln.y + NODE_H) {
+            if (wx >= ln.x && wx <= ln.x + nodeW && wy >= ln.y && wy <= ln.y + nodeH) {
                 return ln;
             }
         }
@@ -1757,9 +1975,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         double wy = panY + screenY / zoom;
         for (LayoutNode ln : flatNodes) {
             if (ln.originalChildCount <= 0) continue;
-            // Button area: x centered, y from NODE_H-2 to NODE_H+18
-            double btnX = ln.x + NODE_W / 2.0 - 10;
-            double btnY = ln.y + NODE_H - 2;
+            // Button area: x centered, y from nodeH-2 to nodeH+18
+            double btnX = ln.x + nodeW / 2.0 - 10;
+            double btnY = ln.y + nodeH - 2;
             if (wx >= btnX && wx <= btnX + 20 && wy >= btnY && wy <= btnY + 20) {
                 return ln;
             }
@@ -1772,13 +1990,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (opts.isEmpty()) return null;
         if (opts.size() == 1) return opts.get(0);
         for (MachineInfo mi : opts) if (mi.name().equals(node.machine())) return mi;
-        return opts.get((int) ((machineCycleTicks / CYCLE_INTERVAL_TICKS) % opts.size()));
+        return opts.get((int) ((machineCycleTicks / cycleIntervalTicks) % opts.size()));
     }
 
     // ═══════════════════ Tooltip ═══════════════════
 
     private void updateTooltip(int mouseX, int mouseY) {
-        if (!widgetHovered) return;
+        if (mouseX < 0 || mouseY < 0 || mouseX > width() || mouseY > height()) {
+            scene().setHoverTooltip(Tooltip.create());
+            return;
+        }
         Tooltip tip = Tooltip.create();
 
         if (showMaterialPanel && isInMaterialPanel(mouseX, mouseY) && hoveredMatName != null) {
@@ -1796,48 +2017,64 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
                 b.divider();
                 switch (found.category()) {
                     case EXTERNAL_INPUT -> {
-                        b.kv("需求量", 0xFF888888, fmtNum(found.needed()), RED);
-                        b.bar(1.0f, RED);
+                        b.kv("需求量", 0xFF888888, fmtNum(found.needed()), red);
+                        b.bar(1.0f, red);
                     }
                     case INTERMEDIATE -> {
                         b.kv("消耗量", 0xFF888888, fmtNum(found.needed()), 0xFF88CC88);
                         b.kv("产出量", 0xFF888888, fmtNum(found.produced()), 0xFFCC8888);
                         if (found.missing() > 0) b.kv("缺少", 0xFFCC4444, fmtNum(found.missing()), 0xFFFF6666);
                         float ratio = found.needed() > 0 ? (float) found.produced() / found.needed() : 1.0f;
-                        b.bar(Math.min(1.0f, ratio), ratio >= 1.0f ? GREEN : RED);
+                        b.bar(Math.min(1.0f, ratio), ratio >= 1.0f ? green : red);
                     }
                     case BYPRODUCT -> {
-                        b.kv("产出量", 0xFF888888, fmtNum(found.produced()), ORANGE);
-                        b.bar((float) found.chance(), ORANGE);
+                        b.kv("产出量", 0xFF888888, fmtNum(found.produced()), orange);
+                        b.bar((float) found.chance(), orange);
                     }
                     case CATALYST -> {
-                        b.kv("用量", 0xFF888888, fmtNum(found.needed()), PURPLE);
-                        b.bar(1.0f, PURPLE);
+                        b.kv("用量", 0xFF888888, fmtNum(found.needed()), purple);
+                        b.bar(1.0f, purple);
                     }
                 }
                 tip.add(b.build());
             }
-        } else if (hoveredNodeId != null) {
-            LayoutNode ln = findLayoutNode(hoveredNodeId);
-            if (ln != null && ln.processNode != null) {
-                ProcessNode node = ln.processNode;
-                var b = FlowChartTooltipComponent.builder();
-                b.section(node.name(), node.tierColor());
-                b.gap(2);
-                b.kv("机器", 0xFF888888, node.machine(), node.tierColor());
-                b.divider();
-                if (!node.inputs().isEmpty()) { b.section("输入", 0xFF88CC88); b.slots(null, 0, node.inputs()); }
-                if (!node.outputs().isEmpty()) { b.section("输出", 0xFFCC8888); b.slots(null, 0, node.outputs()); }
-                b.divider();
-                b.kv("时长", node.durationFormatted());
-                b.kv("速率", 0xFF888888, node.euFormatted(), ORANGE);
-                long seu = (long) node.euPerTick() * node.durationTicks();
-                b.kv("总 EU", 0xFF888888, fmtNum(seu) + " EU", 0xFFFFCC44);
-                b.kv("等级", 0xFF888888, node.tierName(), node.tierColor());
-                tip.add(b.build());
+        } else {
+            String previewPathId = hoveredNodeId != null ? hoveredNodeId : externalHoveredNodeId;
+            if (previewPathId != null) {
+                Tooltip nodeTip = buildNodeTooltipForPath(previewPathId, "配方预览");
+                if (nodeTip != null) {
+                    scene().setHoverTooltip(nodeTip);
+                    return;
+                }
             }
         }
         scene().setHoverTooltip(tip);
+    }
+
+    private void appendNodeTooltip(Tooltip tip, ProcessNode node) {
+        var b = FlowChartTooltipComponent.builder();
+        b.section(node.name(), node.tierColor());
+        b.gap(2);
+        MachineInfo machine = getDisplayMachine(node);
+        if (machine != null) {
+            String machineName = machine.name();
+            if (node.machineOptions().size() > 1) {
+                machineName += " +" + (node.machineOptions().size() - 1);
+            }
+            b.iconText(machine.icon(), 0xFF444466, machineName, node.tierColor(), "机器", 0xFF888888);
+        } else {
+            b.kv("机器", 0xFF888888, node.machine(), node.tierColor());
+        }
+        b.divider();
+        if (!node.inputs().isEmpty()) { b.section("输入", 0xFF88CC88); b.slots(null, 0, node.inputs()); }
+        if (!node.outputs().isEmpty()) { b.section("输出", 0xFFCC8888); b.slots(null, 0, node.outputs()); }
+        b.divider();
+        b.kv("时长", node.durationFormatted());
+        b.kv("速率", 0xFF888888, node.euFormatted(), orange);
+        long seu = (long) node.euPerTick() * node.durationTicks();
+        b.kv("总 EU", 0xFF888888, fmtNum(seu) + " EU", 0xFFFFCC44);
+        b.kv("等级", 0xFF888888, node.tierName(), node.tierColor());
+        tip.add(b.build());
     }
 
     private @Nullable LayoutNode findLayoutNode(String pathId) {
@@ -1848,6 +2085,38 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     }
 
     // ═══════════════════ Utilities ═══════════════════
+
+    private static void drawPanelFrame(SceneCanvas canvas, int x, int y, int w, int h, int fill, int border) {
+        canvas.fill(x, y, w, h, fill);
+        drawOutline(canvas, x, y, w, h, border);
+    }
+
+    private static void drawOutline(SceneCanvas canvas, int x, int y, int w, int h, int color) {
+        canvas.fill(x, y, w, 1, color);
+        canvas.fill(x, y + h - 1, w, 1, color);
+        canvas.fill(x, y, 1, h, color);
+        canvas.fill(x + w - 1, y, 1, h, color);
+    }
+
+    private static void drawGridGlyph(SceneCanvas canvas, int x, int y, int size, int color) {
+        int cell = Math.max(2, (size - 1) / 2);
+        int gap = 1;
+        canvas.fill(x, y, cell, cell, color);
+        canvas.fill(x + cell + gap, y, cell, cell, color);
+        canvas.fill(x, y + cell + gap, cell, cell, color);
+        canvas.fill(x + cell + gap, y + cell + gap, cell, cell, color);
+    }
+
+    private static void drawHomeGlyph(SceneCanvas canvas, int x, int y, int size, int color) {
+        int roofY = y;
+        int bodyY = y + size / 2;
+        int right = x + size;
+        int mid = x + size / 2;
+        canvas.line(x, bodyY, mid, roofY, 1.25f, color);
+        canvas.line(mid, roofY, right, bodyY, 1.25f, color);
+        canvas.fill(x + 1, bodyY, size - 2, size / 2 + 1, color);
+        canvas.fill(mid - 1, y + size - 3, 2, 3, 0xFF555555);
+    }
 
     private static String fmtNum(long v) {
         if (v < 0) v = -v;
@@ -1883,4 +2152,5 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (minutes < 60) return String.format("%.1fm (%dt)", minutes, ticks);
         return String.format("%.1fh (%dt)", minutes / 60, ticks);
     }
+    //endregion
 }

@@ -9,15 +9,15 @@ class WorkbenchExecutionOverlayLayoutTest {
 
     @Test
     void overlayBoundsStayPinnedToLeftEdgeWithClampedWidth() {
-        assertRect(WorkbenchExecutionOverlayLayout.overlayBounds(240, 240), 8, 12, 132, 192);
-        assertRect(WorkbenchExecutionOverlayLayout.overlayBounds(520, 240), 8, 12, 166, 192);
-        assertRect(WorkbenchExecutionOverlayLayout.overlayBounds(960, 240), 8, 12, 220, 192);
+        assertRect(WorkbenchExecutionOverlayLayout.overlayBounds(240, 240), 8, 12, 14, 192);
+        assertRect(WorkbenchExecutionOverlayLayout.overlayBounds(520, 240), 8, 12, 154, 192);
+        assertRect(WorkbenchExecutionOverlayLayout.overlayBounds(960, 240), 8, 12, 162, 192);
     }
 
     @Test
     void controlsRowReservesDedicatedHeightAtPanelBottom() {
-        assertEquals(24, WorkbenchExecutionOverlayLayout.controlsHeight);
-        assertEquals(164, WorkbenchExecutionOverlayLayout.contentHeight(240));
+        assertEquals(30, WorkbenchExecutionOverlayLayout.controlsHeight);
+        assertEquals(156, WorkbenchExecutionOverlayLayout.contentHeight(240));
     }
 
     private static void assertRect(Rect2i rect, int x, int y, int width, int height) {

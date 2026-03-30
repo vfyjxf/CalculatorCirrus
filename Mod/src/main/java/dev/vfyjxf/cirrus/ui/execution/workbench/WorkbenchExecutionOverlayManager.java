@@ -11,8 +11,6 @@ import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
 import dev.vfyjxf.cloudlib.api.ui.base.host.ScreenSceneHost;
 import dev.vfyjxf.cloudlib.api.ui.style.UIStyle;
-import dev.vfyjxf.cloudlib.ui.widget.ButtonWidget;
-import dev.vfyjxf.cloudlib.ui.widget.RowWidget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -220,9 +218,6 @@ public final class WorkbenchExecutionOverlayManager {
 
     private static final class OverlayState {
 
-        private static final int actionTextColor = 0xFFDDDDDD;
-        private static final int actionActiveTextColor = 0xFFFBF3C2;
-
         private final CraftingScreen screen;
         private final WorkbenchExecutionDemoController controller;
 
@@ -230,10 +225,6 @@ public final class WorkbenchExecutionOverlayManager {
         private WidgetGroup<Widget> root;
         private WidgetGroup<Widget> panel;
         private ExecutionOverlayWidget overlayWidget;
-        private ButtonWidget stepButton;
-        private ButtonWidget burstButton;
-        private ButtonWidget autoButton;
-        private ButtonWidget resetButton;
         private boolean visible = true;
 
         private OverlayState(CraftingScreen screen) {
@@ -256,7 +247,6 @@ public final class WorkbenchExecutionOverlayManager {
             panel = root.addWidget(new WidgetGroup<>());
             panel.useStyle(UIStyle.of(
                 flexColumn(),
-                rowGap(WorkbenchExecutionOverlayLayout.controlsGap),
                 positionAbsolute(),
                 inset(length(WorkbenchExecutionOverlayLayout.panelMarginTop), auto(), auto(), length(WorkbenchExecutionOverlayLayout.panelMarginLeft))
             ));
@@ -267,40 +257,12 @@ public final class WorkbenchExecutionOverlayManager {
                 minHeight(0)
             ));
 
-            var controls = panel.addWidget(RowWidget.create(4));
-            controls.useStyle(UIStyle.of(
-                heightOf(WorkbenchExecutionOverlayLayout.controlsHeight),
-                columnGap(4),
-                padding(3),
-                background(CirrusTextures.Background.dark)
-            ));
-
-            stepButton = addControlButton(controls, Component.translatable("cirrus.ui.execution.overlay.button.step"), () -> controller.advanceSteps(1));
-            burstButton = addControlButton(controls, Component.translatable("cirrus.ui.execution.overlay.button.burst"), () -> controller.advanceSteps(3));
-            autoButton = addControlButton(controls, Component.translatable("cirrus.ui.execution.overlay.button.auto"), () -> controller.toggleAutoAdvance());
-            resetButton = addControlButton(controls, Component.translatable("cirrus.ui.execution.overlay.button.reset"), controller::reset);
-
             scene = new Scene(root);
             scene.init();
             scene.mount(SceneContext.create(new ScreenSceneHost(screen)));
             layout();
             applyVisibility();
             refresh();
-        }
-
-        private ButtonWidget addControlButton(RowWidget controls, Component label, Runnable action) {
-            var button = controls.addWidget(
-                ButtonWidget.of(label, () -> {
-                    action.run();
-                    refresh();
-                }).setTextures(CirrusTextures.Toggle.Button.up, CirrusTextures.Toggle.Button.hover, CirrusTextures.Toggle.Button.down)
-            );
-            button.setTextColor(actionTextColor);
-            button.useStyle(UIStyle.of(
-                flexGrow(1),
-                heightOf(WorkbenchExecutionOverlayLayout.controlsHeight - 6)
-            ));
-            return button;
         }
 
         private void destroy() {
@@ -343,19 +305,6 @@ public final class WorkbenchExecutionOverlayManager {
                 return;
             }
             overlayWidget.refreshFromHost(controller);
-            updateButtons();
-        }
-
-        private void updateButtons() {
-            boolean completed = controller.session().completed();
-            stepButton.setEnabled(!completed);
-            burstButton.setEnabled(!completed);
-            resetButton.setEnabled(controller.session().nextStepIndex() > 0 || controller.session().paused() || completed);
-            autoButton.setEnabled(!completed);
-            autoButton.setLabel(controller.autoAdvance()
-                ? Component.translatable("cirrus.ui.execution.overlay.button.auto_active")
-                : Component.translatable("cirrus.ui.execution.overlay.button.auto"));
-            autoButton.setTextColor(controller.autoAdvance() ? actionActiveTextColor : actionTextColor);
         }
 
         //endregion
@@ -368,22 +317,22 @@ public final class WorkbenchExecutionOverlayManager {
             }
             return switch (keyCode) {
                 case GLFW.GLFW_KEY_A -> {
-                    controller.advanceSteps(1);
+                    controller.overlayAdvanceSteps(1);
                     refresh();
                     yield true;
                 }
                 case GLFW.GLFW_KEY_B, GLFW.GLFW_KEY_S -> {
-                    controller.advanceSteps(3);
+                    controller.overlayAdvanceSteps(3);
                     refresh();
                     yield true;
                 }
                 case GLFW.GLFW_KEY_T -> {
-                    controller.toggleAutoAdvance();
+                    controller.overlayToggleAutoAdvance();
                     refresh();
                     yield true;
                 }
                 case GLFW.GLFW_KEY_R -> {
-                    controller.reset();
+                    controller.overlayReset();
                     refresh();
                     yield true;
                 }
@@ -433,7 +382,6 @@ public final class WorkbenchExecutionOverlayManager {
                 return;
             }
             layout();
-            refresh();
             scene.mouseMoved(mouseX, mouseY);
             scene.render(graphics, mouseX, mouseY, partialTick);
         }

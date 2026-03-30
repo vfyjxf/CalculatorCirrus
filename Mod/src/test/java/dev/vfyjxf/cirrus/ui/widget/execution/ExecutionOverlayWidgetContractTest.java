@@ -24,28 +24,59 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class ExecutionOverlayWidgetContractTest {
 
     @Test
     void preferredWidthIsClampedForOverlayUsage() {
-        assertEquals(180, ExecutionOverlayWidget.preferredPanelWidth(240));
-        assertEquals(180, ExecutionOverlayWidget.preferredPanelWidth(520));
-        assertEquals(288, ExecutionOverlayWidget.preferredPanelWidth(960));
-        assertEquals(300, ExecutionOverlayWidget.preferredPanelWidth(1200));
+        assertEquals(162, ExecutionOverlayWidget.preferredPanelWidth(240));
+        assertEquals(162, ExecutionOverlayWidget.preferredPanelWidth(520));
+        assertEquals(162, ExecutionOverlayWidget.preferredPanelWidth(960));
+        assertEquals(162, ExecutionOverlayWidget.preferredPanelWidth(1200));
+    }
+
+    @Test
+    void workbenchDockDefaultsToRecipeWindowWithDedicatedRail() {
+        assertEquals("recipe", ExecutionOverlayWidget.debugDefaultWorkbenchDockId());
+        assertEquals(18, ExecutionOverlayWidget.debugWorkbenchDockRailWidth());
+    }
+
+    @Test
+    void workbenchUsesExpandedRateRangeAndLargerRecipeHero() {
+        assertEquals(1.0d, ExecutionOverlayControlsWidget.debugMinRate());
+        assertEquals(30.0d, ExecutionOverlayControlsWidget.debugMaxRate());
+        assertEquals(134, ExecutionOverlayWidget.debugWorkbenchRecipeHeroHeight());
+    }
+
+    @Test
+    void workbenchChromeUsesIntegratedBadgesInsteadOfNestedSlots() {
+        assertFalse(ExecutionOverlayWidget.debugWorkbenchCountBadgesUseStandaloneSlotChrome());
+        assertFalse(ExecutionOverlayWidget.debugWorkbenchStatusChipsUseStandaloneSlotChrome());
     }
 
     @Test
     void bodyHeightKeepsHeaderAndFooterFixed() {
         assertEquals(
-            102,
+            118,
             ExecutionOverlayWidget.bodyHeight(
                 180,
                 ExecutionOverlayWidget.headerHeight,
                 ExecutionOverlayWidget.footerHeight
             )
         );
+    }
+
+    @Test
+    void wideBranchProjectionKeepsSiblingsVisibleAndTracksFocus() {
+        var widget = new ExecutionOverlayWidget();
+        var session = ExecutionOverlayTestFixtures.sessionWithWideBranching();
+        widget.setSession(session);
+        var model = widget.viewModel();
+        assertNotNull(model);
+        assertEquals(ExecutionOverlayTestFixtures.countFlowNodes(session.flowViewModel().root()), model.visibleNodes().size());
+        assertEquals("branch-6", model.focusNodeId());
     }
 
     @Test

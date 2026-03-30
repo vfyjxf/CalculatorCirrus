@@ -1,118 +1,152 @@
 package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 
 import dev.vfyjxf.cirrus.ui.CirrusTextures.Background;
+import dev.vfyjxf.cirrus.ui.CirrusTextures.Icon;
+import dev.vfyjxf.cirrus.ui.CirrusTextures.Toggle;
 import dev.vfyjxf.cirrus.ui.widget.NumberInputWidget;
-import dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors;
+import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.ui.base.CompositeWidget;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
-import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
-import dev.vfyjxf.cloudlib.api.ui.texture.ColorTexture;
+import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.ui.widget.LabelWidget;
 import dev.vfyjxf.cloudlib.ui.widget.SpacerWidget;
-import dev.vfyjxf.cloudlib.ui.widget.TextFieldWidget;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
+import org.jetbrains.annotations.Nullable;
 
 import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.*;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.*;
-import static dev.vfyjxf.taffy.style.TaffyDimension.percent;
 
 /**
  * Top control bar for the Calculator page.
- * Styled with rounded containers matching omnicalc-pro.
+ * Styled with texture-backed chrome matching Cirrus shell controls.
  */
 public class ControlBarWidget extends CompositeWidget<Widget> {
 
-    private final OmniCalculatorView parentView;
-    private final TextFieldWidget searchField;
-    private final NumberInputWidget amountInput;
+    public record ControlBarMetrics(int height, int targetSlotSize, int amountInputWidth, int calculateButtonWidth) {}
 
+    //region Metrics
+    private static final int barHeight = 30;
+    private static final int targetSlotSize = 18;
+    private static final int amountInputWidth = 36;
+    private static final int calcButtonWidth = 60;
+    private static final int calcButtonHeight = 16;
+    private static final int calcIconX = 5;
+    private static final int calcIconY = 3;
+    private static final int calcIconSize = 10;
+    private static final int calcTextX = 17;
+    private static final int calcTextY = 4;
+    //endregion
+
+    //region State
+    private final OmniCalculatorView parentView;
+    private final TargetSlotWidget targetSlot;
+    private final NumberInputWidget amountInput;
+    //endregion
+
+    //region Init
     public ControlBarWidget(OmniCalculatorView parentView) {
         this.parentView = parentView;
 
         useStyle(
                 flexRow(),
                 alignItemsCenter(),
-                gap(3),
-                paddingHorizontal(6),
-                paddingVertical(3),
+                gap(2),
+                heightOf(barHeight),
+                paddingHorizontal(4),
+                paddingVertical(4),
                 zIndexOf(20)
         );
 
-        // Render: semi-transparent panel background with bottom border
-        onRender((canvas, mx, my, pt, self, ctx) -> {
-            int w = width(), h = height();
-            canvas.fill(0, 0, w, h, 0xCC111827);
-            canvas.fill(0, h - 1, w, 1, BORDER_MAIN);
-        });
+        onRender((canvas, mx, my, pt, self, ctx) -> renderBarBackground(canvas));
 
-        // ── Target item slot ──
-        var targetSlot = new Widget();
-        targetSlot.useStyle(sizeOf(16, 16));
-        targetSlot.onRender((canvas, mx, my, pt, self, ctx) -> {
-            canvas.roundedRect(0, 0, 16, 16, 3f, BG_HOVER, 1f, BORDER_SEC);
-        });
+        targetSlot = new TargetSlotWidget();
         addWidget(targetSlot);
 
-        // ── Search / item name field ──
-        searchField = TextFieldWidget.create("")
-                .setPlaceholder("Search item...")
-                .setEditable(false);
-        searchField.useStyle(
-                widthOf(percent(0.35f)),
-                heightOf(14),
-                marginLeft(3)
-        );
-        addWidget(searchField);
-
-        // ── "x" label ──
         var xLabel = LabelWidget.of(Component.literal("\u00d7"))
-                .setColor(TEXT_SECONDARY)
-                .setShadow(true);
-        xLabel.useStyle(marginLeft(3), widthOf(6));
+                .setColor(textPrimary)
+                .setShadow(false);
+        xLabel.useStyle(widthOf(8));
         addWidget(xLabel);
 
-        // ── Amount input ──
         amountInput = NumberInputWidget.create(1)
                 .setMinValue(1)
                 .setScrollStep(1);
-        amountInput.useStyle(widthOf(28), heightOf(14));
+        amountInput.useStyle(widthOf(amountInputWidth), heightOf(14));
         addWidget(amountInput);
 
-        // ── Settings button ──
-        var settingsWidget = new Widget();
-        settingsWidget.useStyle(sizeOf(14, 14), marginLeft(2));
-        settingsWidget.onRender((canvas, mx, my, pt, self, ctx) -> {
-            int bg = self.hovered() ? BG_ELEVATED : BG_HOVER;
-            canvas.roundedRect(0, 0, 14, 14, 3f, bg, 1f, BORDER_SEC);
-            canvas.drawCenteredString("\u2699", 7, 4, TEXT_SECONDARY);
-        });
-        addWidget(settingsWidget);
-
-        // ── Spacer ──
         addWidget(SpacerWidget.create());
+        addWidget(createCalculateButton());
+    }
+    //endregion
 
-        // ── Calculate button (rounded, accent blue, with shadow) ──
-        var calcWidget = new Widget();
-        calcWidget.useStyle(sizeOf(60, 14));
-        calcWidget.onRender((canvas, mx, my, pt, self, ctx) -> {
-            int bg = self.hovered() ? ACCENT_LIGHT : ACCENT;
-            canvas.shadow(0, 1, 60, 14, 4f, 2f, 4f, 0x402563EB);
-            canvas.roundedRect(0, 0, 60, 14, 4f, bg, 0, 0);
-            canvas.drawCenteredString("\u25B6 Calculate", 30, 4, TEXT_WHITE);
-        });
-        calcWidget.onMouseClick((input, clicks, ctx) -> {
-            parentView.onCalculate();
-            return dev.vfyjxf.cloudlib.api.event.EventDispatch.consumed;
-        });
-        addWidget(calcWidget);
+    //region Public API
+    static ControlBarMetrics debugMetrics() {
+        return new ControlBarMetrics(barHeight, targetSlotSize, amountInputWidth, calcButtonWidth);
+    }
+
+    static boolean debugUsesLegacyStripTexture() {
+        return false;
+    }
+
+    static boolean debugUsesStandardButtonTexture() {
+        return true;
     }
 
     public void setTargetItem(ItemStack stack) {
-        // TODO: render target item in slot
+        targetSlot.setTargetItem(stack);
     }
 
     public long getAmount() {
         return amountInput.getValue();
     }
+    //endregion
+
+    //region Rendering
+    private void renderBarBackground(SceneCanvas canvas) {
+        int w = width(), h = height();
+        canvas.texture(Background.Outlined.flat, 0, 0, w, h);
+        canvas.texture(Background.flat, 2, 2, w - 4, h - 4);
+    }
+
+    private Widget createCalculateButton() {
+        var calculateButton = new Widget();
+        calculateButton.useStyle(sizeOf(calcButtonWidth, calcButtonHeight));
+        calculateButton.onRender((canvas, mx, my, pt, self, ctx) -> {
+            int w = self.width();
+            canvas.texture(self.hovered() ? Toggle.Button.hover : Toggle.Button.up, 0, 0, w, calcButtonHeight);
+            canvas.texture(Icon.Calc.calculate, calcIconX, calcIconY, calcIconSize, calcIconSize);
+            canvas.drawString("\u5F00\u59CB\u8BA1\u7B97", calcTextX, calcTextY, textPrimary, false);
+        });
+        calculateButton.onMouseClick((input, clicks, ctx) -> {
+            parentView.onCalculate();
+            return EventDispatch.consumed;
+        });
+        return calculateButton;
+    }
+    //endregion
+
+    //region TargetSlot
+    private static final class TargetSlotWidget extends Widget {
+
+        @Nullable
+        private ItemStack targetItem;
+
+        private TargetSlotWidget() {
+            useStyle(sizeOf(targetSlotSize, targetSlotSize));
+        }
+
+        @Override
+        protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
+            canvas.texture(Background.Slot.dark, 0, 0, width(), height());
+            if (targetItem != null && !targetItem.isEmpty()) {
+                canvas.renderItem(targetItem, 1, 1);
+            }
+        }
+
+        private void setTargetItem(ItemStack stack) {
+            targetItem = stack == null ? ItemStack.EMPTY : stack.copy();
+        }
+    }
+    //endregion
 }

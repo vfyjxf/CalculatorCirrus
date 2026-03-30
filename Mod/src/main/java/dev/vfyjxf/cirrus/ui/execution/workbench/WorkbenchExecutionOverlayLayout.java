@@ -13,11 +13,11 @@ public final class WorkbenchExecutionOverlayLayout {
     public static final int panelMarginLeft = 8;
     public static final int panelMarginTop = 12;
     public static final int panelMarginBottom = 36;
-    public static final int controlsHeight = 24;
-    public static final int controlsGap = 4;
+    public static final int controlsHeight = 30;
+    public static final int controlsGap = 6;
     private static final int vanillaWorkbenchWidth = 176;
     private static final int panelWorkbenchGap = 10;
-    private static final int minVisibleOverlayWidth = 96;
+    private static final int minVisibleOverlayWidth = 84;
 
     //endregion
 

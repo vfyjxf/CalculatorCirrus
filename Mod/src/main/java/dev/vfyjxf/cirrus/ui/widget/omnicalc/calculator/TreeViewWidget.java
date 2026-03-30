@@ -1,22 +1,28 @@
 package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 
+import dev.vfyjxf.cirrus.ui.CirrusTextures.Background;
+import dev.vfyjxf.cirrus.ui.CirrusTextures.Icon;
 import dev.vfyjxf.cirrus.ui.widget.flowchart.model.ProcessGraph;
-import dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.math.FloatPos;
 import dev.vfyjxf.cloudlib.api.ui.base.CompositeWidget;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
-import dev.vfyjxf.cloudlib.api.ui.texture.ColorTexture;
+import dev.vfyjxf.cloudlib.api.ui.effect.UIEffects;
+import dev.vfyjxf.cloudlib.api.ui.scroll.ScrollDirection;
+import dev.vfyjxf.cloudlib.api.ui.scroll.ScrollState;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.*;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.*;
@@ -41,12 +47,25 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.*;
  */
 public class TreeViewWidget extends CompositeWidget<Widget> {
 
-    private static final int LAYER_NAV_W = 36;  // Layer navigator width
-    private static final float CRUMB_SCALE = 0.75f; // breadcrumb text scale
+    //region Metrics
+    private static final int layerNavWidth = 36;  // Layer navigator width
+    private static final int bottomPanelHeight = 24;
+    private static final int breadcrumbScrollViewWidthPadding = 8;
+    private static final int breadcrumbScrollbarBottomY = 1;
+    private static final int breadcrumbScrollbarTrackHeight = 5;
+    private static final int breadcrumbScrollbarThumbHeight = 7;
+    private static final float crumbScale = 1.0f; // keep pixel text crisp
+    private static final int crumbIconSize = 12;
+    private static final int layerHeaderHeight = 22;
+    private static final int layerHeaderIconSize = 18;
+    //endregion
 
+    //region State
     private @Nullable ProcessGraph graph;
     private final TreeCanvasWidget stepsWidget;
     private final WidgetGroup<Widget> layerNavContainer;
+    private final WidgetGroup<Widget> layerButtonsContainer;
+    private final ScrollState layerScrollState;
     private final WidgetGroup<Widget> bottomPanel;
     private int activeLayer = 0;
     private int maxLayers = 0;
@@ -57,27 +76,70 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
     private int pathContentW = 0, traceContentW = 0; // total breadcrumb content width
     private final List<BreadcrumbHit> pathHitAreas = new ArrayList<>();
     private final List<BreadcrumbHit> traceHitAreas = new ArrayList<>();
+    private @Nullable String hoveredCrumbId = null;
+    private @Nullable String selectedCrumbId = null;
+    private @Nullable ScrollRegion activeScrollDrag;
+    private float dragThumbOffsetX = 0;
+    private boolean layerScrollbarInsetApplied = false;
+    //endregion
+
+    //region Types
+    private enum ScrollRegion { PATH, TRACE }
+    private record ScrollbarThumb(int x, int y, int w, int h, int barX, int barW, int maxScroll) {}
 
     private record BreadcrumbHit(int x, int y, int w, int h, String pathId) {}
+    //endregion
 
+    //region Init
     public TreeViewWidget() {
         useStyle(
                 flexColumn(),
                 sizeFull(),
-                background(OmniCalcColors.TEX_TREE_CANVAS)
+                background(Background.inset)
         );
 
         // ── Main area: Layer Nav + Canvas ──
         var mainArea = new WidgetGroup<>();
-        mainArea.useStyle(flexRow(), flexGrow(1), minHeight(0));
+        mainArea.useStyle(flexRow(), flexGrow(1), minHeight(0), alignItemsStretch());
+        mainArea.onRender((canvas, mx, my, pt, self, ctx) -> {
+            syncLayerScrollbarInset();
+            syncLayerTrackingFromViewport();
+        });
 
         // Layer navigator (left side)
         layerNavContainer = new WidgetGroup<>();
         layerNavContainer.useStyle(
                 flexColumn(),
-                widthOf(LAYER_NAV_W),
-                background(new ColorTexture(TREE_CANVAS_BG))
+                widthOf(layerNavWidth),
+                minWidth(layerNavWidth),
+                maxWidth(layerNavWidth),
+                minHeight(0),
+                alignSelfStretch(),
+                flexShrink(0),
+                paddingHorizontal(0),
+                paddingVertical(1)
         );
+        layerNavContainer.onRender((canvas, mx, my, pt, self, ctx) -> {
+            canvas.texture(Background.inset, 0, 0, self.width(), self.height());
+            canvas.fill(self.width() - 1, 0, 1, self.height(), borderMain);
+        });
+        layerNavContainer.addWidget(new LayerHeaderWidget());
+
+        layerButtonsContainer = new WidgetGroup<>();
+        layerButtonsContainer.useStyle(
+                flexColumn(),
+                flexGrow(1),
+                minHeight(0)
+        );
+        layerScrollState = ScrollState.create(ScrollDirection.vertical)
+                .scrollSpeed(12)
+                .smooth(true)
+                .smoothSpeed(0.35f)
+                .trackTexture(Background.inset)
+                .thumbTexture(Icon.scrollBar)
+                .scrollbarWidth(6);
+        layerButtonsContainer.useEffect(UIEffects.scrollable(layerScrollState));
+        layerNavContainer.addWidget(layerButtonsContainer);
         mainArea.addWidget(layerNavContainer);
 
         // Canvas (TreeCanvasWidget — dark theme, no MC textures)
@@ -93,82 +155,139 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
 
         // ── Bottom info panel ──
         bottomPanel = new WidgetGroup<>();
-        bottomPanel.useStyle(heightOf(18));
+        bottomPanel.useStyle(heightOf(bottomPanelHeight), minHeight(bottomPanelHeight), maxHeight(bottomPanelHeight), flexShrink(0));
 
         bottomPanel.onRender((canvas, mx, my, pt, self, ctx) -> {
             int w = self.width(), h = self.height();
             Font font = Minecraft.getInstance().font;
+            var pathCrumbs = stepsWidget.getPathContextBreadcrumbs();
+            var traceCrumbs = stepsWidget.getTraceBreadcrumbs();
+            int halfW = w / 2;
+            pathContentW = computeBreadcrumbContentWidth(font, pathCrumbs);
+            traceContentW = computeBreadcrumbContentWidth(font, traceCrumbs);
+            sanitizeBreadcrumbScroll(halfW);
 
             // Smooth scroll animation
             pathScrollX += (pathScrollTargetX - pathScrollX) * 0.35f;
             traceScrollX += (traceScrollTargetX - traceScrollX) * 0.35f;
             if (Math.abs(pathScrollX - pathScrollTargetX) < 0.5f) pathScrollX = pathScrollTargetX;
             if (Math.abs(traceScrollX - traceScrollTargetX) < 0.5f) traceScrollX = traceScrollTargetX;
+            sanitizeBreadcrumbScroll(halfW);
 
-            // Background
-            canvas.fill(0, 0, w, h, 0xF0080C14);
-            canvas.fill(0, 0, w, 1, 0xFF1E293B);
+            canvas.texture(Background.flat, 0, 0, w, h);
+            int leftJoinW = Math.max(0, Math.min(w, layerNavWidth + 1));
+            // Merge the bottom edge of the layer panel with path bar: avoid double bright seam.
+            canvas.fill(0, 0, leftJoinW, 1, bgPanel);
+            if (leftJoinW > 0 && leftJoinW <= w) {
+                // Soften the corner transition by one extra pixel row.
+                canvas.fill(leftJoinW - 1, 1, 1, 1, bgPanel);
+            }
 
-            int halfW = w / 2;
-            // Divider between path and trace
-            canvas.fill(halfW, 2, 1, h - 4, 0xFF1E293B);
+            canvas.fill(halfW, 3, 1, h - 6, borderMain);
+            int scrollViewW = halfW - breadcrumbScrollViewWidthPadding;
+            int scrollBarY = h - breadcrumbScrollbarBottomY;
 
             // ── Left half: PATH ──
             FloatPos absOrigin = self.localToScene(0, 0);
             int absX = (int) absOrigin.x(), absY = (int) absOrigin.y();
-            drawBreadcrumbRow(canvas, font, mx, my, stepsWidget.getPathContextBreadcrumbs(),
+            drawBreadcrumbRow(canvas, font, mx, my, pathCrumbs,
                     pathHitAreas, pathScrollX, 0, halfW, h, absX, absY,
-                    0xFF3B82F6, ACCENT, false);
+                    textPrimary, textPrimary, false, selectedCrumbId);
 
             // Path scrollbar
-            if (pathContentW > halfW - 8) {
-                drawMiniScrollbar(canvas, 2, h - 2, halfW - 4, pathScrollX, pathContentW, halfW - 8);
+            if (pathContentW > scrollViewW) {
+                drawMiniScrollbar(canvas, 2, scrollBarY, halfW - 4, pathScrollX, pathContentW, scrollViewW);
             }
 
             // ── Right half: TRACE ──
-            drawBreadcrumbRow(canvas, font, mx - halfW - 1, my, stepsWidget.getTraceBreadcrumbs(),
+            drawBreadcrumbRow(canvas, font, mx, my, traceCrumbs,
                     traceHitAreas, traceScrollX, halfW + 1, halfW - 1, h, absX + halfW + 1, absY,
-                    0xFF6B7280, GREEN, true);
+                    textPrimary, textPrimary, true, selectedCrumbId);
 
             // Trace scrollbar
-            if (traceContentW > halfW - 10) {
-                drawMiniScrollbar(canvas, halfW + 3, h - 2, halfW - 5, traceScrollX, traceContentW, halfW - 10);
+            if (traceContentW > scrollViewW) {
+                drawMiniScrollbar(canvas, halfW + 2, scrollBarY, halfW - 4, traceScrollX, traceContentW, scrollViewW);
             }
+
+            updateBreadcrumbHoverFeedback(mx, my);
         });
 
         // Click handler — path clicks center on node, trace clicks scroll to node
         bottomPanel.onMouseClick((input, clickCount, ctx) -> {
             FloatPos local = input.mouseRelative(bottomPanel);
             double mx = local.x(), my = local.y();
+            int halfW = bottomPanel.width() / 2;
+            int scrollViewW = halfW - breadcrumbScrollViewWidthPadding;
+            int scrollBarY = bottomPanel.height() - breadcrumbScrollbarBottomY;
+            ScrollbarThumb pathThumb = buildScrollbarThumb(2, scrollBarY, halfW - 4,
+                    pathScrollX, pathContentW, scrollViewW);
+            if (pathThumb != null && isPointInside(pathThumb, mx, my)) {
+                activeScrollDrag = ScrollRegion.PATH;
+                dragThumbOffsetX = (float) (mx - pathThumb.x);
+                return EventDispatch.consumed;
+            }
+
+            ScrollbarThumb traceThumb = buildScrollbarThumb(halfW + 2, scrollBarY,
+                    halfW - 4, traceScrollX, traceContentW, scrollViewW);
+            if (traceThumb != null && isPointInside(traceThumb, mx, my)) {
+                activeScrollDrag = ScrollRegion.TRACE;
+                dragThumbOffsetX = (float) (mx - traceThumb.x);
+                return EventDispatch.consumed;
+            }
+
             for (var hit : pathHitAreas) {
                 if (mx >= hit.x && mx <= hit.x + hit.w && my >= hit.y && my <= hit.y + hit.h) {
-                    // Only center viewport on the clicked node — don't switch subtree
-                    stepsWidget.centerOnNode(hit.pathId);
-                    Minecraft.getInstance().getSoundManager()
-                            .play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1f));
-                    return EventDispatch.consumed;
+                    return selectAndJumpToBreadcrumb(hit.pathId());
                 }
             }
             for (var hit : traceHitAreas) {
                 if (mx >= hit.x && mx <= hit.x + hit.w && my >= hit.y && my <= hit.y + hit.h) {
-                    stepsWidget.scrollToNode(hit.pathId);
-                    Minecraft.getInstance().getSoundManager()
-                            .play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1f));
-                    return EventDispatch.consumed;
+                    return selectAndJumpToBreadcrumb(hit.pathId());
                 }
             }
             return EventDispatch.pass;
+        });
+
+        bottomPanel.onMouseDragged((input, deltaX, deltaY, ctx) -> {
+            if (activeScrollDrag == null) return EventDispatch.pass;
+            FloatPos local = input.mouseRelative(bottomPanel);
+            int halfW = bottomPanel.width() / 2;
+            int scrollViewW = halfW - breadcrumbScrollViewWidthPadding;
+            int scrollBarY = bottomPanel.height() - breadcrumbScrollbarBottomY;
+            if (activeScrollDrag == ScrollRegion.PATH) {
+                pathScrollTargetX = dragThumb(pathScrollTargetX, local.x(), 2,
+                        halfW - 4, scrollBarY, pathContentW, scrollViewW);
+            } else {
+                traceScrollTargetX = dragThumb(traceScrollTargetX, local.x(), halfW + 2,
+                        halfW - 4, scrollBarY, traceContentW, scrollViewW);
+            }
+            ctx.cancel();
+            return EventDispatch.consumed;
+        });
+
+        bottomPanel.onMouseReleased((input, ctx) -> {
+            if (activeScrollDrag == null) return EventDispatch.pass;
+            activeScrollDrag = null;
+            dragThumbOffsetX = 0;
+            return EventDispatch.consumed;
+        });
+
+        bottomPanel.onMouseLeave((mouseX, mouseY, ctx) -> {
+            hoveredCrumbId = null;
+            stepsWidget.setExternalHoveredNode(null);
+            scene().setHoverTooltip(Tooltip.create());
         });
 
         // Independent scroll for left/right halves
         bottomPanel.onMouseScrolled((mouseX, mouseY, sx, sy, ctx) -> {
             FloatPos local = bottomPanel.sceneToLocal(mouseX, mouseY);
             int halfW = bottomPanel.width() / 2;
+            int scrollViewW = halfW - breadcrumbScrollViewWidthPadding;
             if (local.x() < halfW) {
-                int maxScroll = Math.max(0, pathContentW - halfW + 8);
+                int maxScroll = Math.max(0, pathContentW - scrollViewW);
                 pathScrollTargetX = Math.max(0, Math.min(maxScroll, pathScrollTargetX - (float) sy * 15));
             } else {
-                int maxScroll = Math.max(0, traceContentW - halfW + 10);
+                int maxScroll = Math.max(0, traceContentW - scrollViewW);
                 traceScrollTargetX = Math.max(0, Math.min(maxScroll, traceScrollTargetX - (float) sy * 15));
             }
             ctx.cancel();
@@ -177,7 +296,9 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
 
         addWidget(bottomPanel);
     }
+    //endregion
 
+    //region Rendering
     private void drawBreadcrumbRow(SceneCanvas canvas, Font font,
                                    double mx, double my,
                                    List<TreeCanvasWidget.BreadcrumbEntry> crumbs,
@@ -185,10 +306,11 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
                                    float scrollX, int areaX, int areaW, int areaH,
                                    int absX, int absY,
                                    int iconColor, int accentColor,
-                                   boolean isTrace) {
+                                   boolean isTrace,
+                                   @Nullable String selectedPathId) {
         hitAreas.clear();
-        float s = CRUMB_SCALE;
-        int rowY = (int) ((areaH - 9 * s) / 2);
+        float s = crumbScale;
+        int rowY = (int) ((areaH - 9 * s) / 2) - 1;
 
         // Clip to area
         canvas.pushClip(absX, absY, areaW, areaH);
@@ -197,33 +319,25 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
         canvas.scale(s);
 
         float invS = 1f / s;
-        int px = 4;
+        int px = 3;
         int textY = (int)(rowY * invS);
 
         // Draw leading icon
-        if (isTrace) {
-            // Small dot
-            canvas.circle(px + 3, textY + 4, 2.5f, iconColor);
-            px += 9;
-        } else {
-            // Right-pointing triangle (play icon)
-            drawTriangleRight(canvas, px, textY + 1, 6, 7, iconColor);
-            px += 10;
-        }
+        canvas.texture(isTrace ? Icon.Calc.Path.branch : Icon.Calc.Path.tree, px, textY - 2, crumbIconSize, crumbIconSize);
+        px += 16;
 
         if (crumbs.isEmpty()) {
-            canvas.drawString("--", px, textY, 0xFF374151, false);
+            canvas.drawString("--", px, textY, textSecondary, false);
         } else {
             for (int i = 0; i < crumbs.size(); i++) {
                 var crumb = crumbs.get(i);
-                String displayName = truncName(crumb.name(), 18);
+                String displayName = crumb.name();
                 int nameW = font.width(displayName);
                 boolean isLast = i == crumbs.size() - 1;
 
                 if (i > 0) {
-                    // Chevron separator
-                    drawChevronRight(canvas, px + 1, textY + 1, 4, 7, 0xFF374151);
-                    px += 8;
+                    canvas.texture(Icon.Small.arrowRight, px, textY + 1, 5, 6);
+                    px += 9;
                 }
 
                 // Hit area in panel-local coords (account for scroll and area offset)
@@ -235,18 +349,22 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
 
                 // Hover detect in panel-local
                 boolean isHover = mx >= hitX && mx <= hitX + hitW && my >= hitY && my <= hitY + hitH;
+                boolean isSelected = Objects.equals(selectedPathId, crumb.pathId());
+                if (isSelected) {
+                    canvas.fill(px - 2, textY - 2, nameW + 4, 12, 0x557FAFD6);
+                }
                 if (isHover) {
-                    canvas.fill(px - 1, textY - 1, nameW + 2, 11, 0xFF1A2744);
+                    canvas.fill(px - 1, textY - 1, nameW + 2, 11, 0x88FFFFFF);
                 }
 
-                int color = isLast ? accentColor : (isHover ? 0xFFBFDBFE : 0xFF94A3B8);
-                canvas.drawString(displayName, px, textY, color, isLast);
+                int color = isSelected ? 0xFF7FAFD6 : (isLast ? accentColor : (isHover ? textPrimary : textSecondary));
+                canvas.drawString(displayName, px, textY, color, false);
                 px += nameW + 1;
             }
         }
 
         // Store total content width for scrollbar
-        int contentW = (int)(px * s) + 4;
+        int contentW = (int)(px * s) + 3;
         if (isTrace) traceContentW = contentW;
         else pathContentW = contentW;
 
@@ -254,124 +372,237 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
         canvas.popClip();
     }
 
-    // ── SVG-like icon drawing helpers ──
-
-    /** Right-pointing filled triangle (play button). */
-    private static void drawTriangleRight(SceneCanvas canvas, int x, int y, int w, int h, int color) {
-        for (int row = 0; row < h; row++) {
-            int rowW = Math.max(1, (int) Math.round((double) w * Math.min(row + 1, h - row) / ((h + 1.0) / 2.0)));
-            canvas.fill(x, y + row, rowW, 1, color);
-        }
-    }
-
-    /** Right-pointing chevron (> shape). */
-    private static void drawChevronRight(SceneCanvas canvas, int x, int y, int w, int h, int color) {
-        int midY = y + h / 2;
-        canvas.line(x, y, x + w, midY, 1f, color);
-        canvas.line(x, y + h, x + w, midY, 1f, color);
-    }
-
-    /** Small 2x2 grid icon (material/grid). */
-    private static void drawGridIcon(SceneCanvas canvas, int x, int y, int size, int color) {
-        int half = size / 2;
-        int gap = 1;
-        int cellW = half - gap;
-        canvas.fill(x, y, cellW, cellW, color);
-        canvas.fill(x + half + gap, y, cellW, cellW, color);
-        canvas.fill(x, y + half + gap, cellW, cellW, color);
-        canvas.fill(x + half + gap, y + half + gap, cellW, cellW, color);
-    }
-
-    /** Small house icon (home/root). */
-    private static void drawHomeIcon(SceneCanvas canvas, int x, int y, int size, int color) {
-        int mid = x + size / 2;
-        int roofTop = y;
-        int roofBot = y + size / 2;
-        int houseBot = y + size;
-        canvas.line(x, roofBot, mid, roofTop, 1.5f, color);
-        canvas.line(mid, roofTop, x + size, roofBot, 1.5f, color);
-        canvas.fill(x + 1, roofBot, size - 2, houseBot - roofBot, color);
-        int doorW = Math.max(2, size / 3);
-        int doorH = Math.max(2, (houseBot - roofBot) * 2 / 3);
-        canvas.fill(mid - doorW / 2, houseBot - doorH, doorW, doorH, 0xFF0D1117);
-    }
-
     private void drawMiniScrollbar(SceneCanvas canvas,
                                    int barX, int barY, int barW,
                                    float scrollPos, int contentW, int viewW) {
-        // Track
-        canvas.fill(barX, barY, barW, 1, 0xFF1E293B);
-        // Thumb
+        int trackY = barY - (breadcrumbScrollbarTrackHeight - 1);
+        canvas.texture(Background.Slot.dark, barX, trackY, barW, breadcrumbScrollbarTrackHeight);
         if (contentW <= 0) return;
         int thumbW = Math.max(8, barW * viewW / contentW);
         int maxScroll = Math.max(1, contentW - viewW);
         int thumbX = barX + (int)((barW - thumbW) * (scrollPos / maxScroll));
-        canvas.fill(thumbX, barY, thumbW, 1, 0xFF475569);
+        int thumbY = barY - (breadcrumbScrollbarThumbHeight - 1);
+        canvas.texture(Icon.scrollBar, thumbX, thumbY, thumbW, breadcrumbScrollbarThumbHeight);
+    }
+    //endregion
+
+    //region Interactions
+    private int computeBreadcrumbContentWidth(Font font, List<TreeCanvasWidget.BreadcrumbEntry> crumbs) {
+        int px = 3;
+        px += 16; // leading icon
+        if (crumbs.isEmpty()) {
+            px += font.width("--");
+        } else {
+            for (int i = 0; i < crumbs.size(); i++) {
+                if (i > 0) px += 9; // arrow
+                px += font.width(crumbs.get(i).name()) + 1;
+            }
+        }
+        return (int) (px * crumbScale) + 3;
     }
 
-    private static String truncName(String name, int maxLen) {
-        if (name.length() <= maxLen) return name;
-        return name.substring(0, maxLen - 1) + "..";
+    private void sanitizeBreadcrumbScroll(int halfW) {
+        int pathMaxScroll = Math.max(0, pathContentW - halfW + 8);
+        int traceMaxScroll = Math.max(0, traceContentW - halfW + 10);
+        pathScrollTargetX = Math.max(0, Math.min(pathMaxScroll, pathScrollTargetX));
+        traceScrollTargetX = Math.max(0, Math.min(traceMaxScroll, traceScrollTargetX));
+        pathScrollX = Math.max(0, Math.min(pathMaxScroll, pathScrollX));
+        traceScrollX = Math.max(0, Math.min(traceMaxScroll, traceScrollX));
+    }
+
+    private EventDispatch selectAndJumpToBreadcrumb(String pathId) {
+        selectedCrumbId = pathId;
+        stepsWidget.setExternalSelectedNode(pathId);
+        stepsWidget.focusNodeWithoutCropping(pathId);
+        Minecraft.getInstance().getSoundManager()
+                .play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1f));
+        return EventDispatch.consumed;
+    }
+
+    private void updateBreadcrumbHoverFeedback(double mx, double my) {
+        if (my < 0 || my > bottomPanel.height()) {
+            return;
+        }
+        BreadcrumbHit hovered = null;
+        String hoverSource = null;
+        for (var hit : pathHitAreas) {
+            if (mx >= hit.x && mx <= hit.x + hit.w && my >= hit.y && my <= hit.y + hit.h) {
+                hovered = hit;
+                hoverSource = "Tree Path";
+                break;
+            }
+        }
+        if (hovered == null) {
+            for (var hit : traceHitAreas) {
+                if (mx >= hit.x && mx <= hit.x + hit.w && my >= hit.y && my <= hit.y + hit.h) {
+                    hovered = hit;
+                    hoverSource = "Trace Path";
+                    break;
+                }
+            }
+        }
+        hoveredCrumbId = hovered != null ? hovered.pathId() : null;
+        stepsWidget.setExternalHoveredNode(hoveredCrumbId);
+        if (hoveredCrumbId == null) {
+            return;
+        }
+        Tooltip tip = stepsWidget.buildNodeTooltipForPath(hoveredCrumbId, hoverSource);
+        scene().setHoverTooltip(tip != null ? tip : singleLineTooltip("Path: " + hoveredCrumbId));
     }
 
     public void setGraph(ProcessGraph graph) {
         this.graph = graph;
+        this.selectedCrumbId = null;
         stepsWidget.setGraph(graph);
+        stepsWidget.setExternalSelectedNode(null);
         stepsWidget.setCraftCount(1);
         rebuildLayerNav(graph);
     }
 
-    private void rebuildLayerNav(ProcessGraph graph) {
-        layerNavContainer.clear();
+    boolean debugIsMaterialPanelVisible() {
+        return stepsWidget.isMaterialPanelVisible();
+    }
 
-        // Spacer at top
-        var spacer = new WidgetGroup<>();
-        spacer.useStyle(heightOf(4));
-        layerNavContainer.addWidget(spacer);
+    int debugMaterialEntryCount() {
+        return stepsWidget.debugMaterialEntryCount();
+    }
+
+    boolean debugIsRootFocused() {
+        return "root".equals(stepsWidget.getCurrentRootPathId());
+    }
+
+    void toggleMaterialPanel() {
+        stepsWidget.toggleMaterialPanel();
+    }
+
+    void resetToFullTree() {
+        stepsWidget.resetToFullTree();
+    }
+
+    private void rebuildLayerNav(ProcessGraph graph) {
+        layerButtonsContainer.clear();
 
         maxLayers = stepsWidget.getMaxDepth();
 
         for (int i = 0; i <= maxLayers; i++) {
             if (stepsWidget.getLayerNodeCount(i) > 0) {
-                layerNavContainer.addWidget(new LayerButton(i));
+                layerButtonsContainer.addWidget(new LayerButton(i));
             }
         }
-
-        // ── Action buttons ──
-        var matBtn = new NavActionButton(NavIconType.GRID, ACCENT, () -> {
-            stepsWidget.toggleMaterialPanel();
-            Minecraft.getInstance().getSoundManager()
-                    .play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1f));
-        });
-        layerNavContainer.addWidget(matBtn);
-
-        var rootBtn = new NavActionButton(NavIconType.HOME, GREEN, () -> {
-            stepsWidget.resetToFullTree();
-            Minecraft.getInstance().getSoundManager()
-                    .play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1f));
-        });
-        layerNavContainer.addWidget(rootBtn);
+        syncLayerTrackingFromViewport();
     }
 
-    private enum NavIconType { GRID, HOME }
+    private void syncLayerScrollbarInset() {
+        int viewportH = layerButtonsContainer.height();
+        if (viewportH <= 0) return;
+
+        int buttonCount = 0;
+        for (var child : layerButtonsContainer.children()) {
+            if (child instanceof LayerButton) buttonCount++;
+        }
+        // LayerButton is fixed 20px height with 1px bottom margin.
+        int contentH = buttonCount * 21;
+        boolean needsInset = contentH > viewportH;
+
+        if (needsInset == layerScrollbarInsetApplied) return;
+        layerScrollbarInsetApplied = needsInset;
+        layerButtonsContainer.useStyle(paddingRight(needsInset ? layerScrollState.scrollbarWidth() : 0));
+    }
 
     private void setActiveLayer(int layer) {
-        this.activeLayer = layer;
-        updateLayerButtons(layer);
+        int targetLayer = nearestExistingLayer(layer);
+        this.activeLayer = targetLayer;
+        updateLayerButtons(targetLayer);
         // Sync highlight to canvas and auto-center
-        stepsWidget.setHighlightedLayer(layer);
-        stepsWidget.centerOnLayer(layer, Math.max(0.25f, stepsWidget.getZoom()));
+        stepsWidget.setHighlightedLayer(targetLayer);
+        stepsWidget.centerOnLayer(targetLayer, Math.max(0.25f, stepsWidget.getZoom()));
+    }
+
+    private int nearestExistingLayer(int layer) {
+        int nearest = layer;
+        int bestDist = Integer.MAX_VALUE;
+        for (var child : layerButtonsContainer.children()) {
+            if (child instanceof LayerButton lb) {
+                int d = Math.abs(lb.layer - layer);
+                if (d < bestDist) {
+                    bestDist = d;
+                    nearest = lb.layer;
+                }
+            }
+        }
+        return nearest;
+    }
+
+    private void syncLayerTrackingFromViewport() {
+        if (graph == null) return;
+        int viewportLayer = nearestExistingLayer(stepsWidget.getViewportCenterLayer());
+        if (viewportLayer == activeLayer) return;
+        activeLayer = viewportLayer;
+        updateLayerButtons(viewportLayer);
+        stepsWidget.setHighlightedLayer(viewportLayer);
+    }
+
+    private @Nullable ScrollbarThumb buildScrollbarThumb(int barX, int barY, int barW,
+                                                         float scrollPos, int contentW, int viewW) {
+        if (contentW <= viewW || contentW <= 0) return null;
+        int thumbW = Math.max(8, barW * viewW / contentW);
+        int maxScroll = Math.max(1, contentW - viewW);
+        int thumbX = barX + (int) ((barW - thumbW) * (scrollPos / maxScroll));
+        int thumbY = barY - (breadcrumbScrollbarThumbHeight - 1);
+        return new ScrollbarThumb(thumbX, thumbY, thumbW, breadcrumbScrollbarThumbHeight, barX, barW, maxScroll);
+    }
+
+    private static boolean isPointInside(ScrollbarThumb thumb, double x, double y) {
+        return x >= thumb.x && x <= thumb.x + thumb.w && y >= thumb.y && y <= thumb.y + thumb.h;
+    }
+
+    private float dragThumb(float currentValue, double mouseX, int barX, int barW, int barY, int contentW, int viewW) {
+        ScrollbarThumb thumb = buildScrollbarThumb(barX, barY, barW, currentValue, contentW, viewW);
+        if (thumb == null) return 0;
+        float track = Math.max(1, barW - thumb.w);
+        float thumbLeft = (float) Math.max(barX, Math.min(mouseX - dragThumbOffsetX, barX + track));
+        float progress = track <= 0 ? 0 : (thumbLeft - barX) / track;
+        return Math.max(0, Math.min(thumb.maxScroll, progress * thumb.maxScroll));
+    }
+    //endregion
+
+    //region Public API
+    static int computeThumbWidth(int barW, int contentW, int viewW) {
+        return Math.max(8, barW * viewW / Math.max(contentW, 1));
+    }
+
+    static String layerLabel(int layer) {
+        return "L" + layer;
+    }
+
+    static int debugLayerNavWidth() {
+        return layerNavWidth;
+    }
+
+    static int debugBottomStripHeight() {
+        return bottomPanelHeight;
+    }
+
+    static boolean debugLayerHeaderUsesIconOnly() {
+        return true;
+    }
+
+    private static Tooltip singleLineTooltip(String text) {
+        var tooltip = Tooltip.create();
+        tooltip.add(Component.literal(text));
+        return tooltip;
     }
 
     /** Update layer button highlight state without changing the canvas. */
     public void updateLayerButtons(int layer) {
         this.activeLayer = layer;
-        for (var child : layerNavContainer.children()) {
+        for (var child : layerButtonsContainer.children()) {
             if (child instanceof LayerButton lb) {
                 lb.updateActive(layer);
             }
         }
     }
+    //endregion
 
     // ═══════════════════ LayerButton ═══════════════════
 
@@ -382,31 +613,28 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
 
         LayerButton(int layer) {
             this.layer = layer;
-            useStyle(heightOf(14), paddingHorizontal(2));
+            useStyle(alignSelfStretch(), heightOf(20), minHeight(20), maxHeight(20), flexShrink(0), paddingHorizontal(2), marginBottom(1));
             updateActive(activeLayer);
+            int nodeCount = stepsWidget.getLayerNodeCount(layer);
+            setTooltip(singleLineTooltip("层级 " + layer + " · " + nodeCount + " 节点"));
 
             onRender((canvas, mouseX, mouseY, partialTicks, self, context) -> {
                 int w = width(), h = height();
-                int nodeCount = stepsWidget.getLayerNodeCount(layer);
-                // Bar width proportional to node count (min 4, max w-6)
-                int barW = Math.max(4, Math.min(w - 18, 4 + nodeCount * 2));
-                String label = String.valueOf(layer);
-                Font font = Minecraft.getInstance().font;
-                int labelW = font.width(label);
+                String label = layerLabel(layer);
 
                 if (active) {
-                    canvas.fill(2, 1, w - 4, h - 2, 0xFF0F1B2E);
-                    canvas.fill(2, 1, 2, h - 2, GREEN);
-                    canvas.fill(6, h / 2, barW, 2, 0xFF22C55E);
-                    canvas.drawString(label, w - labelW - 4, h / 2 - 3, 0xFF22C55E, false);
+                    canvas.texture(Background.Outlined.inset, 0, 0, w, h);
+                    canvas.fill(1, 1, w - 2, h - 2, 0x33FFFFFF);
+                    canvas.fill(1, 1, 3, h - 2, green);
                 } else if (hovered()) {
-                    canvas.fill(2, 1, w - 4, h - 2, 0xFF151D2E);
-                    canvas.fill(6, h / 2, barW, 2, 0xFF334155);
-                    canvas.drawString(label, w - labelW - 4, h / 2 - 3, 0xFF94A3B8, false);
+                    canvas.texture(Background.Outlined.flat, 0, 0, w, h);
                 } else {
-                    canvas.fill(6, h / 2, barW, 1, 0xFF1E293B);
-                    canvas.drawString(label, w - labelW - 4, h / 2 - 3, 0xFF475569, false);
+                    canvas.texture(Background.flat, 0, 0, w, h);
                 }
+
+                int labelW = Minecraft.getInstance().font.width(label);
+                canvas.drawString(label, (w - labelW) / 2, h / 2 - 3,
+                        active ? textPrimary : textSecondary, false);
             });
 
             onMouseClick((input, clickCount, context) -> {
@@ -422,32 +650,18 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
         }
     }
 
-    // ═══════════════════ NavActionButton ═══════════════════
+    private static final class LayerHeaderWidget extends Widget {
 
-    private static class NavActionButton extends CompositeWidget<Widget> {
+        private LayerHeaderWidget() {
+            useStyle(heightOf(layerHeaderHeight), minHeight(layerHeaderHeight), maxHeight(layerHeaderHeight), flexShrink(0), marginBottom(1));
+            setTooltip(singleLineTooltip("层级栏：点击层号以高亮并定位该层节点"));
+        }
 
-        NavActionButton(NavIconType iconType, int color, Runnable action) {
-            useStyle(heightOf(14), paddingHorizontal(2));
-
-            onRender((canvas, mouseX, mouseY, partialTicks, self, context) -> {
-                int w = self.width(), h = self.height();
-                if (self.hovered()) {
-                    canvas.fill(2, 1, w - 4, h - 2, 0xFF1A2744);
-                }
-                int iconSize = 8;
-                int ix = (w - iconSize) / 2;
-                int iy = (h - iconSize) / 2;
-                if (iconType == NavIconType.GRID) {
-                    drawGridIcon(canvas, ix, iy, iconSize, color);
-                } else {
-                    drawHomeIcon(canvas, ix, iy, iconSize, color);
-                }
-            });
-
-            onMouseClick((input, clickCount, context) -> {
-                action.run();
-                return EventDispatch.consumed;
-            });
+        @Override
+        protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
+            int w = width();
+            canvas.texture(Background.flat, 0, 0, w, height());
+            canvas.texture(Icon.Calc.layerNav, (w - layerHeaderIconSize) / 2, (height() - layerHeaderIconSize) / 2, layerHeaderIconSize, layerHeaderIconSize);
         }
     }
 }
