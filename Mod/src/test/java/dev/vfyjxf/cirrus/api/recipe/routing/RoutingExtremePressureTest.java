@@ -251,7 +251,7 @@ class RoutingExtremePressureTest {
 
     private static void assertNoHardExcludedExecution(dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan plan, Set<String> bannedIds) {
         for (var action : plan.actions()) {
-            if (!(action instanceof PlanAction.ExecuteRecipeAction exec) || exec.recipe().id() == null) {
+            if (!(action instanceof PlanAction.ExecuteRecipe exec) || exec.recipe().id() == null) {
                 continue;
             }
             String path = exec.recipe().id().getPath();

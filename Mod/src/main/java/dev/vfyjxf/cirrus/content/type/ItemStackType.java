@@ -142,20 +142,17 @@ public final class ItemStackType extends BasicStackType<Item, ItemStack> {
     @Override
     public long mergeDiff(ItemStack stack1, ItemStack stack2, MatchStrategy strategy) {
         if (stack1 == stack2) return 0;
-        boolean identity = matchesIdentity(stack1, stack2);
-        boolean components = !strategy.withComponent() || strategy.testComponents(stack1.getComponents(), stack2.getComponents());
-        if (identity && components) {
-            return stack1.getCount() - stack2.getCount();
-        } else return 0;
+        if (!matchesIdentity(stack1, stack2)) return 0;
+        if (strategy.withComponent() && !strategy.testComponents(stack1.getComponents(), stack2.getComponents())) return 0;
+        return stack1.getCount() - stack2.getCount();
     }
 
     @Override
     public boolean matches(ItemStack stack1, ItemStack stack2, VariantType<Item, ItemStack> variantType, MatchStrategy strategy) {
         if (stack1 == stack2) return true;
-        boolean identity = !strategy.withIdentity() || matchesIdentity(stack1, stack2, variantType);
-        boolean amount = !strategy.withAmount() || stack1.getCount() == stack2.getCount();
-        boolean components = !strategy.withComponent() || strategy.testComponents(stack1.getComponents(), stack2.getComponents());
-        return identity && amount && components;
+        if (strategy.withIdentity() && !matchesIdentity(stack1, stack2, variantType)) return false;
+        if (strategy.withAmount() && stack1.getCount() != stack2.getCount()) return false;
+        return !strategy.withComponent() || strategy.testComponents(stack1.getComponents(), stack2.getComponents());
     }
 
     //endregion

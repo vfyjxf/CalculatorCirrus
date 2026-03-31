@@ -16,9 +16,6 @@ public record InteractionContext(
 ) {
 
     public InteractionContext {
-        Checks.checkNotNull(recipe, "recipe");
-        Checks.checkNotNull(inputs, "inputs");
-        Checks.checkNotNull(expectedOutputs, "expectedOutputs");
         Checks.checkArgument(times > 0, "times must be positive");
     }
 }

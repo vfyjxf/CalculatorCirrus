@@ -8,6 +8,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
+import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanBuilder;
 import dev.vfyjxf.cloudlib.util.Checks;
 import it.unimi.dsi.fastutil.objects.Object2LongMap;
@@ -20,7 +21,7 @@ import it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap;
  * <ul>
  *     <li><b>Stock pool</b> — the player's initial inventory, wrapped in a
  *         {@link Stock} instance. Resources consumed from stock are recorded
- *         as {@link dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction.ConsumeStockAction}
+ *         as {@link PlanAction.ConsumeStock}
  *         actions in the plan.</li>
  *     <li><b>Byproduct pool</b> — intermediate outputs produced by recipes
  *         executed during planning. These are available for consumption by
@@ -74,6 +75,27 @@ public final class ResourceLedger {
     }
 
     /**
+     * Estimates how much of an input can be satisfied immediately by stock plus byproducts.
+     */
+    public long peekAvailable(InputContent input) {
+        long total = stock.countMatchingInput(input);
+        if (input.isEnumerable()) {
+            for (ContentVariant variant : input.enumerate()) {
+                total = safeAdd(total, countByproductVariant(variant));
+            }
+            return total;
+        }
+
+        for (Object2LongMap.Entry<ContentResource> entry : byproducts.object2LongEntrySet()) {
+            long available = entry.getLongValue();
+            if (available > 0L && input.satisfy(entry.getKey())) {
+                total = safeAdd(total, available);
+            }
+        }
+        return total;
+    }
+
+    /**
      * Consumes up to {@code amount} of a variant from both stock and byproducts,
      * recording stock-consumption actions in the plan builder.
      *
@@ -84,17 +106,15 @@ public final class ResourceLedger {
      * @param planBuilder the plan builder to record actions into
      * @return the total amount actually consumed
      */
-    public long consumeVariantDemand(ContentVariant variant, long amount, PlanBuilder planBuilder) {
+    public long consumeVariantDemand(InputContent input, ContentVariant variant, long amount, PlanBuilder planBuilder) {
         if (amount <= 0) {
             return 0;
         }
         long remaining = amount;
-        long fromStock = stock.consumeVariant(variant, remaining);
-        if (fromStock > 0) {
-            remaining -= fromStock;
-            if (variant instanceof ContentResource resource) {
-                planBuilder.addConsumeStock(resource, fromStock);
-            }
+        var fromStock = stock.consumeVariantDetailed(variant, remaining);
+        for (Stock.ConsumedResource consumed : fromStock) {
+            remaining -= consumed.amount();
+            planBuilder.addConsumeStock(input, consumed.resource(), consumed.amount());
         }
 
         if (remaining > 0) {
@@ -111,6 +131,12 @@ public final class ResourceLedger {
         return new ResourceLedger(stock.copy(), copied);
     }
 
+    public void restoreFrom(ResourceLedger snapshot) {
+        stock.restoreFrom(snapshot.stock);
+        byproducts.clear();
+        byproducts.putAll(snapshot.byproducts);
+    }
+
     /**
      * Consume as much as possible for an input demand and record stock consumption actions.
      *
@@ -118,30 +144,26 @@ public final class ResourceLedger {
      */
     public long consumeDemand(InputContent input, long amount, PlanBuilder planBuilder) {
         long remaining = amount;
-
-        if (input.isEnumerable()) {
-            for (ContentVariant variant : input.enumerate()) {
-                if (remaining <= 0) {
-                    break;
-                }
-
-                long fromStock = stock.consumeVariant(variant, remaining);
-                if (fromStock > 0) {
-                    remaining -= fromStock;
-                    if (variant instanceof ContentResource resource) {
-                        planBuilder.addConsumeStock(resource, fromStock);
-                    }
-                }
-
-                if (remaining > 0) {
-                    long fromByproduct = consumeByproductVariant(variant, remaining);
-                    remaining -= fromByproduct;
-                }
-            }
-            return remaining;
+        var fromStock = stock.consumeInputDetailed(input, remaining);
+        for (Stock.ConsumedResource consumed : fromStock) {
+            remaining -= consumed.amount();
+            planBuilder.addConsumeStock(input, consumed.resource(), consumed.amount());
         }
+        if (remaining > 0) {
+            remaining = consumeByproductSatisfying(input, remaining);
+        }
+        return remaining;
+    }
 
-        return consumeByproductSatisfying(input, remaining);
+    /**
+     * Records an unresolved demand as a pending external input without forcing
+     * {@code input} into an arbitrary concrete resource.
+     */
+    public void recordPendingInput(InputContent input, long amount, PlanBuilder planBuilder) {
+        if (amount <= 0) {
+            return;
+        }
+        planBuilder.addPendingInput(input, amount);
     }
 
     /**
@@ -263,5 +285,15 @@ public final class ResourceLedger {
             return value;
         }
         return resource;
+    }
+
+    private static long safeAdd(long first, long second) {
+        if (second > 0L && first > Long.MAX_VALUE - second) {
+            return Long.MAX_VALUE;
+        }
+        if (second < 0L && first < Long.MIN_VALUE - second) {
+            return Long.MIN_VALUE;
+        }
+        return first + second;
     }
 }

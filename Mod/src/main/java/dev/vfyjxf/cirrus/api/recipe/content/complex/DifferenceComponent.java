@@ -43,7 +43,7 @@ public final class DifferenceComponent implements ComplexContent {
 
     @Override
     public boolean isEmpty() {
-        return rejected.notEmpty() || rejected.isEmpty();
+        return required.isEmpty();
     }
 
     @Override

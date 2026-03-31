@@ -5,6 +5,7 @@ import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.list.ImmutableList;
 
@@ -31,17 +32,9 @@ public sealed interface InteractionStep permits
 
     sealed interface AccessTarget permits AccessTarget.Resource, AccessTarget.Input {
 
-        record Resource(ContentResource resource) implements AccessTarget {
-            public Resource {
-                Checks.checkNotNull(resource, "resource");
-            }
-        }
+        record Resource(ContentResource resource) implements AccessTarget {}
 
-        record Input(InputContent input) implements AccessTarget {
-            public Input {
-                Checks.checkNotNull(input, "input");
-            }
-        }
+        record Input(InputContent input) implements AccessTarget {}
     }
 
     //endregion
@@ -55,9 +48,6 @@ public sealed interface InteractionStep permits
         long requestedAmount
     ) implements InteractionStep {
         public EnsureAccessibleStep {
-            Checks.checkNotNull(requiredSide, "requiredSide");
-            Checks.checkNotNull(requiredCapability, "requiredCapability");
-            Checks.checkNotNull(target, "target");
             Checks.checkArgument(requestedAmount > 0, "requestedAmount must be positive");
         }
     }
@@ -65,15 +55,19 @@ public sealed interface InteractionStep permits
     record WithdrawResourceStep(
         ExecutionSideRequirement requiredSide,
         ExecutionCapability requiredCapability,
-        ContentResource resource,
+        WithdrawTarget target,
         long requestedAmount
     ) implements InteractionStep {
         public WithdrawResourceStep {
-            Checks.checkNotNull(requiredSide, "requiredSide");
-            Checks.checkNotNull(requiredCapability, "requiredCapability");
-            Checks.checkNotNull(resource, "resource");
             Checks.checkArgument(requestedAmount > 0, "requestedAmount must be positive");
         }
+    }
+
+    sealed interface WithdrawTarget permits WithdrawTarget.Resource, WithdrawTarget.Input {
+
+        record Resource(ContentResource resource) implements WithdrawTarget {}
+
+        record Input(InputContent input) implements WithdrawTarget {}
     }
 
     record ReserveCatalystStep(
@@ -83,9 +77,6 @@ public sealed interface InteractionStep permits
         long amount
     ) implements InteractionStep {
         public ReserveCatalystStep {
-            Checks.checkNotNull(requiredSide, "requiredSide");
-            Checks.checkNotNull(requiredCapability, "requiredCapability");
-            Checks.checkNotNull(input, "input");
             Checks.checkArgument(amount > 0, "amount must be positive");
         }
     }
@@ -97,9 +88,6 @@ public sealed interface InteractionStep permits
         long amount
     ) implements InteractionStep {
         public EnsureCapacityStep {
-            Checks.checkNotNull(requiredSide, "requiredSide");
-            Checks.checkNotNull(requiredCapability, "requiredCapability");
-            Checks.checkNotNull(resource, "resource");
             Checks.checkArgument(amount > 0, "amount must be positive");
         }
     }
@@ -111,9 +99,6 @@ public sealed interface InteractionStep permits
         long amount
     ) implements InteractionStep {
         public StoreOutputsStep {
-            Checks.checkNotNull(requiredSide, "requiredSide");
-            Checks.checkNotNull(requiredCapability, "requiredCapability");
-            Checks.checkNotNull(resource, "resource");
             Checks.checkArgument(amount > 0, "amount must be positive");
         }
     }
@@ -127,13 +112,9 @@ public sealed interface InteractionStep permits
         ExecutionCapability requiredCapability,
         RecipeEntry<?> recipe,
         int times,
-        String interactionId
+        Namespace interactionId
     ) implements InteractionStep {
         public OpenInteractionStep {
-            Checks.checkNotNull(requiredSide, "requiredSide");
-            Checks.checkNotNull(requiredCapability, "requiredCapability");
-            Checks.checkNotNull(recipe, "recipe");
-            Checks.checkNotNull(interactionId, "interactionId");
             Checks.checkArgument(times > 0, "times must be positive");
         }
     }
@@ -143,14 +124,7 @@ public sealed interface InteractionStep permits
         ExecutionCapability requiredCapability,
         RecipeEntry<?> recipe,
         ImmutableList<PlanAction.InputBinding> inputs
-    ) implements InteractionStep {
-        public PrepareInputsStep {
-            Checks.checkNotNull(requiredSide, "requiredSide");
-            Checks.checkNotNull(requiredCapability, "requiredCapability");
-            Checks.checkNotNull(recipe, "recipe");
-            Checks.checkNotNull(inputs, "inputs");
-        }
-    }
+    ) implements InteractionStep {}
 
     record ExecuteRecipeStep(
         ExecutionSideRequirement requiredSide,
@@ -161,11 +135,6 @@ public sealed interface InteractionStep permits
         ImmutableList<PlanAction.OutputBinding> expectedOutputs
     ) implements InteractionStep {
         public ExecuteRecipeStep {
-            Checks.checkNotNull(requiredSide, "requiredSide");
-            Checks.checkNotNull(requiredCapability, "requiredCapability");
-            Checks.checkNotNull(recipe, "recipe");
-            Checks.checkNotNull(inputs, "inputs");
-            Checks.checkNotNull(expectedOutputs, "expectedOutputs");
             Checks.checkArgument(times > 0, "times must be positive");
         }
     }
@@ -175,26 +144,13 @@ public sealed interface InteractionStep permits
         ExecutionCapability requiredCapability,
         RecipeEntry<?> recipe,
         ImmutableList<PlanAction.OutputBinding> expectedOutputs
-    ) implements InteractionStep {
-        public CollectOutputsStep {
-            Checks.checkNotNull(requiredSide, "requiredSide");
-            Checks.checkNotNull(requiredCapability, "requiredCapability");
-            Checks.checkNotNull(recipe, "recipe");
-            Checks.checkNotNull(expectedOutputs, "expectedOutputs");
-        }
-    }
+    ) implements InteractionStep {}
 
     record ManualCheckpointStep(
         ExecutionSideRequirement requiredSide,
         ExecutionCapability requiredCapability,
         ExecutionGuidance guidance
-    ) implements InteractionStep {
-        public ManualCheckpointStep {
-            Checks.checkNotNull(requiredSide, "requiredSide");
-            Checks.checkNotNull(requiredCapability, "requiredCapability");
-            Checks.checkNotNull(guidance, "guidance");
-        }
-    }
+    ) implements InteractionStep {}
 
     //endregion
 }

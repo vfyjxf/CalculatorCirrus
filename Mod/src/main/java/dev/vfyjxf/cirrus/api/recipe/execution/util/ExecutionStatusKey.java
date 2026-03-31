@@ -9,8 +9,7 @@ import dev.vfyjxf.cloudlib.util.Checks;
  * @param id the namespace identifier for this status
  */
 public record ExecutionStatusKey(Namespace id) {
-
     public ExecutionStatusKey {
-        Checks.checkNotNull(id, "id");
+        id = Checks.checkNotNull(id, "id");
     }
 }

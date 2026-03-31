@@ -2,15 +2,44 @@ package dev.vfyjxf.cirrus.api.recipe;
 
 import dev.vfyjxf.cirrus.CirrusConstants;
 import dev.vfyjxf.cirrus.api.CirrusTypes;
+import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.plugin.CirrusPlugin;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.FluidContainerContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContext;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.*;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.*;
-import dev.vfyjxf.cirrus.api.recipe.projection.resolve.*;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseSet;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionEngine;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
+import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.InputEffect;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.InputInjected;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.InputRejected;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.InputReplaced;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputEffect;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputInjected;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputRejected;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputReplaced;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionEffect;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionEffectPhase;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionEffectSource;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionPluginReport;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionReport;
+import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveEffect;
+import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveGuard;
+import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveGuardResult;
+import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolvePolicy;
+import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveScope;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.register.RecipeSystemRegister;
 import dev.vfyjxf.cirrus.recipe.clause.FluidContainerUnpackClause;
 import dev.vfyjxf.cirrus.recipe.clause.GuaranteedOutputClause;
@@ -39,122 +68,145 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ExtendWith(EphemeralTestServerProvider.class)
 public class ProjectionEffectPipelineTest {
 
-    //region single clause scenarios
-
     @Test
-    void testUnwrapClauseProducesInputRejectionAndTwoInputInjections(MinecraftServer server) {
+    void unwrapClauseProducesFluidInputAndGenericContainerRequirement(MinecraftServer server) {
         RecipeProjection raw = new ProjectionRecipeBuilder()
-                .input(InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)), FluidContainerUnpackClause.instance)
-                .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
-                .build();
+            .input(InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)), FluidContainerUnpackClause.instance)
+            .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
+            .build();
 
         ProjectionEngine engine = new ProjectionEngine();
         engine.addContentTransformer(CirrusTypes.Clauses.fluidContainerUnpack, FluidContainerUnpackClause.transformer);
         ProjectionReport report = engine.projectReport(new ExecutionContext(), raw);
-        ProjectedRecipe projected = report.recipe();
+        ProjectedRecipe projected = report.projectedRecipe();
 
-        MutableList<ProjectionEffect> rejected = effectsByType(report, ProjectionEffectTypes.contentRejected);
-        MutableList<ProjectionEffect> injected = effectsByType(report, ProjectionEffectTypes.contentInjected);
+        MutableList<ProjectionEffect> removed = removedEffects(report);
+        MutableList<ProjectionEffect> added = addedEffects(report);
+        MutableList<ProjectionEffect> replaced = replacedEffects(report);
 
-        assertEquals(1, rejected.size(), "unwrap should reject original container input");
-        assertEquals(2, injected.size(), "unwrap should inject remaining container + fluid input");
-        assertEquals(2, projected.inputs().size(), "raw single input should become two transformed inputs");
+        assertTrue(removed.isEmpty());
+        assertEquals(1, replaced.size());
+        assertEquals(1, added.size());
+        assertEquals(2, projected.inputs().size());
+        assertTrue(projected.inputs().anySatisfy(FluidContainerContent.class::isInstance));
 
-        ProjectionEffect rejectedEffect = rejected.getOnly();
-        assertEffectSourcePath(rejectedEffect, FluidContainerUnpackClause.id, "contentTransformer", "input", 0);
-        assertNotNull(rejectedEffect.change().before());
-        assertNull(rejectedEffect.change().after());
-        assertEquals(1L, rejectedEffect.meta().get(ProjectionEffectMetaKeys.beforeAmount));
-        assertFalse(rejectedEffect.meta().has(ProjectionEffectMetaKeys.afterAmount));
+        ProjectionEffect replacedEffect = replaced.getOnly();
+        assertContentEffect(replacedEffect, FluidContainerUnpackClause.id, ProjectionEffectPhase.contentTransformer, EffectChannel.input, 0);
+        assertNotNull(effectBefore(replacedEffect));
+        assertNotNull(effectAfter(replacedEffect));
+        assertEquals(1L, beforeAmount(replacedEffect));
+        assertTrue(afterAmount(replacedEffect) > 0L);
 
-        Set<Integer> injectedIndices = new HashSet<>();
-        for (ProjectionEffect injectedEffect : injected) {
-            assertEffectSourcePath(
-                    injectedEffect,
-                    FluidContainerUnpackClause.id,
-                    "contentTransformer",
-                    "input",
-                    injectedEffect.path().index()
+        Set<Integer> addedIndices = new HashSet<>();
+        for (ProjectionEffect addedEffect : added) {
+            assertContentEffect(
+                addedEffect,
+                FluidContainerUnpackClause.id,
+                ProjectionEffectPhase.contentTransformer,
+                EffectChannel.input,
+                effectIndex(addedEffect)
             );
-            assertNull(injectedEffect.change().before());
-            assertNotNull(injectedEffect.change().after());
-            assertTrue(injectedEffect.meta().has(ProjectionEffectMetaKeys.afterAmount));
-            assertTrue(injectedEffect.meta().has(ProjectionEffectMetaKeys.afterType));
-            injectedIndices.add(injectedEffect.path().index());
+            assertNull(effectBefore(addedEffect));
+            assertNotNull(effectAfter(addedEffect));
+            assertTrue(effectAfter(addedEffect) instanceof FluidContainerContent);
+            FluidContainerContent containerRequirement = (FluidContainerContent) effectAfter(addedEffect);
+            assertFalse(containerRequirement.isEnumerable());
+            assertTrue(containerRequirement.satisfy(ContentStack.fromStack(new ItemStack(Items.WATER_BUCKET))));
+            assertTrue(afterAmount(addedEffect) > 0L);
+            addedIndices.add(effectIndex(addedEffect));
         }
-        assertEquals(Set.of(0, 1), injectedIndices);
+        assertEquals(Set.of(1), addedIndices);
     }
 
     @Test
-    void testSkipChancedOutputUsesProjectionTransformerSource(MinecraftServer server) {
+    void skipChancedOutputUsesProjectionTransformerSource(MinecraftServer server) {
         RecipeProjection raw = new ProjectionRecipeBuilder()
-                .input(InputContent.fromItemStack(new ItemStack(Items.STICK)))
-                .output(OutputContent.fromItemStack(new ItemStack(Items.DIAMOND), 1, 0.25F))
-                .build();
+            .input(InputContent.fromItemStack(new ItemStack(Items.STICK)))
+            .output(OutputContent.fromItemStack(new ItemStack(Items.DIAMOND), 1, 0.25F))
+            .build();
         raw.addClause(GuaranteedOutputClause.instance);
 
         ProjectionEngine engine = new ProjectionEngine();
         engine.addProjectionTransformer(GuaranteedOutputClause.type, GuaranteedOutputClause.projectionTransformer);
         ProjectionReport report = engine.projectReport(new ExecutionContext(), raw);
 
-        MutableList<ProjectionEffect> rejected = effectsByType(report, ProjectionEffectTypes.contentRejected);
-        assertEquals(1, rejected.size(), "skip clause should reject chanced output");
-        assertTrue(report.recipe().outputs().isEmpty(), "chanced output should be removed from projected output list");
+        MutableList<ProjectionEffect> removed = removedEffects(report);
+        assertEquals(1, removed.size());
+        assertTrue(report.projectedRecipe().outputs().isEmpty());
 
-        ProjectionEffect rejectedEffect = rejected.getOnly();
-        assertEffectSourcePath(rejectedEffect, GuaranteedOutputClause.id, "projectionTransformer", "output", 0);
-        assertNotNull(rejectedEffect.change().before());
-        assertNull(rejectedEffect.change().after());
-        assertTrue(rejectedEffect.meta().has(ProjectionEffectMetaKeys.beforeAmount));
-        assertFalse(rejectedEffect.meta().has(ProjectionEffectMetaKeys.afterAmount));
+        ProjectionEffect removedEffect = removed.getOnly();
+        assertContentEffect(removedEffect, GuaranteedOutputClause.id, ProjectionEffectPhase.projectionTransformer, EffectChannel.output, 0);
+        assertNotNull(effectBefore(removedEffect));
+        assertNull(effectAfter(removedEffect));
+        assertEquals(1L, beforeAmount(removedEffect));
     }
 
     @Test
-    void testScaleAmountClauseEmitsChangedEffectWithDeltaAndFactor(MinecraftServer server) {
+    void scaleAmountClauseEmitsReplacedEffectWithDeltaAndFactor(MinecraftServer server) {
         RecipeProjection raw = new ProjectionRecipeBuilder()
-                .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)), scaleAmountClause)
-                .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
-                .build();
+            .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)), scaleAmountClause)
+            .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
+            .build();
 
         ProjectionEngine engine = new ProjectionEngine();
         engine.addContentTransformer(scaleAmountClauseType, scaleAmountTransformer);
         ProjectionReport report = engine.projectReport(new ExecutionContext(), raw);
 
-        MutableList<ProjectionEffect> changed = effectsByType(report, ProjectionEffectTypes.contentChanged);
-        assertEquals(1, changed.size(), "scale clause should emit one contentChanged effect");
+        MutableList<ProjectionEffect> replaced = replacedEffects(report);
+        assertEquals(1, replaced.size());
 
-        ProjectionEffect changedEffect = changed.getOnly();
-        assertEffectSourcePath(changedEffect, scaleAmountClauseId, "contentTransformer", "input", 0);
-        assertNotNull(changedEffect.change().before());
-        assertNotNull(changedEffect.change().after());
+        ProjectionEffect replacedEffect = replaced.getOnly();
+        assertContentEffect(replacedEffect, scaleAmountClauseId, ProjectionEffectPhase.contentTransformer, EffectChannel.input, 0);
+        assertEquals(2L, beforeAmount(replacedEffect));
+        assertEquals(4L, afterAmount(replacedEffect));
+        assertEquals(2L, amountDelta(replacedEffect));
+        assertEquals(2.0D, amountFactor(replacedEffect), 0.00001D);
+        assertEquals(4L, report.projectedRecipe().inputs().get(0).amount());
 
-        assertEquals(2L, changedEffect.meta().get(ProjectionEffectMetaKeys.beforeAmount));
-        assertEquals(4L, changedEffect.meta().get(ProjectionEffectMetaKeys.afterAmount));
-        assertEquals(2L, changedEffect.meta().get(ProjectionEffectMetaKeys.amountDelta));
-
-        Double factor = changedEffect.meta().get(ProjectionEffectMetaKeys.amountFactor);
-        assertNotNull(factor);
-        assertEquals(2.0D, factor, 0.00001D);
-        assertEquals(4L, report.recipe().inputs().get(0).amount());
+        ProjectionPluginReport pluginReport = report.pluginReport(ProjectionPlugin.builtin);
+        assertEquals(1, pluginReport.effectCount());
+        assertEquals(1, pluginReport.inputChangeCount());
+        assertEquals(0, pluginReport.outputChangeCount());
+        assertTrue(pluginReport.changesInputs());
+        assertFalse(pluginReport.changesOutputs());
     }
 
-    //endregion
+    @Test
+    void projectionReportDoesNotMutateSourceProjection(MinecraftServer server) {
+        RecipeProjection raw = new ProjectionRecipeBuilder()
+            .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)), scaleAmountClause)
+            .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
+            .build();
 
-    //region composed scenarios
+        ProjectionEngine engine = new ProjectionEngine();
+        engine.addContentTransformer(scaleAmountClauseType, scaleAmountTransformer);
+
+        ProjectionReport first = engine.projectReport(new ExecutionContext(), raw);
+        ProjectionReport second = engine.projectReport(new ExecutionContext(), raw);
+
+        assertEquals(2L, raw.inputs().getFirst().content().amount());
+        assertEquals(4L, first.projectedRecipe().inputs().getFirst().amount());
+        assertEquals(4L, second.projectedRecipe().inputs().getFirst().amount());
+    }
 
     @Test
-    void testCombinedClausesTrackEffectOwnershipAcrossChannels(MinecraftServer server) {
+    void combinedClausesTrackTypedOwnershipAcrossChannels(MinecraftServer server) {
         RecipeProjection raw = new ProjectionRecipeBuilder()
-                .input(InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)), FluidContainerUnpackClause.instance)
-                .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)), scaleAmountClause)
-                .output(OutputContent.fromItemStack(new ItemStack(Items.DIAMOND), 1, 0.25F))
-                .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
-                .build();
+            .input(InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)), FluidContainerUnpackClause.instance)
+            .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)), scaleAmountClause)
+            .output(OutputContent.fromItemStack(new ItemStack(Items.DIAMOND), 1, 0.25F))
+            .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
+            .build();
         raw.addClause(GuaranteedOutputClause.instance);
 
         ProjectionEngine engine = new ProjectionEngine();
@@ -163,124 +215,125 @@ public class ProjectionEffectPipelineTest {
         engine.addContentTransformer(scaleAmountClauseType, scaleAmountTransformer);
         ProjectionReport report = engine.projectReport(new ExecutionContext(), raw);
 
-        assertEquals(3, report.recipe().inputs().size(), "second input retained, first input replaced by two injections");
-        assertEquals(1, report.recipe().outputs().size(), "chanced output rejected, constant output retained");
+        assertEquals(3, report.projectedRecipe().inputs().size());
+        assertEquals(1, report.projectedRecipe().outputs().size());
 
-        MutableList<ProjectionEffect> rejected = effectsByType(report, ProjectionEffectTypes.contentRejected);
-        MutableList<ProjectionEffect> injected = effectsByType(report, ProjectionEffectTypes.contentInjected);
-        MutableList<ProjectionEffect> changed = effectsByType(report, ProjectionEffectTypes.contentChanged);
+        MutableList<ProjectionEffect> removed = removedEffects(report);
+        MutableList<ProjectionEffect> added = addedEffects(report);
+        MutableList<ProjectionEffect> replaced = replacedEffects(report);
 
-        assertEquals(2, rejected.size());
-        assertEquals(2, injected.size());
-        assertEquals(1, changed.size());
+        assertEquals(1, removed.size());
+        assertEquals(1, added.size());
+        assertEquals(2, replaced.size());
 
-        boolean hasInputRejectedByUnwrap = false;
-        boolean hasOutputRejectedBySkip = false;
-        for (ProjectionEffect rejectedEffect : rejected) {
-            if (rejectedEffect.source().clauseId().equals(FluidContainerUnpackClause.id)) {
-                hasInputRejectedByUnwrap = rejectedEffect.path().channel().equals("input");
-            }
-            if (rejectedEffect.source().clauseId().equals(GuaranteedOutputClause.id)) {
-                hasOutputRejectedBySkip = rejectedEffect.path().channel().equals("output");
+        boolean hasInputReplacedByUnwrap = false;
+        boolean hasOutputRemovedBySkip = false;
+        for (ProjectionEffect effect : replaced) {
+            if (effect.source().clauseId().equals(FluidContainerUnpackClause.id)) {
+                hasInputReplacedByUnwrap = effectChannel(effect) == EffectChannel.input;
             }
         }
-        assertTrue(hasInputRejectedByUnwrap, "missing input rejection from unwrap clause");
-        assertTrue(hasOutputRejectedBySkip, "missing output rejection from skip clause");
-
-        ProjectionEffect changedEffect = changed.getOnly();
-        assertEffectSourcePath(changedEffect, scaleAmountClauseId, "contentTransformer", "input", 1);
-        assertEquals(2L, changedEffect.meta().get(ProjectionEffectMetaKeys.beforeAmount));
-        assertEquals(4L, changedEffect.meta().get(ProjectionEffectMetaKeys.afterAmount));
-
-        Set<Integer> injectedIndices = new HashSet<>();
-        for (ProjectionEffect injectedEffect : injected) {
-            injectedIndices.add(injectedEffect.path().index());
-            assertEquals("input", injectedEffect.path().channel());
-            assertEquals(FluidContainerUnpackClause.id, injectedEffect.source().clauseId());
+        for (ProjectionEffect effect : removed) {
+            if (effect.source().clauseId().equals(GuaranteedOutputClause.id)) {
+                hasOutputRemovedBySkip = effectChannel(effect) == EffectChannel.output;
+            }
         }
-        assertEquals(Set.of(1, 2), injectedIndices);
+        assertTrue(hasInputReplacedByUnwrap);
+        assertTrue(hasOutputRemovedBySkip);
+
+        ProjectionEffect replacedEffect = replaced.detect(effect -> effect.source().clauseId().equals(scaleAmountClauseId));
+        assertNotNull(replacedEffect);
+        assertContentEffect(replacedEffect, scaleAmountClauseId, ProjectionEffectPhase.contentTransformer, EffectChannel.input, 1);
+        assertEquals(2L, beforeAmount(replacedEffect));
+        assertEquals(4L, afterAmount(replacedEffect));
+
+        Set<Integer> addedIndices = new HashSet<>();
+        for (ProjectionEffect effect : added) {
+            addedIndices.add(effectIndex(effect));
+            assertEquals(EffectChannel.input, effectChannel(effect));
+            assertEquals(FluidContainerUnpackClause.id, effect.source().clauseId());
+        }
+        assertEquals(Set.of(2), addedIndices);
     }
 
     @Test
-    void testContentTransformerCanRejectInputAndInjectOutput(MinecraftServer server) {
+    void contentTransformerCanRemoveInputAndAddOutput(MinecraftServer server) {
         RecipeProjection raw = new ProjectionRecipeBuilder()
-                .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)), mirrorToOutputClause)
-                .output(OutputContent.fromItemStack(new ItemStack(Items.COBBLESTONE)))
-                .build();
+            .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)), mirrorToOutputClause)
+            .output(OutputContent.fromItemStack(new ItemStack(Items.COBBLESTONE)))
+            .build();
 
         ProjectionEngine engine = new ProjectionEngine();
         engine.addContentTransformer(mirrorToOutputClauseType, mirrorToOutputTransformer);
         ProjectionReport report = engine.projectReport(new ExecutionContext(), raw);
 
-        assertTrue(report.recipe().inputs().isEmpty(), "source input should be removed");
-        assertEquals(2, report.recipe().outputs().size(), "original output + mirrored injected output");
+        assertTrue(report.projectedRecipe().inputs().isEmpty());
+        assertEquals(2, report.projectedRecipe().outputs().size());
 
-        MutableList<ProjectionEffect> rejected = effectsByType(report, ProjectionEffectTypes.contentRejected);
-        MutableList<ProjectionEffect> injected = effectsByType(report, ProjectionEffectTypes.contentInjected);
-        MutableList<ProjectionEffect> changed = effectsByType(report, ProjectionEffectTypes.contentChanged);
+        MutableList<ProjectionEffect> removed = removedEffects(report);
+        MutableList<ProjectionEffect> added = addedEffects(report);
+        MutableList<ProjectionEffect> replaced = replacedEffects(report);
 
-        assertEquals(1, rejected.size());
-        assertEquals(1, injected.size());
-        assertTrue(changed.isEmpty());
+        assertEquals(1, removed.size());
+        assertEquals(1, added.size());
+        assertTrue(replaced.isEmpty());
 
-        ProjectionEffect rejectedEffect = rejected.getOnly();
-        assertEffectSourcePath(rejectedEffect, mirrorToOutputClauseId, "contentTransformer", "input", 0);
-
-        ProjectionEffect injectedEffect = injected.getOnly();
-        assertEffectSourcePath(injectedEffect, mirrorToOutputClauseId, "contentTransformer", "output", 1);
-        assertEquals(6L, injectedEffect.meta().get(ProjectionEffectMetaKeys.afterAmount));
+        assertContentEffect(removed.getOnly(), mirrorToOutputClauseId, ProjectionEffectPhase.contentTransformer, EffectChannel.input, 0);
+        ProjectionEffect addedEffect = added.getOnly();
+        assertContentEffect(addedEffect, mirrorToOutputClauseId, ProjectionEffectPhase.contentTransformer, EffectChannel.output, 1);
+        assertEquals(6L, afterAmount(addedEffect));
     }
 
     @Test
-    void testSelectiveClauseApplicationKeepsChangedEffectIndicesStable(MinecraftServer server) {
+    void selectiveClauseApplicationKeepsChangedEffectIndicesStable(MinecraftServer server) {
         RecipeProjection raw = new ProjectionRecipeBuilder()
-                .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 1)), scaleAmountClause)
-                .input(InputContent.fromItemStack(new ItemStack(Items.COBBLESTONE, 1)))
-                .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 3)), scaleAmountClause)
-                .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
-                .build();
+            .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 1)), scaleAmountClause)
+            .input(InputContent.fromItemStack(new ItemStack(Items.COBBLESTONE, 1)))
+            .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 3)), scaleAmountClause)
+            .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
+            .build();
 
         ProjectionEngine engine = new ProjectionEngine();
         engine.addContentTransformer(scaleAmountClauseType, scaleAmountTransformer);
         ProjectionReport report = engine.projectReport(new ExecutionContext(), raw);
 
-        MutableList<ProjectionEffect> changed = effectsByType(report, ProjectionEffectTypes.contentChanged);
-        assertEquals(2, changed.size(), "only inputs tagged by scale clause should change");
+        MutableList<ProjectionEffect> replaced = replacedEffects(report);
+        assertEquals(2, replaced.size());
 
         Set<Integer> indices = new HashSet<>();
-        for (ProjectionEffect changedEffect : changed) {
-            assertEquals(scaleAmountClauseId, changedEffect.source().clauseId());
-            indices.add(changedEffect.path().index());
+        for (ProjectionEffect effect : replaced) {
+            assertEquals(scaleAmountClauseId, effect.source().clauseId());
+            indices.add(effectIndex(effect));
         }
         assertEquals(Set.of(0, 2), indices);
 
-        assertEquals(2L, report.recipe().inputs().get(0).amount());
-        assertEquals(1L, report.recipe().inputs().get(1).amount());
-        assertEquals(6L, report.recipe().inputs().get(2).amount());
+        assertEquals(2L, report.projectedRecipe().inputs().get(0).amount());
+        assertEquals(1L, report.projectedRecipe().inputs().get(1).amount());
+        assertEquals(6L, report.projectedRecipe().inputs().get(2).amount());
     }
 
     @Test
-    void testSemanticClauseNamesPublishedInCirrusTypes(MinecraftServer server) {
+    void semanticClauseNamesPublishedInCirrusTypes(MinecraftServer server) {
         assertSame(FluidContainerUnpackClause.type, CirrusTypes.Clauses.fluidContainerUnpack);
         assertSame(GuaranteedOutputClause.type, CirrusTypes.Clauses.guaranteedOutput);
         assertSame(ResolvePolicyClause.type, CirrusTypes.Clauses.resolvePolicy);
     }
 
     @Test
-    void testResolvePolicyGuardBlocksEffectsAndExposesFinding(MinecraftServer server) {
+    void resolvePolicyGuardBlocksEffectsAndExposesFinding(MinecraftServer server) {
         RecipeProjection raw = new ProjectionRecipeBuilder()
-                .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)))
-                .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
-                .build();
+            .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)))
+            .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
+            .build();
 
         ResolvePolicy policy = new ResolvePolicy(
-                Lists.immutable.with(
-                        ResolveGuard.of(
-                                guardMinInputAmountId,
-                                (context, recipe) -> ResolveGuardResult.fail("input_amount_too_low", EffectMeta.empty())
-                        )
-                ),
-                Lists.immutable.with(resolveDoubleInputEffect)
+            Lists.immutable.with(
+                ResolveGuard.of(
+                    guardMinInputAmountId,
+                    (context, recipe) -> ResolveGuardResult.fail("input_amount_too_low")
+                )
+            ),
+            Lists.immutable.with(resolveDoubleInputEffect)
         );
         raw.addClause(new ResolvePolicyClause(policy));
 
@@ -293,21 +346,21 @@ public class ProjectionEffectPipelineTest {
         assertEquals(guardMinInputAmountId, finding.guardId());
         assertEquals("input_amount_too_low", finding.reasonCode());
 
-        assertEquals(2L, report.recipe().inputs().getFirst().amount(), "guard blocked effect, amount should stay unchanged");
-        assertTrue(report.effects().isEmpty(), "blocked resolve effect should emit no projection effect");
+        assertEquals(2L, report.projectedRecipe().inputs().getFirst().amount());
+        assertTrue(report.effects().isEmpty());
     }
 
     @Test
-    void testResolvePolicyEffectsEmitObservableMetaAndRespectExtraOrder(MinecraftServer server) {
+    void resolvePolicyEffectsEmitTypedSourceAndRespectExtraOrder(MinecraftServer server) {
         RecipeProjection raw = new ProjectionRecipeBuilder()
-                .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)))
-                .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
-                .build();
+            .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)))
+            .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
+            .build();
 
         ResolvePolicy policy = new ResolvePolicy(
-                Lists.immutable.with(ResolveGuard.of(alwaysPassGuardId, (context, recipe) -> ResolveGuardResult.pass())),
-                Lists.immutable.with(resolveAddThreeEffect, resolveDoubleInputEffect),
-                Comparator.comparingInt(ResolveEffect::order)
+            Lists.immutable.with(ResolveGuard.of(alwaysPassGuardId, (context, recipe) -> ResolveGuardResult.pass())),
+            Lists.immutable.with(resolveAddThreeEffect, resolveDoubleInputEffect),
+            Comparator.comparingInt(ResolveEffect::order)
         );
         raw.addClause(new ResolvePolicyClause(policy));
 
@@ -317,89 +370,176 @@ public class ProjectionEffectPipelineTest {
         assertTrue(report.runnable());
         assertEquals(1, report.guardFindings().size());
         assertTrue(report.guardFindings().getFirst().passed());
+        assertEquals(7L, report.projectedRecipe().inputs().getFirst().amount());
 
-        assertEquals(7L, report.recipe().inputs().getFirst().amount());
+        MutableList<ProjectionEffect> replaced = replacedEffects(report);
+        assertEquals(2, replaced.size());
 
-        MutableList<ProjectionEffect> changed = effectsByType(report, ProjectionEffectTypes.contentChanged);
-        assertEquals(2, changed.size(), "two resolve effects should each emit one changed effect");
+        ProjectionEffectSource first = replaced.get(0).source();
+        assertEquals(ProjectionPlugin.builtin, first.plugin());
+        assertEquals(ProjectionEffectPhase.resolveEffect, first.phase());
+        assertEquals(resolveDoubleInputEffectId, first.resolveEffectId());
+        assertEquals(0, first.resolveEffectOrder());
+        assertEquals(1, first.resolveEffectDeclaredIndex());
 
-        ProjectionEffect first = changed.get(0);
-        assertEquals("resolveEffect", first.source().phase());
-        assertEquals(resolveDoubleInputEffectId.toString(), first.meta().get(ProjectionEffectMetaKeys.resolveEffect));
-        assertEquals(0, first.meta().get(ProjectionEffectMetaKeys.resolveEffectOrder));
-        assertEquals(1, first.meta().get(ProjectionEffectMetaKeys.resolveEffectDeclaredIndex));
-
-        ProjectionEffect second = changed.get(1);
-        assertEquals(resolveAddThreeEffectId.toString(), second.meta().get(ProjectionEffectMetaKeys.resolveEffect));
-        assertEquals(1, second.meta().get(ProjectionEffectMetaKeys.resolveEffectOrder));
-        assertEquals(0, second.meta().get(ProjectionEffectMetaKeys.resolveEffectDeclaredIndex));
+        ProjectionEffectSource second = replaced.get(1).source();
+        assertEquals(resolveAddThreeEffectId, second.resolveEffectId());
+        assertEquals(1, second.resolveEffectOrder());
+        assertEquals(0, second.resolveEffectDeclaredIndex());
     }
 
-    //endregion
+    @Test
+    void disablingProjectionPluginSkipsOwnedEffects(MinecraftServer server) {
+        RecipeProjection raw = new ProjectionRecipeBuilder()
+            .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)), scaleAmountClause)
+            .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
+            .build();
 
-    //region assertions helper
+        ExecutionContext context = new ExecutionContext()
+            .set(ProjectionPlugin.builtin.enabledKey(), false);
+        ProjectionEngine engine = new ProjectionEngine();
+        engine.addContentTransformer(scaleAmountClauseType, scaleAmountTransformer);
+        ProjectionReport report = engine.projectReport(context, raw);
 
-    private static MutableList<ProjectionEffect> effectsByType(ProjectionReport report, EffectType effectType) {
+        assertTrue(report.effects().isEmpty());
+        assertEquals(2L, report.projectedRecipe().inputs().getFirst().amount());
+    }
+
+    private enum EffectChannel {
+        input,
+        output
+    }
+
+    private static MutableList<ProjectionEffect> addedEffects(ProjectionReport report) {
         MutableList<ProjectionEffect> effects = MutableLists.empty();
         for (ProjectionEffect effect : report.effects()) {
-            if (effect.type().equals(effectType)) effects.add(effect);
+            if (effect instanceof InputInjected || effect instanceof OutputInjected) effects.add(effect);
         }
         return effects;
     }
 
-    private static void assertEffectSourcePath(
-            ProjectionEffect effect,
-            Namespace clauseId,
-            String phase,
-            String channel,
-            int index
-    ) {
-        assertEquals(clauseId, effect.source().clauseId());
-        assertEquals(phase, effect.source().phase());
-        assertEquals(channel, effect.path().channel());
-        assertEquals(index, effect.path().index());
-        assertEquals("content", effect.path().field());
+    private static MutableList<ProjectionEffect> removedEffects(ProjectionReport report) {
+        MutableList<ProjectionEffect> effects = MutableLists.empty();
+        for (ProjectionEffect effect : report.effects()) {
+            if (effect instanceof InputRejected || effect instanceof OutputRejected) effects.add(effect);
+        }
+        return effects;
     }
 
-    //endregion
+    private static MutableList<ProjectionEffect> replacedEffects(ProjectionReport report) {
+        MutableList<ProjectionEffect> effects = MutableLists.empty();
+        for (ProjectionEffect effect : report.effects()) {
+            if (effect instanceof InputReplaced || effect instanceof OutputReplaced) effects.add(effect);
+        }
+        return effects;
+    }
 
-    //region test clauses
+    private static void assertContentEffect(
+        ProjectionEffect effect,
+        Namespace clauseId,
+        ProjectionEffectPhase phase,
+        EffectChannel channel,
+        int index
+    ) {
+        assertEquals(ProjectionPlugin.builtin, effect.source().plugin());
+        assertEquals(clauseId, effect.source().clauseId());
+        assertEquals(phase, effect.source().phase());
+        assertEquals(channel, effectChannel(effect));
+        assertEquals(index, effectIndex(effect));
+    }
 
-    private static final Namespace scaleAmountClauseId = Namespace.of(CirrusConstants.MOD_ID, "test/scale_amount");
+    private static @Nullable RecipeContent effectBefore(ProjectionEffect effect) {
+        if (effect instanceof InputEffect input) return input.before();
+        if (effect instanceof OutputEffect output) return output.before();
+        return null;
+    }
+
+    private static @Nullable RecipeContent effectAfter(ProjectionEffect effect) {
+        if (effect instanceof InputEffect input) return input.after();
+        if (effect instanceof OutputEffect output) return output.after();
+        return null;
+    }
+
+    private static EffectChannel effectChannel(ProjectionEffect effect) {
+        if (effect instanceof InputEffect) return EffectChannel.input;
+        if (effect instanceof OutputEffect) return EffectChannel.output;
+        throw new IllegalArgumentException("Not a content effect: " + effect);
+    }
+
+    private static int effectIndex(ProjectionEffect effect) {
+        if (effect instanceof InputEffect input) return input.index();
+        if (effect instanceof OutputEffect output) return output.index();
+        throw new IllegalArgumentException("Not a content effect: " + effect);
+    }
+
+    private static long beforeAmount(ProjectionEffect effect) {
+        if (effect instanceof InputEffect input) return input.beforeAmount();
+        if (effect instanceof OutputEffect output) return output.beforeAmount();
+        return 0L;
+    }
+
+    private static long afterAmount(ProjectionEffect effect) {
+        if (effect instanceof InputEffect input) return input.afterAmount();
+        if (effect instanceof OutputEffect output) return output.afterAmount();
+        return 0L;
+    }
+
+    private static long amountDelta(ProjectionEffect effect) {
+        if (effect instanceof InputEffect input) return input.amountDelta();
+        if (effect instanceof OutputEffect output) return output.amountDelta();
+        return 0L;
+    }
+
+    private static @Nullable Double amountFactor(ProjectionEffect effect) {
+        if (effect instanceof InputEffect input) return input.amountFactor();
+        if (effect instanceof OutputEffect output) return output.amountFactor();
+        return null;
+    }
+
+    private static final Namespace scaleAmountClauseId = Namespace.of(CirrusConstants.modId, "test/scale_amount");
     private static final ScaleAmountClause scaleAmountClause = new ScaleAmountClause(2.0D);
     private static final ClauseType scaleAmountClauseType = new ClauseType(
-            scaleAmountClauseId,
-            (entry, content) -> content instanceof StackContent<?, ?>
+        scaleAmountClauseId,
+        ProjectionPlugin.builtin,
+        (entry, content) -> content instanceof StackContent<?, ?>
     );
     private static final ContentTransformer<StackContent<Item, ItemStack>, ScaleAmountClause> scaleAmountTransformer = ContentTransformer.of(
-            (context, projection, content, asInput) -> asInput && content instanceof StackContent<?, ?> stack && stack.isItem(),
-            (context, recipe, content, clause, asInput, increment, decrement) -> {
-                long current = content.amount();
-                long next = (long) Math.ceil(current * clause.factor());
-                content.content().setAmount(next);
-                return ContentTransformer.ActionResult.RETAIN;
-            }
+        ProjectionPlugin.builtin,
+        (context, projection, content, asInput) -> asInput && content instanceof StackContent<?, ?> stack && stack.isItem(),
+        (context, recipe, content, clause, asInput, increment, decrement) -> {
+            long current = content.amount();
+            long next = (long) Math.ceil(current * clause.factor());
+            content.content().setAmount(next);
+            return ContentTransformer.ActionResult.RETAIN;
+        }
     );
 
-    private static final Namespace mirrorToOutputClauseId = Namespace.of(CirrusConstants.MOD_ID, "test/mirror_to_output");
+    private static final Namespace mirrorToOutputClauseId = Namespace.of(CirrusConstants.modId, "test/mirror_to_output");
     private static final MirrorToOutputClause mirrorToOutputClause = new MirrorToOutputClause(3);
     private static final ClauseType mirrorToOutputClauseType = new ClauseType(
-            mirrorToOutputClauseId,
-            (entry, content) -> content instanceof StackContent<?, ?>
+        mirrorToOutputClauseId,
+        ProjectionPlugin.builtin,
+        (entry, content) -> content instanceof StackContent<?, ?>
     );
     private static final ContentTransformer<StackContent<Item, ItemStack>, MirrorToOutputClause> mirrorToOutputTransformer = ContentTransformer.of(
-            (context, projection, content, asInput) -> asInput && content instanceof StackContent<?, ?> stack && stack.isItem(),
-            (context, recipe, content, clause, asInput, increment, decrement) -> {
-                long mirroredAmount = Math.multiplyExact(content.amount(), clause.multiplier());
-                increment.injectOutput(OutputContent.fromItemStack(new ItemStack(Items.STICK), mirroredAmount));
-                return ContentTransformer.ActionResult.REMOVE;
-            }
+        ProjectionPlugin.builtin,
+        (context, projection, content, asInput) -> asInput && content instanceof StackContent<?, ?> stack && stack.isItem(),
+        (context, recipe, content, clause, asInput, increment, decrement) -> {
+            long mirroredAmount = Math.multiplyExact(content.amount(), clause.multiplier());
+            increment.injectOutput(OutputContent.fromItemStack(new ItemStack(Items.STICK), mirroredAmount));
+            return ContentTransformer.ActionResult.REMOVE;
+        }
     );
 
     private record ScaleAmountClause(double factor) implements RecipeClause {
         @Override
         public Namespace id() {
             return scaleAmountClauseId;
+        }
+
+        @Override
+        public ProjectionPlugin plugin() {
+            return ProjectionPlugin.builtin;
         }
     }
 
@@ -408,38 +548,39 @@ public class ProjectionEffectPipelineTest {
         public Namespace id() {
             return mirrorToOutputClauseId;
         }
+
+        @Override
+        public ProjectionPlugin plugin() {
+            return ProjectionPlugin.builtin;
+        }
     }
 
-    private static final Namespace alwaysPassGuardId = Namespace.of(CirrusConstants.MOD_ID, "test/resolve_guard_pass");
-    private static final Namespace guardMinInputAmountId = Namespace.of(CirrusConstants.MOD_ID, "test/resolve_guard_min_input_amount");
-    private static final Namespace resolveAddThreeEffectId = Namespace.of(CirrusConstants.MOD_ID, "test/resolve_add_three");
-    private static final Namespace resolveDoubleInputEffectId = Namespace.of(CirrusConstants.MOD_ID, "test/resolve_double_input");
+    private static final Namespace alwaysPassGuardId = Namespace.of(CirrusConstants.modId, "test/resolve_guard_pass");
+    private static final Namespace guardMinInputAmountId = Namespace.of(CirrusConstants.modId, "test/resolve_guard_min_input_amount");
+    private static final Namespace resolveAddThreeEffectId = Namespace.of(CirrusConstants.modId, "test/resolve_add_three");
+    private static final Namespace resolveDoubleInputEffectId = Namespace.of(CirrusConstants.modId, "test/resolve_double_input");
 
     private static final ResolveEffect resolveAddThreeEffect = ResolveEffect.of(
-            resolveAddThreeEffectId,
-            10,
-            ResolveScope.input,
-            (context, inputs, outputs) -> {
-                if (inputs.isEmpty()) return;
-                var first = inputs.getFirst();
-                inputs.set(0, (InputContent) first.copyWithAmount(first.amount() + 3L));
-            }
+        resolveAddThreeEffectId,
+        10,
+        ResolveScope.input,
+        (context, inputs, outputs) -> {
+            if (inputs.isEmpty()) return;
+            var first = inputs.getFirst();
+            inputs.set(0, (InputContent) first.copyWithAmount(first.amount() + 3L));
+        }
     );
 
     private static final ResolveEffect resolveDoubleInputEffect = ResolveEffect.of(
-            resolveDoubleInputEffectId,
-            0,
-            ResolveScope.input,
-            (context, inputs, outputs) -> {
-                if (inputs.isEmpty()) return;
-                var first = inputs.getFirst();
-                inputs.set(0, (InputContent) first.copyWithAmount(first.amount() * 2L));
-            }
+        resolveDoubleInputEffectId,
+        0,
+        ResolveScope.input,
+        (context, inputs, outputs) -> {
+            if (inputs.isEmpty()) return;
+            var first = inputs.getFirst();
+            inputs.set(0, (InputContent) first.copyWithAmount(first.amount() * 2L));
+        }
     );
-
-    //endregion
-
-    //region projection fixture
 
     private static class ProjectionRecipeBuilder {
         private final MutableList<ClausedContent<InputContent>> inputs = MutableLists.empty();
@@ -462,13 +603,6 @@ public class ProjectionEffectPipelineTest {
             return this;
         }
 
-        public ProjectionRecipeBuilder output(OutputContent content, RecipeClause... clauses) {
-            ClausedContent<OutputContent> from = ClausedContent.from(content);
-            for (RecipeClause clause : clauses) from.clauses().addClause(clause);
-            outputs.add(from);
-            return this;
-        }
-
         public RecipeProjection build() {
             var recipe = new ProjectionFixtureRecipe(inputs, outputs);
             return recipe.toRecipeProjection();
@@ -476,24 +610,25 @@ public class ProjectionEffectPipelineTest {
     }
 
     record ProjectionFixtureRecipe(
-            MutableList<ClausedContent<InputContent>> inputs,
-            MutableList<ClausedContent<OutputContent>> outputs
+        MutableList<ClausedContent<InputContent>> inputs,
+        MutableList<ClausedContent<OutputContent>> outputs
     ) {
         public RecipeProjection toRecipeProjection() {
-            return new RecipeProjection(RecipeEntry.of(TestRecipeSystem.instance, this), inputs.toImmutable(), outputs.toImmutable());
+            return new RecipeProjection(
+                RecipeEntry.of(TestRecipeSystem.instance, this),
+                inputs.toImmutable(),
+                outputs.toImmutable(),
+                ProjectionSchema.empty(),
+                ClauseSet.create()
+            );
         }
     }
 
-    //endregion
-
-    //region plugin fixture
-
     @PluginMarker
     public static final class TestCirrusPlugin implements CirrusPlugin {
-
         @Override
         public @NotNull Namespace pluginId() {
-            return Namespace.of(CirrusConstants.MOD_ID, "test");
+            return Namespace.of(CirrusConstants.modId, "test");
         }
 
         @Override
@@ -507,7 +642,7 @@ public class ProjectionEffectPipelineTest {
         static final TestRecipeSystem instance = new TestRecipeSystem();
 
         TestRecipeSystem() {
-            super(Namespace.of(CirrusConstants.MOD_ID, "test"));
+            super(Namespace.of(CirrusConstants.modId, "test"));
         }
 
         @Override
@@ -541,8 +676,8 @@ public class ProjectionEffectPipelineTest {
         }
 
         @Override
-        public RecipeProjection resolveRecipe(ProjectionFixtureRecipe recipeHolder) {
-            return recipeHolder.toRecipeProjection();
+        public ResolveResult resolveFallback(ResolveContext context, ProjectionFixtureRecipe recipeHolder) {
+            return ResolveResult.resolved(recipeHolder.toRecipeProjection());
         }
 
         @Override
@@ -550,7 +685,4 @@ public class ProjectionEffectPipelineTest {
             return MutableLists.empty();
         }
     }
-
-    //endregion
-
 }

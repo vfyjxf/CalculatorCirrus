@@ -7,13 +7,29 @@ import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContext;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer.ActionResult;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.*;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.InputInjected;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.InputRejected;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.InputReplaced;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.InputSchemaPut;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputInjected;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputRejected;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputReplaced;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputSchemaPut;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionEffect;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionEffectPhase;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionEffectSource;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionReport;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionSchemaPut;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.ReplaceMode;
 import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveEffect;
 import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveGuard;
 import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveGuardFinding;
 import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveGuardResult;
+import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
+import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemaKey;
 import dev.vfyjxf.cirrus.recipe.clause.ResolvePolicyClause;
 import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
@@ -29,9 +45,10 @@ import java.util.function.Predicate;
 
 public final class ProjectionEngine {
 
-    private static final EffectSource unknownSource = new EffectSource(
-            Namespace.of(CirrusConstants.MOD_ID, "clause/unknown"),
-            "unknown"
+    private static final ProjectionEffectSource unknownSource = ProjectionEffectSource.clause(
+        ProjectionPlugin.builtin,
+        Namespace.of(CirrusConstants.modId, "clause/unknown"),
+        ProjectionEffectPhase.contentTransformer
     );
 
     private final Map<Namespace, ProjectionTransformer<?>> projectionTransformers = new LinkedHashMap<>();
@@ -51,18 +68,34 @@ public final class ProjectionEngine {
     public void addProjectionTransformer(ClauseType type, ProjectionTransformer<?> transformer) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(transformer, "transformer");
+        Checks.checkArgument(type.plugin().equals(transformer.plugin()), "Projection transformer plugin must match clause type plugin");
         projectionTransformers.put(type.id(), transformer);
     }
 
     public void addContentTransformer(ClauseType type, ContentTransformer<?, ?> transformer) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(transformer, "transformer");
+        Checks.checkArgument(type.plugin().equals(transformer.plugin()), "Content transformer plugin must match clause type plugin");
         contentTransformers.put(type.id(), transformer);
     }
 
-    @Deprecated(forRemoval = false)
-    public void addClauseTransformer(ClauseType type, ContentTransformer<?, ?> transformer) {
-        addContentTransformer(type, transformer);
+    public void detectProjection(RecipeProjection projection) {
+        Checks.checkNotNull(projection, "projection");
+
+        RecipeApi api;
+        try {
+            api = RecipeApi.instance();
+        } catch (IllegalStateException ignored) {
+            return;
+        }
+
+        detectRegisteredClauses(api, projection.allClauses());
+        for (var input : projection.inputs()) {
+            detectRegisteredClauses(api, input.allClauses());
+        }
+        for (var output : projection.outputs()) {
+            detectRegisteredClauses(api, output.allClauses());
+        }
     }
 
     //endregion
@@ -70,87 +103,122 @@ public final class ProjectionEngine {
     //region project
 
     public ProjectedRecipe project(ExecutionContext context, RecipeProjection projection) {
-        return projectReport(context, projection).recipe();
+        return projectReport(context, projection).projectedRecipe();
     }
 
     @SuppressWarnings("unchecked")
     public ProjectionReport projectReport(ExecutionContext context, RecipeProjection projection) {
         Checks.checkNotNull(context, "context");
         Checks.checkNotNull(projection, "projection");
+        detectProjection(projection);
 
+        RecipeProjection workingProjection = workingCopy(projection);
         MutableList<ProjectionEffect> effects = MutableLists.empty();
-        EngineIncrementOps increment = new EngineIncrementOps();
-        EngineDecrementOps decrement = new EngineDecrementOps();
+        ProjectionActionLog actions = new ProjectionActionLog();
+        EngineIncrementOps increment = new EngineIncrementOps(actions);
+        EngineDecrementOps decrement = new EngineDecrementOps(actions);
 
-        for (var clause : projection.clauses().allClauses()) {
+        for (var clause : workingProjection.clauses().allClauses()) {
             ProjectionTransformer<RecipeClause> projectionTransformer = (ProjectionTransformer<RecipeClause>) projectionTransformers.get(clause.id());
             if (projectionTransformer == null) continue;
-            if (projectionTransformer.selectProjection(context, projection)) {
-                EffectSource source = new EffectSource(clause.id(), "projectionTransformer");
-                increment.bindSource(source);
-                decrement.bindSource(source);
-                projectionTransformer.project(context, projection, clause, increment, decrement);
-            }
+            ProjectionPlugin plugin = clause.plugin();
+            if (!plugin.equals(projectionTransformer.plugin())) continue;
+            if (!plugin.enabled(context)) continue;
+            if (!projectionTransformer.selectProjection(context, workingProjection)) continue;
+
+            ProjectionEffectSource source = ProjectionEffectSource.clause(
+                plugin,
+                clause.id(),
+                ProjectionEffectPhase.projectionTransformer
+            );
+            increment.bindSource(source);
+            decrement.bindSource(source);
+            projectionTransformer.project(context, workingProjection, clause, increment, decrement);
         }
 
         for (var entry : contentTransformers.entrySet()) {
             Namespace typeId = entry.getKey();
             ContentTransformer<?, ?> contentTransformer = entry.getValue();
-            for (int inputIndex = 0; inputIndex < projection.inputs().size(); inputIndex++) {
-                var input = projection.inputs().get(inputIndex);
-                if (decrement.matchInput(input.content()) != null) continue;
-
-                boolean marked = input.clauses().hasClause(typeId);
-                boolean selected = contentTransformer.select(context, projection, input.content(), true);
-                if (!marked || !selected) continue;
+            for (int inputIndex = 0; inputIndex < workingProjection.inputs().size(); inputIndex++) {
+                var input = workingProjection.inputs().get(inputIndex);
+                if (actions.matchInputRejection(input.content()) != null) continue;
+                if (actions.matchInputReplacement(input.content()) != null) continue;
+                if (!input.clauses().hasClause(typeId)) continue;
 
                 var clause = input.clauses().getClause(typeId);
-                EffectSource source = new EffectSource(clause.id(), "contentTransformer");
+                ProjectionPlugin plugin = clause.plugin();
+                if (!plugin.equals(contentTransformer.plugin())) continue;
+                if (!plugin.enabled(context)) continue;
+                if (!contentTransformer.select(context, workingProjection, input.content(), true)) continue;
+
+                ProjectionEffectSource source = ProjectionEffectSource.clause(
+                    plugin,
+                    clause.id(),
+                    ProjectionEffectPhase.contentTransformer
+                );
                 increment.bindSource(source);
                 decrement.bindSource(source);
-                RecipeContent before = snapshot(input.content());
+                InputContent before = snapshotInput(input.content());
 
-                ActionResult action = applyTransformer(contentTransformer, context, projection.recipe(), input.content(), clause, true, increment, decrement);
-                if (action == ActionResult.REMOVE) decrement.rejectInput(input.content());
-                else appendContentChangedEffect(effects, source, EffectPath.input(inputIndex), before, input.content());
+                ActionResult action = applyTransformer(contentTransformer, context, workingProjection.recipe(), input.content(), clause, true, increment, decrement);
+                if (actions.matchInputReplacement(input.content()) != null) {
+                    continue;
+                }
+                if (action == ActionResult.REMOVE) {
+                    decrement.rejectInput(input.content());
+                } else {
+                    appendInputMutationEffect(effects, source, inputIndex, before, input.content());
+                }
             }
 
-            for (int outputIndex = 0; outputIndex < projection.outputs().size(); outputIndex++) {
-                var output = projection.outputs().get(outputIndex);
-                if (decrement.matchOutput(output.content()) != null) continue;
-
-                boolean marked = output.clauses().hasClause(typeId);
-                boolean selected = contentTransformer.select(context, projection, output.content(), false);
-                if (!marked || !selected) continue;
+            for (int outputIndex = 0; outputIndex < workingProjection.outputs().size(); outputIndex++) {
+                var output = workingProjection.outputs().get(outputIndex);
+                if (actions.matchOutputRejection(output.content()) != null) continue;
+                if (actions.matchOutputReplacement(output.content()) != null) continue;
+                if (!output.clauses().hasClause(typeId)) continue;
 
                 var clause = output.clauses().getClause(typeId);
-                EffectSource source = new EffectSource(clause.id(), "contentTransformer");
+                ProjectionPlugin plugin = clause.plugin();
+                if (!plugin.equals(contentTransformer.plugin())) continue;
+                if (!plugin.enabled(context)) continue;
+                if (!contentTransformer.select(context, workingProjection, output.content(), false)) continue;
+
+                ProjectionEffectSource source = ProjectionEffectSource.clause(
+                    plugin,
+                    clause.id(),
+                    ProjectionEffectPhase.contentTransformer
+                );
                 increment.bindSource(source);
                 decrement.bindSource(source);
-                RecipeContent before = snapshot(output.content());
+                OutputContent before = snapshotOutput(output.content());
 
-                ActionResult action = applyTransformer(contentTransformer, context, projection.recipe(), output.content(), clause, false, increment, decrement);
-                if (action == ActionResult.REMOVE) decrement.rejectOutput(output.content());
-                else
-                    appendContentChangedEffect(effects, source, EffectPath.output(outputIndex), before, output.content());
+                ActionResult action = applyTransformer(contentTransformer, context, workingProjection.recipe(), output.content(), clause, false, increment, decrement);
+                if (actions.matchOutputReplacement(output.content()) != null) {
+                    continue;
+                }
+                if (action == ActionResult.REMOVE) {
+                    decrement.rejectOutput(output.content());
+                } else {
+                    appendOutputMutationEffect(effects, source, outputIndex, before, output.content());
+                }
             }
         }
 
-        ImmutableList<InputContent> transformedInputs = collectInputs(projection, increment, decrement, effects);
-        ImmutableList<OutputContent> transformedOutputs = collectOutputs(projection, increment, decrement, effects);
-        ProjectedRecipe projectedRecipe = new ProjectedRecipe(projection.recipe(), transformedInputs, transformedOutputs);
+        RecipeProjection projectedProjection = collectProjection(workingProjection, actions, effects);
+        ProjectedRecipe projectedRecipe = projectedRecipe(projectedProjection);
         boolean runnable = true;
         ImmutableList<ResolveGuardFinding> guardFindings = Lists.immutable.empty();
 
-        ResolvePolicyClause resolvePolicyClause = findResolvePolicyClause(projection);
+        ResolvePolicyClause resolvePolicyClause = findResolvePolicyClause(workingProjection);
         if (resolvePolicyClause != null) {
             ResolveOutcome resolveOutcome = applyResolvePolicy(context, projectedRecipe, effects, resolvePolicyClause);
             projectedRecipe = resolveOutcome.recipe();
             runnable = resolveOutcome.runnable();
             guardFindings = resolveOutcome.guardFindings();
+            projectedProjection = projectionWithProjectedContents(projectedProjection, projectedRecipe);
         }
 
-        return new ProjectionReport(projectedRecipe, effects.toImmutable(), runnable, guardFindings);
+        return new ProjectionReport(projectedProjection, effects.toImmutable(), runnable, guardFindings);
     }
 
     //endregion
@@ -166,16 +234,15 @@ public final class ProjectionEngine {
         MutableList<ResolveGuardFinding> guardFindings = MutableLists.empty();
         for (ResolveGuard guard : policyClause.policy().guards()) {
             ResolveGuardResult result = guard.evaluate(context, projectedRecipe);
-            EffectMeta guardMeta = appendGuardMeta(result.meta(), guard, result.reasonCode());
-            guardFindings.add(new ResolveGuardFinding(guard.id(), result.passed(), result.reasonCode(), guardMeta));
+            guardFindings.add(new ResolveGuardFinding(guard.id(), result.passed(), result.reasonCode()));
         }
         boolean runnable = guardFindings.allSatisfy(ResolveGuardFinding::passed);
         if (!runnable) {
             return new ResolveOutcome(projectedRecipe, guardFindings.toImmutable(), false);
         }
 
-        MutableList<InputContent> resolvedInputs = projectedRecipe.inputs().toList();
-        MutableList<OutputContent> resolvedOutputs = projectedRecipe.outputs().toList();
+        MutableList<InputContent> resolvedInputs = copyContents(projectedRecipe.inputs());
+        MutableList<OutputContent> resolvedOutputs = copyContents(projectedRecipe.outputs());
         ImmutableList<ResolveEffect> declaredEffects = policyClause.policy().effects();
         ImmutableList<ResolveEffect> orderedEffects = policyClause.policy().orderedEffects();
 
@@ -188,28 +255,10 @@ public final class ProjectionEngine {
             effect.apply(context, resolvedInputs, resolvedOutputs);
 
             if (effect.scope().allowInput()) {
-                appendResolveDiff(
-                    effects,
-                    policyClause,
-                    effect,
-                    effectOrder,
-                    declaredIndex,
-                    "input",
-                    beforeInputs,
-                    resolvedInputs
-                );
+                appendResolveInputDiff(effects, policyClause, effect, effectOrder, declaredIndex, beforeInputs, resolvedInputs);
             }
             if (effect.scope().allowOutput()) {
-                appendResolveDiff(
-                    effects,
-                    policyClause,
-                    effect,
-                    effectOrder,
-                    declaredIndex,
-                    "output",
-                    beforeOutputs,
-                    resolvedOutputs
-                );
+                appendResolveOutputDiff(effects, policyClause, effect, effectOrder, declaredIndex, beforeOutputs, resolvedOutputs);
             }
         }
 
@@ -233,97 +282,85 @@ public final class ProjectionEngine {
         return -1;
     }
 
-    private static <T extends RecipeContent> MutableList<T> copyContents(MutableList<T> contents) {
+    private static <T extends RecipeContent> MutableList<T> copyContents(Iterable<T> contents) {
         MutableList<T> copied = MutableLists.empty();
         for (T content : contents) {
-            @SuppressWarnings("unchecked") T snapshot = (T) snapshot(content);
+            @SuppressWarnings("unchecked") T snapshot = (T) snapshotContent(content);
             copied.add(snapshot);
         }
         return copied;
     }
 
-    private static <T extends RecipeContent> void appendResolveDiff(
+    private static void appendResolveInputDiff(
         MutableList<ProjectionEffect> effects,
         ResolvePolicyClause policyClause,
         ResolveEffect effect,
         int effectOrder,
         int declaredIndex,
-        String channel,
-        MutableList<T> before,
-        MutableList<T> after
+        MutableList<InputContent> before,
+        MutableList<InputContent> after
     ) {
-        EffectSource source = new EffectSource(policyClause.id(), "resolveEffect");
+        ProjectionEffectSource source = ProjectionEffectSource.resolveEffect(
+            policyClause.plugin(),
+            policyClause.id(),
+            effect.id(),
+            effectOrder,
+            declaredIndex
+        );
         int sameCount = Math.min(before.size(), after.size());
 
         for (int index = 0; index < sameCount; index++) {
-            T beforeContent = before.get(index);
-            T afterContent = after.get(index);
+            InputContent beforeContent = before.get(index);
+            InputContent afterContent = after.get(index);
             if (sameContent(beforeContent, afterContent)) continue;
-
-            EffectMeta meta = appendResolveEffectMeta(buildMeta(beforeContent, afterContent), policyClause, effect, effectOrder, declaredIndex);
-            effects.add(new ProjectionEffect(
-                ProjectionEffectTypes.contentChanged,
-                source,
-                pathOf(channel, index).withField("content"),
-                new EffectChange(beforeContent, afterContent),
-                meta
-            ));
+            effects.add(new InputReplaced(source, index, beforeContent, snapshotInput(afterContent), ReplaceMode.adjusted));
         }
 
         if (before.size() > after.size()) {
             for (int index = after.size(); index < before.size(); index++) {
-                T beforeContent = before.get(index);
-                EffectMeta meta = appendResolveEffectMeta(buildMeta(beforeContent, null), policyClause, effect, effectOrder, declaredIndex);
-                effects.add(new ProjectionEffect(
-                    ProjectionEffectTypes.contentRejected,
-                    source,
-                    pathOf(channel, index).withField("content"),
-                    new EffectChange(beforeContent, null),
-                    meta
-                ));
+                effects.add(new InputRejected(source, index, before.get(index)));
             }
         } else if (after.size() > before.size()) {
             for (int index = before.size(); index < after.size(); index++) {
-                T afterContent = after.get(index);
-                EffectMeta meta = appendResolveEffectMeta(buildMeta(null, afterContent), policyClause, effect, effectOrder, declaredIndex);
-                effects.add(new ProjectionEffect(
-                    ProjectionEffectTypes.contentInjected,
-                    source,
-                    pathOf(channel, index).withField("content"),
-                    new EffectChange(null, afterContent),
-                    meta
-                ));
+                effects.add(new InputInjected(source, index, snapshotInput(after.get(index))));
             }
         }
     }
 
-    private static EffectPath pathOf(String channel, int index) {
-        return switch (channel) {
-            case "input" -> EffectPath.input(index);
-            case "output" -> EffectPath.output(index);
-            default -> throw new IllegalArgumentException("Unknown channel: " + channel);
-        };
-    }
-
-    private static EffectMeta appendResolveEffectMeta(
-        EffectMeta meta,
+    private static void appendResolveOutputDiff(
+        MutableList<ProjectionEffect> effects,
         ResolvePolicyClause policyClause,
         ResolveEffect effect,
         int effectOrder,
-        int declaredIndex
+        int declaredIndex,
+        MutableList<OutputContent> before,
+        MutableList<OutputContent> after
     ) {
-        return meta.with(ProjectionEffectMetaKeys.resolvePolicy, policyClause.id().toString())
-                   .with(ProjectionEffectMetaKeys.resolveEffect, effect.id().toString())
-                   .with(ProjectionEffectMetaKeys.resolveEffectOrder, effectOrder)
-                   .with(ProjectionEffectMetaKeys.resolveEffectDeclaredIndex, declaredIndex);
-    }
+        ProjectionEffectSource source = ProjectionEffectSource.resolveEffect(
+            policyClause.plugin(),
+            policyClause.id(),
+            effect.id(),
+            effectOrder,
+            declaredIndex
+        );
+        int sameCount = Math.min(before.size(), after.size());
 
-    private static EffectMeta appendGuardMeta(EffectMeta meta, ResolveGuard guard, @Nullable String reasonCode) {
-        EffectMeta merged = meta.with(ProjectionEffectMetaKeys.guardId, guard.id().toString());
-        if (reasonCode != null) {
-            merged = merged.with(ProjectionEffectMetaKeys.guardReasonCode, reasonCode);
+        for (int index = 0; index < sameCount; index++) {
+            OutputContent beforeContent = before.get(index);
+            OutputContent afterContent = after.get(index);
+            if (sameContent(beforeContent, afterContent)) continue;
+            effects.add(new OutputReplaced(source, index, beforeContent, snapshotOutput(afterContent), ReplaceMode.adjusted));
         }
-        return merged;
+
+        if (before.size() > after.size()) {
+            for (int index = after.size(); index < before.size(); index++) {
+                effects.add(new OutputRejected(source, index, before.get(index)));
+            }
+        } else if (after.size() > before.size()) {
+            for (int index = before.size(); index < after.size(); index++) {
+                effects.add(new OutputInjected(source, index, snapshotOutput(after.get(index))));
+            }
+        }
     }
 
     private record ResolveOutcome(
@@ -336,125 +373,307 @@ public final class ProjectionEngine {
 
     //region effect build
 
-    private static ImmutableList<InputContent> collectInputs(
-            RecipeProjection projection,
-            EngineIncrementOps increment,
-            EngineDecrementOps decrement,
-            MutableList<ProjectionEffect> effects
+    private static RecipeProjection collectProjection(
+        RecipeProjection projection,
+        ProjectionActionLog actions,
+        MutableList<ProjectionEffect> effects
     ) {
-        MutableList<InputContent> transformed = MutableLists.empty();
-        for (int i = 0; i < projection.inputs().size(); i++) {
-            InputContent input = projection.inputs().get(i).content();
-            EngineDecrementOps.InputRule rejectedBy = decrement.matchInput(input);
-            if (rejectedBy != null) {
-                effects.add(new ProjectionEffect(
-                        ProjectionEffectTypes.contentRejected,
-                        rejectedBy.source(),
-                        EffectPath.input(i).withField("content"),
-                        new EffectChange(input, null),
-                        buildMeta(input, null)
+        ProjectionSchema schema = applyProjectionSchemaWrites(projection.schema(), actions, effects);
+        return new RecipeProjection(
+            projection.recipe(),
+            collectInputs(projection, actions, effects),
+            collectOutputs(projection, actions, effects),
+            schema,
+            projection.clauses().merge()
+        );
+    }
+
+    private static ImmutableList<ClausedContent<InputContent>> collectInputs(
+        RecipeProjection projection,
+        ProjectionActionLog actions,
+        MutableList<ProjectionEffect> effects
+    ) {
+        MutableList<ClausedContent<InputContent>> transformed = MutableLists.empty();
+        for (int originalIndex = 0; originalIndex < projection.inputs().size(); originalIndex++) {
+            ClausedContent<InputContent> input = projection.inputs().get(originalIndex);
+            InputContent before = input.content();
+            InputReplacement replacement = actions.matchInputReplacement(before);
+            if (replacement != null) {
+                InputContent after = snapshotInput(replacement.after());
+                ProjectionSchema schema = applyInputSchemaWrites(input.schema(), before, replacement.after(), originalIndex, actions, effects);
+                transformed.add(new ClausedContent<>(after, schema, input.clauses().merge()));
+                effects.add(new InputReplaced(
+                    replacement.source(),
+                    originalIndex,
+                    snapshotInput(before),
+                    after,
+                    replacement.mode()
                 ));
                 continue;
             }
-            transformed.add(input);
+
+            InputRule rejectedBy = actions.matchInputRejection(before);
+            if (rejectedBy != null) {
+                effects.add(new InputRejected(rejectedBy.source(), originalIndex, snapshotInput(before)));
+                continue;
+            }
+
+            ProjectionSchema schema = applyInputSchemaWrites(input.schema(), before, before, originalIndex, actions, effects);
+            transformed.add(new ClausedContent<>(snapshotInput(before), schema, input.clauses().merge()));
         }
 
-        for (var injection : increment.inputInjections) {
+        for (InputInjection injection : actions.inputInjections) {
             int index = transformed.size();
-            transformed.add(injection.content());
-            effects.add(new ProjectionEffect(
-                    ProjectionEffectTypes.contentInjected,
-                    injection.source(),
-                    EffectPath.input(index).withField("content"),
-                    new EffectChange(null, injection.content()),
-                    buildMeta(null, injection.content())
-            ));
+            InputContent after = snapshotInput(injection.content());
+            ProjectionSchema schema = applyInputSchemaWrites(ProjectionSchema.empty(), injection.content(), injection.content(), index, actions, effects);
+            transformed.add(new ClausedContent<>(after, schema, ClauseSet.create()));
+            effects.add(new InputInjected(injection.source(), index, after));
         }
 
         return transformed.toImmutable();
     }
 
-    private static ImmutableList<OutputContent> collectOutputs(
-            RecipeProjection projection,
-            EngineIncrementOps increment,
-            EngineDecrementOps decrement,
-            MutableList<ProjectionEffect> effects
+    private static ImmutableList<ClausedContent<OutputContent>> collectOutputs(
+        RecipeProjection projection,
+        ProjectionActionLog actions,
+        MutableList<ProjectionEffect> effects
     ) {
-        MutableList<OutputContent> transformed = MutableLists.empty();
-        for (int i = 0; i < projection.outputs().size(); i++) {
-            OutputContent output = projection.outputs().get(i).content();
-            EngineDecrementOps.OutputRule rejectedBy = decrement.matchOutput(output);
-            if (rejectedBy != null) {
-                effects.add(new ProjectionEffect(
-                        ProjectionEffectTypes.contentRejected,
-                        rejectedBy.source(),
-                        EffectPath.output(i).withField("content"),
-                        new EffectChange(output, null),
-                        buildMeta(output, null)
+        MutableList<ClausedContent<OutputContent>> transformed = MutableLists.empty();
+        for (int originalIndex = 0; originalIndex < projection.outputs().size(); originalIndex++) {
+            ClausedContent<OutputContent> output = projection.outputs().get(originalIndex);
+            OutputContent before = output.content();
+            OutputReplacement replacement = actions.matchOutputReplacement(before);
+            if (replacement != null) {
+                OutputContent after = snapshotOutput(replacement.after());
+                ProjectionSchema schema = applyOutputSchemaWrites(output.schema(), before, replacement.after(), originalIndex, actions, effects);
+                transformed.add(new ClausedContent<>(after, schema, output.clauses().merge()));
+                effects.add(new OutputReplaced(
+                    replacement.source(),
+                    originalIndex,
+                    snapshotOutput(before),
+                    after,
+                    replacement.mode()
                 ));
                 continue;
             }
-            transformed.add(output);
+
+            OutputRule rejectedBy = actions.matchOutputRejection(before);
+            if (rejectedBy != null) {
+                effects.add(new OutputRejected(rejectedBy.source(), originalIndex, snapshotOutput(before)));
+                continue;
+            }
+
+            ProjectionSchema schema = applyOutputSchemaWrites(output.schema(), before, before, originalIndex, actions, effects);
+            transformed.add(new ClausedContent<>(snapshotOutput(before), schema, output.clauses().merge()));
         }
 
-        for (var injection : increment.outputInjections) {
+        for (OutputInjection injection : actions.outputInjections) {
             int index = transformed.size();
-            transformed.add(injection.content());
-            effects.add(new ProjectionEffect(
-                    ProjectionEffectTypes.contentInjected,
-                    injection.source(),
-                    EffectPath.output(index).withField("content"),
-                    new EffectChange(null, injection.content()),
-                    buildMeta(null, injection.content())
-            ));
+            OutputContent after = snapshotOutput(injection.content());
+            ProjectionSchema schema = applyOutputSchemaWrites(ProjectionSchema.empty(), injection.content(), injection.content(), index, actions, effects);
+            transformed.add(new ClausedContent<>(after, schema, ClauseSet.create()));
+            effects.add(new OutputInjected(injection.source(), index, after));
         }
 
         return transformed.toImmutable();
     }
 
-    private static void appendContentChangedEffect(
-            MutableList<ProjectionEffect> effects,
-            EffectSource source,
-            EffectPath path,
-            RecipeContent before,
-            RecipeContent after
+    private static ProjectionSchema applyProjectionSchemaWrites(
+        ProjectionSchema base,
+        ProjectionActionLog actions,
+        MutableList<ProjectionEffect> effects
+    ) {
+        ProjectionSchema schema = base;
+        for (ProjectionSchemaWrite<?> write : actions.projectionSchemaWrites) {
+            schema = applyProjectionSchemaWrite(schema, write, effects);
+        }
+        return schema;
+    }
+
+    private static <T> ProjectionSchema applyProjectionSchemaWrite(
+        ProjectionSchema schema,
+        ProjectionSchemaWrite<T> write,
+        MutableList<ProjectionEffect> effects
+    ) {
+        effects.add(new ProjectionSchemaPut<>(write.source(), write.key(), write.value()));
+        return schema.with(write.key(), write.value());
+    }
+
+    private static ProjectionSchema applyInputSchemaWrites(
+        ProjectionSchema base,
+        InputContent before,
+        InputContent after,
+        int index,
+        ProjectionActionLog actions,
+        MutableList<ProjectionEffect> effects
+    ) {
+        ProjectionSchema schema = base;
+        for (InputSchemaWrite<?> write : actions.inputSchemaWrites) {
+            if (write.owner() != before && write.owner() != after) continue;
+            schema = applyInputSchemaWrite(schema, write, index, effects);
+        }
+        return schema;
+    }
+
+    private static <T> ProjectionSchema applyInputSchemaWrite(
+        ProjectionSchema schema,
+        InputSchemaWrite<T> write,
+        int index,
+        MutableList<ProjectionEffect> effects
+    ) {
+        effects.add(new InputSchemaPut<>(write.source(), index, write.key(), write.value()));
+        return schema.with(write.key(), write.value());
+    }
+
+    private static ProjectionSchema applyOutputSchemaWrites(
+        ProjectionSchema base,
+        OutputContent before,
+        OutputContent after,
+        int index,
+        ProjectionActionLog actions,
+        MutableList<ProjectionEffect> effects
+    ) {
+        ProjectionSchema schema = base;
+        for (OutputSchemaWrite<?> write : actions.outputSchemaWrites) {
+            if (write.owner() != before && write.owner() != after) continue;
+            schema = applyOutputSchemaWrite(schema, write, index, effects);
+        }
+        return schema;
+    }
+
+    private static <T> ProjectionSchema applyOutputSchemaWrite(
+        ProjectionSchema schema,
+        OutputSchemaWrite<T> write,
+        int index,
+        MutableList<ProjectionEffect> effects
+    ) {
+        effects.add(new OutputSchemaPut<>(write.source(), index, write.key(), write.value()));
+        return schema.with(write.key(), write.value());
+    }
+
+    private static void appendInputMutationEffect(
+        MutableList<ProjectionEffect> effects,
+        ProjectionEffectSource source,
+        int index,
+        InputContent before,
+        InputContent after
     ) {
         if (sameContent(before, after)) return;
-        effects.add(new ProjectionEffect(
-                ProjectionEffectTypes.contentChanged,
-                source,
-                path.withField("content"),
-                new EffectChange(before, after),
-                buildMeta(before, after)
-        ));
+        effects.add(new InputReplaced(source, index, before, snapshotInput(after), ReplaceMode.adjusted));
     }
 
-    private static EffectMeta buildMeta(@Nullable RecipeContent before, @Nullable RecipeContent after) {
-        EffectMeta meta = EffectMeta.empty();
-        if (before != null) {
-            meta = meta.with(ProjectionEffectMetaKeys.beforeAmount, before.amount());
-            meta = meta.with(ProjectionEffectMetaKeys.beforeType, before.getClass().getName());
-        }
-        if (after != null) {
-            meta = meta.with(ProjectionEffectMetaKeys.afterAmount, after.amount());
-            meta = meta.with(ProjectionEffectMetaKeys.afterType, after.getClass().getName());
-        }
-        if (before != null && after != null) {
-            long delta = after.amount() - before.amount();
-            meta = meta.with(ProjectionEffectMetaKeys.amountDelta, delta);
-            if (before.amount() > 0) {
-                meta = meta.with(ProjectionEffectMetaKeys.amountFactor, (double) after.amount() / (double) before.amount());
-            }
-        }
-        return meta;
+    private static void appendOutputMutationEffect(
+        MutableList<ProjectionEffect> effects,
+        ProjectionEffectSource source,
+        int index,
+        OutputContent before,
+        OutputContent after
+    ) {
+        if (sameContent(before, after)) return;
+        effects.add(new OutputReplaced(source, index, before, snapshotOutput(after), ReplaceMode.adjusted));
     }
 
     private static boolean sameContent(RecipeContent before, RecipeContent after) {
-        return before == after || before.equals(after);
+        return before == after ||
+               before.getClass() == after.getClass() &&
+               before.amount() == after.amount() &&
+               Float.compare(before.chance(), after.chance()) == 0 &&
+               before.toString().equals(after.toString());
     }
 
-    private static RecipeContent snapshot(RecipeContent content) {
-        return content.copyWithAmount(content.amount());
+    private static InputContent snapshotInput(InputContent content) {
+        return (InputContent) snapshotContent(content);
+    }
+
+    private static OutputContent snapshotOutput(OutputContent content) {
+        return (OutputContent) snapshotContent(content);
+    }
+
+    private static RecipeContent snapshotContent(RecipeContent content) {
+        return content.copyWithAmountAndChance(content.amount(), content.chance());
+    }
+
+    private static RecipeProjection workingCopy(RecipeProjection projection) {
+        MutableList<ClausedContent<InputContent>> inputs = MutableLists.empty();
+        for (ClausedContent<InputContent> input : projection.inputs()) {
+            inputs.add(copyInput(input));
+        }
+        MutableList<ClausedContent<OutputContent>> outputs = MutableLists.empty();
+        for (ClausedContent<OutputContent> output : projection.outputs()) {
+            outputs.add(copyOutput(output));
+        }
+        return new RecipeProjection(
+            projection.recipe(),
+            inputs.toImmutable(),
+            outputs.toImmutable(),
+            projection.schema(),
+            projection.clauses().merge()
+        );
+    }
+
+    private static ClausedContent<InputContent> copyInput(ClausedContent<InputContent> input) {
+        return new ClausedContent<>(
+            snapshotInput(input.content()),
+            input.schema(),
+            input.clauses().merge()
+        );
+    }
+
+    private static ClausedContent<OutputContent> copyOutput(ClausedContent<OutputContent> output) {
+        return new ClausedContent<>(
+            snapshotOutput(output.content()),
+            output.schema(),
+            output.clauses().merge()
+        );
+    }
+
+    private static ProjectedRecipe projectedRecipe(RecipeProjection projection) {
+        MutableList<InputContent> inputs = MutableLists.empty();
+        for (ClausedContent<InputContent> input : projection.inputs()) {
+            inputs.add(input.content());
+        }
+        MutableList<OutputContent> outputs = MutableLists.empty();
+        for (ClausedContent<OutputContent> output : projection.outputs()) {
+            outputs.add(output.content());
+        }
+        return new ProjectedRecipe(projection.recipe(), inputs.toImmutable(), outputs.toImmutable());
+    }
+
+    private static RecipeProjection projectionWithProjectedContents(RecipeProjection base, ProjectedRecipe projected) {
+        MutableList<ClausedContent<InputContent>> inputs = MutableLists.empty();
+        for (int i = 0; i < projected.inputs().size(); i++) {
+            InputContent input = projected.inputs().get(i);
+            ProjectionSchema schema = ProjectionSchema.empty();
+            ClauseSet clauses = ClauseSet.create();
+            if (i < base.inputs().size() && sameContent(base.inputs().get(i).content(), input)) {
+                schema = base.inputs().get(i).schema();
+                clauses = base.inputs().get(i).clauses().merge();
+            }
+            inputs.add(new ClausedContent<>(snapshotInput(input), schema, clauses));
+        }
+
+        MutableList<ClausedContent<OutputContent>> outputs = MutableLists.empty();
+        for (int i = 0; i < projected.outputs().size(); i++) {
+            OutputContent output = projected.outputs().get(i);
+            ProjectionSchema schema = ProjectionSchema.empty();
+            ClauseSet clauses = ClauseSet.create();
+            if (i < base.outputs().size() && sameContent(base.outputs().get(i).content(), output)) {
+                schema = base.outputs().get(i).schema();
+                clauses = base.outputs().get(i).clauses().merge();
+            }
+            outputs.add(new ClausedContent<>(snapshotOutput(output), schema, clauses));
+        }
+
+        return new RecipeProjection(base.recipe(), inputs.toImmutable(), outputs.toImmutable(), base.schema(), base.clauses().merge());
+    }
+
+    private void detectRegisteredClauses(RecipeApi api, Iterable<? extends RecipeClause> clauses) {
+        for (RecipeClause clause : clauses) {
+            if (!api.hasClause(clause.id())) {
+                continue;
+            }
+            detectClause(api.getClauseType(clause.id()));
+        }
     }
 
     //endregion
@@ -463,111 +682,252 @@ public final class ProjectionEngine {
 
     @SuppressWarnings("unchecked")
     private static <T extends RecipeContent, F extends RecipeClause> ActionResult applyTransformer(
-            ContentTransformer<?, ?> transformer,
-            ExecutionContext context, RecipeEntry<?> recipe,
-            T content, F clause, boolean asInput,
-            EngineIncrementOps increment, EngineDecrementOps decrement
+        ContentTransformer<?, ?> transformer,
+        ExecutionContext context,
+        RecipeEntry<?> recipe,
+        T content,
+        F clause,
+        boolean asInput,
+        EngineIncrementOps increment,
+        EngineDecrementOps decrement
     ) {
         ContentTransformer<T, F> typedTransformer = (ContentTransformer<T, F>) transformer;
         return typedTransformer.transform(context, recipe, content, clause, asInput, increment, decrement);
     }
 
-    private static final class EngineIncrementOps implements ContentTransformer.IncrementOps {
-
+    private static final class ProjectionActionLog {
         private final MutableList<InputInjection> inputInjections = MutableLists.empty();
         private final MutableList<OutputInjection> outputInjections = MutableLists.empty();
-        private EffectSource currentSource = unknownSource;
-
-        void bindSource(EffectSource source) {
-            currentSource = source;
-        }
-
-        @Override
-        public ContentTransformer.IncrementOps injectInput(InputContent content) {
-            Checks.checkNotNull(content, "content");
-            inputInjections.add(new InputInjection(content, currentSource));
-            return this;
-        }
-
-        @Override
-        public ContentTransformer.IncrementOps injectOutput(OutputContent content) {
-            Checks.checkNotNull(content, "content");
-            outputInjections.add(new OutputInjection(content, currentSource));
-            return this;
-        }
-
-        record InputInjection(
-                InputContent content,
-                EffectSource source
-        ) {}
-
-        record OutputInjection(
-                OutputContent content,
-                EffectSource source
-        ) {}
-    }
-
-    private static final class EngineDecrementOps implements ContentTransformer.DecrementOps {
-
+        private final MutableList<InputReplacement> inputReplacements = MutableLists.empty();
+        private final MutableList<OutputReplacement> outputReplacements = MutableLists.empty();
         private final MutableList<InputRule> inputRules = MutableLists.empty();
         private final MutableList<OutputRule> outputRules = MutableLists.empty();
-        private EffectSource currentSource = unknownSource;
+        private final MutableList<ProjectionSchemaWrite<?>> projectionSchemaWrites = MutableLists.empty();
+        private final MutableList<InputSchemaWrite<?>> inputSchemaWrites = MutableLists.empty();
+        private final MutableList<OutputSchemaWrite<?>> outputSchemaWrites = MutableLists.empty();
 
-        void bindSource(EffectSource source) {
-            currentSource = source;
-        }
-
-        @Nullable InputRule matchInput(InputContent input) {
+        private @Nullable InputRule matchInputRejection(InputContent input) {
             for (var rule : inputRules) {
                 if (rule.predicate().test(input)) return rule;
             }
             return null;
         }
 
-        @Nullable OutputRule matchOutput(OutputContent output) {
+        private @Nullable OutputRule matchOutputRejection(OutputContent output) {
             for (var rule : outputRules) {
                 if (rule.predicate().test(output)) return rule;
             }
             return null;
         }
 
+        private @Nullable InputReplacement matchInputReplacement(InputContent input) {
+            for (int i = inputReplacements.size() - 1; i >= 0; i--) {
+                InputReplacement replacement = inputReplacements.get(i);
+                if (replacement.before() == input) return replacement;
+            }
+            return null;
+        }
+
+        private @Nullable OutputReplacement matchOutputReplacement(OutputContent output) {
+            for (int i = outputReplacements.size() - 1; i >= 0; i--) {
+                OutputReplacement replacement = outputReplacements.get(i);
+                if (replacement.before() == output) return replacement;
+            }
+            return null;
+        }
+    }
+
+    private static final class EngineIncrementOps implements ContentTransformer.IncrementOps {
+
+        private final ProjectionActionLog actions;
+        private ProjectionEffectSource currentSource = unknownSource;
+
+        private EngineIncrementOps(ProjectionActionLog actions) {
+            this.actions = actions;
+        }
+
+        void bindSource(ProjectionEffectSource source) {
+            currentSource = source;
+        }
+
+        @Override
+        public ContentTransformer.IncrementOps injectInput(InputContent content) {
+            Checks.checkNotNull(content, "content");
+            actions.inputInjections.add(new InputInjection(content, currentSource));
+            return this;
+        }
+
+        @Override
+        public ContentTransformer.IncrementOps injectOutput(OutputContent content) {
+            Checks.checkNotNull(content, "content");
+            actions.outputInjections.add(new OutputInjection(content, currentSource));
+            return this;
+        }
+
+        @Override
+        public ContentTransformer.IncrementOps replaceInput(InputContent before, InputContent after, ReplaceMode mode) {
+            Checks.checkNotNull(before, "before");
+            Checks.checkNotNull(after, "after");
+            Checks.checkNotNull(mode, "mode");
+            actions.inputReplacements.add(new InputReplacement(before, after, mode, currentSource));
+            return this;
+        }
+
+        @Override
+        public ContentTransformer.IncrementOps replaceOutput(OutputContent before, OutputContent after, ReplaceMode mode) {
+            Checks.checkNotNull(before, "before");
+            Checks.checkNotNull(after, "after");
+            Checks.checkNotNull(mode, "mode");
+            actions.outputReplacements.add(new OutputReplacement(before, after, mode, currentSource));
+            return this;
+        }
+
+        @Override
+        public <T> ContentTransformer.IncrementOps putProjectionSchema(ProjectionSchemaKey<T> key, T value) {
+            actions.projectionSchemaWrites.add(new ProjectionSchemaWrite<>(key, value, currentSource));
+            return this;
+        }
+
+        @Override
+        public <T> ContentTransformer.IncrementOps putInputSchema(InputContent owner, ProjectionSchemaKey<T> key, T value) {
+            Checks.checkNotNull(owner, "owner");
+            actions.inputSchemaWrites.add(new InputSchemaWrite<>(owner, key, value, currentSource));
+            return this;
+        }
+
+        @Override
+        public <T> ContentTransformer.IncrementOps putOutputSchema(OutputContent owner, ProjectionSchemaKey<T> key, T value) {
+            Checks.checkNotNull(owner, "owner");
+            actions.outputSchemaWrites.add(new OutputSchemaWrite<>(owner, key, value, currentSource));
+            return this;
+        }
+    }
+
+    private static final class EngineDecrementOps implements ContentTransformer.DecrementOps {
+
+        private final ProjectionActionLog actions;
+        private ProjectionEffectSource currentSource = unknownSource;
+
+        private EngineDecrementOps(ProjectionActionLog actions) {
+            this.actions = actions;
+        }
+
+        void bindSource(ProjectionEffectSource source) {
+            currentSource = source;
+        }
+
         @Override
         public ContentTransformer.DecrementOps rejectInput(Predicate<InputContent> predicate) {
             Checks.checkNotNull(predicate, "predicate");
-            inputRules.add(new InputRule(predicate, currentSource));
+            actions.inputRules.add(new InputRule(predicate, currentSource));
             return this;
         }
 
         @Override
         public ContentTransformer.DecrementOps rejectInput(InputContent content) {
             Checks.checkNotNull(content, "content");
-            inputRules.add(new InputRule(input -> input == content, currentSource));
+            actions.inputRules.add(new InputRule(input -> input == content, currentSource));
             return this;
         }
 
         @Override
         public ContentTransformer.DecrementOps rejectOutput(Predicate<OutputContent> predicate) {
             Checks.checkNotNull(predicate, "predicate");
-            outputRules.add(new OutputRule(predicate, currentSource));
+            actions.outputRules.add(new OutputRule(predicate, currentSource));
             return this;
         }
 
         @Override
         public ContentTransformer.DecrementOps rejectOutput(OutputContent content) {
             Checks.checkNotNull(content, "content");
-            outputRules.add(new OutputRule(output -> output == content, currentSource));
+            actions.outputRules.add(new OutputRule(output -> output == content, currentSource));
             return this;
         }
 
-        record InputRule(
-                Predicate<InputContent> predicate,
-                EffectSource source
-        ) {}
+        @Override
+        public ContentTransformer.DecrementOps replaceInput(InputContent before, InputContent after, ReplaceMode mode) {
+            Checks.checkNotNull(before, "before");
+            Checks.checkNotNull(after, "after");
+            Checks.checkNotNull(mode, "mode");
+            actions.inputReplacements.add(new InputReplacement(before, after, mode, currentSource));
+            return this;
+        }
 
-        record OutputRule(
-                Predicate<OutputContent> predicate,
-                EffectSource source
-        ) {}
+        @Override
+        public ContentTransformer.DecrementOps replaceOutput(OutputContent before, OutputContent after, ReplaceMode mode) {
+            Checks.checkNotNull(before, "before");
+            Checks.checkNotNull(after, "after");
+            Checks.checkNotNull(mode, "mode");
+            actions.outputReplacements.add(new OutputReplacement(before, after, mode, currentSource));
+            return this;
+        }
+
+        @Override
+        public <T> ContentTransformer.DecrementOps putProjectionSchema(ProjectionSchemaKey<T> key, T value) {
+            actions.projectionSchemaWrites.add(new ProjectionSchemaWrite<>(key, value, currentSource));
+            return this;
+        }
+
+        @Override
+        public <T> ContentTransformer.DecrementOps putInputSchema(InputContent owner, ProjectionSchemaKey<T> key, T value) {
+            Checks.checkNotNull(owner, "owner");
+            actions.inputSchemaWrites.add(new InputSchemaWrite<>(owner, key, value, currentSource));
+            return this;
+        }
+
+        @Override
+        public <T> ContentTransformer.DecrementOps putOutputSchema(OutputContent owner, ProjectionSchemaKey<T> key, T value) {
+            Checks.checkNotNull(owner, "owner");
+            actions.outputSchemaWrites.add(new OutputSchemaWrite<>(owner, key, value, currentSource));
+            return this;
+        }
+    }
+
+    private record InputInjection(InputContent content, ProjectionEffectSource source) {
+    }
+
+    private record OutputInjection(OutputContent content, ProjectionEffectSource source) {
+    }
+
+    private record InputReplacement(InputContent before, InputContent after, ReplaceMode mode, ProjectionEffectSource source) {
+    }
+
+    private record OutputReplacement(OutputContent before, OutputContent after, ReplaceMode mode, ProjectionEffectSource source) {
+    }
+
+    private record InputRule(Predicate<InputContent> predicate, ProjectionEffectSource source) {
+    }
+
+    private record OutputRule(Predicate<OutputContent> predicate, ProjectionEffectSource source) {
+    }
+
+    private record ProjectionSchemaWrite<T>(ProjectionSchemaKey<T> key, T value, ProjectionEffectSource source) {
+        private ProjectionSchemaWrite {
+            Checks.checkNotNull(key, "key");
+            Checks.checkNotNull(value, "value");
+            Checks.checkNotNull(source, "source");
+            key.cast(value);
+        }
+    }
+
+    private record InputSchemaWrite<T>(InputContent owner, ProjectionSchemaKey<T> key, T value, ProjectionEffectSource source) {
+        private InputSchemaWrite {
+            Checks.checkNotNull(owner, "owner");
+            Checks.checkNotNull(key, "key");
+            Checks.checkNotNull(value, "value");
+            Checks.checkNotNull(source, "source");
+            key.cast(value);
+        }
+    }
+
+    private record OutputSchemaWrite<T>(OutputContent owner, ProjectionSchemaKey<T> key, T value, ProjectionEffectSource source) {
+        private OutputSchemaWrite {
+            Checks.checkNotNull(owner, "owner");
+            Checks.checkNotNull(key, "key");
+            Checks.checkNotNull(value, "value");
+            Checks.checkNotNull(source, "source");
+            key.cast(value);
+        }
     }
 
     //endregion

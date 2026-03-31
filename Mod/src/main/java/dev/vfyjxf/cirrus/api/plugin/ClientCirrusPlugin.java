@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.plugin;
 
 import dev.vfyjxf.cirrus.api.register.ContentRendererRegister;
+import dev.vfyjxf.cirrus.api.register.ExecutionDriverRegister;
 import dev.vfyjxf.cirrus.api.register.MachineEntryRendererRegister;
 import dev.vfyjxf.cirrus.api.register.StorageSourceRendererRegister;
 import dev.vfyjxf.cirrus.util.CirrusNamespaces;
@@ -45,6 +46,12 @@ public interface ClientCirrusPlugin extends ModPlugin {
     //region storage source renderer
 
     default void registerStorageSourceRenderer(StorageSourceRendererRegister register) {}
+
+    //endregion
+
+    //region execution driver
+
+    default void registerExecutionDriver(ExecutionDriverRegister register) {}
 
     //endregion
 

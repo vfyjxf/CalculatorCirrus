@@ -81,15 +81,59 @@ public interface StorageApi {
     default StorageTransferResult simulateExtractFirstAvailable(StorageTransferRequest request) {
         StorageTransferResult guidedFallback = null;
         for (StorageSource source : providers()) {
-            if (!matchesProvidedResource(source, request.resource())) {
-                continue;
-            }
+            // Do not pre-filter here with source.canProvide(request): inaccessible providers may
+            // still carry useful guidance that the runtime should surface to the user.
             var result = simulateExtract(source, request);
             if (result.transferredAmount() > 0) {
                 return result;
             }
             if (guidedFallback == null && result.guidance() != null) {
                 guidedFallback = result;
+            }
+        }
+        return guidedFallback != null
+            ? guidedFallback
+            : StorageTransferResult.none(null, request, null);
+    }
+
+    default long countAvailable(StorageTransferRequest request) {
+        long remaining = request.amount();
+        long total = 0L;
+        for (StorageSource source : providers()) {
+            if (remaining <= 0L) {
+                break;
+            }
+            StorageTransferResult simulated = simulateExtract(
+                source,
+                new StorageTransferRequest(request.target(), remaining)
+            );
+            long transferred = Math.max(0L, Math.min(remaining, simulated.transferredAmount()));
+            total = Math.addExact(total, transferred);
+            remaining -= transferred;
+        }
+        return total;
+    }
+
+    default boolean hasAvailable(StorageTransferRequest request) {
+        return countAvailable(request) >= request.amount();
+    }
+
+    default StorageTransferResult extractFirstAvailable(StorageTransferRequest request) {
+        StorageTransferResult guidedFallback = null;
+        for (StorageSource source : providers()) {
+            StorageTransferResult simulated = simulateExtract(source, request);
+            if (!simulated.completed()) {
+                if (guidedFallback == null && simulated.guidance() != null) {
+                    guidedFallback = simulated;
+                }
+                continue;
+            }
+            StorageTransferResult extracted = extract(source, request);
+            if (extracted.transferredAmount() > 0) {
+                return extracted;
+            }
+            if (guidedFallback == null && extracted.guidance() != null) {
+                guidedFallback = extracted;
             }
         }
         return guidedFallback != null
@@ -113,15 +157,28 @@ public interface StorageApi {
             : StorageTransferResult.none(null, request, null);
     }
 
-    private static boolean matchesProvidedResource(StorageSource source, ContentResource resource) {
-        for (ContentVariant content : source.contents()) {
-            if (content instanceof ContentResource candidate && candidate.matchesResource(resource)) {
-                return true;
+    default StorageTransferResult insertFirstAvailable(StorageTransferRequest request) {
+        StorageTransferResult guidedFallback = null;
+        for (StorageSource source : receivers()) {
+            StorageTransferResult simulated = simulateInsert(source, request);
+            if (!simulated.completed()) {
+                if (guidedFallback == null && simulated.guidance() != null) {
+                    guidedFallback = simulated;
+                }
+                continue;
+            }
+            StorageTransferResult inserted = insert(source, request);
+            if (inserted.transferredAmount() > 0) {
+                return inserted;
+            }
+            if (guidedFallback == null && inserted.guidance() != null) {
+                guidedFallback = inserted;
             }
         }
-        return false;
+        return guidedFallback != null
+            ? guidedFallback
+            : StorageTransferResult.none(null, request, null);
     }
-
     //endregion
 
 }

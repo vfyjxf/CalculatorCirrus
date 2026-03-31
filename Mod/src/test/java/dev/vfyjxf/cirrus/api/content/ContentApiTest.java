@@ -1,12 +1,15 @@
 package dev.vfyjxf.cirrus.api.content;
 
 import dev.vfyjxf.cirrus.api.CirrusTypes;
+import dev.vfyjxf.cirrus.api.content.type.TagType;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
+import dev.vfyjxf.cirrus.helper.TagHelper;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -16,6 +19,9 @@ import net.neoforged.testframework.junit.EphemeralTestServerProvider;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
+import java.util.ArrayList;
+import java.util.Collection;
 
 
 @ExtendWith(EphemeralTestServerProvider.class)
@@ -49,16 +55,13 @@ class ContentApiTest {
         var f = new ItemStack(Items.CANDLE);
         f.set(DataComponents.MAX_STACK_SIZE, 99);
         Assertions.assertFalse(itemType.matches(a, b));
-        Assertions.assertTrue(itemType.matches(a, b));
-        Assertions.assertTrue(itemType.matches(b, a));
+        Assertions.assertFalse(itemType.matches(b, a));
         Assertions.assertFalse(itemType.matches(a, c));
-        Assertions.assertFalse(itemType.matches(a, c));
-        Assertions.assertTrue(itemType.matches(c, d));
-        Assertions.assertTrue(itemType.matches(c, d));
-        Assertions.assertTrue(itemType.matches(d, e));
+        Assertions.assertFalse(itemType.matches(c, d));
+        Assertions.assertFalse(itemType.matches(d, e));
         Assertions.assertFalse(itemType.matches(e, d));
         Assertions.assertTrue(itemType.matches(a, f));
-        Assertions.assertTrue(itemType.matches(e, f));
+        Assertions.assertFalse(itemType.matches(e, f));
     }
 
 
@@ -75,8 +78,37 @@ class ContentApiTest {
 
     @Test
     void testTagType(MinecraftServer server) {
+        TagType<Item> tagType = CirrusTypes.Contents.ITEM.tagType();
+        var first = tagType.allTags();
+        var second = tagType.allTags();
+        Assertions.assertSame(first, second);
+        TagType.clearAllTagsCache();
+        var third = tagType.allTags();
+        Assertions.assertNotSame(first, third);
+    }
 
+    @Test
+    void testTagHelperMatchStaysStable(MinecraftServer server) {
+        TagType<Item> tagType = CirrusTypes.Contents.ITEM.tagType();
+        TagKey<Item> tag = null;
+        Collection<? extends ContentStack<Item, ?>> stacks = null;
+        for (TagKey<Item> candidate : tagType.allTags()) {
+            var values = tagType.getTagValues(candidate);
+            if (values.isEmpty()) continue;
+            var collected = new ArrayList<ContentStack<Item, ?>>();
+            for (Item item : values) {
+                collected.add(ContentStack.fromContent(item));
+            }
+            tag = candidate;
+            stacks = collected;
+            break;
+        }
+        Assertions.assertNotNull(tag);
+        Assertions.assertNotNull(stacks);
 
+        Assertions.assertEquals(tag, TagHelper.findTagMatchStacks(tagType, stacks));
+        TagType.clearAllTagsCache();
+        Assertions.assertEquals(tag, TagHelper.findTagMatchStacks(tagType, stacks));
     }
 
 

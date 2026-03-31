@@ -23,6 +23,8 @@ import dev.vfyjxf.cloudlib.util.Checks;
  * @param amplificationRisk estimated risk of infinite amplification in
  *                          {@code [0, 1]}; higher values indicate more
  *                          dangerous cycles
+ * @param availableCoverage how much of this candidate's own inputs can be
+ *                          satisfied immediately from current stock/byproducts
  */
 public record CandidateContext(
     RecipeGraph.Node recipe,
@@ -31,7 +33,8 @@ public record CandidateContext(
     int craftTimes,
     int depth,
     boolean cycleCandidate,
-    double amplificationRisk
+    double amplificationRisk,
+    double availableCoverage
 ) {
     public CandidateContext {
         Checks.checkNotNull(recipe, "recipe");
@@ -40,6 +43,7 @@ public record CandidateContext(
         Checks.checkArgument(craftTimes > 0, "craftTimes must be positive");
         Checks.checkArgument(depth >= 0, "depth must be non-negative");
         Checks.checkArgument(amplificationRisk >= 0, "amplificationRisk must be non-negative");
+        Checks.checkArgument(availableCoverage >= 0, "availableCoverage must be non-negative");
     }
 }
 

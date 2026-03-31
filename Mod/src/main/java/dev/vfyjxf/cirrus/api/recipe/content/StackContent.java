@@ -55,7 +55,7 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
 
     @Override
     public StackContent<T, S> copy() {
-        return new StackContent<>(type, stack, chance);
+        return new StackContent<>(type, stack.copy(), chance);
     }
 
     @Override

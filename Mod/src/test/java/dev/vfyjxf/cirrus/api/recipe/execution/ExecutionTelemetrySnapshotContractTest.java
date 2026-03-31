@@ -7,6 +7,8 @@ import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowViewModel;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -26,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ExecutionTelemetrySnapshotContractTest {
 
     @Test
-    void fromSessionCapturesPausedManualCheckpointWarningsWithoutTreatingThemAsErrors() {
+    void fromSessionCapturesPausedManualCheckpointGuidanceAsPauseDetails() {
         var currentStep = new InteractionStep.ManualCheckpointStep(
             ExecutionSideRequirement.manualPlayerAction,
             ExecutionCapability.manualCheckpoint,
@@ -102,8 +104,8 @@ class ExecutionTelemetrySnapshotContractTest {
         assertEquals("Current stage", snapshot.path().getLast().label());
         assertEquals(2, snapshot.warnings().size());
         assertEquals("Open the bench", snapshot.warnings().getFirst());
-        assertNull(snapshot.errorSummary());
-        assertNull(snapshot.errorDetail());
+        assertEquals("Need attention", snapshot.errorSummary());
+        assertEquals("Check the bench", snapshot.errorDetail());
         assertEquals(4.5d, snapshot.ratePerSecond());
         assertTrue(snapshot.autoAdvanceEnabled());
     }
@@ -354,7 +356,7 @@ class ExecutionTelemetrySnapshotContractTest {
         }
 
         @Override
-        public RecipeProjection resolveRecipe(TestRecipe recipe) {
+        public ResolveResult resolveFallback(ResolveContext context, TestRecipe recipe) {
             throw new UnsupportedOperationException();
         }
 

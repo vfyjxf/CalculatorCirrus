@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.recipe.clause;
 
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
 import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolvePolicy;
 import dev.vfyjxf.cirrus.util.CirrusNamespaces;
@@ -12,7 +13,7 @@ public record ResolvePolicyClause(
 ) implements RecipeClause {
 
     public static final Namespace id = CirrusNamespaces.ofMod("resolve/policy");
-    public static final ClauseType type = new ClauseType(id, (recipe, content) -> true);
+    public static final ClauseType type = new ClauseType(id, ProjectionPlugin.builtin, (recipe, content) -> true);
 
     public ResolvePolicyClause {
         Checks.checkNotNull(policy, "policy");
@@ -21,5 +22,10 @@ public record ResolvePolicyClause(
     @Override
     public Namespace id() {
         return id;
+    }
+
+    @Override
+    public ProjectionPlugin plugin() {
+        return ProjectionPlugin.builtin;
     }
 }

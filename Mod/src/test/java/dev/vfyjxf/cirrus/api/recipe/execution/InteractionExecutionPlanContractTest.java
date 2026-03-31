@@ -9,6 +9,8 @@ import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -45,7 +47,7 @@ class InteractionExecutionPlanContractTest {
             ExecutionCapability.interactionAccess,
             recipe,
             1,
-            "crafting_table"
+            Namespace.of("test", "crafting_table")
         );
         var manual = new InteractionStep.ManualCheckpointStep(
             ExecutionSideRequirement.player,
@@ -233,7 +235,7 @@ class InteractionExecutionPlanContractTest {
         }
 
         @Override
-        public RecipeProjection resolveRecipe(TestRecipe recipe) {
+        public ResolveResult resolveFallback(ResolveContext context, TestRecipe recipe) {
             throw new UnsupportedOperationException("Test fixture does not resolve recipes");
         }
 

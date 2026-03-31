@@ -39,3 +39,11 @@ type = "required"
 versionRange = "[${cloudlib_version},)"
 ordering = "AFTER"
 side = "BOTH"
+
+[[dependencies.${ mod_id }]]
+modId = "emi"
+type = "incompatible"
+versionRange = "[0,)"
+reason = "EMI is not supported and is forever and prohibited from being supported"
+ordering = "NONE"
+side = "CLIENT"

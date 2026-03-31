@@ -3,15 +3,13 @@ package dev.vfyjxf.cirrus.api.recipe.routing.service;
 /**
  * Selects the planning algorithm and its quality guarantees.
  *
- * @see dev.vfyjxf.cirrus.api.recipe.routing.planner.StandardPlanner
- * @see dev.vfyjxf.cirrus.api.recipe.routing.planner.AssuredPlanner
  */
 public enum PlannerMode {
     /** Responsiveness-first greedy DFS planner. Fastest, no optimality guarantees. */
     standard,
     /**
      * Quality-oriented planner with bounded search.
-     * Delegates to the standard search core but rebrands the result.
+     * Uses a wider deterministic candidate window and rollback budget.
      */
     assuredBounded,
     /**

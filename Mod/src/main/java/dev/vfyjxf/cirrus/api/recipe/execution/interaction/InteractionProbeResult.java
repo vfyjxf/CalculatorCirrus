@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.interaction;
 
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
-import dev.vfyjxf.cloudlib.util.Checks;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -13,11 +13,7 @@ public sealed interface InteractionProbeResult permits
 
     //region variants
 
-    record Supported(String interactionId, boolean performerAvailable, boolean contextOpen) implements InteractionProbeResult {
-        public Supported {
-            Checks.checkNotNull(interactionId, "interactionId");
-        }
-    }
+    record Supported(Namespace interactionId, boolean performerAvailable, boolean contextOpen) implements InteractionProbeResult {}
 
     record Unsupported(@Nullable ExecutionGuidance guidance) implements InteractionProbeResult {}
 

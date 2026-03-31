@@ -9,8 +9,7 @@ import dev.vfyjxf.cloudlib.util.Checks;
  * @param id the namespace identifier for this mode
  */
 public record ExecutionModeKey(Namespace id) {
-
     public ExecutionModeKey {
-        Checks.checkNotNull(id, "id");
+        id = Checks.checkNotNull(id, "id");
     }
 }

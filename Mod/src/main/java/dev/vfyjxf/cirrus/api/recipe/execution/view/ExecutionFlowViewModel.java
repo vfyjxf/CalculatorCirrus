@@ -1,9 +1,9 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.view;
 
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
-import dev.vfyjxf.cloudlib.util.Checks;
+import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.set.ImmutableSet;
-import org.eclipse.collections.impl.factory.Lists;
+import org.eclipse.collections.impl.factory.Sets;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -11,15 +11,9 @@ import org.jetbrains.annotations.Nullable;
  */
 public record ExecutionFlowViewModel(ExecutionFlowNode root) {
 
-    public ExecutionFlowViewModel {
-        Checks.checkNotNull(root, "root");
-    }
-
     //region projection
 
     public static ExecutionFlowViewModel derive(ExecutionFlowNode root, RuntimeState runtimeState) {
-        Checks.checkNotNull(root, "root");
-        Checks.checkNotNull(runtimeState, "runtimeState");
         return new ExecutionFlowViewModel(project(root, runtimeState));
     }
 
@@ -31,7 +25,7 @@ public record ExecutionFlowViewModel(ExecutionFlowNode root) {
 
     private static ExecutionFlowStatus deriveStatus(
         ExecutionFlowNode node,
-        org.eclipse.collections.api.list.ImmutableList<ExecutionFlowNode> projectedChildren,
+        ImmutableList<ExecutionFlowNode> projectedChildren,
         RuntimeState runtimeState
     ) {
         if (containsFailedStep(node, projectedChildren, runtimeState)) {
@@ -51,7 +45,7 @@ public record ExecutionFlowViewModel(ExecutionFlowNode root) {
 
     private static boolean containsFailedStep(
         ExecutionFlowNode node,
-        org.eclipse.collections.api.list.ImmutableList<ExecutionFlowNode> projectedChildren,
+        ImmutableList<ExecutionFlowNode> projectedChildren,
         RuntimeState runtimeState
     ) {
         return runtimeState.failedStep() != null && (node.steps().contains(runtimeState.failedStep())
@@ -60,7 +54,7 @@ public record ExecutionFlowViewModel(ExecutionFlowNode root) {
 
     private static boolean containsPausedStep(
         ExecutionFlowNode node,
-        org.eclipse.collections.api.list.ImmutableList<ExecutionFlowNode> projectedChildren,
+        ImmutableList<ExecutionFlowNode> projectedChildren,
         RuntimeState runtimeState
     ) {
         return node.steps().anySatisfy(runtimeState.pausedSteps()::contains)
@@ -69,7 +63,7 @@ public record ExecutionFlowViewModel(ExecutionFlowNode root) {
 
     private static boolean containsRunningStep(
         ExecutionFlowNode node,
-        org.eclipse.collections.api.list.ImmutableList<ExecutionFlowNode> projectedChildren,
+        ImmutableList<ExecutionFlowNode> projectedChildren,
         RuntimeState runtimeState
     ) {
         return runtimeState.runningStep() != null && (node.steps().contains(runtimeState.runningStep())
@@ -78,7 +72,7 @@ public record ExecutionFlowViewModel(ExecutionFlowNode root) {
 
     private static boolean isCompleted(
         ExecutionFlowNode node,
-        org.eclipse.collections.api.list.ImmutableList<ExecutionFlowNode> projectedChildren,
+        ImmutableList<ExecutionFlowNode> projectedChildren,
         RuntimeState runtimeState
     ) {
         var ownStepsCompleted = node.steps().allSatisfy(runtimeState.completedSteps()::contains);
@@ -97,13 +91,8 @@ public record ExecutionFlowViewModel(ExecutionFlowNode root) {
         @Nullable InteractionStep failedStep
     ) {
 
-        public RuntimeState {
-            Checks.checkNotNull(completedSteps, "completedSteps");
-            Checks.checkNotNull(pausedSteps, "pausedSteps");
-        }
-
         public static RuntimeState empty() {
-            return new RuntimeState(org.eclipse.collections.impl.factory.Sets.immutable.empty(), org.eclipse.collections.impl.factory.Sets.immutable.empty(), null, null);
+            return new RuntimeState(Sets.immutable.empty(), Sets.immutable.empty(), null, null);
         }
     }
 

@@ -6,7 +6,11 @@ import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolver;
 import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolverType;
 import dev.vfyjxf.cirrus.api.recipe.filter.RecipeFilter;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
+import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextOption;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.system.VanillaRecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
@@ -84,6 +88,19 @@ public interface RecipeApi {
     RichIterable<? extends RecipeSystem<?>> getTaggedSystems(Namespace tag);
 
     /**
+     * Get all tags assigned to the given recipe system.
+     *
+     * @param systemId the id of the system
+     * @return an unmodifiable view of all tags assigned to the system
+     */
+    RichIterable<Namespace> getSystemTags(Namespace systemId);
+
+    /**
+     * Resolves a recipe through the system's registered subsystems and finally its fallback parser.
+     */
+    <R> ResolveResult resolve(ResolveContext context, RecipeSystem<R> system, R recipe);
+
+    /**
      * @return an unmodifiable view of all registered recipe systems
      */
     @UnmodifiableView
@@ -128,6 +145,18 @@ public interface RecipeApi {
      * @return the transformer if found, null otherwise
      */
     <F extends RecipeClause> @Nullable ProjectionTransformer<F> findProjectionTransformer(ClauseType type);
+
+    //endregion
+
+    //region projection context
+
+    RichIterable<ProjectionPlugin> projectionPlugins();
+
+    @Nullable ProjectionPlugin findProjectionPlugin(Namespace id);
+
+    RichIterable<ProjectionContextOption<?>> projectionContextOptions();
+
+    @Nullable ProjectionContextOption<?> findProjectionContextOption(Namespace id);
 
     //endregion
 

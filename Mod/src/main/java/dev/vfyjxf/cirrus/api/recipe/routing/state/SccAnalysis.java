@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.api.recipe.routing.state;
 
+import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.routing.RecipeGraph;
@@ -8,6 +9,8 @@ import dev.vfyjxf.cloudlib.util.Checks;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 
 import java.util.BitSet;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Strongly Connected Component (SCC) analysis of the recipe dependency graph.
@@ -66,29 +69,34 @@ public record SccAnalysis(
         Checks.checkNotNull(catalog, "catalog");
         Checks.checkNotNull(allowedRecipes, "allowedRecipes");
         int n = catalog.size();
-        IntArrayList[] edges = new IntArrayList[n];
+        RecipeGraph.Node[] nodes = new RecipeGraph.Node[n];
+        List<FallbackConsumer> fallbackConsumers = new ArrayList<>();
         for (int i = 0; i < n; i++) {
-            edges[i] = new IntArrayList();
-        }
-
-        // Build producer-consumer adjacency for allowed recipes.
-        for (int i = 0; i < n; i++) {
+            RecipeGraph.Node node = catalog.nodeAt(i);
+            nodes[i] = node;
             if (!allowedRecipes.get(i)) {
                 continue;
             }
-            RecipeGraph.Node producer = catalog.nodeAt(i);
-            for (int j = 0; j < n; j++) {
-                if (!allowedRecipes.get(j)) {
+            for (InputContent input : node.mergedInputs()) {
+                if (input.notConsumed() || !requiresScanFallback(input)) {
                     continue;
                 }
-                if (i == j) {
-                    // self-loop may still exist; handle below.
-                }
-                RecipeGraph.Node consumer = catalog.nodeAt(j);
-                if (canProduceFor(producer, consumer)) {
-                    edges[i].add(j);
-                }
+                fallbackConsumers.add(new FallbackConsumer(i, input));
             }
+        }
+
+        BitSet[] adjacency = new BitSet[n];
+        for (int i = allowedRecipes.nextSetBit(0); i >= 0; i = allowedRecipes.nextSetBit(i + 1)) {
+            RecipeGraph.Node producer = nodes[i];
+            for (OutputContent output : producer.mergedOutputs()) {
+                addIndexedConsumers(graph, catalog, allowedRecipes, adjacency, i, output);
+                addFallbackConsumers(allowedRecipes, adjacency, fallbackConsumers, i, output);
+            }
+        }
+
+        IntArrayList[] edges = new IntArrayList[n];
+        for (int i = 0; i < n; i++) {
+            edges[i] = toIntList(adjacency[i]);
         }
 
         Tarjan tarjan = new Tarjan(edges, allowedRecipes);
@@ -96,18 +104,72 @@ public record SccAnalysis(
         return new SccAnalysis(tarjan.recipeToScc, tarjan.cyclicScc);
     }
 
-    private static boolean canProduceFor(RecipeGraph.Node producer, RecipeGraph.Node consumer) {
-        for (OutputContent output : producer.mergedOutputs()) {
-            for (InputContent input : consumer.mergedInputs()) {
-                if (input.notConsumed()) {
-                    continue;
-                }
-                if (input.satisfy(output.asResource())) {
-                    return true;
-                }
+    private static void addIndexedConsumers(
+        RecipeGraph graph,
+        RoutingRecipeCatalog catalog,
+        BitSet allowedRecipes,
+        BitSet[] adjacency,
+        int producerIndex,
+        OutputContent output
+    ) {
+        for (RecipeGraph.InputRef consumer : graph.consumersFor(output)) {
+            if (consumer.input().notConsumed()) {
+                continue;
+            }
+            int consumerIndex = catalog.indexOf(consumer.node().recipe());
+            if (consumerIndex < 0 || !allowedRecipes.get(consumerIndex)) {
+                continue;
+            }
+            edgeSet(adjacency, producerIndex).set(consumerIndex);
+        }
+    }
+
+    private static void addFallbackConsumers(
+        BitSet allowedRecipes,
+        BitSet[] adjacency,
+        List<FallbackConsumer> fallbackConsumers,
+        int producerIndex,
+        OutputContent output
+    ) {
+        if (fallbackConsumers.isEmpty()) {
+            return;
+        }
+        var resource = output.asResource();
+        for (FallbackConsumer consumer : fallbackConsumers) {
+            if (!allowedRecipes.get(consumer.recipeIndex())) {
+                continue;
+            }
+            if (consumer.input().satisfy(resource)) {
+                edgeSet(adjacency, producerIndex).set(consumer.recipeIndex());
             }
         }
-        return false;
+    }
+
+    private static boolean requiresScanFallback(InputContent input) {
+        return input instanceof ComplexContent && !input.isEnumerable();
+    }
+
+    private static BitSet edgeSet(BitSet[] adjacency, int producerIndex) {
+        BitSet edges = adjacency[producerIndex];
+        if (edges == null) {
+            edges = new BitSet();
+            adjacency[producerIndex] = edges;
+        }
+        return edges;
+    }
+
+    private static IntArrayList toIntList(BitSet bits) {
+        IntArrayList edges = new IntArrayList();
+        if (bits == null) {
+            return edges;
+        }
+        for (int edge = bits.nextSetBit(0); edge >= 0; edge = bits.nextSetBit(edge + 1)) {
+            edges.add(edge);
+        }
+        return edges;
+    }
+
+    private record FallbackConsumer(int recipeIndex, InputContent input) {
     }
 
     private static final class Tarjan {

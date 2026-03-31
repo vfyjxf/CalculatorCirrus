@@ -4,7 +4,13 @@ import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 
+//TODO:add type class to hash and identity
 public non-sealed interface ComplexContent extends InputContent {
+
+    @Override
+    default boolean preserveOriginalShortageSemantics() {
+        return true;
+    }
 
     /**
      * Complex content is not enumerable by default.

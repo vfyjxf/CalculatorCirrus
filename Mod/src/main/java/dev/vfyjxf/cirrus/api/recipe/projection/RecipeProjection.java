@@ -3,11 +3,12 @@ package dev.vfyjxf.cirrus.api.recipe.projection;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
-import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseSet;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
+import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.RichIterable;
@@ -17,18 +18,19 @@ import org.eclipse.collections.impl.collector.Collectors2;
 import java.util.Collection;
 
 public record RecipeProjection(
-    RecipeEntry<?> recipe,
-    ImmutableList<ClausedContent<InputContent>> inputs,
-    ImmutableList<ClausedContent<OutputContent>> outputs,
-    ClauseSet clauses
+        RecipeEntry<?> recipe,
+        ImmutableList<ClausedContent<InputContent>> inputs,
+        ImmutableList<ClausedContent<OutputContent>> outputs,
+        ProjectionSchema schema,
+        ClauseSet clauses
 ) {
 
     //region factory
 
     public static <R> RecipeProjection create(
-        RecipeSystem<R> system, R recipe,
-        Collection<? extends InputContent> inputs,
-        Collection<? extends OutputContent> outputs
+            RecipeSystem<R> system, R recipe,
+            Collection<? extends InputContent> inputs,
+            Collection<? extends OutputContent> outputs
     ) {
         Checks.checkNotNull(system, "system");
         Checks.checkNotNull(recipe, "recipe");
@@ -36,9 +38,9 @@ public record RecipeProjection(
     }
 
     public static <R> RecipeProjection create(
-        RecipeEntry<R> entry,
-        Collection<? extends InputContent> inputs,
-        Collection<? extends OutputContent> outputs
+            RecipeEntry<R> entry,
+            Collection<? extends InputContent> inputs,
+            Collection<? extends OutputContent> outputs
     ) {
         Checks.checkNotNull(entry, "entry");
         Checks.checkNotNull(inputs, "inputs");
@@ -47,10 +49,11 @@ public record RecipeProjection(
         Checks.checkArgument(!outputs.isEmpty(), "outputs cannot be empty");
 
         return new RecipeProjection(
-            entry,
-            inputs.stream().<ClausedContent<InputContent>>map(ClausedContent::from).collect(Collectors2.toImmutableList()),
-            outputs.stream().<ClausedContent<OutputContent>>map(ClausedContent::from).collect(Collectors2.toImmutableList()),
-            ClauseSet.create()
+                entry,
+                inputs.stream().<ClausedContent<InputContent>>map(ClausedContent::from).collect(Collectors2.toImmutableList()),
+                outputs.stream().<ClausedContent<OutputContent>>map(ClausedContent::from).collect(Collectors2.toImmutableList()),
+                ProjectionSchema.empty(),
+                ClauseSet.create()
         );
     }
 
@@ -60,15 +63,8 @@ public record RecipeProjection(
         Checks.checkNotNull(recipe, "recipe");
         Checks.checkNotNull(inputs, "inputs");
         Checks.checkNotNull(outputs, "outputs");
+        Checks.checkNotNull(schema, "schema");
         Checks.checkNotNull(clauses, "clauses");
-    }
-
-    public RecipeProjection(
-        RecipeEntry<?> recipe,
-        ImmutableList<ClausedContent<InputContent>> inputs,
-        ImmutableList<ClausedContent<OutputContent>> outputs
-    ) {
-        this(recipe, inputs, outputs, ClauseSet.create());
     }
 
     //region clause
@@ -115,52 +111,14 @@ public record RecipeProjection(
 
     //endregion
 
-    //region compatibility
-
-    @Deprecated(forRemoval = false)
-    public RecipeClause getFacet(Namespace facetId) {
-        return getClause(facetId);
-    }
-
-    @Deprecated(forRemoval = false)
-    public ClauseSet addFacet(RecipeClause facet) {
-        return addClause(facet);
-    }
-
-    @Deprecated(forRemoval = false)
-    public ClauseSet removeFacet(ClauseType facetType) {
-        return removeClause(facetType);
-    }
-
-    @Deprecated(forRemoval = false)
-    public ClauseSet removeFacet(Namespace facetId) {
-        return removeClause(facetId);
-    }
-
-    @Deprecated(forRemoval = false)
-    public RecipeClause getFacet(ClauseType facetType) {
-        return getClause(facetType);
-    }
-
-    @Deprecated(forRemoval = false)
-    public void resetFacets() {
-        resetClauses();
-    }
-
-    @Deprecated(forRemoval = false)
-    public RichIterable<RecipeClause> allFacets() {
-        return allClauses();
-    }
-
-    //endregion
-
     @Override
     public String toString() {
         return "RecipeProjection{" +
-               "recipe=" + recipe +
-               ", inputs=" + inputs +
-               ", outputs=" + outputs +
-               ", clauses=" + clauses +
-               '}';
+                "recipe=" + recipe +
+                ", inputs=" + inputs +
+                ", outputs=" + outputs +
+                ", schema=" + schema +
+                ", clauses=" + clauses +
+                '}';
     }
 }

@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.TagType;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.util.TagLookup;
+import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
@@ -180,6 +181,21 @@ public sealed interface InputContent
 
     static <T> InputContent fromValue(ValueType<T> type, T value) {
         return fromValue(type, value, MAX_CHANCE);
+    }
+
+    //endregion
+
+    //region resource factory
+
+    static InputContent fromResource(ContentResource resource, float chance) {
+        return switch (resource) {
+            case ContentStack<?, ?> stack -> fromStack(stack, chance);
+            case ContentValue<?> value -> fromValue(value, chance);
+        };
+    }
+
+    static InputContent fromResource(ContentResource resource) {
+        return fromResource(resource, MAX_CHANCE);
     }
 
     //endregion
@@ -390,6 +406,19 @@ public sealed interface InputContent
      */
     @UnmodifiableView
     RichIterable<? extends ContentVariant> enumerate();
+
+    /**
+     * Whether routing should preserve this input itself when reporting shortages or
+     * generating execution-profile uncertain-stock fallback.
+     *
+     * <p>Exact single-resource inputs can usually be collapsed to a concrete stack or
+     * value without losing meaning. Tag, list, and complex inputs carry additional
+     * semantics that should stay attached to the original input object instead of a
+     * planner-chosen concrete candidate.
+     */
+    default boolean preserveOriginalShortageSemantics() {
+        return false;
+    }
 
     //endregion
 

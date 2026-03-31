@@ -19,7 +19,7 @@ public interface RecipeConstraint<R> {
      */
     @SuppressWarnings("unchecked")
     static <R> RecipeConstraint<R> ingredientConstraint() {
-        return (RecipeConstraint<R>) DefaultRecipeConstraint.INSTANCE;
+        return (RecipeConstraint<R>) DefaultRecipeConstraint.instance;
     }
 
     /**
@@ -35,7 +35,7 @@ public interface RecipeConstraint<R> {
 
 class DefaultRecipeConstraint<R> implements RecipeConstraint<R> {
 
-    static final RecipeConstraint<?> INSTANCE = new DefaultRecipeConstraint<>();
+    static final RecipeConstraint<?> instance = new DefaultRecipeConstraint<>();
 
     private DefaultRecipeConstraint() {}
 

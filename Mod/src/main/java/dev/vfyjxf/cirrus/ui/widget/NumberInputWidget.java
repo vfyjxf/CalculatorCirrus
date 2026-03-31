@@ -1,18 +1,19 @@
 package dev.vfyjxf.cirrus.ui.widget;
 
-import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusTextures.Background;
+import dev.vfyjxf.cirrus.ui.widget.calculator.CalculatorInputKeyMappings;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
-import dev.vfyjxf.cloudlib.api.ui.event.InputEvents;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-import java.util.List;
-import java.util.function.Consumer;
 import java.util.function.LongConsumer;
+import java.util.function.Supplier;
 
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.background;
 
@@ -33,11 +34,16 @@ public class NumberInputWidget extends Widget {
     private int selectionStart = -1;
     private int scrollOffset = 0;
     private long cursorBlinkEpoch = System.currentTimeMillis();
+    private boolean rangeWarning = false;
+    private long committedValue = 1;
 
     @Nullable
     private LongConsumer onValueChanged;
     @Nullable
     private CalculatorOpenCallback onCalculatorOpen;
+    @Nullable
+    private Supplier<Tooltip> tooltipSupplier;
+    private boolean defaultCalculatorPopupEnabled;
 
     @FunctionalInterface
     public interface CalculatorOpenCallback {
@@ -64,7 +70,9 @@ public class NumberInputWidget extends Widget {
 
     private void setupEvents() {
         onMouseClick((input, clickCount, context) -> {
-            if (input.key().getValue() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+            if (onCalculatorOpen != null
+                && (input.key().getValue() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE
+                || CalculatorInputKeyMappings.openAmountCalculatorPopupPressed(input.key()))) {
                 openCalculator((int) input.mouseX(), (int) input.mouseY());
                 return EventDispatch.consumed;
             }
@@ -92,6 +100,10 @@ public class NumberInputWidget extends Widget {
 
         onKeyPressed((input, context) -> {
             if (!focused()) return EventDispatch.pass;
+            if (onCalculatorOpen != null && CalculatorInputKeyMappings.openAmountCalculatorPopupPressed(input.key())) {
+                openCalculator(absolutePos().x(), absolutePos().y());
+                return EventDispatch.consumed;
+            }
             return handleKeyInput(input.key().getValue(), input.isCtrlDown());
         });
 
@@ -100,14 +112,24 @@ public class NumberInputWidget extends Widget {
             return handleCharInput(codePoint);
         });
 
-        onEvent(InputEvents.onMouseScrolled, (mouseX, mouseY, scrollX, scrollY, context) -> {
-            if (!scrollEnabled) return EventDispatch.pass;
+        onFocusLost(context -> commitOrRollback());
+
+        onMouseScrolled((mouseX, mouseY, scrollX, scrollY, context) -> {
+            if (!scrollEnabled || scrollY == 0) return EventDispatch.pass;
+            context.consume();
             if (scrollY > 0) {
                 adjustValue(scrollStep);
-            } else if (scrollY < 0) {
+            } else {
                 adjustValue(-scrollStep);
             }
             return EventDispatch.consumed;
+        });
+        onHoverTooltip((mouseX, mouseY) -> {
+            Tooltip supplied = tooltipSupplier == null ? null : tooltipSupplier.get();
+            if (supplied != null) {
+                return supplied;
+            }
+            return tooltip().notEmpty() ? tooltip() : null;
         });
     }
 
@@ -191,6 +213,11 @@ public class NumberInputWidget extends Widget {
                 return EventDispatch.consumed;
             }
             case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER, GLFW.GLFW_KEY_ESCAPE -> {
+                if (key == GLFW.GLFW_KEY_ESCAPE) {
+                    rollbackToCommitted();
+                } else {
+                    commitOrRollback();
+                }
                 scene().requestUnfocus(this);
                 return EventDispatch.consumed;
             }
@@ -227,17 +254,22 @@ public class NumberInputWidget extends Widget {
         stripLeadingZeros();
         selectionStart = -1;
         if (displayText.isEmpty() || displayText.equals("-")) {
-            value = 0;
+            rangeWarning = true;
         } else {
             try {
                 long parsed = Long.parseLong(displayText);
-                value = clampValue(parsed);
+                if (parsed < minValue || parsed > maxValue) {
+                    rangeWarning = true;
+                    return;
+                }
+                rangeWarning = false;
+                value = parsed;
+                committedValue = parsed;
+                notifyValueChanged();
             } catch (NumberFormatException e) {
-                displayText = String.valueOf(value);
-                cursorPosition = Math.min(cursorPosition, displayText.length());
+                rangeWarning = true;
             }
         }
-        notifyValueChanged();
     }
 
     private void stripLeadingZeros() {
@@ -303,8 +335,8 @@ public class NumberInputWidget extends Widget {
     }
 
     private void adjustValue(long delta) {
-        long newValue = clampValue(value + delta);
-        if (newValue != value) {
+        long newValue = clampValue(committedValue + delta);
+        if (newValue != committedValue) {
             setValue(newValue);
         }
     }
@@ -325,20 +357,78 @@ public class NumberInputWidget extends Widget {
         }
     }
 
+    private void commitOrRollback() {
+        if (displayText.isEmpty() || displayText.equals("-")) {
+            rollbackToCommitted();
+            return;
+        }
+        try {
+            long parsed = Long.parseLong(displayText);
+            if (parsed < minValue || parsed > maxValue) {
+                rollbackToCommitted();
+                return;
+            }
+            if (parsed != committedValue) {
+                value = parsed;
+                committedValue = parsed;
+                displayText = String.valueOf(parsed);
+                cursorPosition = displayText.length();
+                rangeWarning = false;
+                notifyValueChanged();
+                return;
+            }
+            displayText = String.valueOf(committedValue);
+            cursorPosition = displayText.length();
+            rangeWarning = false;
+        } catch (NumberFormatException e) {
+            rollbackToCommitted();
+        }
+    }
+
+    private void rollbackToCommitted() {
+        value = committedValue;
+        displayText = String.valueOf(committedValue);
+        cursorPosition = displayText.length();
+        selectionStart = -1;
+        scrollOffset = 0;
+        rangeWarning = false;
+    }
+
     public long getValue() {
         return value;
     }
 
+    public boolean hasRangeWarning() {
+        return rangeWarning;
+    }
+
+    public long minValue() {
+        return minValue;
+    }
+
+    public long maxValue() {
+        return maxValue;
+    }
+
+    public long scrollStep() {
+        return scrollStep;
+    }
+
     public NumberInputWidget setValue(long value) {
         this.value = clampValue(value);
+        this.committedValue = this.value;
         this.displayText = String.valueOf(this.value);
         this.cursorPosition = this.displayText.length();
+        this.rangeWarning = false;
         notifyValueChanged();
         return this;
     }
 
     public NumberInputWidget setMinValue(long minValue) {
         this.minValue = minValue;
+        if (maxValue < this.minValue) {
+            maxValue = this.minValue;
+        }
         if (value < minValue) {
             setValue(minValue);
         }
@@ -347,6 +437,9 @@ public class NumberInputWidget extends Widget {
 
     public NumberInputWidget setMaxValue(long maxValue) {
         this.maxValue = maxValue;
+        if (minValue > this.maxValue) {
+            minValue = this.maxValue;
+        }
         if (value > maxValue) {
             setValue(maxValue);
         }
@@ -354,8 +447,8 @@ public class NumberInputWidget extends Widget {
     }
 
     public NumberInputWidget setRange(long min, long max) {
-        this.minValue = min;
-        this.maxValue = max;
+        this.minValue = Math.min(min, max);
+        this.maxValue = Math.max(min, max);
         setValue(clampValue(value));
         return this;
     }
@@ -375,9 +468,42 @@ public class NumberInputWidget extends Widget {
         return this;
     }
 
-    public NumberInputWidget onCalculatorOpen(CalculatorOpenCallback callback) {
+    public NumberInputWidget onCalculatorOpen(@Nullable CalculatorOpenCallback callback) {
         this.onCalculatorOpen = callback;
+        this.defaultCalculatorPopupEnabled = false;
         return this;
+    }
+
+    public NumberInputWidget enableCalculatorPopup() {
+        this.onCalculatorOpen = NumberInputCalculatorPopup::open;
+        this.defaultCalculatorPopupEnabled = true;
+        return this;
+    }
+
+    public NumberInputWidget tooltip(@Nullable Supplier<Tooltip> tooltipSupplier) {
+        this.tooltipSupplier = tooltipSupplier;
+        return this;
+    }
+
+    public NumberInputWidget tooltipWithCalculatorPopup(@Nullable Supplier<Tooltip> tooltipSupplier) {
+        this.tooltipSupplier = () -> {
+            Tooltip supplied = tooltipSupplier == null ? null : tooltipSupplier.get();
+            Tooltip tooltip = supplied == null ? Tooltip.create() : supplied.copy();
+            if (tooltip.notEmpty()) {
+                tooltip.add(Component.empty());
+            }
+            tooltip.add(CalculatorInputKeyMappings.openAmountCalculatorPopupUsage(CirrusLangs.Calc.amountMiddleClick.component()));
+            return tooltip;
+        };
+        return this;
+    }
+
+    public boolean debugCalculatorPopupEnabled() {
+        return defaultCalculatorPopupEnabled;
+    }
+
+    public boolean debugCalculatorPopupOpen() {
+        return NumberInputCalculatorPopup.isOpen(this);
     }
 
     @Override
@@ -385,7 +511,7 @@ public class NumberInputWidget extends Widget {
         super.renderInternal(canvas, mouseX, mouseY, partialTicks);
 
         var font = context().font();
-        int textColor = focused() ? 0xFFFFFF : 0xE0E0E0;
+        int textColor = rangeWarning ? 0xFFF36D6D : focused() ? 0xFFFFFFFF : 0xFFE0E0E0;
         int padding = 4;
         int textY = (height() - font.lineHeight) / 2 + 1;
         int visibleWidth = width() - padding * 2;
@@ -406,6 +532,9 @@ public class NumberInputWidget extends Widget {
 
         int absX = absolutePos().x();
         int absY = absolutePos().y();
+        if (rangeWarning) {
+            canvas.fill(1, 1, Math.max(0, width() - 2), Math.max(0, height() - 2), 0x26F36D6D);
+        }
         canvas.pushClip(absX + padding, absY, visibleWidth, height());
 
         canvas.text(text, padding - scrollOffset, textY, textColor, false);

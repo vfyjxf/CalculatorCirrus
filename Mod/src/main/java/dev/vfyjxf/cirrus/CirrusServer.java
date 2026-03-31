@@ -20,7 +20,7 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
-@Mod(value = CirrusConstants.MOD_ID, dist = Dist.DEDICATED_SERVER)
+@Mod(value = CirrusConstants.modId, dist = Dist.DEDICATED_SERVER)
 public final class CirrusServer extends Cirrus {
 
     public static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Server");
@@ -55,14 +55,14 @@ public final class CirrusServer extends Cirrus {
 
         NeoForge.EVENT_BUS.addListener(firstTrigger);
         NeoForge.EVENT_BUS.addListener(
-            EventPriority.LOWEST,
-            (TagsUpdatedEvent event) -> {
-                //trigger after DataMap loaded
-                boolean notRun = firstUntrigger.get() || event.getUpdateCause() != TagsUpdatedEvent.UpdateCause.SERVER_DATA_LOAD;
-                if (notRun) return;
-                unload();
-                load();
-            }
+                EventPriority.LOWEST,
+                (TagsUpdatedEvent event) -> {
+                    //trigger after DataMap loaded
+                    boolean notRun = firstUntrigger.get() || event.getUpdateCause() != TagsUpdatedEvent.UpdateCause.SERVER_DATA_LOAD;
+                    if (notRun) return;
+                    unload();
+                    load();
+                }
         );
     }
 

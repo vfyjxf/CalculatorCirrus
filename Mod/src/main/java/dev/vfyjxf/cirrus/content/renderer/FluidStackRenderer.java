@@ -6,7 +6,7 @@ import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import dev.vfyjxf.cirrus.api.content.render.StackRenderer;
+import dev.vfyjxf.cirrus.api.content.render.BatchableStackRenderer;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.util.NumberUtils;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
@@ -28,10 +28,12 @@ import net.minecraft.world.level.material.Fluids;
 import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.joml.Matrix4f;
+import org.jetbrains.annotations.Nullable;
 
+import java.util.List;
 import java.util.function.LongFunction;
 
-public class FluidStackRenderer implements StackRenderer<Fluid, FluidStack> {
+public class FluidStackRenderer implements BatchableStackRenderer<Fluid, FluidStack> {
 
     private static final int TEXTURE_SIZE = 16;
 
@@ -53,37 +55,18 @@ public class FluidStackRenderer implements StackRenderer<Fluid, FluidStack> {
 
     @Override
     public void renderBase(GuiGraphics graphics, FluidStack stack, int width, int height, float delta) {
-        if (stack.isEmpty()) return;
-        //render code from jei
-        var fluid = stack.getFluid();
-        var extension = IClientFluidTypeExtensions.of(fluid);
-        var stillTexture = extension.getStillTexture();
-        var minecraft = Minecraft.getInstance();
-        TextureAtlasSprite sprite = minecraft.getTextureAtlas(InventoryMenu.BLOCK_ATLAS).apply(stillTexture);
-        if (sprite.atlasLocation() == MissingTextureAtlasSprite.getLocation()) return;
+        renderBaseAt(graphics, stack, 0, 0, width, height, delta);
+    }
 
-        int color = extension.getTintColor();
+    @Override
+    public void renderBaseAt(GuiGraphics graphics, FluidStack stack, int x, int y, int width, int height, float delta) {
+        FluidVisual visual = visualFor(stack);
+        if (visual == null) return;
         RenderSystem.setShaderTexture(0, InventoryMenu.BLOCK_ATLAS);
-        Matrix4f matrix = graphics.pose().last().pose();
-        float red = (color >> 16 & 0xFF) / 255.0F;
-        float green = (color >> 8 & 0xFF) / 255.0F;
-        float blue = (color & 0xFF) / 255.0F;
-        float alpha = ((color >> 24) & 0xFF) / 255F;
-
         RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
-
-        Tesselator tesselator = Tesselator.getInstance();
-
-        float uMin = sprite.getU0();
-        float uMax = sprite.getU1();
-        float vMin = sprite.getV0();
-        float vMax = sprite.getV1();
-
-        BufferBuilder buffer = tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
-        buffer.addVertex(matrix, 0, 0, 0).setColor(red, green, blue, alpha).setUv(uMin, vMin);
-        buffer.addVertex(matrix, 0, height, 0).setColor(red, green, blue, alpha).setUv(uMin, vMax);
-        buffer.addVertex(matrix, width, height, 0).setColor(red, green, blue, alpha).setUv(uMax, vMax);
-        buffer.addVertex(matrix, width, 0, 0).setColor(red, green, blue, alpha).setUv(uMax, vMin);
+        Matrix4f matrix = graphics.pose().last().pose();
+        BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
+        addQuad(buffer, matrix, visual, x, y, width, height);
         BufferUploader.drawWithShader(buffer.buildOrThrow());
     }
 
@@ -91,6 +74,78 @@ public class FluidStackRenderer implements StackRenderer<Fluid, FluidStack> {
     public void renderBase(GuiGraphics graphics, ContentStack<Fluid, FluidStack> stack, int width, int height, float delta) {
         if (stack.isEmpty()) return;
         renderBase(graphics, stack.value(), width, height, delta);
+    }
+
+    @Override
+    public void renderBaseBatch(GuiGraphics graphics, List<BatchableStackRenderer.Entry<Fluid, FluidStack>> entries, float delta) {
+        renderBaseBatch(graphics, entries, delta, null);
+    }
+
+    @Override
+    public @Nullable Object createBatchContext() {
+        return new BatchContext();
+    }
+
+    @Override
+    public void renderBaseBatch(GuiGraphics graphics, List<BatchableStackRenderer.Entry<Fluid, FluidStack>> entries, float delta, @Nullable Object context) {
+        BatchContext batchContext = context instanceof BatchContext typed ? typed : new BatchContext();
+        batchContext.begin(graphics);
+        BufferBuilder buffer = batchContext.buffer();
+        Matrix4f matrix = batchContext.matrix();
+        for (BatchableStackRenderer.Entry<Fluid, FluidStack> entry : entries) {
+            ContentStack<Fluid, FluidStack> stack = entry.stack();
+            if (stack.isEmpty()) {
+                continue;
+            }
+            FluidVisual visual = visualFor(stack.value());
+            if (visual == null) {
+                continue;
+            }
+            addQuad(buffer, matrix, visual, entry.x(), entry.y(), entry.width(), entry.height());
+        }
+        batchContext.flush();
+    }
+
+    private static @Nullable FluidVisual visualFor(FluidStack stack) {
+        if (stack.isEmpty()) {
+            return null;
+        }
+        var extension = IClientFluidTypeExtensions.of(stack.getFluid());
+        TextureAtlasSprite sprite = Minecraft.getInstance()
+            .getTextureAtlas(InventoryMenu.BLOCK_ATLAS)
+            .apply(extension.getStillTexture());
+        if (sprite.atlasLocation() == MissingTextureAtlasSprite.getLocation()) {
+            return null;
+        }
+        int color = extension.getTintColor();
+        return new FluidVisual(
+            sprite,
+            (color >> 16 & 0xFF) / 255.0F,
+            (color >> 8 & 0xFF) / 255.0F,
+            (color & 0xFF) / 255.0F,
+            ((color >> 24) & 0xFF) / 255F
+        );
+    }
+
+    private static void addQuad(BufferBuilder buffer, Matrix4f matrix, FluidVisual visual, int x, int y, int width, int height) {
+        TextureAtlasSprite sprite = visual.sprite();
+        float uMin = sprite.getU0();
+        float uMax = sprite.getU1();
+        float vMin = sprite.getV0();
+        float vMax = sprite.getV1();
+        buffer.addVertex(matrix, x, y, 0).setColor(visual.red(), visual.green(), visual.blue(), visual.alpha()).setUv(uMin, vMin);
+        buffer.addVertex(matrix, x, y + height, 0).setColor(visual.red(), visual.green(), visual.blue(), visual.alpha()).setUv(uMin, vMax);
+        buffer.addVertex(matrix, x + width, y + height, 0).setColor(visual.red(), visual.green(), visual.blue(), visual.alpha()).setUv(uMax, vMax);
+        buffer.addVertex(matrix, x + width, y, 0).setColor(visual.red(), visual.green(), visual.blue(), visual.alpha()).setUv(uMax, vMin);
+    }
+
+    private record FluidVisual(
+        TextureAtlasSprite sprite,
+        float red,
+        float green,
+        float blue,
+        float alpha
+    ) {
     }
 
     private void decorate(GuiGraphics graphics, FluidStack stack, long amount, int width, int height, float delta, LongFunction<String> formatter) {}
@@ -103,6 +158,49 @@ public class FluidStackRenderer implements StackRenderer<Fluid, FluidStack> {
     @Override
     public void decorate(GuiGraphics graphics, ContentStack<Fluid, FluidStack> stack, int width, int height, float delta) {
         decorate(graphics, stack.value(), stack.amount(), width, height, delta, NumberUtils::toSuffix);
+    }
+
+    @Override
+    public void decorateAt(GuiGraphics graphics, FluidStack stack, int x, int y, int width, int height, float delta) {
+    }
+
+    @Override
+    public void decorateBatch(GuiGraphics graphics, List<BatchableStackRenderer.Entry<Fluid, FluidStack>> entries, float delta) {
+        decorateBatch(graphics, entries, delta, null);
+    }
+
+    @Override
+    public void decorateBatch(GuiGraphics graphics, List<BatchableStackRenderer.Entry<Fluid, FluidStack>> entries, float delta, @Nullable Object context) {
+    }
+
+    private static final class BatchContext {
+        private @Nullable BufferBuilder buffer;
+        private @Nullable Matrix4f matrix;
+
+        private void begin(GuiGraphics graphics) {
+            buffer = null;
+            matrix = null;
+            RenderSystem.setShaderTexture(0, InventoryMenu.BLOCK_ATLAS);
+            RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
+            matrix = graphics.pose().last().pose();
+            buffer = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
+        }
+
+        private @Nullable BufferBuilder buffer() {
+            return buffer;
+        }
+
+        private Matrix4f matrix() {
+            return matrix;
+        }
+
+        private void flush() {
+            if (buffer != null) {
+                BufferUploader.drawWithShader(buffer.buildOrThrow());
+                buffer = null;
+                matrix = null;
+            }
+        }
     }
 
     @Override
@@ -135,8 +233,4 @@ public class FluidStackRenderer implements StackRenderer<Fluid, FluidStack> {
         return stack.getHoverName();
     }
 
-    @Override
-    public String getDisplayName(FluidStack stack) {
-        return stack.getHoverName().getString();
-    }
 }

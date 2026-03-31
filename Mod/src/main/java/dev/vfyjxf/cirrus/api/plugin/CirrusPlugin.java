@@ -43,6 +43,8 @@ public interface CirrusPlugin extends ModPlugin {
 
     default void registerContentResolver(ContentResolverRegister register) {}
 
+    default void registerJeiTypeBridge(JeiTypeBridgeRegister register) {}
+
     //endregion
 
     //region recipe registryKey
@@ -51,9 +53,15 @@ public interface CirrusPlugin extends ModPlugin {
 
     default void registerRecipeClause(RecipeClauseRegister register) {}
 
+    default void registerProjectionPlugin(ProjectionPluginRegister register) {}
+
+    default void registerProjectionContextOption(ProjectionContextOptionRegister register) {}
+
     default void registerRecipeFilter(RecipeFilterRegister register) {}
 
     default void registerRecipeSystemTag(RecipeSystemTagRegister register) {}
+
+    default void registerRecipeContentRenderer(RecipeContentRendererRegister register) {}
 
     //endregion
 
@@ -78,6 +86,12 @@ public interface CirrusPlugin extends ModPlugin {
     //region storage type
 
     default void registerStorageType(StorageTypeRegister register) {}
+
+    //endregion
+
+    //region execution driver
+
+    default void registerExecutionDriver(ExecutionDriverRegister register) {}
 
     //endregion
 }

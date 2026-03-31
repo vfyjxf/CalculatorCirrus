@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.routing.rule;
 
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
 import dev.vfyjxf.cirrus.api.recipe.routing.tag.TagSnapshot;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.list.ImmutableList;
@@ -31,6 +33,31 @@ public sealed interface TagExpr permits
     TagExpr.AnyOf,
     TagExpr.NoneOf,
     TagExpr.Not {
+    Codec<TagExpr> CODEC = Codec.recursive(
+        "cirrus_tag_expr",
+        self -> Codec.STRING.dispatch("type", TagExpr::codecType, type -> codecForType(type, self))
+    );
+
+    private static MapCodec<? extends TagExpr> codecForType(String type, Codec<TagExpr> self) {
+        return switch (type) {
+            case "has" -> Codec.STRING.fieldOf("tag").xmap(Has::new, Has::tag);
+            case "all_of" -> dev.vfyjxf.cloudlib.api.util.Codecs.immutableList(self).fieldOf("expressions").xmap(AllOf::new, AllOf::expressions);
+            case "any_of" -> dev.vfyjxf.cloudlib.api.util.Codecs.immutableList(self).fieldOf("expressions").xmap(AnyOf::new, AnyOf::expressions);
+            case "none_of" -> dev.vfyjxf.cloudlib.api.util.Codecs.immutableList(self).fieldOf("expressions").xmap(NoneOf::new, NoneOf::expressions);
+            case "not" -> self.fieldOf("expression").xmap(Not::new, Not::expression);
+            default -> throw new IllegalArgumentException("Unknown tag expression type: " + type);
+        };
+    }
+
+    default String codecType() {
+        return switch (this) {
+            case Has ignored -> "has";
+            case AllOf ignored -> "all_of";
+            case AnyOf ignored -> "any_of";
+            case NoneOf ignored -> "none_of";
+            case Not ignored -> "not";
+        };
+    }
 
     /**
      * Evaluates this expression against the given tag snapshot.

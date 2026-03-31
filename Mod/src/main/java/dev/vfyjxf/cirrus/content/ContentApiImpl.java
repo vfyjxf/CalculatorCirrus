@@ -34,7 +34,7 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
 
     //region instance
 
-    private static ContentApiImpl instance = null;
+    private static volatile ContentApiImpl instance = null;
 
     public static @Nullable ContentApiImpl instance() {
         return instance;
@@ -151,7 +151,7 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
     @Override
     @SuppressWarnings("unchecked")
     public <T, S> StackType<T, S> getStackType(Namespace typeId) {
-        StackType<T, S> result = (StackType<T, S>) contentTypes.get(typeId);
+        StackType<T, S> result = (StackType<T, S>) stackTypesById.get(typeId);
         if (result == null) {
             throw new IllegalArgumentException("Unknown stack type id: " + typeId);
         }

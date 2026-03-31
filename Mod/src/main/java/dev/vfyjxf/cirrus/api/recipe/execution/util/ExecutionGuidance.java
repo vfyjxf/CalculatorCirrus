@@ -18,16 +18,16 @@ import org.jetbrains.annotations.Nullable;
  * @param hintTags tags classifying this guidance (empty if none)
  */
 public record ExecutionGuidance(
-        Component summary,
-        @Nullable Component detail,
-        ImmutableList<Component> steps,
-        ImmutableSet<Namespace> hintTags
+    Component summary,
+    @Nullable Component detail,
+    ImmutableList<Component> steps,
+    ImmutableSet<Namespace> hintTags
 ) {
 
     public ExecutionGuidance {
-        Checks.checkNotNull(summary, "summary");
-        Checks.checkNotNull(steps, "steps");
-        Checks.checkNotNull(hintTags, "hintTags");
+        summary = Checks.checkNotNull(summary, "summary");
+        steps = Checks.checkNotNull(steps, "steps");
+        hintTags = Checks.checkNotNull(hintTags, "hintTags");
     }
 
     //region factories

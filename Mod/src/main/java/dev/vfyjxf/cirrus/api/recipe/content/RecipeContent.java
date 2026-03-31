@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.content;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import org.jetbrains.annotations.Range;
 
 /**
@@ -68,6 +69,10 @@ public sealed interface RecipeContent permits InputContent, OutputContent {
     default boolean constantly() {
         return chance() == MAX_CHANCE ||
                chance() == MIN_CHANCE;
+    }
+
+    default RecipeContentType<? extends RecipeContent> recipeType() {
+        return RecipeContentType.of(this);
     }
 
     //endregion

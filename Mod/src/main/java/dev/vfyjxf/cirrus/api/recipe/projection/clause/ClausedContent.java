@@ -2,20 +2,33 @@ package dev.vfyjxf.cirrus.api.recipe.projection.clause;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
+import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.RichIterable;
 import org.jetbrains.annotations.Range;
 
 public record ClausedContent<T extends RecipeContent>(
     T content,
+    ProjectionSchema schema,
     ClauseSet clauses
 ) {
     public static <T extends RecipeContent> ClausedContent<T> from(T content) {
-        return new ClausedContent<>(content, ClauseSet.create());
+        return new ClausedContent<>(content, ProjectionSchema.empty(), ClauseSet.create());
     }
 
     public static <T extends RecipeContent> ClausedContent<T> from(T content, ClauseSet clauses) {
-        return new ClausedContent<>(content, clauses);
+        return new ClausedContent<>(content, ProjectionSchema.empty(), clauses);
+    }
+
+    public static <T extends RecipeContent> ClausedContent<T> from(T content, ProjectionSchema schema, ClauseSet clauses) {
+        return new ClausedContent<>(content, schema, clauses);
+    }
+
+    public ClausedContent {
+        Checks.checkNotNull(content, "content");
+        Checks.checkNotNull(schema, "schema");
+        Checks.checkNotNull(clauses, "clauses");
     }
 
     public boolean isEmpty() {
@@ -92,44 +105,11 @@ public record ClausedContent<T extends RecipeContent>(
 
     //endregion
 
-    //region compatibility
-
-    @Deprecated(forRemoval = false)
-    public RichIterable<RecipeClause> allFacets() {
-        return allClauses();
-    }
-
-    @Deprecated(forRemoval = false)
-    public RecipeClause getFacet(ClauseType facetType) {
-        return getClause(facetType);
-    }
-
-    @Deprecated(forRemoval = false)
-    public RecipeClause getFacet(Namespace facetId) {
-        return getClause(facetId);
-    }
-
-    @Deprecated(forRemoval = false)
-    public ClauseSet removeFacet(Namespace facetId) {
-        return removeClause(facetId);
-    }
-
-    @Deprecated(forRemoval = false)
-    public ClauseSet removeFacet(ClauseType facetType) {
-        return removeClause(facetType);
-    }
-
-    @Deprecated(forRemoval = false)
-    public ClauseSet addFacet(RecipeClause facet) {
-        return addClause(facet);
-    }
-
-    //endregion
-
     @Override
     public String toString() {
         return '[' +
                "content=" + content +
+               ", schema=" + schema +
                ", clauses=" + clauses +
                ']';
     }

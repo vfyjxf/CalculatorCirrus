@@ -1,34 +1,59 @@
 package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 
 import com.mojang.blaze3d.platform.Lighting;
+import com.mojang.blaze3d.platform.InputConstants;
+import dev.vfyjxf.cirrus.api.content.value.ContentStack;
+import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.recipe.content.BatchableRecipeContentRenderer;
+import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.content.renderer.FluidStackRenderer;
+import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentVisual;
+import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentVisualCache;
+import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingVariantKeys;
+import dev.vfyjxf.cirrus.ui.CirrusLangs;
+import dev.vfyjxf.cirrus.ui.CirrusMouse;
+import dev.vfyjxf.cirrus.ui.CirrusScroll;
 import dev.vfyjxf.cirrus.ui.CirrusTextures.Background;
 import dev.vfyjxf.cirrus.ui.CirrusTextures.Icon;
 import dev.vfyjxf.cirrus.ui.CirrusTextures.Sign;
-import dev.vfyjxf.cirrus.ui.widget.flowchart.FlowChartTooltipComponent;
-import dev.vfyjxf.cirrus.ui.widget.flowchart.model.ProcessEdge;
-import dev.vfyjxf.cirrus.ui.widget.flowchart.model.ProcessGraph;
-import dev.vfyjxf.cirrus.ui.widget.flowchart.model.ProcessGroup;
-import dev.vfyjxf.cirrus.ui.widget.flowchart.model.ProcessNode;
-import dev.vfyjxf.cirrus.ui.widget.flowchart.model.ProcessNode.MachineInfo;
-import dev.vfyjxf.cirrus.ui.widget.flowchart.model.ProcessNode.MaterialSlot;
+import dev.vfyjxf.cirrus.ui.CirrusUiSound;
+import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayContentHelper;
+import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayUi;
+import dev.vfyjxf.cirrus.ui.execution.tooltip.ExecutionRecipeTooltipPreview;
+import dev.vfyjxf.cirrus.ui.process.ProcessEdge;
+import dev.vfyjxf.cirrus.ui.process.ProcessGraph;
+import dev.vfyjxf.cirrus.ui.process.ProcessNode;
+import dev.vfyjxf.cirrus.ui.process.ProcessNode.MachineInfo;
+import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialSlot;
+import dev.vfyjxf.cirrus.ui.tooltip.RichTooltipComponent;
+import dev.vfyjxf.cirrus.ui.widget.common.CirrusControlChrome;
+import dev.vfyjxf.cirrus.ui.widget.common.CirrusSlotGroupRenderer;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.math.FloatPos;
 import dev.vfyjxf.cloudlib.api.math.Pos;
 import dev.vfyjxf.cloudlib.api.ui.base.CompositeWidget;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
+import dev.vfyjxf.cloudlib.api.ui.scroll.ScrollState;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipStack;
+import dev.vfyjxf.cloudlib.api.ui.texture.ImageTexture;
+import dev.vfyjxf.cloudlib.api.ui.texture.SizedTexture;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.resources.sounds.SimpleSoundInstance;
-import net.minecraft.sounds.SoundEvents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.world.inventory.tooltip.TooltipComponent;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.*;
 
@@ -38,15 +63,24 @@ import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.*;
  */
 public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
+    private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Calculator");
+
     //region Metrics
     // Node dimensions (world-space pixels)
-    private static final int nodeW = 220;
+    private static final int nodeW = 188;
     private static final int nodeH = 82;
-    private static final int gapX = 24;
-    private static final int rowH = 128;
+    private static final int gapX = 20;
+    private static final int rowH = 122;
     private static final int focusBtnW = 18;
     private static final int focusBtnH = 18;
-    private static final int stepSectionGap = 8;
+    private static final int collapseBtnW = 18;
+    private static final int collapseBtnH = 16;
+    private static final int stepSectionGap = 6;
+    private static final int cardExtensionH = 14;
+    private static final int cardMainSlot = 22;
+    private static final int cardMachineSlot = 18;
+    private static final int cardSmallSlot = 14;
+    private static final int cardRecipeMinSlot = 7;
 
     // Color accents still used by line/text overlays
     private static final int trackedRing = 0xFFEEF3F8;
@@ -64,11 +98,11 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private static final int matFrame = 0xFFE6E6E6;
 
     // Layout
-    private static final int mmW = 160;
-    private static final int mmH = 100;
-    private static final int mmPad = 8;
-    private static final int mmContentPad = 6;
-    private static final double mmScaleShrink = 0.92;
+    private static final int mmW = 128;
+    private static final int mmH = 78;
+    private static final int mmPad = 6;
+    private static final int mmContentPad = 5;
+    private static final double mmScaleShrink = 0.94;
     private static final int panelW = 200;
     private static final int panelPad = 5;
     private static final int barH = 3;
@@ -81,6 +115,21 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private static final int iconSlotSz = 22;
     private static final int indCellSz = 10;
     private static final int scrollbarW = 8;
+    private static final int materialPanelHeaderH = 20;
+    private static final int materialPanelSearchH = 18;
+    private static final int machineCandidatePanelW = 96;
+    private static final int machineCandidatePanelHeaderH = 18;
+    private static final int machineCandidateCell = 22;
+    private static final int machineCandidatePanelMaxRows = 3;
+    private static final int contentCandidatePanelW = 160;
+    private static final int contentCandidatePanelHeaderH = 18;
+    private static final int contentCandidateCell = 20;
+    private static final int contentCandidateCellGap = 0;
+    private static final int contentCandidatePanelMaxCells = 21;
+    private static final int contentCandidateGridX = 6;
+    private static final int contentCandidateGridY = contentCandidatePanelHeaderH + 4;
+    private static final int tagCandidateCell = 16;
+    private static final int candidateScrollbarW = 6;
     private static final int maxTreeWidth = 3500;  // Width cap for auto-collapse
     private static final float minZoom = 0.15f;
     private static final float maxZoom = 3.0f;
@@ -89,10 +138,10 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private static final float zoomSmoothSpeed = 0.6f;
     private static final float matScrollSpeed = 25f;
     private static final float matScrollSmooth = 0.35f;
+    private static final float contentCandidateScrollSmooth = 0.35f;
     private static final long cycleIntervalTicks = 40;
-    private static final int cardTitleText = 0xFF555D65;
     private static final int cardMetaText = 0xFF656E77;
-    private static final int cardMinorText = 0xFF7A838C;
+    private static final int maxLayerLabelCache = 128;
     //endregion
 
     //region Inner Types
@@ -103,10 +152,14 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         final String pathId;
         final int depth;
         final List<LayoutNode> children = new ArrayList<>();
+        @Nullable List<ProcessEdge> incomingEdges;
+        @Nullable LayoutLink incomingLink;
         int treeWidth;   // width of this subtree in pixels
         int x, y;        // top-left corner in world space
         boolean collapsed;
+        boolean autoCollapsed;
         int originalChildCount;
+        @Nullable NodeRenderModel renderModel;
 
         LayoutNode(ProcessNode pn, String pathId, int depth) {
             this.processNode = pn;
@@ -119,13 +172,13 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private record LayoutLink(LayoutNode source, LayoutNode target, String id) {}
 
     private enum MatCategory {
-        EXTERNAL_INPUT("外部输入", 0xFF55FFAA),
-        BYPRODUCT("副产物 / 多余", 0xFFFFCC44),
-        CATALYST("催化剂 / 工具", 0xFFBB77FF),
-        INTERMEDIATE("中间产物", 0xFF9EA7AF);
-        final String label;
+        EXTERNAL_INPUT(CirrusLangs.Calc.Tree.Material.externalInput, 0xFF55FFAA),
+        BYPRODUCT(CirrusLangs.Calc.Tree.Material.byproduct, 0xFFFFCC44),
+        CATALYST(CirrusLangs.Calc.Tree.Material.catalyst, 0xFFBB77FF),
+        INTERMEDIATE(CirrusLangs.Calc.Tree.Material.intermediate, 0xFF9EA7AF);
+        final dev.vfyjxf.cloudlib.data.lang.LangEntry label;
         final int color;
-        MatCategory(String l, int c) { this.label = l; this.color = c; }
+        MatCategory(dev.vfyjxf.cloudlib.data.lang.LangEntry l, int c) { this.label = l; this.color = c; }
     }
 
     private record MaterialEntry(
@@ -136,14 +189,384 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     private record DeferredItem(ItemStack stack, int x, int y, float scale) {}
     private record DeferredFluid(FluidStack fluid, int x, int y, float scale, float pt) {}
+    private static final class RenderSession {
+        private final SceneCanvas canvas;
+        private final float pt;
+        private @Nullable List<DeferredItem> deferredItems;
+        private @Nullable List<DeferredFluid> deferredFluids;
+        private @Nullable RecipeContentVisual[] contentVisuals;
+        private @Nullable int[] contentVisualIndices;
+        private @Nullable int[] contentXs;
+        private @Nullable int[] contentYs;
+        private @Nullable int[] contentSizes;
+        private int contentCount;
+        private @Nullable ContentStack<?, ?>[] baseStacks;
+        private @Nullable int[] baseStackXs;
+        private @Nullable int[] baseStackYs;
+        private @Nullable int[] baseStackSizes;
+        private int baseStackCount;
+        private @Nullable String[] amountOverlayTexts;
+        private @Nullable int[] amountOverlayXs;
+        private @Nullable int[] amountOverlayYs;
+        private int amountOverlayCount;
+        private @Nullable int[] catalystOverlayXs;
+        private @Nullable int[] catalystOverlayYs;
+        private int catalystOverlayCount;
+        private @Nullable int[] selectionOverlayXs;
+        private @Nullable int[] selectionOverlayYs;
+        private @Nullable int[] selectionOverlaySizes;
+        private @Nullable int[] selectionOverlayColors;
+        private int selectionOverlayCount;
+        private @Nullable int[] machineOverlayXs;
+        private @Nullable int[] machineOverlayYs;
+        private @Nullable int[] machineOverlayColors;
+        private @Nullable int[] machineOverlayFlags;
+        private int machineOverlayCount;
+
+        private RenderSession(SceneCanvas canvas, float pt) {
+            this.canvas = canvas;
+            this.pt = pt;
+        }
+
+        private void addContent(RecipeContentVisual visual, int visualIndex, int x, int y, int size) {
+            if (visual != null && visual.notEmpty() && size > 0) {
+                int index = contentCount++;
+                contentVisuals = grow(contentVisuals, contentCount);
+                contentVisualIndices = grow(contentVisualIndices, contentCount);
+                contentXs = grow(contentXs, contentCount);
+                contentYs = grow(contentYs, contentCount);
+                contentSizes = grow(contentSizes, contentCount);
+                contentVisuals[index] = visual;
+                contentVisualIndices[index] = Math.max(0, visualIndex);
+                contentXs[index] = x;
+                contentYs[index] = y;
+                contentSizes[index] = size;
+            }
+        }
+
+        private void addBaseStack(ContentStack<?, ?> stack, int x, int y, int size) {
+            if (stack != null && stack.notEmpty() && size > 0) {
+                int index = baseStackCount++;
+                baseStacks = grow(baseStacks, baseStackCount);
+                baseStackXs = grow(baseStackXs, baseStackCount);
+                baseStackYs = grow(baseStackYs, baseStackCount);
+                baseStackSizes = grow(baseStackSizes, baseStackCount);
+                baseStacks[index] = stack;
+                baseStackXs[index] = x;
+                baseStackYs[index] = y;
+                baseStackSizes[index] = size;
+            }
+        }
+
+        private void deferItem(ItemStack stack, int x, int y, float scale) {
+            if (deferredItems == null) {
+                deferredItems = new ArrayList<>(4);
+            }
+            deferredItems.add(new DeferredItem(stack, x, y, scale));
+        }
+
+        private void deferFluid(FluidStack fluid, int x, int y, float scale, float pt) {
+            if (deferredFluids == null) {
+                deferredFluids = new ArrayList<>(4);
+            }
+            deferredFluids.add(new DeferredFluid(fluid, x, y, scale, pt));
+        }
+
+        private void addAmountOverlay(String text, int x, int y) {
+            int index = amountOverlayCount++;
+            amountOverlayTexts = grow(amountOverlayTexts, amountOverlayCount);
+            amountOverlayXs = grow(amountOverlayXs, amountOverlayCount);
+            amountOverlayYs = grow(amountOverlayYs, amountOverlayCount);
+            amountOverlayTexts[index] = text;
+            amountOverlayXs[index] = x;
+            amountOverlayYs[index] = y;
+        }
+
+        private void addCatalystOverlay(int x, int y) {
+            int index = catalystOverlayCount++;
+            catalystOverlayXs = grow(catalystOverlayXs, catalystOverlayCount);
+            catalystOverlayYs = grow(catalystOverlayYs, catalystOverlayCount);
+            catalystOverlayXs[index] = x;
+            catalystOverlayYs[index] = y;
+        }
+
+        private void addSelectionOverlay(int x, int y, int size, int color) {
+            int index = selectionOverlayCount++;
+            selectionOverlayXs = grow(selectionOverlayXs, selectionOverlayCount);
+            selectionOverlayYs = grow(selectionOverlayYs, selectionOverlayCount);
+            selectionOverlaySizes = grow(selectionOverlaySizes, selectionOverlayCount);
+            selectionOverlayColors = grow(selectionOverlayColors, selectionOverlayCount);
+            selectionOverlayXs[index] = x;
+            selectionOverlayYs[index] = y;
+            selectionOverlaySizes[index] = size;
+            selectionOverlayColors[index] = color;
+        }
+
+        private void addMachineCandidateOverlay(int x, int y, int color, boolean current, boolean hovered) {
+            int index = machineOverlayCount++;
+            machineOverlayXs = grow(machineOverlayXs, machineOverlayCount);
+            machineOverlayYs = grow(machineOverlayYs, machineOverlayCount);
+            machineOverlayColors = grow(machineOverlayColors, machineOverlayCount);
+            machineOverlayFlags = grow(machineOverlayFlags, machineOverlayCount);
+            machineOverlayXs[index] = x;
+            machineOverlayYs[index] = y;
+            machineOverlayColors[index] = color;
+            machineOverlayFlags[index] = (current ? 1 : 0) | (hovered ? 2 : 0);
+        }
+
+        private void flushIcons() {
+            BatchableRecipeContentRenderer.Batch currentBatch = null;
+            if (contentCount > 0 || baseStackCount > 0) {
+                currentBatch = BatchableRecipeContentRenderer.Batch.create(canvas.layeredGraphics(), pt);
+                for (int i = 0; i < contentCount; i++) {
+                    int size = contentSizes[i];
+                    currentBatch.addBaseVisual(contentVisuals[i], contentVisualIndices[i], contentXs[i], contentYs[i], size, size);
+                }
+                for (int i = 0; i < baseStackCount; i++) {
+                    int size = baseStackSizes[i];
+                    currentBatch.addBaseStack(baseStacks[i], baseStackXs[i], baseStackYs[i], size, size);
+                }
+                currentBatch.flush();
+                if (contentCount > 0) {
+                    Arrays.fill(contentVisuals, 0, contentCount, null);
+                }
+                if (baseStackCount > 0) {
+                    Arrays.fill(baseStacks, 0, baseStackCount, null);
+                }
+                contentCount = 0;
+                baseStackCount = 0;
+            }
+            boolean hasItems = deferredItems != null && !deferredItems.isEmpty();
+            boolean hasFluids = deferredFluids != null && !deferredFluids.isEmpty();
+            if (!hasItems && !hasFluids) {
+                return;
+            }
+            var graphics = currentBatch == null ? canvas.layeredGraphics() : currentBatch.graphics();
+            Lighting.setupFor3DItems();
+            try {
+                if (hasItems) {
+                    for (DeferredItem item : deferredItems) {
+                        graphics.pose().pushPose();
+                        graphics.pose().translate(item.x, item.y, 0);
+                        graphics.pose().scale(item.scale, item.scale, 1);
+                        graphics.pose().last().normal().identity();
+                        graphics.renderItem(item.stack, 0, 0);
+                        graphics.pose().popPose();
+                    }
+                }
+                if (hasFluids) {
+                    for (DeferredFluid fluid : deferredFluids) {
+                        graphics.pose().pushPose();
+                        graphics.pose().translate(fluid.x, fluid.y, 0);
+                        graphics.pose().scale(fluid.scale, fluid.scale, 1);
+                        graphics.pose().last().normal().identity();
+                        FluidStackRenderer.instance.renderBase(graphics, fluid.fluid, 16, 16, fluid.pt);
+                        graphics.pose().popPose();
+                    }
+                }
+                graphics.flush();
+            } finally {
+                Lighting.setupForFlatItems();
+                if (deferredItems != null) {
+                    deferredItems.clear();
+                }
+                if (deferredFluids != null) {
+                    deferredFluids.clear();
+                }
+            }
+        }
+
+        private void finish() {
+            flushIcons();
+            flushSlotOverlays(canvas);
+            flushMachineCandidateOverlays(canvas);
+        }
+
+        private void flushSlotOverlays(SceneCanvas canvas) {
+            if (amountOverlayCount > 0) {
+                for (int i = 0; i < amountOverlayCount; i++) {
+                    canvas.drawString(amountOverlayTexts[i], amountOverlayXs[i], amountOverlayYs[i], textWhite, true);
+                }
+                if (amountOverlayTexts != null) {
+                    Arrays.fill(amountOverlayTexts, 0, amountOverlayCount, null);
+                }
+                amountOverlayCount = 0;
+            }
+            if (catalystOverlayCount > 0) {
+                for (int i = 0; i < catalystOverlayCount; i++) {
+                    canvas.texture(Icon.Sign.Amount.catalyst, catalystOverlayXs[i], catalystOverlayYs[i], 5, 5);
+                }
+                catalystOverlayCount = 0;
+            }
+            if (selectionOverlayCount > 0) {
+                for (int i = 0; i < selectionOverlayCount; i++) {
+                    int x = selectionOverlayXs[i];
+                    int y = selectionOverlayYs[i];
+                    int size = selectionOverlaySizes[i];
+                    drawOutline(canvas, x, y, size, size, selectionOverlayColors[i]);
+                    int markSize = Math.min(9, Math.max(6, size - 2));
+                    canvas.texture(Icon.finished, x + size - markSize - 1, y + 1, markSize, markSize);
+                }
+                selectionOverlayCount = 0;
+            }
+        }
+
+        private void flushMachineCandidateOverlays(SceneCanvas canvas) {
+            if (machineOverlayCount <= 0) {
+                return;
+            }
+            for (int i = 0; i < machineOverlayCount; i++) {
+                int x = machineOverlayXs[i];
+                int y = machineOverlayYs[i];
+                int color = machineOverlayColors[i];
+                int flags = machineOverlayFlags[i];
+                if ((flags & 1) != 0) {
+                    drawOutline(canvas, x, y, machineCandidateCell, machineCandidateCell, color);
+                    canvas.texture(Icon.finished, x + machineCandidateCell - 10, y + 1, 9, 9);
+                } else if ((flags & 2) != 0) {
+                    canvas.fill(x + 1, y + 1, machineCandidateCell - 2, machineCandidateCell - 2,
+                            withAlpha(color, 0x24));
+                }
+            }
+            machineOverlayCount = 0;
+        }
+
+        private static int[] grow(@Nullable int[] values, int minCapacity) {
+            if (values == null) {
+                return new int[Math.max(4, minCapacity)];
+            }
+            if (minCapacity <= values.length) {
+                return values;
+            }
+            return Arrays.copyOf(values, Math.max(minCapacity, values.length * 2));
+        }
+
+        private static String[] grow(@Nullable String[] values, int minCapacity) {
+            if (values == null) {
+                return new String[Math.max(4, minCapacity)];
+            }
+            if (minCapacity <= values.length) {
+                return values;
+            }
+            return Arrays.copyOf(values, Math.max(minCapacity, values.length * 2));
+        }
+
+        private static RecipeContentVisual[] grow(@Nullable RecipeContentVisual[] values, int minCapacity) {
+            if (values == null) {
+                return new RecipeContentVisual[Math.max(16, minCapacity)];
+            }
+            if (minCapacity <= values.length) {
+                return values;
+            }
+            return Arrays.copyOf(values, Math.max(minCapacity, values.length * 2));
+        }
+
+        @SuppressWarnings("unchecked")
+        private static ContentStack<?, ?>[] grow(@Nullable ContentStack<?, ?>[] values, int minCapacity) {
+            if (values == null) {
+                return new ContentStack[Math.max(16, minCapacity)];
+            }
+            if (minCapacity <= values.length) {
+                return values;
+            }
+            return Arrays.copyOf(values, Math.max(minCapacity, values.length * 2));
+        }
+    }
+    private record SlotGridPlan(int slotSize, int columns, int rows) {}
+    private record WorldViewport(double minX, double minY, double maxX, double maxY) {
+        boolean intersectsNode(LayoutNode node) {
+            return node.x + nodeW >= minX && node.x <= maxX
+                    && node.y + nodeH >= minY && node.y <= maxY;
+        }
+
+        boolean intersectsConnection(LayoutLink link) {
+            int startX = link.source.x + nodeW / 2;
+            int startY = link.source.y + nodeH;
+            int endX = link.target.x + nodeW / 2;
+            int endY = link.target.y;
+            return Math.max(Math.min(startX, endX), minX) <= Math.min(Math.max(startX, endX), maxX)
+                    && Math.max(Math.min(startY, endY), minY) <= Math.min(Math.max(startY, endY), maxY);
+        }
+
+        int firstLayer() {
+            return Math.max(0, (int) Math.floor(minY / rowH) - 1);
+        }
+
+        int lastLayer(int maxDepth) {
+            return Math.min(maxDepth, (int) Math.floor(maxY / rowH) + 1);
+        }
+    }
+    public record ContentCandidateSelection(String pathId, String inputKey, String variantKey, int visualIndex) {}
 
     /** Breadcrumb entry for path context / trace display. */
     public record BreadcrumbEntry(String name, String pathId) {}
     public record MaterialPanelPalette(int baseFill, int shadow, int highlight, int frame) {}
     public record StepCardChrome(int machineTitleColor, boolean machineTitleShadow,
                                  boolean usesSlotBackedMachineIcon, boolean usesSlotBackedOutputIcon,
-                                 boolean usesDrawnSeparator, boolean focusButtonUsesForkGlyph, int sectionGap) {}
+                                 boolean usesDrawnSeparator, boolean focusButtonUsesTreeGlyph, int sectionGap,
+                                 boolean hasIntrinsicZone, boolean hasExtensionZone,
+                                 boolean rendersRecipeFlow, boolean leafShowsCandidates,
+                                 boolean leafRendersMachineSlot, boolean rendersMachinePlaceholder,
+                                 boolean usesSingleCardBackground, boolean usesDividerLines,
+                                 boolean machineOptionIndicatorAvoidsText, boolean extensionUsesIconMetrics,
+                                 boolean hasProjectionAction, boolean usesLeftAccentStrip,
+                                 boolean collapseChildCountRenderedInTooltip) {}
+    public record CardZone(int x, int y, int w, int h) {}
+    public record NodeCardLayout(CardZone intrinsic, CardZone machine, CardZone actions,
+                                 CardZone recipe, CardZone inputs, CardZone arrow, CardZone outputs,
+                                 CardZone primaryOutput, CardZone candidates, CardZone extension,
+                                 int intrinsicDividerY, int dividerY, int actionGap) {}
+    public record TagLeafCardLayout(CardZone header, CardZone candidates, CardZone action) {}
+    private record SlotVisual(RecipeContent content, RecipeContentVisual visual, int count) {}
+    private record NodeRenderModel(
+            List<MachineInfo> machines,
+            int accentColor,
+            int nodeAccent,
+            @Nullable MaterialSlot primaryOutput,
+            @Nullable SlotVisual primaryVisual,
+            @Nullable MaterialSlot selectableSlot,
+            @Nullable SlotVisual selectableVisual,
+            List<@Nullable SlotVisual> inputVisuals,
+            List<@Nullable SlotVisual> outputVisuals,
+            boolean recipeNode,
+            boolean tagLikePrimary,
+            boolean extensionVisible
+    ) {}
     public record MinimapViewportRect(int x, int y, int w, int h) {}
+    public record LayoutDebugInfo(
+            int graphNodes,
+            int graphEdges,
+            int graphSinks,
+            int graphSources,
+            @Nullable String targetNodeId,
+            @Nullable String preferredRootNodeId,
+            int layoutNodes,
+            int layoutLinks,
+            int rootChildCount,
+            int fullRootChildCount,
+            boolean rootCollapsed,
+            int maxDepth,
+            int collapseLevel,
+            int layoutWidth,
+            int layoutHeight,
+            String currentRootPathId
+    ) {
+        public String toDebugText() {
+            return "graph=" + graphNodes + "/" + graphEdges
+                    + " sinks=" + graphSinks
+                    + " sources=" + graphSources
+                    + " preferredRoot=" + preferredRootNodeId
+                    + " target=" + targetNodeId
+                    + " layout=" + layoutNodes + "/" + layoutLinks
+                    + " rootChildren=" + rootChildCount
+                    + " fullRootChildren=" + fullRootChildCount
+                    + " rootCollapsed=" + rootCollapsed
+                    + " depth=" + maxDepth
+                    + " collapseLevel=" + collapseLevel
+                    + " size=" + layoutWidth + "x" + layoutHeight
+                    + " currentRoot=" + currentRootPathId;
+        }
+    }
     //endregion
 
     //region State
@@ -156,18 +579,24 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private @Nullable LayoutNode rootLayout;
     private List<LayoutNode> flatNodes = List.of();
     private List<LayoutLink> flatLinks = List.of();
+    private Map<String, LayoutNode> layoutNodeByPath = Map.of();
     private Map<Integer, List<LayoutNode>> layerNodes = Map.of();
+    private Map<Integer, List<LayoutNode>> layerNodesByX = Map.of();
+    private Map<Integer, List<LayoutLink>> layerLinks = Map.of();
     private int maxDepth = 0;
     private int layoutWidth = 2000, layoutHeight = 1000;
     // Minimap bounding box (world coords, computed from flatNodes)
     private int mmWorldMinX, mmWorldMinY, mmWorldW = 1, mmWorldH = 1;
     private Set<String> collapsedPaths = new HashSet<>();
     private Set<String> userExpandedPaths = new HashSet<>();
+    private boolean forceExpandAll = false;
     private @Nullable String trackedNodeId = null;
     private int highlightedLayer = -1;  // -1 = none
     private @Nullable LayoutNode fullRootLayout;
     private String currentRootPathId = "root";
     private @Nullable Runnable onSubtreeChanged;
+    private Consumer<RecipeEntry<?>> onProjectionEdit = ignored -> {};
+    private Consumer<ContentCandidateSelection> onContentCandidateSelected = ignored -> {};
 
     // Viewport
     private double panX = 0, panY = 0;
@@ -175,9 +604,20 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private boolean dragging = false;
     private double dragStartX, dragStartY, dragPanStartX, dragPanStartY;
     private double zoomFocusWX, zoomFocusWY, zoomFocusSX, zoomFocusSY;
+    private boolean pendingAutoFit = false;
 
     // Hover
     private @Nullable String hoveredNodeId = null;
+    private @Nullable String hoveredCollapseNodeId = null;
+    private @Nullable String hoveredMachineNodeId = null;
+    private @Nullable String hoveredProjectionNodeId = null;
+    private @Nullable String machineCandidatePanelNodeId = null;
+    private @Nullable String contentCandidatePanelNodeId = null;
+    private final Map<String, String> selectedMachineByPath = new HashMap<>();
+    private final Map<String, Integer> selectedContentCandidateByPath = new HashMap<>();
+    private Map<String, String> contentVariantPreferences = Map.of();
+    private final Map<String, Integer> contentCandidateScrollRowsByPath = new HashMap<>();
+    private final Map<String, Float> contentCandidateDisplayScrollRowsByPath = new HashMap<>();
     private @Nullable String externalHoveredNodeId = null;
     private @Nullable String externalSelectedNodeId = null;
     private boolean minimapDragging = false;
@@ -185,10 +625,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     // Material panel
     private boolean showMaterialPanel = false;
     private float matScrollY = 0, matScrollTargetY = 0;
+    private final ScrollState materialWheelState = CirrusScroll.longVerticalState(Math.round(matScrollSpeed));
+    private final ScrollState contentCandidateWheelState = CirrusScroll.longVerticalState(1);
     private boolean scrollbarDragging = false;
     private float scrollbarDragStartY = 0, scrollbarDragStartScroll = 0;
     private Map<MatCategory, List<MaterialEntry>> materialByCategory = new LinkedHashMap<>();
+    private Map<MatCategory, List<MaterialEntry>> materialFilteredByCategory = new LinkedHashMap<>();
+    private Map<String, MaterialEntry> materialEntryByName = Map.of();
     private int materialPanelContentH = 0;
+    private int materialFilteredEntryCount = 0;
+    private int materialFilterEvaluationCount = 0;
     private long totalTimeTicks = 0;
     private long totalEU = 0;
     private @Nullable String hoveredMatName = null;
@@ -203,10 +649,47 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     // Rendering
     private long machineCycleTicks = 0;
-    private final Map<Long, String> truncationCache = new HashMap<>();
-    private long truncationFrameId = 0;
-    private final List<DeferredItem> deferredItems = new ArrayList<>();
-    private final List<DeferredFluid> deferredFluids = new ArrayList<>();
+    private static final int truncationCacheMaxEntries = 4096;
+    private final LinkedHashMap<Long, String> truncationCache = new LinkedHashMap<>(256, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Long, String> eldest) {
+            return size() > truncationCacheMaxEntries;
+        }
+    };
+    private final RecipeContentVisualCache visualCache = RecipeContentVisualCache.create(2048);
+    private final IdentityHashMap<RecipeContent, RecipeContentVisual> frameVisualCache = new IdentityHashMap<>(512);
+    private final IdentityHashMap<ItemStack, ContentStack<?, ?>> itemStackVisualCache = new IdentityHashMap<>(128);
+    private final IdentityHashMap<FluidStack, ContentStack<?, ?>> fluidStackVisualCache = new IdentityHashMap<>(64);
+    private final ArrayList<LayoutNode> visibleNodesScratch = new ArrayList<>(256);
+    private final ArrayList<LayoutLink> visibleLinksScratch = new ArrayList<>(256);
+    private final ArrayList<LayoutNode> visibleTrackedNodesScratch = new ArrayList<>(32);
+    private final ArrayList<LayoutNode> visibleNormalNodesScratch = new ArrayList<>(224);
+    private final ArrayList<LayoutLink> visibleTrackedLinksScratch = new ArrayList<>(32);
+    private final ArrayList<LayoutLink> visibleNormalLinksScratch = new ArrayList<>(224);
+    private int[] minimapPixelScratch = new int[0];
+    private int[] minimapRunX = new int[256];
+    private int[] minimapRunY = new int[256];
+    private int[] minimapRunW = new int[256];
+    private int[] minimapRunH = new int[256];
+    private int[] minimapRunColor = new int[256];
+    private int minimapRunCount = 0;
+    private boolean minimapRunsDirty = true;
+    private int minimapCacheContentW = -1;
+    private int minimapCacheContentH = -1;
+    private int minimapCacheWorldMinX = 0;
+    private int minimapCacheWorldMinY = 0;
+    private int minimapCacheWorldW = 0;
+    private int minimapCacheWorldH = 0;
+    private int minimapCacheNodeCount = -1;
+    private int minimapCacheLinkCount = -1;
+    private double minimapCacheScale = -1.0;
+    private double minimapCacheDrawX = 0.0;
+    private double minimapCacheDrawY = 0.0;
+    private @Nullable String minimapCacheTrackedNodeId = null;
+    private final String[] layerLabelCache = new String[maxLayerLabelCache];
+    private final Map<String, List<LayoutNode>> pathChildrenCache = new HashMap<>();
+    private final Map<String, List<ProcessEdge>> incomingEdgesByNodeId = new HashMap<>();
+    private final Map<String, List<MachineInfo>> machineCandidatesByNodeId = new HashMap<>();
     //endregion
 
     //region Constructor
@@ -216,23 +699,28 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             FloatPos local = input.mouseRelative(TreeCanvasWidget.this);
             double mx = local.x(), my = local.y();
             if (mx < 0 || my < 0 || mx > width() || my > height()) return EventDispatch.pass;
-            // Search icon click in material panel header
-            if (input.isLeftClick() && showMaterialPanel && isInMaterialPanel(mx, my)) {
-                int px = width() - panelW;
-                int iconX = px + panelW - 28;
-                if (mx >= iconX && mx <= iconX + 14 && my >= 3 && my <= 17) {
-                    matSearchActive = !matSearchActive;
-                    if (!matSearchActive) { matFilterText = ""; updateFilteredContentH(); }
-                    matScrollY = 0; matScrollTargetY = 0;
+            // Material panel owns its input region so clicks do not pass through to tree nodes.
+            if (showMaterialPanel && isInMaterialPanel(mx, my)) {
+                if (input.isLeftClick() && isInMaterialSearchField(mx, my)) {
+                    matSearchActive = true;
                     ctx.cancel();
                     return EventDispatch.consumed;
                 }
-            }
-            // Scrollbar thumb
-            if (input.isLeftClick() && showMaterialPanel && isOnScrollbarThumb(mx, my)) {
-                scrollbarDragging = true;
-                scrollbarDragStartY = (float) my;
-                scrollbarDragStartScroll = matScrollTargetY;
+                if (input.isLeftClick() && isInMaterialSearchClear(mx, my) && !matFilterText.isEmpty()) {
+                    matFilterText = "";
+                    updateFilteredContentH();
+                    matScrollY = 0;
+                    matScrollTargetY = 0;
+                    ctx.cancel();
+                    return EventDispatch.consumed;
+                }
+                if (input.isLeftClick() && isOnScrollbarThumb(mx, my)) {
+                    scrollbarDragging = true;
+                    scrollbarDragStartY = (float) my;
+                    scrollbarDragStartScroll = matScrollTargetY;
+                } else if (input.isLeftClick()) {
+                    matSearchActive = false;
+                }
                 ctx.cancel();
                 return EventDispatch.consumed;
             }
@@ -243,37 +731,91 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
                 ctx.cancel();
                 return EventDispatch.consumed;
             }
+            if (input.isLeftClick() && machineCandidatePanelNodeId != null) {
+                if (isInMachineCandidatePanel(mx, my)) {
+                    if (isInMachineCandidatePanelClose(mx, my)) {
+                        machineCandidatePanelNodeId = null;
+                        CirrusUiSound.playClickSound();
+                    } else {
+                        int candidateIndex = machineCandidateIndexAt(mx, my);
+                        if (candidateIndex >= 0) {
+                            selectMachineCandidate(machineCandidatePanelNodeId, candidateIndex);
+                            machineCandidatePanelNodeId = null;
+                        }
+                    }
+                    ctx.cancel();
+                    return EventDispatch.consumed;
+                }
+                machineCandidatePanelNodeId = null;
+            }
+            if (input.isLeftClick() && contentCandidatePanelNodeId != null) {
+                if (isInContentCandidatePanel(mx, my)) {
+                    if (isInContentCandidatePanelClose(mx, my)) {
+                        contentCandidatePanelNodeId = null;
+                        CirrusUiSound.playClickSound();
+                    } else {
+                        int candidateIndex = contentCandidateIndexAt(mx, my);
+                        if (candidateIndex >= 0) {
+                            selectContentCandidate(contentCandidatePanelNodeId, candidateIndex);
+                            contentCandidatePanelNodeId = null;
+                        }
+                    }
+                    ctx.cancel();
+                    return EventDispatch.consumed;
+                }
+                contentCandidatePanelNodeId = null;
+            }
             // Left click on collapse button
             if (input.isLeftClick()) {
-                LayoutNode clicked = findNodeWithButtonAt(mx, my);
-                if (clicked != null && clicked.originalChildCount > 0) {
-                    double wx = panX + mx / zoom, wy = panY + my / zoom;
-                    // Focus subgraph button (top-right of header)
-                    int[] focusBounds = focusButtonBounds(clicked.x, clicked.y);
-                    if (containsWorldPoint(focusBounds, wx, wy)) {
-                        focusSubgraph(clicked.pathId);
-                        ctx.cancel();
-                        return EventDispatch.consumed;
-                    }
-                    // Collapse/expand button (bottom center)
-                    double btnX = clicked.x + nodeW / 2.0 - 10;
-                    double btnY = clicked.y + nodeH - 2;
-                    if (wx >= btnX && wx <= btnX + 20 && wy >= btnY && wy <= btnY + 20) {
-                        toggleCollapse(clicked.pathId);
-                        ctx.cancel();
-                        return EventDispatch.consumed;
-                    }
+                LayoutNode collapseHit = findCollapseButtonAt(mx, my);
+                if (collapseHit != null) {
+                    toggleCollapse(collapseHit.pathId);
+                    CirrusUiSound.playClickSound();
+                    ctx.cancel();
+                    return EventDispatch.consumed;
                 }
                 // Click on a node to track it
                 LayoutNode nodeHit = findNodeAt(mx, my);
                 if (nodeHit != null) {
-                    trackedNodeId = nodeHit.pathId;
+                    double wx = panX + mx / zoom, wy = panY + my / zoom;
+                    if (nodeHit.originalChildCount > 0 && containsWorldPoint(focusButtonBounds(nodeHit.x, nodeHit.y), wx, wy)) {
+                        focusSubgraph(nodeHit.pathId);
+                        CirrusUiSound.playClickSound();
+                        ctx.cancel();
+                        return EventDispatch.consumed;
+                    }
+                    if (isProjectionActionHit(nodeHit, mx, my)) {
+                        setTrackedNodeId(nodeHit.pathId);
+                        RecipeEntry<?> recipe = nodeHit.processNode == null ? null : nodeHit.processNode.recipe();
+                        if (recipe != null) {
+                            scene().nextTick(() -> onProjectionEdit.accept(recipe));
+                            CirrusUiSound.playClickSound();
+                        }
+                        ctx.cancel();
+                        return EventDispatch.consumed;
+                    }
+                    if (isContentCandidateActionHit(nodeHit, mx, my)) {
+                        setTrackedNodeId(nodeHit.pathId);
+                        openContentCandidatePanel(nodeHit.pathId);
+                        CirrusUiSound.playClickSound();
+                        ctx.cancel();
+                        return EventDispatch.consumed;
+                    }
+                    if (isMachineSlotHit(nodeHit, mx, my)) {
+                        setTrackedNodeId(nodeHit.pathId);
+                        hoveredMachineNodeId = nodeHit.pathId;
+                        machineCandidatePanelNodeId = nodeHit.pathId;
+                        CirrusUiSound.playClickSound();
+                        ctx.cancel();
+                        return EventDispatch.consumed;
+                    }
+                    setTrackedNodeId(nodeHit.pathId);
                     ctx.cancel();
                     return EventDispatch.consumed;
                 }
             }
             // Middle-click drag
-            if (input.key().getValue() == 2) {
+            if (input.key().getValue() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
                 dragging = true;
                 zoom = targetZoom;
                 dragStartX = mx; dragStartY = my;
@@ -292,8 +834,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             FloatPos local = input.mouseRelative(TreeCanvasWidget.this);
             double mx = local.x(), my = local.y();
             if (scrollbarDragging) {
+                if (!input.isLeftClick() || !CirrusMouse.leftButtonDown()) {
+                    scrollbarDragging = false;
+                    return EventDispatch.pass;
+                }
                 int visibleH = panelContentVisibleH();
-                int maxScroll = Math.max(0, matFilteredContentH - visibleH);
+                int maxScroll = materialPanelMaxScroll(visibleH);
+                if (maxScroll <= 0) {
+                    ctx.cancel();
+                    return EventDispatch.consumed;
+                }
                 int thumbH = Math.max(16, (int) ((float) visibleH / matFilteredContentH * visibleH));
                 int trackH = visibleH - thumbH;
                 if (trackH > 0 && maxScroll > 0) {
@@ -317,11 +867,20 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             double mx = local.x(), my = local.y();
             if (mx < 0 || my < 0 || mx > width() || my > height()) return EventDispatch.pass;
             if (showMaterialPanel && isInMaterialPanel(mx, my)) {
-                int maxScroll = Math.max(0, matFilteredContentH - panelContentVisibleH());
-                if (scrollY > 0) matScrollTargetY = Math.max(0, matScrollTargetY - matScrollSpeed);
-                else if (scrollY < 0) matScrollTargetY = Math.min(maxScroll, matScrollTargetY + matScrollSpeed);
+                int maxScroll = materialPanelMaxScroll();
+                if (maxScroll <= 0) {
+                    return EventDispatch.pass;
+                }
+                matScrollTargetY = Math.max(0, Math.min(maxScroll,
+                        matScrollTargetY + materialWheelState.wheelDelta(0, scrollY).y()));
                 ctx.cancel();
                 return EventDispatch.consumed;
+            }
+            if (contentCandidatePanelNodeId != null && isInContentCandidatePanel(mx, my)) {
+                if (scrollContentCandidatePanel(scrollY)) {
+                    ctx.cancel();
+                    return EventDispatch.consumed;
+                }
             }
             zoomFocusWX = panX + mx / (double) zoom;
             zoomFocusWY = panY + my / (double) zoom;
@@ -332,11 +891,19 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             return EventDispatch.consumed;
         });
         onKeyPressed((input, ctx) -> {
-            if (!matSearchActive) return EventDispatch.pass;
             int key = input.key().getValue();
+            if (showMaterialPanel && handleMaterialPanelScrollKey(key)) {
+                return EventDispatch.consumed;
+            }
+            if (!matSearchActive) return EventDispatch.pass;
             if (key == GLFW.GLFW_KEY_ESCAPE) {
                 matSearchActive = false; matFilterText = ""; updateFilteredContentH();
                 matScrollY = 0; matScrollTargetY = 0;
+                return EventDispatch.consumed;
+            }
+            if (key == GLFW.GLFW_KEY_DELETE && !matFilterText.isEmpty()) {
+                matFilterText = "";
+                updateFilteredContentH(); matScrollY = 0; matScrollTargetY = 0;
                 return EventDispatch.consumed;
             }
             if (key == GLFW.GLFW_KEY_BACKSPACE && !matFilterText.isEmpty()) {
@@ -349,7 +916,8 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         onCharTyped((codePoint, modifiers, ctx) -> {
             if (!matSearchActive) return EventDispatch.pass;
             char c = (char) codePoint;
-            if (Character.isLetterOrDigit(c) || c == ' ' || c == '_' || c == '-' || c == '.') {
+            if (Character.isLetterOrDigit(c) || c == ' ' || c == '_' || c == '-' || c == '.' || c == ':' || c == '/' || c == '#'
+                    || c == '>' || c == '<' || c == '=') {
                 matFilterText += c;
                 updateFilteredContentH(); matScrollY = 0; matScrollTargetY = 0;
                 return EventDispatch.consumed;
@@ -357,8 +925,11 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             return EventDispatch.pass;
         });
         onMouseLeave((mouseX, mouseY, ctx) -> {
+            scrollbarDragging = false;
+            minimapDragging = false;
+            dragging = false;
             hoveredNodeId = null;
-            scene().setHoverTooltip(Tooltip.create());
+            hoveredMachineNodeId = null;
         });
     }
     //endregion
@@ -384,7 +955,33 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     }
 
     static StepCardChrome debugStepCardChrome() {
-        return new StepCardChrome(textWhite, true, true, true, true, true, stepSectionGap);
+        return new StepCardChrome(cardMetaText, false, true, true, false, true, stepSectionGap,
+                true, true, true, true, false, false,
+                true, false, true, true, true, false, true);
+    }
+
+    static NodeCardLayout debugRecipeNodeCardLayout() {
+        return recipeNodeCardLayout(0, 0);
+    }
+
+    static TagLeafCardLayout debugTagLeafCardLayout() {
+        return tagLeafCardLayout(0, 0);
+    }
+
+    static int debugNodeWidth() {
+        return nodeW;
+    }
+
+    static int debugNodeHeight() {
+        return nodeH;
+    }
+
+    static int debugMinimapWidth() {
+        return mmW;
+    }
+
+    static int debugMinimapHeight() {
+        return mmH;
     }
 
     static boolean debugMinimapShowsTitle() {
@@ -395,6 +992,71 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         return false;
     }
 
+    static boolean debugStepCardsRenderTierByDefault() {
+        return false;
+    }
+
+    static boolean debugMaterialPanelSearchAlwaysVisible() {
+        return true;
+    }
+
+    static boolean debugMachineCandidatePanelUsesCustomRendering() {
+        return true;
+    }
+
+    static int debugMachineCandidatePanelMaxRows() {
+        return machineCandidatePanelMaxRows;
+    }
+
+    static boolean debugMachineCandidateSelectionOverlayRendersAfterIcons() {
+        return true;
+    }
+
+    static boolean debugMachineTooltipsUseTextOnlyMachineRows() {
+        return true;
+    }
+
+    static int debugContentCandidatePanelMaxCells() {
+        return contentCandidatePanelMaxCells;
+    }
+
+    static boolean debugTreeContentUsesCachedVisualBatch() {
+        return true;
+    }
+
+    static boolean debugCollapseToggleReusesVirtualLayoutNodes() {
+        return true;
+    }
+
+    static boolean debugCollapseControlUsesLightweightDrawing() {
+        return true;
+    }
+
+    static int debugTagCandidateCellSize() {
+        return tagCandidateCell;
+    }
+
+    void debugSetSize(int width, int height) {
+        setSize(width, height);
+    }
+
+    static float debugMachineCandidatePanelScale(float zoom) {
+        return machineCandidatePanelScale(zoom);
+    }
+
+    static int debugRecipePreviewSlotSize(int inputCount, int outputCount) {
+        NodeCardLayout layout = recipeNodeCardLayout(0, 0, false);
+        return recipePreviewSlotSize(inputCount, outputCount, layout.inputs(), layout.outputs());
+    }
+
+    static boolean debugRecipePreviewUsesUnifiedSlotGroups() {
+        return true;
+    }
+
+    static boolean debugSingleMaterialLeafUsesCompactLayout() {
+        return true;
+    }
+
     static MinimapViewportRect debugClampMinimapViewportRect(int contentX, int contentY, int contentW, int contentH,
                                                              int rawX, int rawY, int rawW, int rawH) {
         return clampMinimapViewportRect(contentX, contentY, contentW, contentH, rawX, rawY, rawW, rawH);
@@ -402,6 +1064,173 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     int debugMaterialEntryCount() {
         return materialByCategory.values().stream().mapToInt(List::size).sum();
+    }
+
+    int debugFilteredMaterialEntryCount() {
+        return filteredMaterialEntryCount();
+    }
+
+    int debugMaterialFilterEvaluationCount() {
+        return materialFilterEvaluationCount;
+    }
+
+    int debugMaterialFilteredCategoryCount() {
+        return materialFilteredByCategory.size();
+    }
+
+    int debugMaterialPanelContentTop() {
+        return materialPanelContentTop();
+    }
+
+    int debugVisibleNodeCount(int viewportWidth, int viewportHeight) {
+        WorldViewport viewport = worldViewport(viewportWidth, viewportHeight);
+        int count = 0;
+        for (LayoutNode node : flatNodes) {
+            if (viewport.intersectsNode(node)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    int debugVisibleConnectionCount(int viewportWidth, int viewportHeight) {
+        WorldViewport viewport = worldViewport(viewportWidth, viewportHeight);
+        int count = 0;
+        for (LayoutLink link : flatLinks) {
+            if (viewport.intersectsConnection(link)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    boolean debugMaterialPanelNeedsScrollbar(int viewportHeight) {
+        return materialPanelNeedsScrollbar(materialPanelVisibleHeight(viewportHeight));
+    }
+
+    LayoutDebugInfo debugLayoutInfo() {
+        return layoutDebugInfo();
+    }
+
+    int debugLayoutNodeCount() {
+        return flatNodes.size();
+    }
+
+    int debugRootChildCount() {
+        return rootLayout == null ? 0 : rootLayout.originalChildCount;
+    }
+
+    boolean debugMachineCandidatePanelVisible() {
+        return machineCandidatePanelNodeId != null && machineCandidatePanelBounds() != null;
+    }
+
+    boolean debugContentCandidatePanelVisible() {
+        return contentCandidatePanelNodeId != null && contentCandidatePanelBounds() != null;
+    }
+
+    @Nullable int[] debugMachineCandidatePanelBounds() {
+        int[] bounds = machineCandidatePanelBounds();
+        return bounds == null ? null : Arrays.copyOf(bounds, bounds.length);
+    }
+
+    @Nullable int[] debugContentCandidatePanelBounds() {
+        int[] bounds = contentCandidatePanelBounds();
+        return bounds == null ? null : Arrays.copyOf(bounds, bounds.length);
+    }
+
+    float debugMachineCandidatePanelScale() {
+        return machineCandidatePanelScale();
+    }
+
+    float debugContentCandidatePanelScale() {
+        return contentCandidatePanelScale();
+    }
+
+    boolean debugOpenMachineCandidatePanelForPath(String pathId) {
+        LayoutNode node = findLayoutNode(pathId);
+        if (node == null || node.processNode == null) {
+            return false;
+        }
+        machineCandidatePanelNodeId = pathId;
+        return true;
+    }
+
+    boolean debugOpenContentCandidatePanelForPath(String pathId) {
+        LayoutNode node = findLayoutNode(pathId);
+        if (node == null || node.processNode == null) {
+            return false;
+        }
+        NodeRenderModel model = renderModel(node);
+        SlotVisual visual = model.selectableVisual();
+        if (model.selectableSlot() == null || visual == null || visual.count() <= 1) {
+            return false;
+        }
+        openContentCandidatePanel(pathId);
+        return true;
+    }
+
+    boolean debugSelectMachineCandidateForPath(String pathId, int index) {
+        return selectMachineCandidate(pathId, index);
+    }
+
+    int debugMachineCandidateCount(String pathId) {
+        LayoutNode node = findLayoutNode(pathId);
+        return node == null || node.processNode == null ? 0 : renderModel(node).machines().size();
+    }
+
+    List<String> debugMachineCandidateNames(String pathId) {
+        LayoutNode node = findLayoutNode(pathId);
+        if (node == null || node.processNode == null) {
+            return List.of();
+        }
+        return renderModel(node).machines().stream().map(MachineInfo::name).toList();
+    }
+
+    boolean debugSelectContentCandidateForPath(String pathId, int index) {
+        return selectContentCandidate(pathId, index);
+    }
+
+    @Nullable String debugSelectedMachineName(String pathId) {
+        return selectedMachineByPath.get(pathId);
+    }
+
+    int debugSelectedContentCandidateIndex(String pathId) {
+        return selectedContentCandidateByPath.getOrDefault(pathId, 0);
+    }
+
+    int debugContentCandidateVisualCount(String pathId) {
+        LayoutNode node = findLayoutNode(pathId);
+        SlotVisual visual = node == null || node.processNode == null ? null : renderModel(node).selectableVisual();
+        return visual == null ? 0 : visual.count();
+    }
+
+    boolean debugContentCandidateNeedsScrollbar(String pathId) {
+        LayoutNode previous = contentCandidatePanelNodeId == null ? null : findLayoutNode(contentCandidatePanelNodeId);
+        String previousId = contentCandidatePanelNodeId;
+        contentCandidatePanelNodeId = pathId;
+        MaterialSlot slot = contentCandidatePanelSlot();
+        int[] bounds = contentCandidatePanelBounds();
+        float scale = contentCandidatePanelScale();
+        SlotVisual visual = slot == null ? null : slotVisual(slot);
+        boolean result = visual != null && bounds != null && contentCandidateNeedsScrollbar(visual.count(), bounds[3], scale);
+        contentCandidatePanelNodeId = previous == null ? previousId : previous.pathId;
+        return result;
+    }
+
+    int debugContentCandidateScrollRow(String pathId) {
+        return contentCandidateScrollRowsByPath.getOrDefault(pathId, 0);
+    }
+
+    float debugContentCandidateDisplayScrollRow(String pathId) {
+        return contentCandidateDisplayScrollRowsByPath.getOrDefault(pathId, 0.0f);
+    }
+
+    boolean debugScrollContentCandidatePanel(double scrollY) {
+        return scrollContentCandidatePanel(scrollY);
+    }
+
+    void debugAnimateSmooth() {
+        animateSmooth();
     }
 
     /** Direct viewport manipulation for dump tests. */
@@ -415,9 +1244,17 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     public double getPanY() { return panY; }
     public float getZoom() { return zoom; }
 
+    boolean debugPendingAutoFit() {
+        return pendingAutoFit;
+    }
+
+    long debugCraftCount() {
+        return craftCount;
+    }
+
     /** Scroll material panel programmatically. */
     public void setMaterialScroll(float scrollY) {
-        int maxScroll = Math.max(0, matFilteredContentH - panelContentVisibleH());
+        int maxScroll = materialPanelMaxScroll();
         if (Float.isNaN(scrollY) || Float.isInfinite(scrollY)) {
             scrollY = 0;
         }
@@ -428,15 +1265,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     /** Set material panel search filter for dump tests. */
     public void setMatFilter(String text) {
-        this.matSearchActive = !text.isEmpty();
-        this.matFilterText = text;
+        String clean = text == null ? "" : text;
+        this.matSearchActive = !clean.isEmpty();
+        this.matFilterText = clean;
         updateFilteredContentH();
         sanitizeMaterialScroll();
     }
 
     /** Track a specific node by path ID. */
     public void setTrackedNode(@Nullable String pathId) {
-        this.trackedNodeId = pathId;
+        setTrackedNodeId(pathId);
     }
 
     public List<LayoutNode> getFlatNodes() { return flatNodes; }
@@ -489,11 +1327,32 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         this.onSubtreeChanged = callback;
     }
 
+    public void setOnProjectionEdit(@Nullable Consumer<RecipeEntry<?>> callback) {
+        this.onProjectionEdit = callback == null ? ignored -> {} : callback;
+    }
+
+    public void setOnContentCandidateSelected(@Nullable Consumer<ContentCandidateSelection> callback) {
+        this.onContentCandidateSelected = callback == null ? ignored -> {} : callback;
+    }
+
+    public void setContentVariantPreferences(Map<String, String> preferences) {
+        this.contentVariantPreferences = Map.copyOf(preferences);
+        remapSelectedContentCandidatesFromPreferences();
+    }
+
     public @Nullable String getTrackedNodeId() { return trackedNodeId; }
     public String getCurrentRootPathId() { return currentRootPathId; }
 
     public int getLayerNodeCount(int layer) {
         return layerNodes.getOrDefault(layer, List.of()).size();
+    }
+
+    private void setTrackedNodeId(@Nullable String pathId) {
+        if (Objects.equals(this.trackedNodeId, pathId)) {
+            return;
+        }
+        this.trackedNodeId = pathId;
+        markMinimapDirty();
     }
 
     /** Highlight a node from external UI (e.g., path breadcrumbs). */
@@ -519,23 +1378,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (node == null || node.processNode == null) return null;
 
         Tooltip tip = Tooltip.create();
-        var crumbs = getBreadcrumbs(pathId);
-        var pathInfo = FlowChartTooltipComponent.builder();
-        pathInfo.section(sourceLabel != null ? sourceLabel : "路径信息", 0xFF7D8791);
-        pathInfo.kv("Path", 0xFF888888, pathId, 0xFF6E7882);
-        pathInfo.kv("层级", 0xFF888888, "L" + node.depth, 0xFF6E7882);
-        pathInfo.kv("深度", 0xFF888888, String.valueOf(Math.max(0, crumbs.size() - 1)), 0xFF6E7882);
-        if (!crumbs.isEmpty()) {
-            pathInfo.kv("节点", 0xFF888888, crumbs.get(crumbs.size() - 1).name(), 0xFF6E7882);
-        }
-        int branchCount = Math.max(0, node.originalChildCount);
-        pathInfo.kv("分叉", 0xFF888888, String.valueOf(branchCount), 0xFF6E7882);
-        if (branchCount > 1) {
-            pathInfo.kv("支点", 0xFF888888, "是", 0xFF88C070);
-        }
-        pathInfo.divider();
-        tip.add(pathInfo.build());
-        appendNodeTooltip(tip, node.processNode);
+        appendNodeTooltip(tip, node);
         return tip;
     }
 
@@ -608,10 +1451,11 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             String ancestor = current.toString();
             collapsedPaths.remove(ancestor);
             userExpandedPaths.add(ancestor);
+            expandExistingNode(ancestor);
         }
         float keepZoom = this.zoom;
-        trackedNodeId = pathId;
-        rebuildTree(false); // don't auto-collapse, preserve user state
+        setTrackedNodeId(pathId);
+        refreshVisibleLayoutFromFullRoot();
         notifyTreeStructureChanged();
         this.zoom = keepZoom;
         this.targetZoom = keepZoom;
@@ -636,9 +1480,10 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             String ancestor = current.toString();
             collapsedPaths.remove(ancestor);
             userExpandedPaths.add(ancestor);
+            expandExistingNode(ancestor);
         }
         float keepZoom = this.zoom;
-        rebuildTree(false);
+        refreshVisibleLayoutFromFullRoot();
         notifyTreeStructureChanged();
         this.zoom = keepZoom;
         this.targetZoom = keepZoom;
@@ -685,25 +1530,22 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     private void reflattenFromRoot() {
         if (rootLayout == null) return;
+        if (fullRootLayout != null) {
+            refreshVisibleLayoutFromFullRoot();
+            return;
+        }
         List<LayoutNode> fNodes = new ArrayList<>();
         List<LayoutLink> fLinks = new ArrayList<>();
         Map<Integer, List<LayoutNode>> lNodes = new HashMap<>();
         flatten(rootLayout, fNodes, fLinks, lNodes);
         this.flatNodes = fNodes;
         this.flatLinks = fLinks;
-        this.layerNodes = lNodes;
-        this.maxDepth = fNodes.stream().mapToInt(n -> n.depth).max().orElse(0);
-        // Update minimap bounds and layout dimensions
-        if (!fNodes.isEmpty()) {
-            mmWorldMinX = fNodes.stream().mapToInt(n -> n.x).min().orElse(0);
-            mmWorldMinY = fNodes.stream().mapToInt(n -> n.y).min().orElse(0);
-            int maxX = fNodes.stream().mapToInt(n -> n.x + nodeW).max().orElse(0);
-            int maxY = fNodes.stream().mapToInt(n -> n.y + nodeH).max().orElse(0);
-            mmWorldW = Math.max(1, maxX - mmWorldMinX);
-            mmWorldH = Math.max(1, maxY - mmWorldMinY);
-        }
-        this.layoutWidth = Math.max(500, mmWorldW + 200);
-        this.layoutHeight = Math.max(500, (maxDepth + 1) * rowH + 200);
+        this.layoutNodeByPath = indexLayoutNodes(fNodes);
+        this.layerNodes = freezeLayerNodes(lNodes, false);
+        this.layerNodesByX = this.layerNodes;
+        this.layerLinks = indexLayoutLinks(fLinks);
+        updateLayoutMetrics(fNodes, 0);
+        markMinimapDirty();
     }
 
     private int viewportW() {
@@ -719,12 +1561,46 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         this.matFilterText = "";
         this.matScrollY = 0;
         this.matScrollTargetY = 0;
-        List<ProcessNode> sinks = graph.sinks();
-        this.targetNode = sinks.isEmpty() ? null : sinks.get(0);
+        this.currentRootPathId = "root";
+        this.externalHoveredNodeId = null;
+        this.externalSelectedNodeId = null;
+        this.machineCandidatePanelNodeId = null;
+        this.contentCandidatePanelNodeId = null;
+        this.trackedNodeId = null;
+        this.minimapCacheTrackedNodeId = null;
+        this.minimapRunsDirty = true;
+        this.forceExpandAll = false;
+        this.selectedMachineByPath.clear();
+        this.selectedContentCandidateByPath.clear();
+        this.contentCandidateScrollRowsByPath.clear();
+        this.contentCandidateDisplayScrollRowsByPath.clear();
+        this.targetNode = selectTargetNode(graph);
         rebuildTree();
+        logLayoutState("tree.setGraph");
+        remapSelectedContentCandidatesFromPreferences();
         resetView();
         computeMaterialSummary();
         return this;
+    }
+
+    private @Nullable ProcessNode selectTargetNode(ProcessGraph graph) {
+        String preferredRoot = graph.preferredRootNodeId();
+        if (preferredRoot != null) {
+            ProcessNode preferred = graph.node(preferredRoot);
+            if (preferred != null) {
+                return preferred;
+            }
+        }
+        List<ProcessNode> sinks = graph.sinks();
+        if (sinks.isEmpty()) {
+            return null;
+        }
+        return sinks.stream()
+                .max(Comparator
+                        .comparingInt((ProcessNode node) -> graph.incomingEdges(node.id()).size())
+                        .thenComparing(node -> node.recipe() != null)
+                        .thenComparing(ProcessNode::id))
+                .orElse(sinks.get(0));
     }
 
     private int collapseLevel = 0; // current auto-collapse aggressiveness
@@ -741,13 +1617,17 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (graph == null || targetNode == null) {
             rootLayout = null; fullRootLayout = null;
             flatNodes = List.of(); flatLinks = List.of();
-            layerNodes = Map.of(); maxDepth = 0;
+            layoutNodeByPath = Map.of();
+            layerNodes = Map.of(); layerLinks = Map.of(); maxDepth = 0;
+            clearRenderCaches();
             return;
         }
+        clearRenderCaches();
         if (autoCollapse) {
             // Build tree, iteratively increasing collapse aggressiveness until width fits
             collapseLevel = 0;
             for (int attempt = 0; attempt < 6; attempt++) {
+                pathChildrenCache.clear();
                 fullRootLayout = buildLayoutTree(targetNode, 0, "root");
                 computeWidths(fullRootLayout);
                 if (fullRootLayout.treeWidth <= maxTreeWidth) break;
@@ -755,10 +1635,33 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             }
         } else {
             // User-initiated toggle: keep current collapseLevel, just rebuild once
+            pathChildrenCache.clear();
             fullRootLayout = buildLayoutTree(targetNode, 0, "root");
             computeWidths(fullRootLayout);
         }
 
+        refreshVisibleLayoutFromFullRoot();
+    }
+
+    private void refreshVisibleLayoutFromFullRoot() {
+        if (fullRootLayout == null) {
+            rootLayout = null;
+            flatNodes = List.of();
+            flatLinks = List.of();
+            layoutNodeByPath = Map.of();
+            layerNodes = Map.of();
+            layerLinks = Map.of();
+            maxDepth = 0;
+            layoutWidth = 500;
+            layoutHeight = 500;
+            mmWorldMinX = 0;
+            mmWorldMinY = 0;
+            mmWorldW = 1;
+            mmWorldH = 1;
+            markMinimapDirty();
+            return;
+        }
+        computeWidths(fullRootLayout);
         int offsetX = Math.max(0, (Math.min(2000, maxTreeWidth) - fullRootLayout.treeWidth) / 2);
         assignPositions(fullRootLayout, offsetX);
 
@@ -779,39 +1682,319 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
         this.flatNodes = fNodes;
         this.flatLinks = fLinks;
-        this.layerNodes = lNodes;
-        this.maxDepth = fNodes.stream().mapToInt(n -> n.depth).max().orElse(0);
-        this.layoutWidth = Math.max(500, fullRootLayout.treeWidth + offsetX * 2);
-        this.layoutHeight = Math.max(500, (maxDepth + 1) * rowH + 200);
-
-        // Compute minimap bounding box from actual visible nodes
-        if (!fNodes.isEmpty()) {
-            mmWorldMinX = fNodes.stream().mapToInt(n -> n.x).min().orElse(0);
-            mmWorldMinY = fNodes.stream().mapToInt(n -> n.y).min().orElse(0);
-            int maxX = fNodes.stream().mapToInt(n -> n.x + nodeW).max().orElse(0);
-            int maxY = fNodes.stream().mapToInt(n -> n.y + nodeH).max().orElse(0);
-            mmWorldW = Math.max(1, maxX - mmWorldMinX);
-            mmWorldH = Math.max(1, maxY - mmWorldMinY);
-        }
+        this.layoutNodeByPath = indexLayoutNodes(fNodes);
+        this.layerNodes = freezeLayerNodes(lNodes, false);
+        this.layerNodesByX = this.layerNodes;
+        this.layerLinks = indexLayoutLinks(fLinks);
+        updateLayoutMetrics(fNodes, fullRootLayout.treeWidth + offsetX * 2);
+        markMinimapDirty();
 
         // Auto-track the deepest main trunk node
         if (trackedNodeId == null) {
             LayoutNode trunk = effectiveRoot;
             while (!trunk.children.isEmpty()) {
-                trunk = trunk.children.stream()
-                        .max(Comparator.comparingInt(this::subtreeDepth))
-                        .orElse(trunk.children.get(0));
+                LayoutNode deepest = trunk.children.get(0);
+                int deepestDepth = subtreeDepth(deepest);
+                for (int i = 1; i < trunk.children.size(); i++) {
+                    LayoutNode candidate = trunk.children.get(i);
+                    int candidateDepth = subtreeDepth(candidate);
+                    if (candidateDepth > deepestDepth) {
+                        deepest = candidate;
+                        deepestDepth = candidateDepth;
+                    }
+                }
+                trunk = deepest;
             }
-            trackedNodeId = trunk.pathId;
+            setTrackedNodeId(trunk.pathId);
         }
+    }
+
+    private void updateLayoutMetrics(List<LayoutNode> nodes, int widthCandidate) {
+        if (nodes.isEmpty()) {
+            this.maxDepth = 0;
+            this.layoutWidth = Math.max(500, widthCandidate);
+            this.layoutHeight = 500;
+            mmWorldMinX = 0;
+            mmWorldMinY = 0;
+            mmWorldW = 1;
+            mmWorldH = 1;
+            return;
+        }
+        int depth = 0;
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        for (LayoutNode node : nodes) {
+            depth = Math.max(depth, node.depth);
+            minX = Math.min(minX, node.x);
+            minY = Math.min(minY, node.y);
+            maxX = Math.max(maxX, node.x + nodeW);
+            maxY = Math.max(maxY, node.y + nodeH);
+        }
+        this.maxDepth = depth;
+        int contentWidth = Math.max(1, maxX - minX);
+        int targetWidth = widthCandidate > 0 ? widthCandidate : contentWidth + 200;
+        this.layoutWidth = Math.max(500, targetWidth);
+        this.layoutHeight = Math.max(500, (maxDepth + 1) * rowH + 200);
+        mmWorldMinX = minX;
+        mmWorldMinY = minY;
+        mmWorldW = Math.max(1, maxX - minX);
+        mmWorldH = Math.max(1, maxY - minY);
+    }
+
+    private LayoutDebugInfo layoutDebugInfo() {
+        int graphNodes = graph == null ? 0 : graph.nodeCount();
+        int graphEdges = graph == null ? 0 : graph.edgeCount();
+        int graphSinks = graph == null ? 0 : graph.sinks().size();
+        int graphSources = graph == null ? 0 : graph.sources().size();
+        return new LayoutDebugInfo(
+                graphNodes,
+                graphEdges,
+                graphSinks,
+                graphSources,
+                targetNode == null ? null : targetNode.id(),
+                graph == null ? null : graph.preferredRootNodeId(),
+                flatNodes.size(),
+                flatLinks.size(),
+                rootLayout == null ? 0 : rootLayout.originalChildCount,
+                fullRootLayout == null ? 0 : fullRootLayout.originalChildCount,
+                rootLayout != null && rootLayout.collapsed,
+                maxDepth,
+                collapseLevel,
+                layoutWidth,
+                layoutHeight,
+                currentRootPathId
+        );
+    }
+
+    private void logLayoutState(String event) {
+        LayoutDebugInfo info = layoutDebugInfo();
+        if (info.graphNodes() > 1 && info.layoutNodes() <= 1) {
+            logger.warn("{} {}", event, info.toDebugText());
+        } else if (logger.isDebugEnabled()) {
+            logger.debug("{} {}", event, info.toDebugText());
+        }
+    }
+
+    private void clearRenderCaches() {
+        frameVisualCache.clear();
+        pathChildrenCache.clear();
+        incomingEdgesByNodeId.clear();
+        machineCandidatesByNodeId.clear();
+        visualCache.clear();
+        itemStackVisualCache.clear();
+        fluidStackVisualCache.clear();
+    }
+
+    private void markMinimapDirty() {
+        minimapRunsDirty = true;
+    }
+
+    private void ensureMinimapRuns(SceneCanvas canvas) {
+        MinimapProjection proj = minimapProjection();
+        if (proj == null) {
+            minimapRunCount = 0;
+            minimapRunsDirty = false;
+            return;
+        }
+        int contentW = proj.contentW;
+        int contentH = proj.contentH;
+        if (!minimapRunsDirty
+                && minimapCacheContentW == contentW
+                && minimapCacheContentH == contentH
+                && minimapCacheWorldMinX == mmWorldMinX
+                && minimapCacheWorldMinY == mmWorldMinY
+                && minimapCacheWorldW == mmWorldW
+                && minimapCacheWorldH == mmWorldH
+                && minimapCacheNodeCount == flatNodes.size()
+                && minimapCacheLinkCount == flatLinks.size()
+                && Double.compare(minimapCacheScale, proj.scale) == 0
+                && Double.compare(minimapCacheDrawX, proj.drawX) == 0
+                && Double.compare(minimapCacheDrawY, proj.drawY) == 0
+                && Objects.equals(minimapCacheTrackedNodeId, trackedNodeId)) {
+            return;
+        }
+        rebuildMinimapRuns(proj, canvas);
+    }
+
+    private void rebuildMinimapRuns(MinimapProjection proj, SceneCanvas canvas) {
+        int contentW = proj.contentW;
+        int contentH = proj.contentH;
+        if (contentW <= 0 || contentH <= 0 || mmWorldW <= 0 || mmWorldH <= 0) {
+            minimapRunCount = 0;
+            minimapRunsDirty = false;
+            minimapCacheContentW = contentW;
+            minimapCacheContentH = contentH;
+            minimapCacheWorldMinX = mmWorldMinX;
+            minimapCacheWorldMinY = mmWorldMinY;
+            minimapCacheWorldW = mmWorldW;
+            minimapCacheWorldH = mmWorldH;
+            minimapCacheNodeCount = flatNodes.size();
+            minimapCacheLinkCount = flatLinks.size();
+            minimapCacheScale = proj.scale;
+            minimapCacheDrawX = proj.drawX;
+            minimapCacheDrawY = proj.drawY;
+            minimapCacheTrackedNodeId = trackedNodeId;
+            return;
+        }
+        int pixelCount = contentW * contentH;
+        if (minimapPixelScratch.length < pixelCount) {
+            minimapPixelScratch = new int[pixelCount];
+        }
+        Arrays.fill(minimapPixelScratch, 0, pixelCount, 0);
+        double sx = proj.scale;
+        double sy = proj.scale;
+        double ox = proj.drawX;
+        double oy = proj.drawY;
+
+        for (LayoutLink link : flatLinks) {
+            int color = isNodeInTrackedPath(link.target.pathId) ? 0xFF9BA8B6 : 0xFF6F747B;
+            int x0 = clampToInt((link.source.x + nodeW / 2.0 - mmWorldMinX) * sx + ox - proj.contentX, 0, contentW - 1);
+            int y0 = clampToInt((link.source.y + nodeH - mmWorldMinY) * sy + oy - proj.contentY, 0, contentH - 1);
+            int x1 = clampToInt((link.target.x + nodeW / 2.0 - mmWorldMinX) * sx + ox - proj.contentX, 0, contentW - 1);
+            int y1 = clampToInt((link.target.y - mmWorldMinY) * sy + oy - proj.contentY, 0, contentH - 1);
+            int midY = (y0 + y1) >>> 1;
+            stampMinimapLine(contentW, contentH, x0, y0, x0, midY, color);
+            stampMinimapLine(contentW, contentH, x0, midY, x1, midY, color);
+            stampMinimapLine(contentW, contentH, x1, midY, x1, y1, color);
+        }
+
+        for (LayoutNode ln : flatNodes) {
+            int rx = clampToInt((ln.x - mmWorldMinX) * sx + ox - proj.contentX, 0, contentW - 1);
+            int ry = clampToInt((ln.y - mmWorldMinY) * sy + oy - proj.contentY, 0, contentH - 1);
+            int rw = Math.max(1, (int) Math.ceil(nodeW * sx));
+            int rh = Math.max(1, (int) Math.ceil(nodeH * sy));
+            int color = minimapNodeColor(ln);
+            stampMinimapRect(contentW, contentH, rx, ry, rw, rh, color);
+        }
+
+        compactMinimapRuns(contentW, contentH);
+        minimapRunsDirty = false;
+        minimapCacheContentW = contentW;
+        minimapCacheContentH = contentH;
+        minimapCacheWorldMinX = mmWorldMinX;
+        minimapCacheWorldMinY = mmWorldMinY;
+        minimapCacheWorldW = mmWorldW;
+        minimapCacheWorldH = mmWorldH;
+        minimapCacheNodeCount = flatNodes.size();
+        minimapCacheLinkCount = flatLinks.size();
+        minimapCacheScale = proj.scale;
+        minimapCacheDrawX = proj.drawX;
+        minimapCacheDrawY = proj.drawY;
+        minimapCacheTrackedNodeId = trackedNodeId;
+    }
+
+    private void compactMinimapRuns(int contentW, int contentH) {
+        minimapRunCount = 0;
+        Map<Long, Integer> activeRuns = new HashMap<>();
+        int index = 0;
+        for (int y = 0; y < contentH; y++) {
+            Map<Long, Integer> nextActiveRuns = new HashMap<>();
+            int x = 0;
+            while (x < contentW) {
+                int color = minimapPixelScratch[index + x];
+                if (color == 0) {
+                    x++;
+                    continue;
+                }
+                int start = x;
+                while (x < contentW && minimapPixelScratch[index + x] == color) {
+                    x++;
+                }
+                int width = x - start;
+                long key = minimapRunKey(start, width, color);
+                Integer activeIndex = activeRuns.get(key);
+                if (activeIndex != null) {
+                    minimapRunH[activeIndex]++;
+                    nextActiveRuns.put(key, activeIndex);
+                } else {
+                    int runIndex = appendMinimapRun(start, y, width, 1, color);
+                    nextActiveRuns.put(key, runIndex);
+                }
+            }
+            index += contentW;
+            activeRuns = nextActiveRuns;
+        }
+    }
+
+    private static long minimapRunKey(int x, int w, int color) {
+        return ((long) (x & 0xFFFF) << 48)
+                | ((long) (w & 0xFFFF) << 32)
+                | (color & 0xFFFFFFFFL);
+    }
+
+    private int appendMinimapRun(int x, int y, int w, int h, int color) {
+        if (w <= 0 || h <= 0) return -1;
+        if (minimapRunCount == minimapRunX.length) {
+            int newCap = minimapRunCount + Math.max(64, minimapRunCount >> 1);
+            minimapRunX = Arrays.copyOf(minimapRunX, newCap);
+            minimapRunY = Arrays.copyOf(minimapRunY, newCap);
+            minimapRunW = Arrays.copyOf(minimapRunW, newCap);
+            minimapRunH = Arrays.copyOf(minimapRunH, newCap);
+            minimapRunColor = Arrays.copyOf(minimapRunColor, newCap);
+        }
+        minimapRunX[minimapRunCount] = x;
+        minimapRunY[minimapRunCount] = y;
+        minimapRunW[minimapRunCount] = w;
+        minimapRunH[minimapRunCount] = h;
+        minimapRunColor[minimapRunCount] = color;
+        return minimapRunCount++;
+    }
+
+    private void stampMinimapRect(int contentW, int contentH, int x, int y, int w, int h, int color) {
+        if (w <= 0 || h <= 0 || color == 0) return;
+        int x0 = Math.max(0, x);
+        int y0 = Math.max(0, y);
+        int x1 = Math.min(contentW, x + w);
+        int y1 = Math.min(contentH, y + h);
+        for (int yy = y0; yy < y1; yy++) {
+            int row = yy * contentW;
+            for (int xx = x0; xx < x1; xx++) {
+                minimapPixelScratch[row + xx] = color;
+            }
+        }
+    }
+
+    private void stampMinimapLine(int contentW, int contentH, int x0, int y0, int x1, int y1, int color) {
+        if (color == 0) return;
+        int dx = Math.abs(x1 - x0);
+        int dy = Math.abs(y1 - y0);
+        int sx = x0 < x1 ? 1 : -1;
+        int sy = y0 < y1 ? 1 : -1;
+        int err = dx - dy;
+        while (true) {
+            if (x0 >= 0 && x0 < contentW && y0 >= 0 && y0 < contentH) {
+                minimapPixelScratch[y0 * contentW + x0] = color;
+            }
+            if (x0 == x1 && y0 == y1) break;
+            int twiceErr = err << 1;
+            if (twiceErr > -dy) {
+                err -= dy;
+                x0 += sx;
+            }
+            if (twiceErr < dx) {
+                err += dx;
+                y0 += sy;
+            }
+        }
+    }
+
+    private static int clampToInt(double value, int min, int max) {
+        int v = (int) Math.round(value);
+        if (v < min) return min;
+        if (v > max) return max;
+        return v;
     }
 
     private LayoutNode buildLayoutTree(ProcessNode pn, int depth, String pathId) {
         LayoutNode node = new LayoutNode(pn, pathId, depth);
 
         // Get child nodes (inputs to this step)
-        List<ProcessEdge> incoming = new ArrayList<>(graph.incomingEdges(pn.id()));
+        List<ProcessEdge> incoming = incomingEdgesByNodeId.computeIfAbsent(pn.id(), ignored -> List.copyOf(graph.incomingEdges(pn.id())));
+        node.incomingEdges = incoming;
         node.originalChildCount = incoming.size();
+        node.renderModel = createRenderModel(node, pn);
 
         // Auto-collapse heuristic — aggressiveness increases with collapseLevel
         boolean shouldAutoCollapse = false;
@@ -824,21 +2007,50 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         else if (depth <= 10) shouldAutoCollapse = inputCount >= Math.max(1, 3 - cl);
         else shouldAutoCollapse = true;
 
-        boolean isCollapsed = collapsedPaths.contains(pathId)
-                || (shouldAutoCollapse && !userExpandedPaths.contains(pathId));
+        boolean isCollapsed = !forceExpandAll && (collapsedPaths.contains(pathId)
+                || (shouldAutoCollapse && !userExpandedPaths.contains(pathId)));
         node.collapsed = isCollapsed;
+        node.autoCollapsed = shouldAutoCollapse && !userExpandedPaths.contains(pathId) && !collapsedPaths.contains(pathId);
 
         if (!isCollapsed) {
-            int idx = 0;
-            for (ProcessEdge edge : incoming) {
-                ProcessNode child = graph.node(edge.fromNodeId());
-                if (child != null) {
-                    node.children.add(buildLayoutTree(child, depth + 1, pathId + "-" + idx));
-                }
-                idx++;
-            }
+            ensureChildrenBuilt(node);
         }
         return node;
+    }
+
+    private void ensureChildrenBuilt(LayoutNode node) {
+        if (node == null || node.processNode == null || graph == null) {
+            return;
+        }
+        if (!node.children.isEmpty() || node.originalChildCount <= 0) {
+            return;
+        }
+        String cacheKey = childCacheKey(node);
+        List<LayoutNode> cached = pathChildrenCache.get(cacheKey);
+        if (cached != null) {
+            node.children.addAll(cached);
+            return;
+        }
+        List<ProcessEdge> incoming = node.incomingEdges != null
+                ? node.incomingEdges
+                : incomingEdgesByNodeId.computeIfAbsent(node.processNode.id(), ignored -> List.copyOf(graph.incomingEdges(node.processNode.id())));
+        node.incomingEdges = incoming;
+        ArrayList<LayoutNode> built = new ArrayList<>(incoming.size());
+        int idx = 0;
+        for (ProcessEdge edge : incoming) {
+            ProcessNode child = graph.node(edge.fromNodeId());
+            if (child != null) {
+                built.add(buildLayoutTree(child, node.depth + 1, node.pathId + "-" + idx));
+            }
+            idx++;
+        }
+        List<LayoutNode> immutable = List.copyOf(built);
+        pathChildrenCache.put(cacheKey, immutable);
+        node.children.addAll(immutable);
+    }
+
+    private static String childCacheKey(LayoutNode node) {
+        return node.pathId + "@" + node.depth;
     }
 
     private void computeWidths(LayoutNode n) {
@@ -860,8 +2072,10 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         n.y = n.depth * rowH + (rowH / 2 - nodeH / 2);
 
         if (!n.collapsed && !n.children.isEmpty()) {
-            int childrenSum = n.children.stream().mapToInt(c -> c.treeWidth).sum()
-                    + Math.max(0, n.children.size() - 1) * gapX;
+            int childrenSum = Math.max(0, n.children.size() - 1) * gapX;
+            for (LayoutNode child : n.children) {
+                childrenSum += child.treeWidth;
+            }
             int offset = startX + (n.treeWidth - childrenSum) / 2;
             for (LayoutNode c : n.children) {
                 assignPositions(c, offset);
@@ -882,28 +2096,123 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         }
     }
 
+    private static Map<String, LayoutNode> indexLayoutNodes(List<LayoutNode> nodes) {
+        if (nodes.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, LayoutNode> index = new HashMap<>(nodes.size() * 2);
+        for (LayoutNode node : nodes) {
+            index.put(node.pathId, node);
+        }
+        return index;
+    }
+
+    private static Map<Integer, List<LayoutNode>> freezeLayerNodes(Map<Integer, List<LayoutNode>> source, boolean sortByX) {
+        if (source.isEmpty()) {
+            return Map.of();
+        }
+        ArrayList<Integer> layers = new ArrayList<>(source.keySet());
+        layers.sort(Integer::compareTo);
+        LinkedHashMap<Integer, List<LayoutNode>> out = new LinkedHashMap<>(layers.size());
+        for (Integer layer : layers) {
+            List<LayoutNode> nodes = source.getOrDefault(layer, List.of());
+            if (nodes.isEmpty()) {
+                out.put(layer, List.of());
+                continue;
+            }
+            ArrayList<LayoutNode> copy = new ArrayList<>(nodes);
+            if (sortByX) {
+                copy.sort(Comparator.comparingInt(node -> node.x));
+            }
+            out.put(layer, List.copyOf(copy));
+        }
+        return out;
+    }
+
+    private static Map<Integer, List<LayoutLink>> indexLayoutLinks(List<LayoutLink> links) {
+        if (links.isEmpty()) {
+            return Map.of();
+        }
+        Map<Integer, List<LayoutLink>> byLayer = new HashMap<>();
+        for (LayoutLink link : links) {
+            byLayer.computeIfAbsent(link.source.depth, ignored -> new ArrayList<>()).add(link);
+        }
+        return freezeLayerLinks(byLayer);
+    }
+
+    private static Map<Integer, List<LayoutLink>> freezeLayerLinks(Map<Integer, List<LayoutLink>> source) {
+        if (source.isEmpty()) {
+            return Map.of();
+        }
+        ArrayList<Integer> layers = new ArrayList<>(source.keySet());
+        layers.sort(Integer::compareTo);
+        LinkedHashMap<Integer, List<LayoutLink>> out = new LinkedHashMap<>(layers.size());
+        for (Integer layer : layers) {
+            List<LayoutLink> links = source.getOrDefault(layer, List.of());
+            if (links.isEmpty()) {
+                out.put(layer, List.of());
+                continue;
+            }
+            ArrayList<LayoutLink> copy = new ArrayList<>(links);
+            copy.sort(Comparator.comparingInt(link -> link.target.x));
+            out.put(layer, List.copyOf(copy));
+        }
+        return out;
+    }
+
     private int subtreeDepth(LayoutNode n) {
-        if (n.children.isEmpty()) return 0;
-        return 1 + n.children.stream().mapToInt(this::subtreeDepth).max().orElse(0);
+        int max = 0;
+        for (LayoutNode child : n.children) {
+            max = Math.max(max, 1 + subtreeDepth(child));
+        }
+        return max;
     }
 
     private void toggleCollapse(String pathId) {
-        // Find actual collapsed state of the node (may be auto-collapsed)
-        boolean currentlyCollapsed = false;
-        for (LayoutNode ln : flatNodes) {
-            if (ln.pathId.equals(pathId)) { currentlyCollapsed = ln.collapsed; break; }
+        LayoutNode target = fullRootLayout != null ? findInTree(fullRootLayout, pathId) : findLayoutNode(pathId);
+        if (target == null || target.originalChildCount <= 0) {
+            return;
         }
+        boolean currentlyCollapsed = target.collapsed;
         if (currentlyCollapsed) {
             // Expand: remove from manual collapse, add to user-expanded (overrides auto)
             collapsedPaths.remove(pathId);
             userExpandedPaths.add(pathId);
+            target.collapsed = false;
+            target.autoCollapsed = false;
+            ensureChildrenBuilt(target);
         } else {
             // Collapse: add to manual collapse, remove from user-expanded
             collapsedPaths.add(pathId);
             userExpandedPaths.remove(pathId);
+            target.collapsed = true;
+            target.autoCollapsed = false;
         }
-        rebuildTree(false);  // user-initiated: keep collapseLevel, don't re-run width constraint
+        forceExpandAll = false;
+        refreshVisibleLayoutFromFullRoot();
         notifyTreeStructureChanged();
+    }
+
+    private void expandExistingNode(String pathId) {
+        LayoutNode node = fullRootLayout == null ? null : findInTree(fullRootLayout, pathId);
+        if (node == null) {
+            return;
+        }
+        node.collapsed = false;
+        node.autoCollapsed = false;
+        ensureChildrenBuilt(node);
+    }
+
+    private void expandSubtree(LayoutNode node) {
+        if (node == null) {
+            return;
+        }
+        node.collapsed = false;
+        node.autoCollapsed = false;
+        ensureChildrenBuilt(node);
+        for (LayoutNode child : node.children) {
+            expandSubtree(child);
+        }
     }
 
     /** Toggle collapse state of a node by pathId. For dump tests. */
@@ -944,6 +2253,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     /** Reset all user collapse/expand overrides back to auto-collapse defaults. */
     public void resetCollapseState() {
+        forceExpandAll = false;
         collapsedPaths.clear();
         userExpandedPaths.clear();
         rebuildTree();
@@ -951,11 +2261,34 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         resetView();
     }
 
+    /** Expand every currently reachable tree node and disable auto-collapse until the graph resets. */
+    public void expandAllNodes() {
+        forceExpandAll = true;
+        collapsedPaths.clear();
+        userExpandedPaths.clear();
+        currentRootPathId = "root";
+        if (fullRootLayout != null) {
+            expandSubtree(fullRootLayout);
+            rootLayout = fullRootLayout;
+            refreshVisibleLayoutFromFullRoot();
+        } else {
+            rebuildTree(false);
+        }
+        computeMaterialSummary();
+        notifyTreeStructureChanged();
+        resetView();
+    }
+
+    public boolean isForceExpandAll() {
+        return forceExpandAll;
+    }
+
     private void notifyTreeStructureChanged() {
         if (onSubtreeChanged != null) onSubtreeChanged.run();
     }
 
     public void resetView() {
+        pendingAutoFit = true;
         fitContent();
     }
 
@@ -977,6 +2310,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         double contentCenterY = mmWorldMinY + contentH / 2.0;
         panX = contentCenterX - vw / (2.0 * zoom);
         panY = contentCenterY - vh / (2.0 * zoom);
+        pendingAutoFit = false;
     }
 
     public int getLayoutWidth() { return layoutWidth; }
@@ -987,7 +2321,11 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private void computeMaterialSummary() {
         if (graph == null || flatNodes.isEmpty()) {
             materialByCategory = new LinkedHashMap<>();
+            materialFilteredByCategory = new LinkedHashMap<>();
+            materialEntryByName = Map.of();
             materialPanelContentH = 0; totalTimeTicks = 0; totalEU = 0;
+            materialFilteredEntryCount = 0;
+            materialFilterEvaluationCount = 0;
             return;
         }
         Map<String, long[]> amounts = new LinkedHashMap<>();
@@ -996,6 +2334,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         Map<String, List<Integer>> producerSteps = new HashMap<>(), consumerSteps = new HashMap<>();
         Map<String, Double> chanceAccum = new HashMap<>();
         Map<String, Integer> chanceCount = new HashMap<>();
+        Map<String, MaterialEntry> byName = new HashMap<>();
         long totalTime = 0, totalEnergy = 0;
         int stepNum = 0;
         for (LayoutNode ln : flatNodes) {
@@ -1034,13 +2373,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             else if (consumed > 0 && produced == 0) cat = MatCategory.EXTERNAL_INPUT;
             else if (consumed == 0 && produced > 0) cat = MatCategory.BYPRODUCT;
             else cat = MatCategory.INTERMEDIATE;
-            byCategory.get(cat).add(new MaterialEntry(name, slotRef.get(name),
+            MaterialEntry materialEntry = new MaterialEntry(name, slotRef.get(name),
                     consumed, produced, missing, inventory, cat,
                     producerSteps.getOrDefault(name, List.of()),
-                    consumerSteps.getOrDefault(name, List.of()), avgChance));
+                    consumerSteps.getOrDefault(name, List.of()), avgChance);
+            byCategory.get(cat).add(materialEntry);
+            byName.put(name, materialEntry);
         }
         byCategory.values().removeIf(List::isEmpty);
         this.materialByCategory = byCategory;
+        this.materialEntryByName = byName;
         int h = 0;
         for (var entry : byCategory.entrySet()) {
             h += secHdrH + 2;
@@ -1053,28 +2395,139 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     }
 
     private void updateFilteredContentH() {
-        if (matFilterText.isEmpty()) {
-            matFilteredContentH = materialPanelContentH;
-            sanitizeMaterialScroll();
-            return;
-        }
-        String lower = matFilterText.toLowerCase();
+        String lower = normalizeMaterialSearch(matFilterText);
         int h = 0;
-        for (var entry : materialByCategory.entrySet()) {
-            long matchCount = entry.getValue().stream()
-                    .filter(e -> e.name().toLowerCase().contains(lower))
-                    .count();
-            if (matchCount > 0) {
-                h += secHdrH + 2 + (int) (matchCount * (entryH + entryGap)) + 6;
+        int count = 0;
+        int evaluations = 0;
+        Map<MatCategory, List<MaterialEntry>> filteredByCategory = new LinkedHashMap<>();
+        if (lower.isBlank()) {
+            for (var entry : materialByCategory.entrySet()) {
+                List<MaterialEntry> entries = entry.getValue();
+                if (entries.isEmpty()) {
+                    continue;
+                }
+                filteredByCategory.put(entry.getKey(), entries);
+                count += entries.size();
+                h += secHdrH + 2 + entries.size() * (entryH + entryGap) + 6;
+            }
+        } else {
+            for (var entry : materialByCategory.entrySet()) {
+                ArrayList<MaterialEntry> matches = new ArrayList<>();
+                for (MaterialEntry materialEntry : entry.getValue()) {
+                    evaluations++;
+                    if (matchesMaterialFilter(materialEntry, lower)) {
+                        matches.add(materialEntry);
+                    }
+                }
+                if (!matches.isEmpty()) {
+                    List<MaterialEntry> entries = List.copyOf(matches);
+                    filteredByCategory.put(entry.getKey(), entries);
+                    count += entries.size();
+                    h += secHdrH + 2 + entries.size() * (entryH + entryGap) + 6;
+                }
             }
         }
         h += totalsH + 10;
+        materialFilteredByCategory = filteredByCategory;
+        materialFilteredEntryCount = count;
+        materialFilterEvaluationCount = evaluations;
         matFilteredContentH = h;
         sanitizeMaterialScroll();
     }
 
+    private static String normalizeMaterialSearch(String text) {
+        return text == null ? "" : text.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean matchesMaterialFilter(MaterialEntry entry, String filter) {
+        if (filter == null || filter.isBlank()) {
+            return true;
+        }
+        String haystack = (entry.name() + " " + entry.category().label.string() + " " + entry.category().name())
+                .toLowerCase(Locale.ROOT);
+        for (String token : filter.split("\\s+")) {
+            if (token.isBlank()) {
+                continue;
+            }
+            boolean matched = switch (token) {
+                case "missing", "缺少" -> entry.missing() > 0;
+                case "need", "needed", "required", "req", "需求" -> entry.needed() > 0;
+                case "available", "have", "已有", "surplus", "余" -> entry.inventory() > 0 || entry.produced() > 0;
+                case "produced", "produce", "output", "out", "产出" -> entry.produced() > 0;
+                case "input", "in", "输入" -> entry.category() == MatCategory.EXTERNAL_INPUT;
+                case "intermediate", "mid", "中间" -> entry.category() == MatCategory.INTERMEDIATE;
+                case "byproduct", "extra", "副产物" -> entry.category() == MatCategory.BYPRODUCT;
+                case "catalyst", "tool", "催化剂", "工具" -> entry.category() == MatCategory.CATALYST;
+                default -> matchesMaterialNumericToken(entry, token) || haystack.contains(token);
+            };
+            if (!matched) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean matchesMaterialNumericToken(MaterialEntry entry, String token) {
+        String[] operators = {">=", "<=", ">", "<", "="};
+        for (String op : operators) {
+            int idx = token.indexOf(op);
+            if (idx <= 0 || idx + op.length() >= token.length()) {
+                continue;
+            }
+            String field = token.substring(0, idx);
+            Long expected = parseSearchNumber(token.substring(idx + op.length()));
+            if (expected == null) {
+                return false;
+            }
+            Long actual = materialSearchValue(entry, field);
+            return actual != null && compareSearchValue(actual, expected, op);
+        }
+        return false;
+    }
+
+    private static @Nullable Long materialSearchValue(MaterialEntry entry, String field) {
+        return switch (field) {
+            case "missing", "miss", "缺" -> entry.missing();
+            case "need", "needed", "required", "req", "需求" -> entry.needed();
+            case "produced", "produce", "output", "out", "产出" -> entry.produced();
+            case "available", "have", "surplus", "余" -> entry.inventory();
+            default -> null;
+        };
+    }
+
+    private static boolean compareSearchValue(long actual, long expected, String operator) {
+        return switch (operator) {
+            case ">=" -> actual >= expected;
+            case "<=" -> actual <= expected;
+            case ">" -> actual > expected;
+            case "<" -> actual < expected;
+            case "=" -> actual == expected;
+            default -> false;
+        };
+    }
+
+    private static @Nullable Long parseSearchNumber(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String text = raw.trim().toLowerCase(Locale.ROOT);
+        long multiplier = 1;
+        if (text.endsWith("k")) {
+            multiplier = 1_000;
+            text = text.substring(0, text.length() - 1);
+        } else if (text.endsWith("m")) {
+            multiplier = 1_000_000;
+            text = text.substring(0, text.length() - 1);
+        }
+        try {
+            return Math.round(Double.parseDouble(text) * multiplier);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
     private void sanitizeMaterialScroll() {
-        int maxScroll = Math.max(0, matFilteredContentH - panelContentVisibleH());
+        int maxScroll = materialPanelMaxScroll();
         if (Float.isNaN(matScrollY) || Float.isInfinite(matScrollY)) {
             matScrollY = 0;
         }
@@ -1083,6 +2536,31 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         }
         matScrollY = Math.max(0, Math.min(matScrollY, maxScroll));
         matScrollTargetY = Math.max(0, Math.min(matScrollTargetY, maxScroll));
+    }
+
+    private boolean handleMaterialPanelScrollKey(int key) {
+        int maxScroll = materialPanelMaxScroll();
+        if (maxScroll <= 0) {
+            return false;
+        }
+        float next = matScrollTargetY;
+        if (key == GLFW.GLFW_KEY_DOWN) {
+            next += matScrollSpeed;
+        } else if (key == GLFW.GLFW_KEY_UP) {
+            next -= matScrollSpeed;
+        } else if (key == GLFW.GLFW_KEY_PAGE_DOWN) {
+            next += Math.max(matScrollSpeed, panelContentVisibleH() - entryH);
+        } else if (key == GLFW.GLFW_KEY_PAGE_UP) {
+            next -= Math.max(matScrollSpeed, panelContentVisibleH() - entryH);
+        } else if (key == GLFW.GLFW_KEY_HOME) {
+            next = 0;
+        } else if (key == GLFW.GLFW_KEY_END) {
+            next = maxScroll;
+        } else {
+            return false;
+        }
+        matScrollTargetY = Math.max(0, Math.min(next, maxScroll));
+        return true;
     }
 
     // ═══════════════════ Animation ═══════════════════
@@ -1100,6 +2578,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             matScrollY += (matScrollTargetY - matScrollY) * matScrollSmooth;
             if (Math.abs(matScrollTargetY - matScrollY) < 0.5f) matScrollY = matScrollTargetY;
         }
+        animateContentCandidateScroll();
     }
 
     // ═══════════════════ Rendering ═══════════════════
@@ -1108,23 +2587,24 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
         if (graph == null || flatNodes.isEmpty()) {
             canvas.fill(0, 0, width(), height(), bgPanel);
-            canvas.drawCenteredString("无配方数据", width() / 2, height() / 2 - 4, textWeak);
+            canvas.drawCenteredString(CirrusLangs.Calc.Tree.noRecipeData.string(), width() / 2, height() / 2 - 4, textWeak);
             return;
         }
         Font font = Minecraft.getInstance().font;
+        if (pendingAutoFit && width() > 0 && height() > 0) {
+            fitContent();
+        }
         animateSmooth();
-        truncationFrameId++;
-        truncationCache.clear();
-
         updateHover(mouseX, mouseY);
-        updateTooltip(mouseX, mouseY);
         machineCycleTicks++;
+        frameVisualCache.clear();
 
         int vw = viewportW();
         canvas.fill(0, 0, vw, height(), bgPanel);
 
         Pos abs = absolutePos();
         canvas.withClip(abs.x(), abs.y(), vw, height(), () -> {
+            WorldViewport viewport = worldViewport(vw, height());
             drawLayerOverlay(canvas, font);
             canvas.pushTransform();
             canvas.scale(zoom);
@@ -1132,19 +2612,15 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
             drawGrid(canvas);
             drawLayerBands(canvas, font);
-            drawConnections(canvas);
-            for (LayoutNode ln : flatNodes) {
-                double nRight = ln.x + nodeW, nBot = ln.y + nodeH;
-                double visMinX = panX, visMinY = panY;
-                double visMaxX = panX + vw / zoom, visMaxY = panY + height() / zoom;
-                if (nRight < visMinX || ln.x > visMaxX || nBot < visMinY || ln.y > visMaxY) continue;
-                drawNodeCard(canvas, font, ln, partialTicks);
-            }
-            flushDeferredIcons(canvas);
+            collectVisibleTreeBatch(viewport, visibleNodesScratch, visibleLinksScratch);
+            drawConnections(canvas, visibleLinksScratch);
+            renderVisibleTreeBatch(canvas, font, visibleNodesScratch, partialTicks);
             canvas.popTransform();
         });
 
         drawMinimap(canvas, mouseX, mouseY);
+        drawContentCandidatePanel(canvas, font, mouseX, mouseY, partialTicks);
+        drawMachineCandidatePanel(canvas, font, mouseX, mouseY, partialTicks);
         if (showMaterialPanel) drawMaterialPanel(canvas, font, mouseX, mouseY, partialTicks);
     }
 
@@ -1199,7 +2675,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             if (bandBottom < 0 || bandTop > height()) continue;
 
             boolean isHighlighted = (i == highlightedLayer);
-            String layerLabel = "LAYER " + i;
+            String layerLabel = layerLabel(i);
             int scaledLabelW = Math.max(1, (int) Math.round(font.width(layerLabel) * bgScale));
             int bgLabelY = bandTop + Math.max(8, (bandBottom - bandTop) / 2 - 8);
             int bgLabelColor = isHighlighted ? withAlpha(0xFF7F9589, 0x90) : withAlpha(0xFF7A7A7A, 0x58);
@@ -1229,36 +2705,74 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         return trackedNodeId.startsWith(nodeId + "-");
     }
 
-    private void drawConnections(SceneCanvas canvas) {
-        // Sort links so tracked ones draw on top
-        List<LayoutLink> sorted = new ArrayList<>(flatLinks);
-        sorted.sort(Comparator.comparingInt(l -> isNodeInTrackedPath(l.target.pathId) ? 1 : 0));
+    private WorldViewport worldViewport(int viewportWidth, int viewportHeight) {
+        double safeZoom = Math.max(minZoom, zoom);
+        int w = Math.max(0, viewportWidth);
+        int h = Math.max(0, viewportHeight);
+        return new WorldViewport(panX, panY, panX + w / safeZoom, panY + h / safeZoom);
+    }
 
-        for (LayoutLink link : sorted) {
-            int startX = link.source.x + nodeW / 2;
-            int startY = link.source.y + nodeH;
-            int endX = link.target.x + nodeW / 2;
-            int endY = link.target.y;
-            int midY = (startY + endY) / 2;
-
-            boolean tracked = isNodeInTrackedPath(link.target.pathId);
-            boolean isCatalyst = link.target.processNode != null
-                    && link.target.processNode.inputs().stream().anyMatch(MaterialSlot::isCatalyst);
-
-            int color = tracked ? linkTracked : (isCatalyst ? linkCatalyst : linkDefault);
-            int thickness = tracked ? 3 : 2;
-
-            // Manhattan routing: down, horizontal, down
-            // Vertical segment from source bottom to midY
-            canvas.fill(startX - thickness / 2, startY, thickness, midY - startY, color);
-            // Horizontal segment at midY
-            int hx1 = Math.min(startX, endX) - thickness / 2;
-            int hx2 = Math.max(startX, endX) + thickness / 2;
-            canvas.fill(hx1, midY - thickness / 2, hx2 - hx1, thickness, color);
-            // Vertical segment from midY to target top
-            canvas.fill(endX - thickness / 2, midY, thickness, endY - midY, color);
-
+    private void collectVisibleTreeBatch(WorldViewport viewport, List<LayoutNode> nodes, List<LayoutLink> links) {
+        nodes.clear();
+        links.clear();
+        int firstLayer = viewport.firstLayer();
+        int lastLayer = viewport.lastLayer(maxDepth);
+        for (int layer = firstLayer; layer <= lastLayer; layer++) {
+            for (LayoutNode node : layerNodes.getOrDefault(layer, List.of())) {
+                if (viewport.intersectsNode(node)) {
+                    nodes.add(node);
+                }
+            }
+            for (LayoutLink link : layerLinks.getOrDefault(layer, List.of())) {
+                if (viewport.intersectsConnection(link)) {
+                    links.add(link);
+                }
+            }
         }
+    }
+
+    private String layerLabel(int layer) {
+        if (layer >= 0 && layer < layerLabelCache.length) {
+            String label = layerLabelCache[layer];
+            if (label == null) {
+                label = "LAYER " + layer;
+                layerLabelCache[layer] = label;
+            }
+            return label;
+        }
+        return "LAYER " + layer;
+    }
+
+    private void drawConnections(SceneCanvas canvas, List<LayoutLink> visibleLinks) {
+        for (LayoutLink link : visibleLinks) {
+            if (!isNodeInTrackedPath(link.target.pathId)) {
+                drawConnection(canvas, link, false);
+            }
+        }
+        for (LayoutLink link : visibleLinks) {
+            if (isNodeInTrackedPath(link.target.pathId)) {
+                drawConnection(canvas, link, true);
+            }
+        }
+    }
+
+    private void drawConnection(SceneCanvas canvas, LayoutLink link, boolean tracked) {
+        int startX = link.source.x + nodeW / 2;
+        int startY = link.source.y + nodeH;
+        int endX = link.target.x + nodeW / 2;
+        int endY = link.target.y;
+        int midY = (startY + endY) / 2;
+
+        boolean isCatalyst = link.target.processNode != null && hasCatalystInput(link.target.processNode);
+
+        int color = tracked ? linkTracked : (isCatalyst ? linkCatalyst : linkDefault);
+        int thickness = tracked ? 3 : 2;
+
+        canvas.fill(startX - thickness / 2, startY, thickness, midY - startY, color);
+        int hx1 = Math.min(startX, endX) - thickness / 2;
+        int hx2 = Math.max(startX, endX) + thickness / 2;
+        canvas.fill(hx1, midY - thickness / 2, hx2 - hx1, thickness, color);
+        canvas.fill(endX - thickness / 2, midY, thickness, endY - midY, color);
     }
 
     private int nodeAccent(LayoutNode ln) {
@@ -1266,7 +2780,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (ln.depth == 0) return dotClrRoot;
         ProcessNode pn = ln.processNode;
         if (pn == null) return dotClr;
-        if (pn.inputs().stream().anyMatch(MaterialSlot::isCatalyst)) return 0xFF95AED4;
+        if (hasCatalystInput(pn)) return 0xFF95AED4;
         if (!pn.outputs().isEmpty()) {
             return switch (pn.outputs().get(0).type()) {
                 case ITEM -> 0xFFA8BAD8;
@@ -1277,6 +2791,15 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             };
         }
         return dotClr;
+    }
+
+    private static boolean hasCatalystInput(ProcessNode node) {
+        for (MaterialSlot input : node.inputs()) {
+            if (input.isCatalyst()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private int minimapNodeColor(LayoutNode ln) {
@@ -1346,43 +2869,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         int contentW = proj.contentW;
         // Keep minimap with a single background layer (no extra chrome frame).
         canvas.texture(Background.inset, contentX, contentY, contentW, contentH);
-
-        double sx = proj.scale;
-        double sy = proj.scale;
-        double ox = proj.drawX;
-        double oy = proj.drawY;
-
-        // Draw connections first (behind nodes), right-angle routing
-        int linkColor = 0xFF6F747B;
-        int linkTracked = 0xFF9BA8B6;
-        for (LayoutLink link : flatLinks) {
-            int lsx = (int) (ox + (link.source.x + nodeW / 2.0 - mmWorldMinX) * sx);
-            int lsy = (int) (oy + (link.source.y + nodeH - mmWorldMinY) * sy);
-            int lex = (int) (ox + (link.target.x + nodeW / 2.0 - mmWorldMinX) * sx);
-            int ley = (int) (oy + (link.target.y - mmWorldMinY) * sy);
-            boolean tracked = isNodeInTrackedPath(link.target.pathId);
-            int c = tracked ? linkTracked : linkColor;
-            int midY = (lsy + ley) / 2;
-            canvas.fill(lsx, lsy, 1, midY - lsy, c);
-            canvas.fill(Math.min(lsx, lex), midY, Math.abs(lex - lsx) + 1, 1, c);
-            canvas.fill(lex, midY, 1, ley - midY, c);
-        }
-
-        // Draw nodes
-        for (LayoutNode ln : flatNodes) {
-            int rx = (int) (ox + (ln.x - mmWorldMinX) * sx);
-            int ry = (int) (oy + (ln.y - mmWorldMinY) * sy);
-            int rw = Math.max(1, (int) Math.round(nodeW * sx));
-            int rh = Math.max(1, (int) Math.round(nodeH * sy));
-            int color = minimapNodeColor(ln);
-            canvas.fill(rx, ry, rw, rh, color);
+        ensureMinimapRuns(canvas);
+        for (int i = 0; i < minimapRunCount; i++) {
+            canvas.fill(contentX + minimapRunX[i], contentY + minimapRunY[i], minimapRunW[i], minimapRunH[i], minimapRunColor[i]);
         }
 
         // Viewport indicator (pan is in world-space, offset by bounding box origin)
-        int rawVpW = Math.max(4, (int) Math.round((viewportW() / zoom) * sx));
-        int rawVpH = Math.max(4, (int) Math.round((height() / zoom) * sy));
-        int rawVpX = (int) Math.round(ox + (panX - mmWorldMinX) * sx);
-        int rawVpY = (int) Math.round(oy + (panY - mmWorldMinY) * sy);
+        int rawVpW = Math.max(4, (int) Math.round((viewportW() / zoom) * proj.scale));
+        int rawVpH = Math.max(4, (int) Math.round((height() / zoom) * proj.scale));
+        int rawVpX = (int) Math.round(proj.drawX + (panX - mmWorldMinX) * proj.scale);
+        int rawVpY = (int) Math.round(proj.drawY + (panY - mmWorldMinY) * proj.scale);
         MinimapViewportRect vp = clampMinimapViewportRect(contentX, contentY, contentW, contentH,
                 rawVpX, rawVpY, rawVpW, rawVpH);
         canvas.fill(vp.x() + 1, vp.y() + 1, Math.max(1, vp.w() - 2), Math.max(1, vp.h() - 2), 0x1AFFFFFF);
@@ -1421,34 +2917,39 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     // ═══════════════════ Node Card ═══════════════════
 
-    private void drawNodeCard(SceneCanvas canvas, Font font, LayoutNode ln, float pt) {
-        int x = ln.x, y = ln.y;
-        ProcessNode pn = ln.processNode;
-        if (pn == null) return;
+    private void renderVisibleTreeBatch(SceneCanvas canvas, Font font, List<LayoutNode> visibleNodes, float pt) {
+        if (visibleNodes.isEmpty()) {
+            return;
+        }
+        RenderSession session = new RenderSession(canvas, pt);
+        try {
+            for (LayoutNode node : visibleNodes) {
+                drawNodeCard(canvas, font, node, session);
+            }
+        } finally {
+            session.finish();
+        }
+    }
 
+    private void drawNodeCard(SceneCanvas canvas, Font font, LayoutNode ln, RenderSession session) {
+        int x = ln.x, y = ln.y;
+        ProcessNode node = ln.processNode;
+        if (node == null) return;
+
+        NodeRenderModel model = renderModel(ln);
         boolean hovered = isNodeHovered(ln.pathId);
         boolean tracked = ln.pathId.equals(trackedNodeId);
         boolean externallySelected = Objects.equals(ln.pathId, externalSelectedNodeId);
-        boolean isCatalystNode = pn.inputs().stream().anyMatch(MaterialSlot::isCatalyst);
-        boolean isLeaf = ln.originalChildCount == 0;
+        boolean recipeNode = model.recipeNode();
         int accent = nodeAccent(ln);
+        boolean extensionVisible = model.extensionVisible();
+        NodeCardLayout layout = recipeNodeCardLayout(x, y, extensionVisible);
 
-        // Very low zoom: simplified rectangle
+        drawNodeShell(canvas, layout, x, y, hovered, accent, recipeNode, extensionVisible);
         if (zoom < detailLodZoom) {
-            canvas.texture(hovered ? Background.Border.light : Background.frame, x, y, nodeW, nodeH);
-            canvas.texture(Background.flat, x + 2, y + 2, nodeW - 4, nodeH - 4);
-            canvas.texture(Background.Sign.bar, x + 2, y + 2, nodeW - 4, 2);
-            canvas.fill(x + 2, y + 3, nodeW - 4, 1, accent);
             return;
         }
 
-        canvas.texture(hovered ? Background.Border.light : Background.frame, x, y, nodeW, nodeH);
-        canvas.texture(Background.flat, x + 2, y + 2, nodeW - 4, nodeH - 4);
-        if (isCatalystNode) {
-            canvas.texture(Sign.Group.catalyst, x + 5, y + 5, 3, nodeH - 10);
-        }
-
-        // Tracked ring + glow
         if (tracked) {
             drawOutline(canvas, x - 1, y - 1, nodeW + 2, nodeH + 2, trackedRing);
         }
@@ -1456,127 +2957,723 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             drawOutline(canvas, x - 2, y - 2, nodeW + 4, nodeH + 4, externalSelectedRing);
         }
 
-        if (isLeaf) {
-            drawLeafCard(canvas, font, ln, x, y, pt);
+        if (recipeNode) {
+            drawStepCard(canvas, font, ln, model, layout, session);
         } else {
-            drawStepCard(canvas, font, ln, x, y, pt);
+            drawLeafCard(canvas, font, ln, model, layout, session);
         }
 
-        // Collapse/expand button at bottom center
         if (ln.originalChildCount > 0) {
-            int btnX = x + nodeW / 2 - 10;
-            int btnY = y + nodeH - 2;
-            canvas.texture(Background.flat, btnX, btnY, 20, 18);
-            canvas.drawCenteredString(ln.collapsed ? "+" : "-", btnX + 10, btnY + 5, cardMetaText);
+            drawCollapseControl(canvas, ln, x, y, accent);
+        }
+    }
 
-            if (ln.collapsed) {
-                String badge = "+ " + ln.originalChildCount + " Inputs";
-                int bw = font.width(badge) + 8;
-                int bx = x + nodeW / 2 - bw / 2;
-                int by = btnY + 22;
-                canvas.drawString(badge, bx + 2, by + 3, cardMetaText, false);
+    private void drawNodeShell(SceneCanvas canvas, NodeCardLayout layout, int x, int y, boolean hovered, int accent,
+                               boolean recipeNode, boolean extensionVisible) {
+        canvas.texture(Background.Outlined.flat, x, y, nodeW, nodeH);
+        if (hovered) {
+            canvas.fill(x + 3, y + 3, nodeW - 6, nodeH - 6, withAlpha(accent, 0x16));
+        }
+        if (recipeNode) {
+            canvas.texture(Background.flat, layout.recipe().x(), layout.recipe().y(), layout.recipe().w(), layout.recipe().h());
+        }
+    }
+
+    private void drawStepCard(SceneCanvas canvas, Font font, LayoutNode ln, NodeRenderModel model,
+                              NodeCardLayout layout, RenderSession session) {
+        ProcessNode node = ln.processNode;
+        if (node == null) return;
+        int slotSize = recipePreviewSlotSize(node.inputs().size(), node.outputs().size(), layout.inputs(), layout.outputs());
+        drawMachineZone(canvas, ln, model, layout.machine(), session);
+        drawInputZone(canvas, font, node.inputs(), model.inputVisuals(), layout.inputs(), slotSize, session);
+        drawFlowArrow(canvas, layout.arrow());
+        drawOutputZone(canvas, font, node.outputs(), model.outputVisuals(), layout.outputs(), slotSize, session);
+        drawActionZone(canvas, ln, layout);
+        if (layout.extension().h() > 0) {
+            drawExtensionZone(canvas, font, node, model, false, layout.extension(), session);
+        }
+    }
+
+    private void drawLeafCard(SceneCanvas canvas, Font font, LayoutNode ln, NodeRenderModel model,
+                              NodeCardLayout layout, RenderSession session) {
+        ProcessNode node = ln.processNode;
+        if (node == null) return;
+        drawLeafMaterialZone(canvas, font, ln.pathId, node, model, layout.primaryOutput(), layout.candidates(), session);
+        if (layout.extension().h() > 0) {
+            drawExtensionZone(canvas, font, node, model, true, layout.extension(), session);
+        }
+    }
+
+    private void drawMachineZone(SceneCanvas canvas, LayoutNode layoutNode, NodeRenderModel model,
+                                 CardZone zone, RenderSession session) {
+        ProcessNode node = layoutNode.processNode;
+        MachineInfo displayMachine = getDisplayMachine(layoutNode);
+        String machineName = displayMachine == null ? node.machine() : displayMachine.name();
+        boolean drawn = drawMachineIcon(canvas, displayMachine, zone.x(), zone.y(), cardMachineSlot, session);
+        int candidateCount = model.machines().size();
+        int indicatorW = candidateCount > 1 ? 16 : 0;
+        int labelX = drawn ? zone.x() + cardMachineSlot + 5 : zone.x();
+        int labelW = Math.max(0, zone.w() - (labelX - zone.x()) - indicatorW - 2);
+        if (machineName != null && !machineName.isBlank() && labelW > 8) {
+            canvas.drawString(cachedTruncate(machineName, labelW, context().font()), labelX, zone.y() + 6, cardMetaText, false);
+        }
+        if (candidateCount > 1) {
+            drawMachineOptionIndicator(canvas, zone.x() + zone.w() - indicatorW + 2, zone.y() + zone.h() - 5,
+                    candidateCount - 1);
+        }
+    }
+
+    private void drawInputZone(SceneCanvas canvas, Font font, List<MaterialSlot> inputs, List<@Nullable SlotVisual> visuals,
+                               CardZone zone, int slotSize, RenderSession session) {
+        drawSlotGrid(canvas, font, inputs, visuals, zone, slotSize, true, 0xFF88CC88, session);
+    }
+
+    private void drawOutputZone(SceneCanvas canvas, Font font, List<MaterialSlot> outputs, List<@Nullable SlotVisual> visuals,
+                                CardZone zone, int slotSize, RenderSession session) {
+        drawSlotGrid(canvas, font, outputs, visuals, zone, slotSize, true, green, session);
+    }
+
+    private void drawLeafMaterialZone(SceneCanvas canvas, Font font, String pathId, ProcessNode node,
+                                      NodeRenderModel model, CardZone primaryZone, CardZone candidateZone,
+                                      RenderSession session) {
+        MaterialSlot primary = model.primaryOutput();
+        if (primary == null) {
+            return;
+        }
+        if (model.tagLikePrimary()) {
+            drawTagLeafMaterialZone(canvas, font, pathId, primary, model.primaryVisual(), session);
+            return;
+        }
+        int accent = nodeAccentColorForSlot(primary);
+        SlotVisual primaryVisual = model.primaryVisual();
+        int count = primaryVisual == null ? 0 : primaryVisual.count();
+        boolean hasCandidates = count > 1;
+        int slotSize = hasCandidates ? primaryZone.w() : Math.min(32, Math.max(cardMainSlot, primaryZone.w()));
+        int slotX = hasCandidates ? primaryZone.x() : primaryZone.x() + Math.max(0, (primaryZone.w() - slotSize) / 2);
+        int slotY = hasCandidates ? primaryZone.y() : primaryZone.y() + Math.max(0, (primaryZone.h() - slotSize) / 2);
+        drawMaterialSlot(canvas, font, primary, primaryVisual, slotX, slotY, slotSize, session, true,
+                selectedContentCandidateByPath.getOrDefault(pathId, -1));
+
+        int textX = hasCandidates ? candidateZone.x() + 5 : primaryZone.x() + primaryZone.w() + 7;
+        int textY = hasCandidates ? candidateZone.y() + 4 : yForCenteredText(candidateZone, 2);
+        int textRight = candidateZone.x() + candidateZone.w() - (hasCandidates ? 24 : 4);
+        int labelW = Math.max(0, textRight - textX);
+        String name = primary.materialName();
+        canvas.drawString(cachedTruncate(name, labelW, font), textX, textY, textPrimary, false);
+
+        String amount = primaryAmountText(primary);
+        if (!amount.isBlank() && !"1".equals(amount)) {
+            canvas.drawString(amount, textX, textY + 10, accent, false);
+        } else if (isTagLikeMaterial(primary)) {
+            canvas.drawString("tag", textX, textY + 10, cardMetaText, false);
+        }
+
+        if (primary.content().isEmpty()) {
+            return;
+        }
+        if (!hasCandidates) {
+            return;
+        }
+        CardZone preview = new CardZone(candidateZone.x() + 42, candidateZone.y() + 12,
+                Math.max(0, candidateZone.w() - 66), Math.max(0, candidateZone.h() - 14));
+        drawCandidatePreviewGrid(canvas, font, primaryVisual, preview, count, session);
+        int[] bounds = new int[] { candidateZone.x() + candidateZone.w() - 19, candidateZone.y() + candidateZone.h() - 18, 16, 16 };
+        drawSmallGlyphButton(canvas, bounds[0], bounds[1], bounds[2], bounds[3],
+                Objects.equals(contentCandidatePanelNodeId, pathId),
+                Icon.Calc.Path.branch, Icon.Calc.Path.branch, 11, 11);
+    }
+
+    private static int yForCenteredText(CardZone zone, int lines) {
+        int textH = Math.max(1, lines) * 10;
+        return zone.y() + Math.max(0, (zone.h() - textH) / 2);
+    }
+
+    private void drawTagLeafMaterialZone(SceneCanvas canvas, Font font, String pathId, MaterialSlot slot,
+                                         @Nullable SlotVisual slotVisual, RenderSession session) {
+        LayoutNode node = findLayoutNode(pathId);
+        if (node == null) {
+            return;
+        }
+        TagLeafCardLayout layout = tagLeafCardLayout(node.x, node.y);
+        CardZone header = layout.header();
+        CardZone candidates = layout.candidates();
+        CardZone action = layout.action();
+        int count = slotVisual == null ? 0 : slotVisual.count();
+        boolean hasCandidates = count > 1;
+        int selectedIndex = selectedVisualIndex(pathId, slotVisual);
+
+        canvas.texture(Background.flat, header.x(), header.y(), header.w(), header.h());
+        int selectedSlotSize = Math.min(20, Math.max(14, header.h() - 4));
+        int selectedSlotX = header.x() + 3;
+        int selectedSlotY = header.y() + Math.max(0, (header.h() - selectedSlotSize) / 2);
+        CirrusSlotGroupRenderer.renderSingle(canvas, selectedSlotX, selectedSlotY, selectedSlotSize);
+        drawMaterialSlotContent(canvas, font, slot, slotVisual, selectedSlotX, selectedSlotY, selectedSlotSize, session, false, selectedIndex);
+
+        if (hasCandidates) {
+            drawSmallGlyphButton(canvas, action.x(), action.y(), action.w(), action.h(),
+                    Objects.equals(contentCandidatePanelNodeId, pathId),
+                    Icon.Small.arrowRight, Icon.Small.arrowRightSelected, 5, 6);
+            drawTagCandidateGrid(canvas, font, slotVisual, candidates, count, session);
+        }
+    }
+
+    private void drawTagCandidateGrid(SceneCanvas canvas, Font font, SlotVisual visual, CardZone zone, int candidateCount,
+                                      RenderSession session) {
+        if (candidateCount <= 0 || zone.w() <= 0 || zone.h() <= 0) {
+            return;
+        }
+        int size = Math.min(tagCandidateCell, Math.max(12, Math.min(zone.w(), zone.h())));
+        int columns = Math.max(1, zone.w() / size);
+        int rows = Math.max(1, zone.h() / size);
+        int maxVisible = Math.max(1, columns * rows);
+        int visible = Math.min(candidateCount, maxVisible);
+        int shownColumns = Math.min(columns, visible);
+        int shownRows = (int) Math.ceil(visible / (double) columns);
+        int totalW = shownColumns * size;
+        int totalH = shownRows * size;
+        int sx = zone.x() + Math.max(0, (zone.w() - totalW) / 2);
+        int sy = zone.y() + Math.max(0, (zone.h() - totalH) / 2);
+        CirrusSlotGroupRenderer.renderRowMajorCells(canvas, sx, sy, size, visible, columns);
+        for (int i = 0; i < visible; i++) {
+            int col = i % columns;
+            int row = i / columns;
+            int cellX = sx + col * size;
+            int cellY = sy + row * size;
+            drawContentSlot(session, visual, i, cellX + 1, cellY + 1, Math.max(1, size - 2));
+        }
+        if (candidateCount > visible) {
+            String overflow = "+" + fmtNum(candidateCount - visible);
+            int textW = font.width(overflow);
+            int textX = zone.x() + zone.w() - textW - 1;
+            int textY = zone.y() + Math.max(0, (zone.h() - 8) / 2);
+            canvas.drawString(overflow, textX, textY, cardMetaText, false);
+        }
+    }
+
+    private int selectedVisualIndex(String pathId, @Nullable SlotVisual visual) {
+        int count = visual == null ? 0 : visual.count();
+        if (count <= 0) {
+            return -1;
+        }
+        return Math.max(0, Math.min(count - 1, selectedContentCandidateByPath.getOrDefault(pathId, 0)));
+    }
+
+    private void drawSlotGrid(SceneCanvas canvas, Font font, List<MaterialSlot> slots, List<@Nullable SlotVisual> visuals, CardZone zone,
+                              int slotSize, boolean amountOverlay, int overflowColor, RenderSession session) {
+        if (slots.isEmpty() || zone.w() <= 0 || zone.h() <= 0 || slotSize <= 0) {
+            return;
+        }
+        SlotGridPlan plan = slotGridPlan(slots.size(), zone.w(), zone.h(), slotSize);
+        int visible = Math.min(slots.size(), plan.columns() * plan.rows());
+        int gridW = plan.columns() * plan.slotSize();
+        int gridH = plan.rows() * plan.slotSize();
+        int sx = zone.x() + Math.max(0, (zone.w() - gridW) / 2);
+        int sy = zone.y() + Math.max(0, (zone.h() - gridH) / 2);
+        CirrusSlotGroupRenderer.renderRowMajorCells(canvas, sx, sy, plan.slotSize(), visible, plan.columns());
+        for (int i = 0; i < visible; i++) {
+            int column = i % plan.columns();
+            int row = i / plan.columns();
+            int slotX = sx + column * plan.slotSize();
+            int slotY = sy + row * plan.slotSize();
+            SlotVisual visual = i < visuals.size() ? visuals.get(i) : null;
+            drawMaterialSlotContent(canvas, font, slots.get(i), visual, slotX, slotY, plan.slotSize(), session, amountOverlay, -1);
+        }
+        if (slots.size() > visible) {
+            int overflowX = Math.min(zone.x() + zone.w() - 1, sx + gridW + 2);
+            int overflowY = sy + Math.max(2, (plan.slotSize() - 7) / 2);
+            drawOverflowCount(canvas, font, overflowX, overflowY, slots.size() - visible, overflowColor);
+        }
+    }
+
+    private void remapSelectedContentCandidatesFromPreferences() {
+        selectedContentCandidateByPath.clear();
+        if (contentVariantPreferences.isEmpty() || flatNodes.isEmpty()) {
+            return;
+        }
+        for (LayoutNode node : flatNodes) {
+            NodeRenderModel model = renderModel(node);
+            MaterialSlot slot = model.selectableSlot();
+            SlotVisual slotVisual = model.selectableVisual();
+            if (slot == null || slotVisual == null || slotVisual.count() <= 1) {
+                continue;
+            }
+            String inputKey = inputKey(slot);
+            String variantKey = inputKey == null ? null : contentVariantPreferences.get(inputKey);
+            if (variantKey == null) {
+                continue;
+            }
+            int index = visualIndexForVariantKey(slot.content(), variantKey);
+            if (index >= 0) {
+                selectedContentCandidateByPath.put(node.pathId, index);
             }
         }
     }
 
-    private void drawLeafCard(SceneCanvas canvas, Font font, LayoutNode ln, int x, int y, float pt) {
-        ProcessNode pn = ln.processNode;
-        int pad = 10;
-        int iconSz = 18;
-        int iconX = x + pad;
-        int iconY = y + 31;
-        canvas.texture(Background.Slot.dark, iconX - 1, iconY - 1, iconSz + 2, iconSz + 2);
-
-        if (!pn.outputs().isEmpty()) {
-            MaterialSlot slot = pn.outputs().get(0);
-            drawSlotIcon(canvas, slot, iconX, iconY, iconSz / 16.0f, pt);
-        }
-
-        int textX = iconX + iconSz + 10;
-        int textW = nodeW - textX + x - pad;
-        canvas.drawString(cachedTruncate(pn.machine(), textW, font), textX, y + 12, cardMetaText, false);
-        canvas.drawString(cachedTruncate(pn.name(), textW, font), textX, y + 25, cardTitleText, false);
-
-        String amtStr = "+" + fmtNum(pn.outputs().isEmpty() ? 0 : pn.outputs().get(0).amount());
-        canvas.drawString(cachedTruncate(amtStr, textW, font), textX, y + 41, green, false);
-        canvas.drawString(cachedTruncate(pn.durationTicks() + "t", textW, font), textX, y + 56, cardMinorText, false);
+    private static @Nullable String inputKey(MaterialSlot slot) {
+        return slot.content() instanceof InputContent input ? RoutingVariantKeys.inputKey(input) : null;
     }
 
-    private void drawStepCard(SceneCanvas canvas, Font font, LayoutNode ln, int x, int y, float pt) {
-        ProcessNode pn = ln.processNode;
-        MachineInfo displayMachine = getDisplayMachine(pn);
-        int accent = nodeAccent(ln);
-        int headerX = x + 5;
-        int headerY = y + 8;
-        int headerW = nodeW - 10;
-        int machineIconX = x + 11;
-        int machineIconY = y + 11;
-        int[] focusBounds = focusButtonBounds(x, y);
-        String machineName = buildMachineLabel(pn, displayMachine);
-        int nameX = machineIconX + 20;
-        int nameMaxW = focusBounds[0] - nameX - 5;
+    private static @Nullable String variantKey(MaterialSlot slot, int visualIndex) {
+        return RoutingVariantKeys.variantKey(slot.content(), visualIndex);
+    }
 
-        canvas.texture(Background.Sign.bar, x + 4, y + 4, nodeW - 8, 3);
-        canvas.fill(x + 4, y + 4, nodeW - 8, 1, accent);
-        canvas.texture(Background.dark, headerX, headerY, headerW, 22);
-        drawMachineIcon(canvas, displayMachine, machineIconX, machineIconY);
-        canvas.drawString(cachedTruncate(machineName, nameMaxW, font), nameX, y + 12, textWhite, true);
-        canvas.drawString(cachedTruncate(pn.name(), nameMaxW, font), nameX, y + 22, 0xFFD9D9D9, true);
-
-        if (ln.originalChildCount > 0) {
-            drawFocusButton(canvas, focusBounds, isNodeHovered(ln.pathId));
+    private static int visualIndexForVariantKey(RecipeContent content, String variantKey) {
+        if (!(content instanceof InputContent input) || !input.isEnumerable()) {
+            return -1;
         }
-
-        int separatorY = headerY + 22 + stepSectionGap / 2;
-        canvas.fill(x + 10, separatorY, nodeW - 20, 1, 0xFF8F959C);
-        canvas.fill(x + 10, separatorY + 1, nodeW - 20, 1, 0x40FFFFFF);
-
-        int bodyY = separatorY + stepSectionGap;
-        int itemIconSz = 18;
-        int itemX = x + 11;
-        int itemY = bodyY + 1;
-        canvas.texture(Background.Slot.dark, itemX - 1, itemY - 1, itemIconSz + 2, itemIconSz + 2);
-        if (!pn.outputs().isEmpty()) {
-            MaterialSlot outSlot = pn.outputs().get(0);
-            drawSlotIcon(canvas, outSlot, itemX, itemY, itemIconSz / 16.0f, pt);
-        }
-
-        int outTextX = itemX + itemIconSz + 10;
-        int outTextW = nodeW - (outTextX - x) - 10;
-        if (!pn.outputs().isEmpty()) {
-            MaterialSlot out = pn.outputs().get(0);
-            canvas.drawString(cachedTruncate(out.materialName(), outTextW, font), outTextX, bodyY + 2, cardTitleText, false);
-            String amountText = "+" + fmtNum(out.amount());
-            if (out.chance() < 1.0) {
-                amountText += "  " + (int) Math.round(out.chance() * 100) + "%";
+        int index = 0;
+        for (var variant : input.enumerate()) {
+            if (Objects.equals(RoutingVariantKeys.variantKey(variant), variantKey)) {
+                return index;
             }
-            canvas.drawString(cachedTruncate(amountText, outTextW, font), outTextX, bodyY + 13, green, false);
+            index++;
         }
+        return -1;
+    }
 
-        List<String> metaLines = buildStepMetaLines(pn);
-        for (int i = 0; i < Math.min(2, metaLines.size()); i++) {
-            canvas.drawString(cachedTruncate(metaLines.get(i), outTextW, font),
-                    outTextX, bodyY + 25 + i * 10, cardMinorText, false);
+    private NodeRenderModel renderModel(LayoutNode node) {
+        if (node == null || node.processNode == null) {
+            return emptyRenderModel();
         }
+        NodeRenderModel model = node.renderModel;
+        if (model != null) {
+            return model;
+        }
+        model = createRenderModel(node, node.processNode);
+        node.renderModel = model;
+        return model;
+    }
+
+    private NodeRenderModel createRenderModel(LayoutNode layoutNode, ProcessNode node) {
+        MaterialSlot primary = primaryOutput(node);
+        SlotVisual primaryVisual = slotVisual(primary);
+        List<@Nullable SlotVisual> inputVisuals = slotVisuals(node.inputs());
+        List<@Nullable SlotVisual> outputVisuals = slotVisuals(node.outputs());
+        MaterialSlot selectable = selectableContentSlotFromVisuals(node, primaryVisual, inputVisuals, outputVisuals);
+        SlotVisual selectableVisual = selectable == primary ? primaryVisual : slotVisual(selectable);
+        boolean recipeNode = isRecipeLayoutNode(layoutNode);
+        boolean tagLikePrimary = isTagLikeMaterial(primary);
+        return new NodeRenderModel(
+                machineCandidates(node),
+                nodeAccentColor(node),
+                dotClr,
+                primary,
+                primaryVisual,
+                selectable,
+                selectableVisual,
+                inputVisuals,
+                outputVisuals,
+                recipeNode,
+                tagLikePrimary,
+                hasExtensionInfo(node, !recipeNode)
+        );
+    }
+
+    private static NodeRenderModel emptyRenderModel() {
+        return new NodeRenderModel(List.of(), cardMetaText, dotClr, null, null, null, null,
+                List.of(), List.of(), false, false, false);
+    }
+
+    private List<@Nullable SlotVisual> slotVisuals(List<MaterialSlot> slots) {
+        if (slots.isEmpty()) {
+            return List.of();
+        }
+        ArrayList<@Nullable SlotVisual> visuals = new ArrayList<>(slots.size());
+        for (MaterialSlot slot : slots) {
+            visuals.add(slotVisual(slot));
+        }
+        return Collections.unmodifiableList(visuals);
+    }
+
+    private @Nullable SlotVisual slotVisual(@Nullable MaterialSlot slot) {
+        if (slot == null || slot.content().isEmpty()) {
+            return null;
+        }
+        RecipeContentVisual visual = visual(slot.content());
+        int count = visual.variantCount();
+        return count <= 0 ? null : new SlotVisual(slot.content(), visual, count);
+    }
+
+    private RecipeContentVisual visual(RecipeContent content) {
+        if (content == null || content.isEmpty()) {
+            return RecipeContentVisual.empty();
+        }
+        RecipeContentVisual visual = frameVisualCache.get(content);
+        if (visual != null) {
+            return visual;
+        }
+        visual = visualCache.visual(content);
+        frameVisualCache.put(content, visual);
+        return visual;
+    }
+
+    private static int recipePreviewSlotSize(int inputCount, int outputCount, CardZone inputZone, CardZone outputZone) {
+        int inputSize = slotGridPlan(Math.max(1, inputCount), inputZone.w(), inputZone.h(), cardMainSlot).slotSize();
+        int outputSize = slotGridPlan(Math.max(1, outputCount), outputZone.w(), outputZone.h(), cardMainSlot).slotSize();
+        return Math.max(cardRecipeMinSlot, Math.min(inputSize, outputSize));
+    }
+
+    private static SlotGridPlan slotGridPlan(int slotCount, int zoneW, int zoneH, int preferredSlotSize) {
+        int count = Math.max(1, slotCount);
+        int maxSlot = Math.max(cardRecipeMinSlot, Math.min(preferredSlotSize, Math.min(zoneW, zoneH)));
+        for (int size = maxSlot; size >= cardRecipeMinSlot; size--) {
+            int columns = Math.max(1, zoneW / size);
+            int rows = Math.max(1, zoneH / size);
+            if (columns * rows >= count) {
+                columns = Math.min(columns, count);
+                rows = Math.max(1, (int) Math.ceil(count / (double) columns));
+                return new SlotGridPlan(size, columns, rows);
+            }
+        }
+        int fallbackColumns = Math.max(1, zoneW / cardRecipeMinSlot);
+        int fallbackRows = Math.max(1, zoneH / cardRecipeMinSlot);
+        return new SlotGridPlan(cardRecipeMinSlot, fallbackColumns, fallbackRows);
+    }
+
+    private static String stripTagPrefix(String text) {
+        return text != null && text.startsWith("#") ? text.substring(1) : text;
+    }
+
+    private static String stripLeadingTagBreaks(String text) {
+        int index = 0;
+        while (index < text.length()) {
+            char c = text.charAt(index);
+            if (Character.isWhitespace(c) || c == '/' || c == '_') {
+                index++;
+                continue;
+            }
+            break;
+        }
+        return text.substring(index);
+    }
+
+    private static int fittingPrefixLength(String text, int maxPxW, Font font) {
+        if (text.isEmpty() || maxPxW <= 0) {
+            return 0;
+        }
+        int codePoints = text.codePointCount(0, text.length());
+        int low = 0;
+        int high = codePoints;
+        while (low < high) {
+            int mid = (low + high + 1) >>> 1;
+            int end = text.offsetByCodePoints(0, mid);
+            if (font.width(text.substring(0, end)) <= maxPxW) {
+                low = mid;
+            } else {
+                high = mid - 1;
+            }
+        }
+        return text.offsetByCodePoints(0, Math.max(0, low));
+    }
+
+    private static int preferredTagBreak(String text, int maxExclusive) {
+        int limit = Math.max(1, Math.min(maxExclusive, text.length()));
+        int best = -1;
+        for (int i = 1; i < limit; i++) {
+            char c = text.charAt(i);
+            if (c == ':' || c == '/' || c == '_' || c == '.') {
+                best = i + 1;
+            }
+        }
+        return best >= Math.max(4, limit / 2) ? best : limit;
+    }
+
+    private int nodeCardX(String pathId) {
+        LayoutNode node = findLayoutNode(pathId);
+        return node == null ? 0 : node.x;
+    }
+
+    private int nodeCardY(String pathId) {
+        LayoutNode node = findLayoutNode(pathId);
+        return node == null ? 0 : node.y;
+    }
+
+    private void drawCandidatePreviewGrid(SceneCanvas canvas, Font font, SlotVisual visual, CardZone zone, int candidateCount,
+                                          RenderSession session) {
+        if (candidateCount <= 0 || zone.w() <= 0 || zone.h() <= 0) {
+            return;
+        }
+        int size = candidateCount <= 5 ? 14 : 12;
+        int gap = 0;
+        int columns = Math.max(1, zone.w() / size);
+        int rows = Math.max(1, zone.h() / size);
+        int visible = Math.min(candidateCount, Math.max(1, columns * rows));
+        int shownColumns = Math.min(columns, visible);
+        int shownRows = (int) Math.ceil(visible / (double) columns);
+        int totalW = shownColumns * size + Math.max(0, shownColumns - 1) * gap;
+        int totalH = shownRows * size + Math.max(0, shownRows - 1) * gap;
+        int sx = zone.x() + Math.max(0, (zone.w() - totalW) / 2);
+        int sy = zone.y() + Math.max(0, (zone.h() - totalH) / 2);
+        CirrusSlotGroupRenderer.renderRowMajorCells(canvas, sx, sy, size, visible, columns);
+        for (int i = 0; i < visible; i++) {
+            int col = i % columns;
+            int row = i / columns;
+            int cellX = sx + col * (size + gap);
+            int cellY = sy + row * (size + gap);
+            drawContentSlot(session, visual, i, cellX + 1, cellY + 1, Math.max(1, size - 2));
+        }
+        if (candidateCount > visible) {
+            drawOverflowCount(canvas, font, sx + totalW + 2, sy + Math.max(2, (size - 7) / 2), candidateCount - visible, cardMetaText);
+        }
+    }
+
+    private void drawFlowArrow(SceneCanvas canvas, CardZone zone) {
+        canvas.texture(Icon.arrowRight, zone.x(), zone.y(), zone.w(), zone.h());
+    }
+
+    private void drawActionZone(SceneCanvas canvas, LayoutNode ln, NodeCardLayout layout) {
+        ProcessNode node = ln.processNode;
+        if (node == null) return;
+        int[] projection = projectionButtonBounds(ln.x, ln.y);
+        if (node.recipe() != null) {
+            drawActionButton(canvas, projection, Objects.equals(hoveredProjectionNodeId, ln.pathId),
+                    Icon.setting, Icon.settingSelected, 10, 10);
+        }
+        if (ln.originalChildCount > 0) {
+            drawFocusButton(canvas, focusButtonBounds(ln.x, ln.y), isNodeHovered(ln.pathId));
+        }
+    }
+
+    private void drawActionButton(SceneCanvas canvas, int[] bounds, boolean hovered,
+                                  SizedTexture icon, @Nullable SizedTexture hoveredIcon,
+                                  int iconW, int iconH) {
+        CirrusControlChrome.renderButtonBackground(canvas, bounds[0], bounds[1], bounds[2], bounds[3], false, hovered, true);
+        SizedTexture drawIcon = hovered && hoveredIcon != null ? hoveredIcon : icon;
+        canvas.texture(drawIcon, bounds[0] + (bounds[2] - iconW) / 2,
+                bounds[1] + Math.max(0, (bounds[3] - iconH) / 2 - 1), iconW, iconH);
+    }
+
+    private void drawExtensionZone(SceneCanvas canvas, Font font, ProcessNode node, NodeRenderModel model,
+                                   boolean leaf, CardZone zone, RenderSession session) {
+        int x = zone.x();
+        int right = zone.x() + zone.w();
+        MaterialSlot primary = primaryOutput(node);
+        if (leaf) {
+            if (primary != null && (primary.amount() > 1 || primary.chance() < 1.0)) {
+                drawMetricPill(canvas, font, x, zone.y(), right, null, primaryAmountText(primary), nodeAccentColor(node));
+            }
+            return;
+        }
+        if (node.durationTicks() > 0) {
+            x = drawMetricPill(canvas, font, x, zone.y(), right, Icon.Sign.Energy.time, node.durationFormatted(), cardMetaText);
+        }
+        if (node.euPerTick() > 0) {
+            x = drawMetricPill(canvas, font, x, zone.y(), right, Icon.Sign.Energy.eu, energyCostText(node), cardMetaText);
+        }
+        int machineCount = model.machines().size();
+        if (machineCount > 1) {
+            drawMachineOptionIndicator(canvas, Math.min(x + 2, right - 14), zone.y() + 5, machineCount - 1);
+        }
+    }
+
+    private int drawMetricPill(SceneCanvas canvas, Font font, int x, int y, int right,
+                               @Nullable ImageTexture icon, String text, int color) {
+        if (text == null || text.isBlank() || x >= right - 8) {
+            return x;
+        }
+        int iconW = icon == null ? 0 : 10;
+        int maxW = Math.max(12, right - x);
+        int w = Math.max(12, Math.min(maxW, iconW + font.width(text) + 6));
+        if (icon != null && w >= iconW + 4) {
+            canvas.texture(icon, x + 1, y + 2, 9, 9);
+        }
+        int textX = x + (icon == null ? 2 : 11);
+        canvas.drawString(cachedTruncate(text, Math.max(0, w - (textX - x) - 2), font), textX, y + 2, color, false);
+        canvas.fill(x + 1, y + 11, Math.max(1, w - 2), 1, withAlpha(color, 0x4F));
+        return x + w + 4;
+    }
+
+    private void drawMachineOptionIndicator(SceneCanvas canvas, int x, int y, int count) {
+        if (count <= 0) {
+            return;
+        }
+        int visible = Math.min(3, count);
+        for (int i = 0; i < visible; i++) {
+            canvas.fill(x + i * 4, y, 2, 2, withAlpha(cardMetaText, 0xA0));
+        }
+        if (count > visible) {
+            canvas.fill(x + visible * 4, y, 4, 2, withAlpha(cardMetaText, 0xA0));
+        }
+    }
+
+    private static String energyCostText(ProcessNode node) {
+        long total = (long) node.euPerTick() * Math.max(0, node.durationTicks());
+        if (total > 0) {
+            return fmtNum(total) + " EU";
+        }
+        return node.euFormatted();
+    }
+
+    private void drawMoreDots(SceneCanvas canvas, int x, int y, int count, int color) {
+        int dots = Math.max(1, Math.min(3, count));
+        for (int i = 0; i < dots; i++) {
+            canvas.fill(x + i * 3, y, 2, 2, withAlpha(color, 0xA0));
+        }
+    }
+
+    private void drawOverflowCount(SceneCanvas canvas, Font font, int x, int y, int count, int color) {
+        if (count <= 0) {
+            return;
+        }
+        String text = "+" + fmtNum(count);
+        canvas.drawString(text, x, y, color, false);
+    }
+
+    private void drawCollapseControl(SceneCanvas canvas, LayoutNode ln, int x, int y, int accent) {
+        int btnX = x + nodeW / 2 - collapseBtnW / 2;
+        int btnY = y + nodeH - 1;
+        boolean hovered = isCollapseButtonHovered(ln.pathId);
+        CirrusControlChrome.renderButtonBackground(canvas, btnX, btnY, collapseBtnW, collapseBtnH, false, hovered, true);
+        ImageTexture glyph = ln.collapsed
+                ? hovered ? Icon.Small.plusSelected : Icon.Small.plus
+                : hovered ? Icon.Small.minusSelected : Icon.Small.minus;
+        canvas.texture(glyph, btnX + (collapseBtnW - 5) / 2, btnY + (collapseBtnH - 6) / 2, 5, 6);
+    }
+
+    private static @Nullable MaterialSlot primaryOutput(ProcessNode node) {
+        return node.outputs().isEmpty() ? null : node.outputs().getFirst();
+    }
+
+    private static boolean isSelectableContentSlot(@Nullable MaterialSlot slot, @Nullable SlotVisual visual) {
+        if (slot == null || slot.content().isEmpty()) {
+            return false;
+        }
+        return visual == null ? true : visual.count() > 1;
+    }
+
+    private static @Nullable MaterialSlot selectableContentSlotFromVisuals(
+            ProcessNode node,
+            @Nullable SlotVisual primaryVisual,
+            List<@Nullable SlotVisual> inputVisuals,
+            List<@Nullable SlotVisual> outputVisuals
+    ) {
+        MaterialSlot primary = primaryOutput(node);
+        if (isSelectableContentSlot(primary, primaryVisual)) {
+            return primary;
+        }
+        for (int i = 0; i < node.inputs().size(); i++) {
+            SlotVisual visual = i < inputVisuals.size() ? inputVisuals.get(i) : null;
+            if (isSelectableContentSlot(node.inputs().get(i), visual)) {
+                return node.inputs().get(i);
+            }
+        }
+        for (int i = 0; i < node.outputs().size(); i++) {
+            SlotVisual visual = i < outputVisuals.size() ? outputVisuals.get(i) : null;
+            if (isSelectableContentSlot(node.outputs().get(i), visual)) {
+                return node.outputs().get(i);
+            }
+        }
+        return null;
+    }
+
+    private static String primaryName(ProcessNode node) {
+        MaterialSlot primary = primaryOutput(node);
+        return primary == null ? node.name() : primary.materialName();
+    }
+
+    private static boolean isTagLikeMaterial(MaterialSlot slot) {
+        return slot != null && slot.materialName() != null && slot.materialName().startsWith("#");
+    }
+
+    private static boolean hasExtensionInfo(ProcessNode node, boolean leaf) {
+        MaterialSlot primary = primaryOutput(node);
+        if (leaf) {
+            return primary != null && !isTagLikeMaterial(primary) && (primary.amount() > 1 || primary.chance() < 1.0);
+        }
+        return node.durationTicks() > 0 || node.euPerTick() > 0;
+    }
+
+    private static String primaryAmountText(@Nullable MaterialSlot slot) {
+        if (slot == null) {
+            return "0";
+        }
+        String text = fmtNum(slot.amount());
+        if (slot.chance() < 1.0) {
+            text += " " + Math.round(slot.chance() * 100) + "%";
+        }
+        return text;
     }
 
     static int[] focusButtonBounds(int nodeX, int nodeY) {
-        return new int[] { nodeX + nodeW - focusBtnW - 6, nodeY + 6, focusBtnW, focusBtnH };
+        return new int[] { nodeX + nodeW - focusBtnW - 5, nodeY + 5, focusBtnW, focusBtnH };
+    }
+
+    static int[] projectionButtonBounds(int nodeX, int nodeY) {
+        int[] focus = focusButtonBounds(nodeX, nodeY);
+        return new int[] { focus[0] - focusBtnW - 3, nodeY + 5, focusBtnW, focusBtnH };
+    }
+
+    static int[] machineSlotBounds(int nodeX, int nodeY) {
+        CardZone zone = recipeNodeCardLayout(nodeX, nodeY).machine();
+        return new int[] { zone.x(), zone.y(), zone.w(), zone.h() };
+    }
+
+    static int[] contentCandidateButtonBounds(int nodeX, int nodeY) {
+        CardZone zone = recipeNodeCardLayout(nodeX, nodeY).candidates();
+        return new int[] { zone.x() + zone.w() - 19, zone.y() + zone.h() - 18, 16, 16 };
+    }
+
+    private static int[] contentCandidateButtonBounds(LayoutNode node) {
+        MaterialSlot slot = node == null || node.processNode == null ? null : primaryOutput(node.processNode);
+        if (isTagLikeMaterial(slot)) {
+            CardZone zone = tagLeafCardLayout(node.x, node.y).action();
+            return new int[] { zone.x(), zone.y(), zone.w(), zone.h() };
+        }
+        return contentCandidateButtonBounds(node.x, node.y);
+    }
+
+    private static NodeCardLayout recipeNodeCardLayout(int x, int y) {
+        return recipeNodeCardLayout(x, y, true);
+    }
+
+    private static TagLeafCardLayout tagLeafCardLayout(int x, int y) {
+        return new TagLeafCardLayout(
+                new CardZone(x + 8, y + 8, nodeW - 16, 30),
+                new CardZone(x + 10, y + 40, nodeW - 20, 30),
+                new CardZone(x + nodeW - 30, y + 10, 18, 18)
+        );
+    }
+
+    private static NodeCardLayout recipeNodeCardLayout(int x, int y, boolean hasExtension) {
+        int focusX = x + nodeW - focusBtnW - 5;
+        int contextX = focusX - focusBtnW - 3;
+        int recipeTop = y + 29;
+        int recipeBottom = hasExtension ? y + 61 : y + nodeH - 8;
+        int recipeH = Math.max(24, recipeBottom - recipeTop);
+        int slotH = hasExtension ? 22 : 24;
+        int slotY = recipeTop + Math.max(0, (recipeH - slotH) / 2);
+        int arrowY = recipeTop + Math.max(0, (recipeH - 10) / 2);
+        int extensionY = hasExtension ? y + 64 : y + nodeH - 5;
+        return new NodeCardLayout(
+                new CardZone(x + 6, y + 5, nodeW - 12, 20),
+                new CardZone(x + 8, y + 6, Math.max(40, contextX - x - 12), cardMachineSlot),
+                new CardZone(contextX, y + 5, nodeW - (contextX - x) - 5, focusBtnH),
+                new CardZone(x + 8, recipeTop, nodeW - 16, recipeH),
+                new CardZone(x + 10, slotY, 74, slotH),
+                new CardZone(x + 89, arrowY, 10, 10),
+                new CardZone(x + 105, slotY, 72, slotH),
+                new CardZone(x + 12, y + 31, 30, 30),
+                new CardZone(x + 48, y + 27, nodeW - 60, 37),
+                new CardZone(x + 8, extensionY, nodeW - 16, hasExtension ? cardExtensionH : 0),
+                27,
+                hasExtension ? 61 : -1,
+                3
+        );
     }
 
     static List<String> buildStepMetaLines(ProcessNode node) {
         List<String> lines = new ArrayList<>(2);
-        lines.add(node.tierName() + " · " + node.durationFormatted());
-
-        List<String> detail = new ArrayList<>(3);
-        if (node.euPerTick() > 0) {
-            detail.add(node.euFormatted());
+        if (node.durationTicks() > 0) {
+            lines.add(CirrusLangs.Calc.Tree.durationLine.string(node.durationFormatted()));
         }
-        if (node.machineOptions().size() > 1) {
-            detail.add("+" + (node.machineOptions().size() - 1) + " alt");
+
+        List<String> detail = new ArrayList<>(2);
+        int machineCount = machineCandidatesStatic(node).size();
+        if (machineCount > 1) {
+            detail.add(CirrusLangs.Calc.Tree.machineCount.string(machineCount));
         }
         if (node.outputs().size() > 1) {
-            detail.add(node.outputs().size() + " outputs");
+            detail.add(CirrusLangs.Calc.Tree.outputCount.string(node.outputs().size()));
         }
         if (!detail.isEmpty()) {
             lines.add(String.join(" · ", detail));
@@ -1589,74 +3686,906 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
                 && wy >= bounds[1] && wy <= bounds[1] + bounds[3];
     }
 
-    private static String buildMachineLabel(ProcessNode node, @Nullable MachineInfo displayMachine) {
-        String machineName = displayMachine != null ? displayMachine.name() : node.machine();
-        if (node.machineOptions().size() > 1) {
-            machineName += " +" + (node.machineOptions().size() - 1);
-        }
-        return machineName;
-    }
-
     private void drawFocusButton(SceneCanvas canvas, int[] bounds, boolean hovered) {
-        var bg = hovered ? Background.Outlined.inset : Background.flat;
-        canvas.texture(bg, bounds[0], bounds[1], bounds[2], bounds[3]);
-        canvas.texture(Icon.Calc.Path.branch, bounds[0] + 3, bounds[1] + 3, 12, 12);
+        drawActionButton(canvas, bounds, hovered, Icon.Calc.Path.tree, null, 12, 12);
     }
 
     // ═══════════════════ Slot Icons ═══════════════════
 
-    private void drawSlotIcon(SceneCanvas canvas, MaterialSlot slot, int ix, int iy, float scale, float pt) {
+    private void drawSlotIcon(SceneCanvas canvas, MaterialSlot slot, int ix, int iy, float scale,
+                              RenderSession session) {
+        SlotVisual visual = slotVisual(slot);
+        if (visual != null && visual.count() > 0) {
+            drawContentSlot(session, visual, currentVisualIndex(visual), ix, iy, Math.round(16 * scale));
+            return;
+        }
         ItemStack stack = slot.itemStack();
         if (stack != null && !stack.isEmpty()) {
-            deferredItems.add(new DeferredItem(stack, ix, iy, scale));
+            submitItemStack(stack, ix, iy, scale, session);
         } else if (slot.fluidStack() != null && !slot.fluidStack().isEmpty()) {
-            deferredFluids.add(new DeferredFluid(slot.fluidStack(), ix, iy, scale, pt));
+            submitFluidStack(slot.fluidStack(), ix, iy, scale, session);
         } else {
             int sz = (int)(16 * scale);
-            canvas.texture(Background.Slot.dark, ix, iy, sz, sz);
+            if (sz > 0) {
+                canvas.texture(Sign.Group.item, ix + Math.max(0, (sz - 10) / 2), iy + Math.max(0, (sz - 10) / 2), Math.min(10, sz), Math.min(10, sz));
+            }
         }
     }
 
-    private void drawMachineIcon(SceneCanvas canvas, @Nullable MachineInfo machine, int ix, int iy) {
-        canvas.texture(Background.Slot.dark, ix - 1, iy - 1, 18, 18);
-        ItemStack stack = machine == null ? ItemStack.EMPTY : machine.icon();
-        if (stack != null && !stack.isEmpty()) {
-            deferredItems.add(new DeferredItem(stack, ix + 1, iy + 1, 0.875f));
+    private void drawMaterialSlot(SceneCanvas canvas, Font font, @Nullable MaterialSlot slot, int x, int y, int size, RenderSession session, boolean amountOverlay) {
+        drawMaterialSlot(canvas, font, slot, slotVisual(slot), x, y, size, session, amountOverlay, -1);
+    }
+
+    private void drawMaterialSlot(SceneCanvas canvas, Font font, @Nullable MaterialSlot slot, int x, int y, int size,
+                                  RenderSession session, boolean amountOverlay, int visualIndexOverride) {
+        drawMaterialSlot(canvas, font, slot, slotVisual(slot), x, y, size, session, amountOverlay, visualIndexOverride);
+    }
+
+    private void drawMaterialSlot(SceneCanvas canvas, Font font, @Nullable MaterialSlot slot, @Nullable SlotVisual visual,
+                                  int x, int y, int size, RenderSession session, boolean amountOverlay, int visualIndexOverride) {
+        CirrusSlotGroupRenderer.renderSingle(canvas, x, y, size);
+        drawMaterialSlotContent(canvas, font, slot, visual, x, y, size, session, amountOverlay, visualIndexOverride);
+    }
+
+    private void drawMaterialSlotContent(SceneCanvas canvas, Font font, @Nullable MaterialSlot slot, int x, int y, int size,
+                                         RenderSession session, boolean amountOverlay, int visualIndexOverride) {
+        drawMaterialSlotContent(canvas, font, slot, slotVisual(slot), x, y, size, session, amountOverlay, visualIndexOverride);
+    }
+
+    private void drawMaterialSlotContent(SceneCanvas canvas, Font font, @Nullable MaterialSlot slot, @Nullable SlotVisual visual,
+                                         int x, int y, int size, RenderSession session, boolean amountOverlay, int visualIndexOverride) {
+        if (slot == null) {
+            canvas.texture(Sign.Group.item, x + Math.max(2, (size - 10) / 2), y + Math.max(2, (size - 10) / 2), 10, 10);
+            return;
+        }
+        int contentSize = Math.max(1, size - 2);
+        if (visual != null && visual.count() > 0) {
+            int count = visual.count();
+            int visualIndex = visualIndexOverride >= 0 ? Math.min(visualIndexOverride, count - 1) : currentVisualIndex(visual);
+            drawContentSlot(session, visual, visualIndex, x + 1, y + 1, contentSize);
+        } else {
+            drawSlotIcon(canvas, slot, x + 1, y + 1, contentSize / 16.0f, session);
+        }
+        if (amountOverlay && slot.amount() > 1) {
+            String amount = fmtNum(slot.amount());
+            int textW = font.width(amount);
+            session.addAmountOverlay(amount, x + size - textW - 1, y + size - 7);
+        }
+        if (slot.isCatalyst() && size >= 14) {
+            session.addCatalystOverlay(x + 1, y + 1);
         }
     }
 
-    private void flushDeferredIcons(SceneCanvas canvas) {
-        if (deferredItems.isEmpty() && deferredFluids.isEmpty()) return;
-        canvas.renderLayered(g -> {
-            Lighting.setupFor3DItems();
-            for (DeferredItem item : deferredItems) {
-                g.pose().pushPose();
-                g.pose().translate(item.x, item.y, 0);
-                g.pose().scale(item.scale, item.scale, 1);
-                g.pose().last().normal().identity();
-                g.renderItem(item.stack, 0, 0);
-                g.pose().popPose();
+    private void drawContentSlot(RenderSession session, RecipeContent content, int visualIndex, int x, int y, int size) {
+        if (content == null || content.isEmpty()) {
+            return;
+        }
+        drawContentSlot(session, visual(content), visualIndex, x, y, size);
+    }
+
+    private void drawContentSlot(RenderSession session, SlotVisual visual, int visualIndex, int x, int y, int size) {
+        drawContentSlot(session, visual == null ? null : visual.visual(), visualIndex, x, y, size);
+    }
+
+    private void drawContentSlot(RenderSession session, RecipeContentVisual visual, int visualIndex, int x, int y, int size) {
+        if (visual == null || visual.isEmpty() || size <= 0) {
+            return;
+        }
+        session.addContent(visual, visualIndex, x, y, size);
+    }
+
+    private static int currentVisualIndex(SlotVisual visual) {
+        return visual == null ? 0 : currentVisualIndex(visual.visual());
+    }
+
+    private static int currentVisualIndex(RecipeContentVisual visual) {
+        return visual == null || visual.variantCount() <= 1 ? 0 : visual.currentVisualIndex();
+    }
+
+    private boolean drawMachineIcon(SceneCanvas canvas, @Nullable MachineInfo machine, int x, int y, int size,
+                                    RenderSession session) {
+        ItemStack icon = machine == null ? ItemStack.EMPTY : machine.icon();
+        if (icon != null && !icon.isEmpty()) {
+            CirrusSlotGroupRenderer.renderSingle(canvas, x, y, size);
+            float scale = Math.max(0.5f, Math.min(1.25f, (size - 4) / 16.0f));
+            submitItemStack(icon, x + 2, y + 2, scale, session);
+            return true;
+        }
+        return false;
+    }
+
+    private void drawContentCandidatePanel(SceneCanvas canvas, Font font, int mouseX, int mouseY, float pt) {
+        int[] bounds = contentCandidatePanelBounds();
+        MaterialSlot slot = contentCandidatePanelSlot();
+        if (bounds == null || slot == null || slot.content().isEmpty()) {
+            return;
+        }
+        SlotVisual visual = slotVisual(slot);
+        int count = visual == null ? 0 : visual.count();
+        if (count <= 1) {
+            return;
+        }
+        int x = bounds[0], y = bounds[1], w = bounds[2], h = bounds[3];
+        float scale = contentCandidatePanelScale();
+        canvas.shadow(x, y + 1, w, h, 2, 2, 6, 0x42000000);
+
+        canvas.pushTransform();
+        canvas.translate(x, y);
+        canvas.scale(scale);
+        canvas.texture(Background.Outlined.flat, 0, 0, contentCandidatePanelW, Math.round(h / scale));
+        drawSmallGlyphButton(canvas, contentCandidatePanelW - 19, 4, 14, 14,
+                isInContentCandidatePanelClose(mouseX, mouseY), Icon.Small.minus, Icon.Small.minusSelected, 5, 6);
+
+        int columns = contentCandidatePanelColumns(count);
+        int totalRows = contentCandidatePanelRows(count);
+        int visibleRows = contentCandidatePanelVisibleRows(count, h, scale);
+        int maxScrollRow = Math.max(0, totalRows - visibleRows);
+        if (contentCandidateScrollRow() > maxScrollRow) {
+            setContentCandidateScrollRow(maxScrollRow);
+        }
+        float displayScrollRow = contentCandidateDisplayScrollRow(maxScrollRow);
+        int firstRow = Math.max(0, Math.min(maxScrollRow, (int) Math.floor(displayScrollRow)));
+        float rowOffset = (displayScrollRow - firstRow) * (contentCandidateCell + contentCandidateCellGap);
+        int renderRows = Math.min(totalRows - firstRow, visibleRows + (rowOffset > 0.01f ? 1 : 0));
+        int visible = Math.max(0, Math.min(count - firstRow * columns, renderRows * columns));
+        int gridX = contentCandidateGridX;
+        int gridY = contentCandidateGridY;
+        int gridH = visibleRows * contentCandidateCell + Math.max(0, visibleRows - 1) * contentCandidateCellGap;
+        int gridW = columns * contentCandidateCell + Math.max(0, columns - 1) * contentCandidateCellGap;
+        int selectedIndex = selectedContentCandidateIndex();
+        double localMouseX = (mouseX - x) / (double) scale;
+        double localMouseY = (mouseY - y) / (double) scale;
+        if (visible > 0) {
+            Pos abs = absolutePos();
+            canvas.withClip(abs.x() + x + Math.round(gridX * scale), abs.y() + y + Math.round(gridY * scale),
+                    Math.round(gridW * scale), Math.round(gridH * scale), () -> {
+                RenderSession session = new RenderSession(canvas, pt);
+                try {
+                    renderContentCandidatePanelCells(
+                            canvas,
+                            slot,
+                            columns,
+                            visible,
+                            firstRow,
+                            rowOffset,
+                            selectedIndex,
+                            localMouseX,
+                            localMouseY,
+                            session
+                    );
+                } finally {
+                    session.finish();
+                }
+            });
+        }
+        if (contentCandidateNeedsScrollbar(count, h, scale)) {
+            drawCandidateScrollbar(canvas, contentCandidatePanelW - candidateScrollbarW - 4,
+                    gridY, candidateScrollbarW, visibleRows * contentCandidateCell,
+                    displayScrollRow, maxScrollRow, visibleRows, totalRows);
+        }
+        canvas.popTransform();
+    }
+
+    private void renderContentCandidatePanelCells(
+            SceneCanvas canvas,
+            MaterialSlot slot,
+            int columns,
+            int visible,
+            int firstRow,
+            float rowOffset,
+            int selectedIndex,
+            double localMouseX,
+            double localMouseY,
+            RenderSession session
+    ) {
+        SlotVisual slotVisual = slotVisual(slot);
+        if (slotVisual == null) {
+            return;
+        }
+        for (int i = 0; i < visible; i++) {
+            int visualIndex = firstRow * columns + i;
+            int col = i % columns;
+            int row = i / columns;
+            int cellLocalX = contentCandidateGridX + col * (contentCandidateCell + contentCandidateCellGap);
+            int cellLocalY = contentCandidateGridY + row * (contentCandidateCell + contentCandidateCellGap);
+            double displayedCellY = cellLocalY - rowOffset;
+            int cellX = cellLocalX;
+            int cellY = (int) Math.round(displayedCellY);
+            int cellSize = contentCandidateCell;
+            CirrusSlotGroupRenderer.renderSingle(canvas, cellX, cellY, cellSize);
+            boolean hovered = localMouseX >= cellLocalX && localMouseX <= cellLocalX + contentCandidateCell
+                    && localMouseY >= displayedCellY && localMouseY <= displayedCellY + contentCandidateCell;
+            if (visualIndex != selectedIndex && hovered) {
+                canvas.fill(cellX + 1, cellY + 1, Math.max(1, cellSize - 2), Math.max(1, cellSize - 2),
+                        withAlpha(slot.type().color, 0x24));
             }
-            for (DeferredFluid fluid : deferredFluids) {
-                g.pose().pushPose();
-                g.pose().translate(fluid.x, fluid.y, 0);
-                g.pose().scale(fluid.scale, fluid.scale, 1);
-                g.pose().last().normal().identity();
-                FluidStackRenderer.instance.renderBase(g, fluid.fluid, 16, 16, fluid.pt);
-                g.pose().popPose();
+            int contentInset = 2;
+            drawContentSlot(session, slotVisual, visualIndex,
+                    cellX + contentInset,
+                    cellY + contentInset,
+                    Math.max(1, cellSize - contentInset * 2));
+            if (visualIndex == selectedIndex) {
+                session.addSelectionOverlay(cellX, cellY, cellSize, slot.type().color);
             }
-        });
-        deferredItems.clear();
-        deferredFluids.clear();
+        }
+    }
+
+    private static int panelSize(double value, float scale) {
+        return Math.round((float) value * scale);
+    }
+
+    private @Nullable MaterialSlot contentCandidatePanelSlot() {
+        LayoutNode node = contentCandidatePanelNodeId == null ? null : findLayoutNode(contentCandidatePanelNodeId);
+        return contentCandidatePanelSlot(node);
+    }
+
+    private @Nullable MaterialSlot contentCandidatePanelSlot(@Nullable LayoutNode node) {
+        if (node == null || node.processNode == null) {
+            return null;
+        }
+        NodeRenderModel model = renderModel(node);
+        MaterialSlot slot = model.selectableSlot();
+        SlotVisual visual = model.selectableVisual();
+        if (slot == null || visual == null || visual.count() <= 1) {
+            return null;
+        }
+        return slot;
+    }
+
+    private @Nullable int[] contentCandidatePanelBounds() {
+        LayoutNode node = contentCandidatePanelNodeId == null ? null : findLayoutNode(contentCandidatePanelNodeId);
+        MaterialSlot slot = contentCandidatePanelSlot(node);
+        if (node == null || node.processNode == null || slot == null) {
+            return null;
+        }
+        float scale = contentCandidatePanelScale();
+        SlotVisual visual = slotVisual(slot);
+        int count = visual == null ? 0 : visual.count();
+        int w = scaled(contentCandidatePanelW, scale);
+        int h = scaled(contentCandidatePanelBaseHeight(count), scale);
+        int maxH = Math.max(4, height() - 8);
+        if (h > maxH) {
+            h = maxH;
+        }
+        int vw = viewportW();
+        int anchorRight = worldToScreenX(node.x + nodeW + 6);
+        int anchorLeft = worldToScreenX(node.x - 6) - w;
+        int x = anchorRight + w <= vw - 4 ? anchorRight : anchorLeft;
+        x = Math.max(4, Math.min(x, Math.max(4, vw - w - 4)));
+        int y = worldToScreenY(node.y + 18);
+        y = Math.max(4, Math.min(y, Math.max(4, height() - h - 4)));
+        return new int[]{x, y, w, h};
+    }
+
+    private boolean isInContentCandidatePanel(double mx, double my) {
+        int[] b = contentCandidatePanelBounds();
+        return b != null && mx >= b[0] && mx <= b[0] + b[2] && my >= b[1] && my <= b[1] + b[3];
+    }
+
+    private boolean isInContentCandidatePanelClose(double mx, double my) {
+        int[] b = contentCandidatePanelBounds();
+        if (b == null) {
+            return false;
+        }
+        float scale = contentCandidatePanelScale();
+        double lx = (mx - b[0]) / scale;
+        double ly = (my - b[1]) / scale;
+        return lx >= contentCandidatePanelW - 19 && lx <= contentCandidatePanelW - 5
+                && ly >= 4 && ly <= 18;
+    }
+
+    private int contentCandidateIndexAt(double mx, double my) {
+        int[] b = contentCandidatePanelBounds();
+        MaterialSlot slot = contentCandidatePanelSlot();
+        if (b == null || slot == null || slot.content().isEmpty()) {
+            return -1;
+        }
+        SlotVisual visual = slotVisual(slot);
+        int count = visual == null ? 0 : visual.count();
+        if (count <= 0) {
+            return -1;
+        }
+        float scale = contentCandidatePanelScale();
+        double lx = (mx - b[0]) / scale;
+        double ly = (my - b[1]) / scale;
+        int columns = contentCandidatePanelColumns(count);
+        int gridX = contentCandidateGridX;
+        int gridY = contentCandidateGridY;
+        int visibleRows = contentCandidatePanelVisibleRows(count, b[3], scale);
+        int cellStep = contentCandidateCell + contentCandidateCellGap;
+        int gridW = columns * contentCandidateCell + Math.max(0, columns - 1) * contentCandidateCellGap;
+        int gridH = visibleRows * contentCandidateCell + Math.max(0, visibleRows - 1) * contentCandidateCellGap;
+        if (lx < gridX || lx >= gridX + gridW || ly < gridY || ly >= gridY + gridH) {
+            return -1;
+        }
+        int maxScrollRow = Math.max(0, contentCandidatePanelRows(count) - visibleRows);
+        float displayScrollRow = contentCandidateDisplayScrollRow(maxScrollRow);
+        int firstRow = Math.max(0, Math.min(maxScrollRow, (int) Math.floor(displayScrollRow)));
+        float rowOffset = (displayScrollRow - firstRow) * cellStep;
+        int col = (int) ((lx - gridX) / cellStep);
+        int row = (int) ((ly - gridY + rowOffset) / cellStep);
+        if (col < 0 || col >= columns || row < 0) {
+            return -1;
+        }
+        if ((lx - gridX - col * cellStep) >= contentCandidateCell
+                || (ly - gridY + rowOffset - row * cellStep) >= contentCandidateCell) {
+            return -1;
+        }
+        int index = (firstRow + row) * columns + col;
+        return index >= 0 && index < count ? index : -1;
+    }
+
+    private boolean selectContentCandidate(String pathId, int index) {
+        LayoutNode node = findLayoutNode(pathId);
+        NodeRenderModel model = node == null || node.processNode == null ? null : renderModel(node);
+        MaterialSlot slot = model == null ? null : model.selectableSlot();
+        SlotVisual visual = model == null ? null : model.selectableVisual();
+        if (slot == null || visual == null) {
+            return false;
+        }
+        int count = visual.count();
+        if (index < 0 || index >= count) {
+            return false;
+        }
+        int previous = selectedContentCandidateByPath.getOrDefault(pathId, 0);
+        selectedContentCandidateByPath.put(pathId, index);
+        boolean changed = previous != index;
+        String inputKey = changed ? inputKey(slot) : null;
+        String variantKey = inputKey == null ? null : variantKey(slot, index);
+        if (changed && inputKey != null && variantKey != null) {
+            contentVariantPreferences = withPreference(contentVariantPreferences, inputKey, variantKey);
+            onContentCandidateSelected.accept(new ContentCandidateSelection(pathId, inputKey, variantKey, index));
+        }
+        CirrusUiSound.playClickSound();
+        return true;
+    }
+
+    private static Map<String, String> withPreference(Map<String, String> preferences, String inputKey, String variantKey) {
+        LinkedHashMap<String, String> next = new LinkedHashMap<>(preferences);
+        next.put(inputKey, variantKey);
+        return Map.copyOf(next);
+    }
+
+    private int selectedContentCandidateIndex() {
+        if (contentCandidatePanelNodeId == null) {
+            return 0;
+        }
+        MaterialSlot slot = contentCandidatePanelSlot();
+        SlotVisual visual = slot == null ? null : slotVisual(slot);
+        int count = visual == null ? 0 : visual.count();
+        int selected = selectedContentCandidateByPath.getOrDefault(contentCandidatePanelNodeId, 0);
+        return count <= 0 ? 0 : Math.max(0, Math.min(selected, count - 1));
+    }
+
+    private int contentCandidateScrollRow() {
+        if (contentCandidatePanelNodeId == null) {
+            return 0;
+        }
+        return Math.max(0, contentCandidateScrollRowsByPath.getOrDefault(contentCandidatePanelNodeId, 0));
+    }
+
+    private void setContentCandidateScrollRow(int row) {
+        if (contentCandidatePanelNodeId != null) {
+            contentCandidateScrollRowsByPath.put(contentCandidatePanelNodeId, Math.max(0, row));
+        }
+    }
+
+    private float contentCandidateDisplayScrollRow(int maxScrollRow) {
+        if (contentCandidatePanelNodeId == null) {
+            return 0.0f;
+        }
+        float row = contentCandidateDisplayScrollRowsByPath.getOrDefault(
+                contentCandidatePanelNodeId,
+                (float) contentCandidateScrollRow()
+        );
+        row = Math.max(0.0f, Math.min(maxScrollRow, row));
+        contentCandidateDisplayScrollRowsByPath.put(contentCandidatePanelNodeId, row);
+        return row;
+    }
+
+    private void openContentCandidatePanel(String pathId) {
+        contentCandidatePanelNodeId = pathId;
+        int row = contentCandidateScrollRowsByPath.getOrDefault(pathId, 0);
+        contentCandidateDisplayScrollRowsByPath.put(pathId, (float) row);
+    }
+
+    private void animateContentCandidateScroll() {
+        if (contentCandidatePanelNodeId == null) {
+            return;
+        }
+        MaterialSlot slot = contentCandidatePanelSlot();
+        if (slot == null || slot.content().isEmpty()) {
+            return;
+        }
+        SlotVisual visual = slotVisual(slot);
+        int count = visual == null ? 0 : visual.count();
+        if (count <= 0) {
+            return;
+        }
+        int[] bounds = contentCandidatePanelBounds();
+        float scale = contentCandidatePanelScale();
+        int visibleRows = contentCandidatePanelVisibleRows(count, bounds == null ? 0 : bounds[3], scale);
+        int maxScrollRow = Math.max(0, contentCandidatePanelRows(count) - visibleRows);
+        int target = Math.max(0, Math.min(maxScrollRow, contentCandidateScrollRow()));
+        contentCandidateScrollRowsByPath.put(contentCandidatePanelNodeId, target);
+        float current = contentCandidateDisplayScrollRowsByPath.getOrDefault(contentCandidatePanelNodeId, (float) target);
+        current = Math.max(0.0f, Math.min(maxScrollRow, current));
+        if (Math.abs(target - current) > 0.01f) {
+            current += (target - current) * contentCandidateScrollSmooth;
+            if (Math.abs(target - current) < 0.01f) {
+                current = target;
+            }
+        } else {
+            current = target;
+        }
+        contentCandidateDisplayScrollRowsByPath.put(contentCandidatePanelNodeId, current);
+    }
+
+    private boolean scrollContentCandidatePanel(double scrollY) {
+        MaterialSlot slot = contentCandidatePanelSlot();
+        if (slot == null || slot.content().isEmpty()) {
+            return false;
+        }
+        SlotVisual visual = slotVisual(slot);
+        int count = visual == null ? 0 : visual.count();
+        if (count <= 0) {
+            return false;
+        }
+        int[] bounds = contentCandidatePanelBounds();
+        float scale = contentCandidatePanelScale();
+        int visibleRows = contentCandidatePanelVisibleRows(count, bounds == null ? 0 : bounds[3], scale);
+        int maxScrollRow = Math.max(0, contentCandidatePanelRows(count) - visibleRows);
+        if (maxScrollRow <= 0) {
+            return false;
+        }
+        int current = contentCandidateScrollRow();
+        int next = current + Math.round(contentCandidateWheelState.wheelDelta(0, scrollY).y());
+        next = Math.max(0, Math.min(maxScrollRow, next));
+        if (next == current) {
+            return true;
+        }
+        setContentCandidateScrollRow(next);
+        return true;
+    }
+
+    private int contentCandidatePanelBaseHeight(int count) {
+        int rows = contentCandidatePanelRows(count);
+        return contentCandidatePanelHeaderH + 8
+                + rows * contentCandidateCell
+                + Math.max(0, rows - 1) * contentCandidateCellGap
+                + 5;
+    }
+
+    private static int contentCandidatePanelColumns(int count) {
+        if (count <= 0) {
+            return 1;
+        }
+        int available = contentCandidatePanelW - 12 - candidateScrollbarW - 4;
+        int maxColumns = Math.max(1, (available + contentCandidateCellGap) / (contentCandidateCell + contentCandidateCellGap));
+        return Math.max(1, Math.min(maxColumns, Math.min(7, count)));
+    }
+
+    private static int contentCandidatePanelMaxRenderableCells(int panelHeight, float scale) {
+        return contentCandidatePanelColumns(Integer.MAX_VALUE)
+                * Math.max(1, contentCandidatePanelVisibleRows(Integer.MAX_VALUE, panelHeight, scale) + 1);
+    }
+
+    private static int contentCandidatePanelRows(int count) {
+        int columns = contentCandidatePanelColumns(count);
+        return Math.max(1, (int) Math.ceil(Math.max(1, count) / (double) columns));
+    }
+
+    private static int contentCandidatePanelVisibleRows(int count, int panelHeight, float scale) {
+        int rows = contentCandidatePanelRows(count);
+        int contentHeight = Math.max(0, panelHeight - panelSize(contentCandidatePanelHeaderH + 8 + 5, scale));
+        double localContentHeight = contentHeight / Math.max(0.0001d, scale);
+        int rowsThatFit = Math.max(1, (int) Math.floor(
+                (localContentHeight + contentCandidateCellGap + 0.001d)
+                        / (contentCandidateCell + contentCandidateCellGap)
+        ));
+        return Math.max(1, Math.min(rows, rowsThatFit));
+    }
+
+    private static boolean contentCandidateNeedsScrollbar(int count, int panelHeight, float scale) {
+        return contentCandidatePanelRows(count) > contentCandidatePanelVisibleRows(count, panelHeight, scale);
+    }
+
+    private void drawCandidateScrollbar(
+        SceneCanvas canvas,
+        int x,
+        int y,
+        int width,
+        int height,
+        float scrollRow,
+        int maxScrollRow,
+        int visibleRows,
+        int totalRows
+    ) {
+        if (maxScrollRow <= 0 || totalRows <= 0 || height <= 0) {
+            return;
+        }
+        canvas.texture(Background.scroll, x, y, width, height);
+        int thumbH = Math.max(10, Math.round(height * (visibleRows / (float) totalRows)));
+        int travel = Math.max(0, height - thumbH);
+        int thumbY = y + Math.round(travel * (scrollRow / Math.max(1.0f, (float) maxScrollRow)));
+        canvas.texture(Icon.scrollBarVertical, x + 1, thumbY, Math.max(1, width - 2), thumbH);
+    }
+
+    private float contentCandidatePanelScale() {
+        LayoutNode node = contentCandidatePanelNodeId == null ? null : findLayoutNode(contentCandidatePanelNodeId);
+        MaterialSlot slot = contentCandidatePanelSlot(node);
+        SlotVisual visual = slot == null ? null : slotVisual(slot);
+        int count = visual == null ? 1 : visual.count();
+        return contentCandidatePanelScale(count, node);
+    }
+
+    private float contentCandidatePanelScale(int count, @Nullable LayoutNode anchorNode) {
+        float requested = machineCandidatePanelScale(zoom);
+        int maxPanelHeight = Math.max(4, height() - 8);
+        while (requested > 0.15f
+                && anchorNode != null
+                && contentCandidatePanelMaxRenderableCells(maxPanelHeight, requested) < Math.min(count, contentCandidatePanelMaxCells)
+                && !contentCandidatePanelCanFitSide(anchorNode, requested)) {
+            requested *= 0.9f;
+        }
+        return fitPanelScaleToViewportWidth(requested, contentCandidatePanelW);
+    }
+
+    private boolean contentCandidatePanelCanFitSide(LayoutNode node, float scale) {
+        int w = scaled(contentCandidatePanelW, scale);
+        int vw = viewportW();
+        int anchorRight = worldToScreenX(node.x + nodeW + 6);
+        int anchorLeft = worldToScreenX(node.x - 6) - w;
+        return anchorRight + w <= vw - 4 || anchorLeft >= 4;
+    }
+
+    private void drawMachineCandidatePanel(SceneCanvas canvas, Font font, int mouseX, int mouseY, float pt) {
+        int[] bounds = machineCandidatePanelBounds();
+        if (bounds == null) {
+            return;
+        }
+        LayoutNode layoutNode = findLayoutNode(machineCandidatePanelNodeId);
+        if (layoutNode == null || layoutNode.processNode == null) {
+            return;
+        }
+        ProcessNode node = layoutNode.processNode;
+        int x = bounds[0], y = bounds[1], w = bounds[2], h = bounds[3];
+        float scale = machineCandidatePanelScale(node);
+        List<MachineInfo> machines = renderModel(layoutNode).machines();
+        double localMouseX = (mouseX - x) / (double) scale;
+        double localMouseY = (mouseY - y) / (double) scale;
+
+        canvas.shadow(x, y + 1, w, h, 2, 2, 6, 0x42000000);
+        canvas.pushTransform();
+        canvas.translate(x, y);
+        canvas.scale(scale);
+        int baseH = machineCandidatePanelBaseHeight(machines.size());
+        canvas.texture(Background.Outlined.flat, 0, 0, machineCandidatePanelW, baseH);
+        canvas.drawString(String.valueOf(machines.size()), 8, 8, textSecondary, false);
+        drawSmallGlyphButton(canvas, machineCandidatePanelW - 19, 4, 14, 14,
+                isInMachineCandidatePanelClose(mouseX, mouseY), Icon.Small.minus, Icon.Small.minusSelected, 5, 6);
+        RenderSession session = new RenderSession(canvas, pt);
+
+        int gridX = 6;
+        int gridY = machineCandidatePanelHeaderH + 3;
+        int columns = machineCandidatePanelColumns(machines.size());
+        int visible = Math.min(machines.size(), machineCandidatePanelMaxCells());
+        if (visible > 0) {
+            CirrusSlotGroupRenderer.renderRowMajorCells(canvas, gridX, gridY, machineCandidateCell,
+                    visible, columns, nodeAccentColor(node));
+        }
+        String selectedName = selectedMachineName(layoutNode);
+        for (int i = 0; i < visible; i++) {
+            int col = i % columns;
+            int row = i / columns;
+            drawMachineCandidateCell(canvas, node, machines.get(i), selectedName,
+                    gridX + col * machineCandidateCell, gridY + row * machineCandidateCell,
+                    localMouseX, localMouseY, session);
+        }
+        if (machines.size() > visible) {
+            drawMoreDots(canvas, machineCandidatePanelW - 18, baseH - 9, Math.min(3, machines.size() - visible), cardMetaText);
+        }
+        session.finish();
+        canvas.popTransform();
+    }
+
+    private void drawMachineCandidateCell(SceneCanvas canvas, ProcessNode node, MachineInfo machine,
+                                          String selectedName, int x, int y,
+                                          double localMouseX, double localMouseY, RenderSession session) {
+        boolean hovered = localMouseX >= x && localMouseX <= x + machineCandidateCell
+                && localMouseY >= y && localMouseY <= y + machineCandidateCell;
+        boolean current = Objects.equals(machine.name(), selectedName);
+        if (current || hovered) {
+            session.addMachineCandidateOverlay(x, y, nodeAccentColor(node), current, hovered);
+        }
+        ItemStack icon = machine.icon();
+        if (icon != null && !icon.isEmpty()) {
+            float itemScale = Math.max(0.5f, Math.min(1.25f, (machineCandidateCell - 4) / 16.0f));
+            submitItemStack(icon, x + 2, y + 2, itemScale, session);
+        }
+    }
+
+    private @Nullable int[] machineCandidatePanelBounds() {
+        if (machineCandidatePanelNodeId == null) {
+            return null;
+        }
+        LayoutNode node = findLayoutNode(machineCandidatePanelNodeId);
+        if (node == null || node.processNode == null) {
+            return null;
+        }
+        float scale = machineCandidatePanelScale(node.processNode);
+        int w = scaled(machineCandidatePanelW, scale);
+        int h = scaled(machineCandidatePanelBaseHeight(renderModel(node).machines().size()), scale);
+        int vw = viewportW();
+        int anchorRight = worldToScreenX(node.x + nodeW + 6);
+        int anchorLeft = worldToScreenX(node.x - 6) - w;
+        int x = anchorRight + w <= vw - 4 ? anchorRight : anchorLeft;
+        x = Math.max(4, Math.min(x, Math.max(4, vw - w - 4)));
+        int y = worldToScreenY(node.y + 2);
+        y = Math.max(4, Math.min(y, Math.max(4, height() - h - 4)));
+        return new int[]{x, y, w, h};
+    }
+
+    private boolean isInMachineCandidatePanel(double mx, double my) {
+        int[] b = machineCandidatePanelBounds();
+        return b != null && mx >= b[0] && mx <= b[0] + b[2] && my >= b[1] && my <= b[1] + b[3];
+    }
+
+    private boolean isInMachineCandidatePanelClose(double mx, double my) {
+        int[] b = machineCandidatePanelBounds();
+        if (b == null) {
+            return false;
+        }
+        float scale = machineCandidatePanelScale();
+        double lx = (mx - b[0]) / scale;
+        double ly = (my - b[1]) / scale;
+        return lx >= machineCandidatePanelW - 19 && lx <= machineCandidatePanelW - 5
+                && ly >= 4 && ly <= 18;
+    }
+
+    private int machineCandidateIndexAt(double mx, double my) {
+        int[] b = machineCandidatePanelBounds();
+        LayoutNode layoutNode = machineCandidatePanelNodeId == null ? null : findLayoutNode(machineCandidatePanelNodeId);
+        if (b == null || layoutNode == null || layoutNode.processNode == null) {
+            return -1;
+        }
+        float scale = machineCandidatePanelScale();
+        double lx = (mx - b[0]) / scale;
+        double ly = (my - b[1]) / scale;
+        List<MachineInfo> candidates = renderModel(layoutNode).machines();
+        int columns = machineCandidatePanelColumns(candidates.size());
+        int gridX = 6;
+        int gridY = machineCandidatePanelHeaderH + 3;
+        int visible = Math.min(candidates.size(), machineCandidatePanelMaxCells());
+        int rows = machineCandidatePanelRows(candidates.size());
+        int gridW = columns * machineCandidateCell;
+        int gridH = rows * machineCandidateCell;
+        if (lx < gridX || lx >= gridX + gridW || ly < gridY || ly >= gridY + gridH) {
+            return -1;
+        }
+        int col = (int) ((lx - gridX) / machineCandidateCell);
+        int row = (int) ((ly - gridY) / machineCandidateCell);
+        int index = row * columns + col;
+        return index >= 0 && index < visible ? index : -1;
+    }
+
+    private boolean selectMachineCandidate(String pathId, int index) {
+        LayoutNode layoutNode = findLayoutNode(pathId);
+        if (layoutNode == null || layoutNode.processNode == null) {
+            return false;
+        }
+        List<MachineInfo> candidates = renderModel(layoutNode).machines();
+        if (index < 0 || index >= candidates.size()) {
+            return false;
+        }
+        selectedMachineByPath.put(pathId, candidates.get(index).name());
+        return true;
+    }
+
+    private List<MachineInfo> machineCandidates(ProcessNode node) {
+        if (node == null) {
+            return List.of();
+        }
+        return machineCandidatesByNodeId.computeIfAbsent(node.id(), ignored -> machineCandidatesStatic(node));
+    }
+
+    private static List<MachineInfo> machineCandidatesStatic(ProcessNode node) {
+        if (!node.machineOptions().isEmpty()) {
+            return dedupeMachineCandidates(node.machineOptions(), node.machine());
+        }
+        return node.machine().isBlank() ? List.of() : List.of(new MachineInfo(node.machine()));
+    }
+
+    private static List<MachineInfo> dedupeMachineCandidates(List<MachineInfo> machines, String preferredName) {
+        if (machines.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashMap<String, MachineInfo> deduped = new LinkedHashMap<>();
+        for (MachineInfo machine : machines) {
+            if (machine == null || machine.name() == null || machine.name().isBlank()) {
+                continue;
+            }
+            String key = machineKey(machine);
+            MachineInfo existing = deduped.get(key);
+            if (existing == null || shouldReplaceMachineCandidate(existing, machine, preferredName)) {
+                deduped.put(key, machine);
+            }
+        }
+        return List.copyOf(deduped.values());
+    }
+
+    private static boolean shouldReplaceMachineCandidate(MachineInfo existing, MachineInfo candidate, String preferredName) {
+        boolean candidatePreferred = Objects.equals(candidate.name(), preferredName);
+        boolean existingPreferred = Objects.equals(existing.name(), preferredName);
+        if (candidatePreferred != existingPreferred) {
+            return candidatePreferred;
+        }
+        ItemStack existingIcon = existing.icon();
+        ItemStack candidateIcon = candidate.icon();
+        return (existingIcon == null || existingIcon.isEmpty()) && candidateIcon != null && !candidateIcon.isEmpty();
+    }
+
+    private static String machineKey(MachineInfo machine) {
+        ItemStack icon = machine.icon();
+        if (icon != null && !icon.isEmpty()) {
+            return icon.getItemHolder().unwrapKey()
+                    .map(key -> key.location().toString())
+                    .orElseGet(() -> machine.name().strip().toLowerCase(Locale.ROOT));
+        }
+        return machine.name().strip().toLowerCase(Locale.ROOT);
+    }
+
+    private String selectedMachineName(LayoutNode layoutNode) {
+        ProcessNode node = layoutNode.processNode;
+        String selected = selectedMachineByPath.get(layoutNode.pathId);
+        List<MachineInfo> candidates = renderModel(layoutNode).machines();
+        boolean hasNodeMachine = false;
+        for (MachineInfo machine : candidates) {
+            if (selected != null && Objects.equals(machine.name(), selected)) {
+                return selected;
+            }
+            if (Objects.equals(machine.name(), node.machine())) {
+                hasNodeMachine = true;
+            }
+        }
+        return hasNodeMachine || candidates.isEmpty() ? node.machine() : candidates.getFirst().name();
+    }
+
+    private int machineCandidatePanelBaseHeight(int machineCount) {
+        int rows = machineCandidatePanelRows(machineCount);
+        return machineCandidatePanelHeaderH + 8 + rows * machineCandidateCell
+                + (machineCount > machineCandidatePanelMaxCells() ? 8 : 4);
+    }
+
+    private static int machineCandidatePanelColumns(int count) {
+        if (count <= 0) {
+            return 1;
+        }
+        int available = machineCandidatePanelW - 12;
+        int maxColumns = Math.max(1, available / machineCandidateCell);
+        return Math.max(1, Math.min(maxColumns, count));
+    }
+
+    private static int machineCandidatePanelMaxCells() {
+        return Math.max(1, machineCandidatePanelColumns(Integer.MAX_VALUE) * machineCandidatePanelMaxRows);
+    }
+
+    private static int machineCandidatePanelRows(int count) {
+        int visible = Math.max(1, Math.min(count, machineCandidatePanelMaxCells()));
+        return Math.max(1, (int) Math.ceil(visible / (double) machineCandidatePanelColumns(count)));
+    }
+
+    private float machineCandidatePanelScale() {
+        LayoutNode node = machineCandidatePanelNodeId == null ? null : findLayoutNode(machineCandidatePanelNodeId);
+        return node == null || node.processNode == null
+                ? machineCandidatePanelScale(zoom)
+                : machineCandidatePanelScale(node.processNode);
+    }
+
+    private float machineCandidatePanelScale(ProcessNode node) {
+        return fitPanelScaleToViewport(machineCandidatePanelScale(zoom), machineCandidatePanelW,
+                machineCandidatePanelBaseHeight(machineCandidates(node).size()));
+    }
+
+    private static float machineCandidatePanelScale(float zoom) {
+        if (Float.isNaN(zoom) || Float.isInfinite(zoom)) {
+            return 1.0f;
+        }
+        return Math.max(0.15f, Math.min(3.0f, zoom));
+    }
+
+    private float fitPanelScaleToViewportWidth(float requestedScale, int baseW) {
+        if (baseW <= 0) {
+            return requestedScale;
+        }
+        int availableW = viewportW() - 8;
+        if (availableW > 0) {
+            requestedScale = Math.min(requestedScale, availableW / (float) baseW);
+        }
+        return Math.max(0.15f, requestedScale);
+    }
+
+    private float fitPanelScaleToViewport(float requestedScale, int baseW, int baseH) {
+        requestedScale = fitPanelScaleToViewportWidth(requestedScale, baseW);
+        int availableH = height() - 8;
+        if (baseH > 0 && availableH > 0) {
+            requestedScale = Math.min(requestedScale, availableH / (float) baseH);
+        }
+        return Math.max(0.15f, requestedScale);
+    }
+
+    private int worldToScreenX(double worldX) {
+        return (int) Math.round((worldX - panX) * zoom);
+    }
+
+    private int worldToScreenY(double worldY) {
+        return (int) Math.round((worldY - panY) * zoom);
+    }
+
+    private static int scaled(int value, float scale) {
+        return Math.max(1, Math.round(value * scale));
+    }
+
+    private void drawSmallGlyphButton(SceneCanvas canvas, int x, int y, int w, int h, boolean hovered,
+                                      SizedTexture icon, SizedTexture hoveredIcon, int iconW, int iconH) {
+        CirrusControlChrome.renderButtonBackground(canvas, x, y, w, h, false, hovered, true);
+        SizedTexture drawIcon = hovered ? hoveredIcon : icon;
+        canvas.texture(drawIcon, x + (w - iconW) / 2, y + Math.max(0, (h - iconH) / 2 - 1), iconW, iconH);
+    }
+
+    private void submitItemStack(ItemStack stack, int x, int y, float scale, RenderSession session) {
+        if (stack == null || stack.isEmpty()) {
+            return;
+        }
+        int size = Math.max(1, Math.round(16 * scale));
+        ContentStack<?, ?> contentStack = itemStackVisualCache.computeIfAbsent(stack, ContentStack::fromStack);
+        if (contentStack.notEmpty()) {
+            session.addBaseStack(contentStack, x, y, size);
+            return;
+        }
+        session.deferItem(stack, x, y, scale);
+    }
+
+    private void submitFluidStack(FluidStack fluidStack, int x, int y, float scale, RenderSession session) {
+        if (fluidStack == null || fluidStack.isEmpty()) {
+            return;
+        }
+        int size = Math.max(1, Math.round(16 * scale));
+        ContentStack<?, ?> contentStack = fluidStackVisualCache.computeIfAbsent(fluidStack, ContentStack::fromStack);
+        if (contentStack.notEmpty()) {
+            session.addBaseStack(contentStack, x, y, size);
+            return;
+        }
+        session.deferFluid(fluidStack, x, y, scale, session.pt);
     }
 
     // ═══════════════════ Material Panel ═══════════════════
 
-    private static final int searchBarH = 16;
+    private static final int searchBarH = materialPanelSearchH;
+
+    private int materialPanelContentTop() {
+        return 4 + materialPanelHeaderH + materialPanelSearchH + 3;
+    }
 
     private int panelContentVisibleH() {
-        int contentTop = 26 + (matSearchActive ? searchBarH : 0);
-        return Math.max(0, height() - contentTop - 4);
+        return materialPanelVisibleHeight(height());
+    }
+
+    private int materialPanelVisibleHeight(int viewportHeight) {
+        int contentTop = materialPanelContentTop();
+        return Math.max(0, viewportHeight - contentTop - 4);
+    }
+
+    private int materialPanelMaxScroll() {
+        return materialPanelMaxScroll(panelContentVisibleH());
+    }
+
+    private int materialPanelMaxScroll(int visibleH) {
+        return Math.max(0, matFilteredContentH - Math.max(0, visibleH));
+    }
+
+    private boolean materialPanelNeedsScrollbar(int visibleH) {
+        return materialPanelMaxScroll(visibleH) > 0;
     }
 
     private boolean isInMaterialPanel(double mx, double my) {
@@ -1665,16 +4594,68 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         return mx >= px && mx <= width() && my >= 0 && my <= height();
     }
 
+    private @Nullable MaterialEntry materialEntryAt(double mx, double my) {
+        if (!showMaterialPanel || !isInMaterialPanel(mx, my)) {
+            return null;
+        }
+        int px = width() - panelW;
+        int contentY = materialPanelContentTop();
+        int visibleH = panelContentVisibleH();
+        if (visibleH <= 0 || my < contentY || my > contentY + visibleH) {
+            return null;
+        }
+        boolean hasScrollbar = materialPanelNeedsScrollbar(visibleH);
+        int innerW = panelW - 2 * panelPad - (hasScrollbar ? scrollbarW + 4 : 0);
+        double localX = mx - px - panelPad;
+        double localY = my - contentY + matScrollY;
+        if (localX < 0 || localX > innerW || localY < 0) {
+            return null;
+        }
+        int drawY = 0;
+        for (List<MaterialEntry> entries : materialFilteredByCategory.values()) {
+            if (entries.isEmpty()) {
+                continue;
+            }
+            drawY += secHdrH + 2;
+            for (MaterialEntry entry : entries) {
+                if (localY >= drawY && localY <= drawY + entryH) {
+                    return entry;
+                }
+                drawY += entryH + entryGap;
+            }
+            drawY += 6;
+        }
+        return null;
+    }
+
+    private boolean isInMaterialSearchField(double mx, double my) {
+        if (!showMaterialPanel) return false;
+        int px = width() - panelW;
+        int sfX = px + 8;
+        int sfY = 4 + materialPanelHeaderH + 3;
+        int sfW = panelW - 16;
+        int sfH = materialPanelSearchH - 3;
+        return mx >= sfX && mx <= sfX + sfW && my >= sfY && my <= sfY + sfH;
+    }
+
+    private boolean isInMaterialSearchClear(double mx, double my) {
+        if (!showMaterialPanel || matFilterText.isEmpty()) return false;
+        int px = width() - panelW;
+        int sfY = 4 + materialPanelHeaderH + 3;
+        int clearX = px + panelW - 20;
+        return mx >= clearX && mx <= clearX + 10 && my >= sfY + 2 && my <= sfY + 12;
+    }
+
     private boolean isOnScrollbarThumb(double mx, double my) {
         if (!showMaterialPanel) return false;
-        int maxScroll = Math.max(0, matFilteredContentH - panelContentVisibleH());
+        int maxScroll = materialPanelMaxScroll();
         if (maxScroll <= 0) return false;
         int px = width() - panelW;
-        int contentY = 26 + (matSearchActive ? searchBarH : 0);
+        int contentY = materialPanelContentTop();
         int visibleH = panelContentVisibleH();
         int sbX = px + panelW - scrollbarW - 3;
         int sbH = visibleH - 2;
-        int thumbH = Math.max(16, (int) ((float) visibleH / materialPanelContentH * sbH));
+        int thumbH = Math.max(16, (int) ((float) visibleH / Math.max(1, matFilteredContentH) * sbH));
         float progress = matScrollTargetY / maxScroll;
         int thumbY = contentY + 1 + (int) (progress * (sbH - thumbH));
         return mx >= sbX && mx <= sbX + scrollbarW && my >= thumbY && my <= thumbY + thumbH;
@@ -1689,50 +4670,44 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         canvas.texture(Background.frame, px, 0, panelW, ph);
         canvas.texture(Background.inset, px + 4, 4, panelW - 8, ph - 8);
 
-        int headerH = 20;
+        int headerH = materialPanelHeaderH;
         canvas.texture(Background.Outlined.inset, px + 4, 4, panelW - 8, headerH);
         canvas.texture(Sign.Group.item, px + 6, 6, 3, headerH - 4);
-        canvas.drawString("材料清单", px + 14, 11, textPrimary, false);
-        // Search icon
-        int searchIconX = px + panelW - 28;
-        boolean searchHover = mouseX >= searchIconX && mouseX <= searchIconX + 14
-                && mouseY >= 3 && mouseY <= 17;
-        canvas.texture(matSearchActive || searchHover ? Icon.searchSelected : Icon.search,
-                searchIconX, 9, 10, 10);
+        canvas.drawString(CirrusLangs.Calc.Tree.materialList.string(), px + 14, 11, textPrimary, false);
+
         // Item count badge
-        int totalItems = materialByCategory.values().stream().mapToInt(List::size).sum();
+        int totalItems = filteredMaterialEntryCount();
         String badge = String.valueOf(totalItems);
         int badgeW = font.width(badge) + 6;
-        int badgeX = searchIconX - badgeW - 4;
+        int badgeX = px + panelW - badgeW - 8;
         canvas.texture(Background.Outlined.inset, badgeX, 8, badgeW, 12);
         canvas.drawCenteredString(badge, badgeX + badgeW / 2, 11, textPrimary);
 
-        // Search bar (below header, when active)
-        int searchBarBottom = 4 + headerH;
-        if (matSearchActive) {
-            searchBarBottom = 4 + headerH + searchBarH;
-            canvas.texture(Background.inset, px + 4, 4 + headerH + 2, panelW - 8, searchBarH - 2);
-            // Search text field
-            int sfX = px + 8, sfY = 4 + headerH + 4, sfW = panelW - 16, sfH = searchBarH - 6;
-            canvas.texture(Background.Outlined.inset, sfX, sfY, sfW, sfH);
-            if (matFilterText.isEmpty()) {
-                canvas.drawString("搜索物料...", sfX + 4, sfY + 2, textWeak, false);
-            } else {
-                String displayText = matFilterText;
-                int maxTextW = sfW - 8;
-                while (font.width(displayText) > maxTextW && displayText.length() > 1) {
-                    displayText = displayText.substring(1);
-                }
-                canvas.drawString(displayText, sfX + 4, sfY + 2, textPrimary, false);
-                // Cursor blink
-                if ((System.currentTimeMillis() / 500) % 2 == 0) {
-                    int cursorX = sfX + 4 + font.width(displayText);
-                    canvas.fill(cursorX, sfY + 2, 1, sfH - 4, textPrimary);
-                }
+        int sfX = px + 8;
+        int sfY = 4 + headerH + 3;
+        int sfW = panelW - 16;
+        int sfH = searchBarH - 3;
+        canvas.texture(matSearchActive ? Background.Outlined.inset : Background.flat, sfX, sfY, sfW, sfH);
+        canvas.texture(Icon.search, sfX + 3, sfY + 2, 10, 10);
+        int textX = sfX + 16;
+        int maxTextW = sfW - 28 - (matFilterText.isEmpty() ? 0 : 12);
+        if (matFilterText.isEmpty()) {
+            canvas.drawString(CirrusLangs.Calc.Tree.materialSearchPlaceholder.string(), textX, sfY + 3, textWeak, false);
+        } else {
+            String displayText = matFilterText;
+            while (font.width(displayText) > maxTextW && displayText.length() > 1) {
+                displayText = displayText.substring(1);
+            }
+            canvas.drawString(displayText, textX, sfY + 3, textPrimary, false);
+            int clearX = px + panelW - 20;
+            canvas.texture(Icon.delete, clearX, sfY + 2, 10, 10);
+            if (matSearchActive && (System.currentTimeMillis() / 500) % 2 == 0) {
+                int cursorX = textX + font.width(displayText);
+                canvas.fill(cursorX, sfY + 2, 1, sfH - 4, textPrimary);
             }
         }
 
-        int contentY = searchBarBottom + 2;
+        int contentY = materialPanelContentTop();
         int visibleH = panelContentVisibleH();
         stickyHeaderCat = null;
 
@@ -1740,14 +4715,15 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         canvas.pushClip(absP.x() + px + 4, absP.y() + contentY, panelW - 8, visibleH);
         canvas.pushTransform();
         canvas.translate(px + panelPad, contentY - matScrollY);
-        renderMaterialContent(canvas, font, mouseX - px - panelPad, (int) (mouseY - contentY + matScrollY), pt,
+        RenderSession session = new RenderSession(canvas, pt);
+        renderMaterialContent(canvas, font, mouseX - px - panelPad, (int) (mouseY - contentY + matScrollY), session,
                 matScrollY, matScrollY + visibleH);
-        flushDeferredIcons(canvas);
+        session.finish();
         canvas.popTransform();
         canvas.popClip();
 
         // Draw sticky category header ON TOP of the clipped content, in widget-local coords
-        boolean hasScrollbar = matFilteredContentH > visibleH;
+        boolean hasScrollbar = materialPanelNeedsScrollbar(visibleH);
         int innerW = panelW - 2 * panelPad - (hasScrollbar ? scrollbarW + 4 : 0);
         if (stickyHeaderCat != null) {
             int stickyDrawY = contentY + stickyHeaderOffsetY;
@@ -1756,33 +4732,34 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
                     px + panelPad, stickyDrawY, innerW);
         }
 
-        int maxScroll = Math.max(0, matFilteredContentH - visibleH);
+        int maxScroll = materialPanelMaxScroll(visibleH);
         if (maxScroll > 0) {
             int sbX = px + panelW - scrollbarW - 2;
             int sbY = contentY + 1;
             int sbH = visibleH - 2;
-            canvas.texture(Background.inset, sbX, sbY, scrollbarW, sbH);
-            int thumbH = Math.max(16, (int) ((float) visibleH / matFilteredContentH * sbH));
+            canvas.texture(Background.scroll, sbX, sbY, scrollbarW, sbH);
+            int thumbH = Math.max(16, (int) ((float) visibleH / Math.max(1, matFilteredContentH) * sbH));
             float progress = maxScroll > 0 ? matScrollY / maxScroll : 0;
             int thumbY = sbY + (int) (progress * (sbH - thumbH));
-            canvas.texture(Icon.scrollBar, sbX + 1, thumbY, scrollbarW - 2, thumbH);
+            canvas.texture(Icon.scrollBarVertical, sbX + 1, thumbY, scrollbarW - 2, thumbH);
         }
     }
 
+    private int filteredMaterialEntryCount() {
+        return materialFilteredEntryCount;
+    }
+
     private void renderMaterialContent(SceneCanvas canvas, Font font,
-                                        int mouseX, int mouseY, float pt,
+                                        int mouseX, int mouseY, RenderSession session,
                                         float visMinY, float visMaxY) {
         int drawY = 0;
-        boolean hasScrollbar = matFilteredContentH > (int) (visMaxY - visMinY);
+        boolean hasScrollbar = materialPanelNeedsScrollbar((int) (visMaxY - visMinY));
         int innerW = panelW - 2 * panelPad - (hasScrollbar ? scrollbarW + 4 : 0);
         hoveredMatName = null;
-        String filterLower = matFilterText.isEmpty() ? null : matFilterText.toLowerCase();
 
-        for (var catEntry : materialByCategory.entrySet()) {
+        for (var catEntry : materialFilteredByCategory.entrySet()) {
             MatCategory cat = catEntry.getKey();
-            List<MaterialEntry> allEntries = catEntry.getValue();
-            List<MaterialEntry> entries = filterLower == null ? allEntries
-                    : allEntries.stream().filter(e -> e.name().toLowerCase().contains(filterLower)).toList();
+            List<MaterialEntry> entries = catEntry.getValue();
             if (entries.isEmpty()) continue;
             int headerY = drawY;
 
@@ -1793,7 +4770,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             drawY += secHdrH + 2;
             for (MaterialEntry entry : entries) {
                 if (drawY + entryH >= visMinY && drawY <= visMaxY)
-                    drawMaterialEntry(canvas, font, entry, 0, drawY, innerW, pt, mouseX, mouseY);
+                    drawMaterialEntry(canvas, font, entry, 0, drawY, innerW, session, mouseX, mouseY);
                 drawY += entryH + entryGap;
             }
             int sectionEnd = drawY;
@@ -1817,21 +4794,21 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             int txL = 6, txR = innerW - 8;
             int r0 = drawY + 6, r1 = drawY + 20, r2 = drawY + 36;
             canvas.texture(Icon.Sign.Energy.time, txL, r0, 9, 9);
-            canvas.drawString("总时间", txL + 12, r0, textWeak, false);
+            canvas.drawString(CirrusLangs.Calc.Tree.totalTime.string(), txL + 12, r0, textWeak, false);
             String timeStr = formatDuration(totalTimeTicks);
             canvas.drawString(timeStr, txR - font.width(timeStr), r0, textPrimary, false);
             canvas.texture(Icon.Sign.Energy.eu, txL, r1, 9, 9);
-            canvas.drawString("总能量", txL + 12, r1, textWeak, false);
+            canvas.drawString(CirrusLangs.Calc.Tree.totalEnergy.string(), txL + 12, r1, textWeak, false);
             String euStr = fmtNum(totalEU) + " EU";
             canvas.drawString(euStr, txR - font.width(euStr), r1, orange, false);
             canvas.texture(Icon.Sign.Amount.available, txL + 1, r2 + 3, 5, 5);
-            canvas.drawString("步骤数", txL + 10, r2, textWeak, false);
+            canvas.drawString(CirrusLangs.Calc.Tree.stepCount.string(), txL + 10, r2, textWeak, false);
             String stepStr = String.valueOf(flatNodes.size());
             canvas.drawString(stepStr, txR - font.width(stepStr), r2, green, false);
         }
     }
 
-    private static dev.vfyjxf.cloudlib.api.ui.texture.ImageTexture categoryMarker(MatCategory cat) {
+    private static ImageTexture categoryMarker(MatCategory cat) {
         return switch (cat) {
             case BYPRODUCT -> Sign.Group.fluid;
             case CATALYST -> Sign.Group.catalyst;
@@ -1843,68 +4820,81 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
                                      MatCategory cat, int count, int x, int y, int w) {
         canvas.texture(Background.Outlined.inset, x, y, w, secHdrH);
         canvas.texture(categoryMarker(cat), x + 2, y + 2, 3, secHdrH - 4);
-        canvas.drawString(cat.label, x + 8, y + 4, textSecondary, false);
+        canvas.drawString(cat.label.string(), x + 8, y + 4, textSecondary, false);
         String countStr = String.valueOf(count);
         int cw = font.width(countStr);
         canvas.drawString(countStr, x + w - cw - 4, y + 4, textSecondary, false);
     }
 
+    private int drawMaterialQuantityChip(SceneCanvas canvas, Font font,
+                                         int x, int y, int right,
+                                         String label, String value, int valueColor) {
+        if (x >= right - 18 || value == null || value.isBlank()) {
+            return x;
+        }
+        int labelW = font.width(label);
+        int rawW = labelW + font.width(value) + 11;
+        int chipW = Math.max(24, Math.min(rawW, right - x));
+        canvas.texture(Background.flat, x, y, chipW, 12);
+        canvas.drawString(label, x + 4, y + 2, textWeak, false);
+        int valueX = x + labelW + 7;
+        canvas.drawString(cachedTruncate(value, Math.max(0, chipW - (valueX - x) - 3), font),
+                valueX, y + 2, valueColor, false);
+        return x + chipW + 3;
+    }
+
     private void drawMaterialEntry(SceneCanvas canvas, Font font,
                                     MaterialEntry entry, int x, int y, int w,
-                                    float pt, int mouseX, int mouseY) {
+                                    RenderSession session, int mouseX, int mouseY) {
         boolean hovered = mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + entryH;
         if (hovered) hoveredMatName = entry.name();
 
-        canvas.texture(hovered ? Background.Border.light : Background.Slot.dark, x, y, w, boxH);
-        canvas.texture(categoryMarker(entry.category()), x + 1, y + 1, 3, boxH - 2);
+        canvas.texture(hovered ? Background.Border.light : Background.flat, x, y, w, boxH);
 
         int pad = 3;
         int slotX = x + pad, slotY = y + pad;
-        canvas.texture(Background.Slot.dark, slotX, slotY, iconSlotSz, iconSlotSz);
+        CirrusSlotGroupRenderer.renderSingle(canvas, slotX, slotY, iconSlotSz);
         int iconX = slotX + (iconSlotSz - panelIconSz) / 2;
         int iconY = slotY + (iconSlotSz - panelIconSz) / 2;
-        drawPanelSlotIcon(canvas, entry.refSlot(), iconX, iconY, pt);
+        drawPanelSlotIcon(canvas, entry.refSlot(), iconX, iconY, session);
 
         int nameX = slotX + iconSlotSz + 4;
         int nameW = w - (nameX - x) - pad;
         String name = cachedTruncate(entry.name(), nameW, font);
-        canvas.drawString(name, nameX, y + 3, textPrimary, false);
+        canvas.drawString(name, nameX, y + 4, textPrimary, false);
 
-        int indX = slotX + iconSlotSz + 2;
-        int row1Y = y + 18;
-        int row2Y = y + 29;
-        int textX = indX + indCellSz + 2;
-        int textW = w - (textX - x) - pad;
-
-        canvas.texture(Background.inset, indX, row1Y, indCellSz, indCellSz);
-        canvas.texture(entry.category() == MatCategory.CATALYST ? Icon.Sign.Amount.catalyst : Icon.Sign.Amount.available,
-                indX + 2, row1Y + 2, 6, 6);
-        canvas.texture(Background.inset, textX, row1Y, textW, indCellSz);
-        String row1Value = switch (entry.category()) {
-            case EXTERNAL_INPUT -> "0";
-            case INTERMEDIATE -> fmtNum(entry.produced());
-            case BYPRODUCT -> fmtNum(entry.produced());
-            case CATALYST -> fmtNum(entry.needed());
-        };
-        canvas.drawString(cachedTruncate(row1Value, textW - 6, font), textX + 3, row1Y + 1,
-                entry.category() == MatCategory.CATALYST ? purple : green, false);
-
-        canvas.texture(Background.inset, indX, row2Y, indCellSz, indCellSz);
-        canvas.texture(Icon.Sign.Amount.missing, indX + 2, row2Y + 2, 6, 6);
-        canvas.texture(Background.inset, textX, row2Y, textW, indCellSz);
-        String row2Value = switch (entry.category()) {
-            case EXTERNAL_INPUT -> fmtNum(entry.needed());
-            case INTERMEDIATE -> entry.missing() > 0 ? fmtNum(entry.missing()) : "0";
-            case BYPRODUCT -> entry.chance() < 1.0 ? (int) (entry.chance() * 100) + "%" : "0";
-            case CATALYST -> "0";
-        };
-        canvas.drawString(cachedTruncate(row2Value, textW - 6, font), textX + 3, row2Y + 1,
-                entry.category() == MatCategory.BYPRODUCT ? orange : red, false);
+        int chipX = nameX;
+        int chipY = y + 25;
+        int right = x + w - pad;
+        switch (entry.category()) {
+            case EXTERNAL_INPUT -> drawMaterialQuantityChip(canvas, font, chipX, chipY, right,
+                    CirrusLangs.Calc.Tree.needShort.string(), fmtNum(entry.needed()), red);
+            case INTERMEDIATE -> {
+                chipX = drawMaterialQuantityChip(canvas, font, chipX, chipY, right,
+                        CirrusLangs.Calc.Tree.producedShort.string(), fmtNum(entry.produced()), green);
+                drawMaterialQuantityChip(canvas, font, chipX, chipY, right,
+                        entry.missing() > 0
+                                ? CirrusLangs.Calc.Tree.missingShort.string()
+                                : CirrusLangs.Calc.Tree.needShort.string(),
+                        fmtNum(entry.missing() > 0 ? entry.missing() : entry.needed()),
+                        entry.missing() > 0 ? red : textSecondary);
+            }
+            case BYPRODUCT -> {
+                chipX = drawMaterialQuantityChip(canvas, font, chipX, chipY, right,
+                        CirrusLangs.Calc.Tree.producedShort.string(), fmtNum(entry.produced()), orange);
+                if (entry.chance() < 1.0) {
+                    drawMaterialQuantityChip(canvas, font, chipX, chipY, right,
+                            CirrusLangs.Calc.Tree.chanceShort.string(), (int) (entry.chance() * 100) + "%", orange);
+                }
+            }
+            case CATALYST -> drawMaterialQuantityChip(canvas, font, chipX, chipY, right,
+                    CirrusLangs.Calc.Tree.toolShort.string(), fmtNum(entry.needed()), purple);
+        }
 
         int barY = y + boxH;
         int barX = x;
         int barW = w;
-        canvas.texture(Background.inset, barX, barY, barW, barH + 1);
+        canvas.fill(barX, barY, barW, barH, 0x33000000);
         int barInnerW = Math.max(0, barW - 2);
         if (barInnerW <= 0) return;
         switch (entry.category()) {
@@ -1926,16 +4916,17 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         }
     }
 
-    private void drawPanelSlotIcon(SceneCanvas canvas, MaterialSlot slot, int ix, int iy, float pt) {
+    private void drawPanelSlotIcon(SceneCanvas canvas, MaterialSlot slot, int ix, int iy,
+                                   RenderSession session) {
         float iconScale = panelIconSz / 16.0f;
         ItemStack stack = slot.itemStack();
         if (stack != null && !stack.isEmpty()) {
-            deferredItems.add(new DeferredItem(stack, ix, iy, iconScale));
+            submitItemStack(stack, ix, iy, iconScale, session);
         } else if (slot.fluidStack() != null && !slot.fluidStack().isEmpty()) {
-            deferredFluids.add(new DeferredFluid(slot.fluidStack(), ix, iy, iconScale, pt));
+            submitFluidStack(slot.fluidStack(), ix, iy, iconScale, session);
         } else {
             int c = slot.type().color;
-            canvas.texture(Background.Slot.dark, ix, iy, panelIconSz, panelIconSz);
+            CirrusSlotGroupRenderer.renderSingle(canvas, ix, iy, panelIconSz);
             canvas.drawCenteredString(slot.type().name().substring(0, 1),
                     ix + panelIconSz / 2, iy + (panelIconSz - 9) / 2, c);
         }
@@ -1945,48 +4936,152 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     private void updateHover(int mouseX, int mouseY) {
         hoveredNodeId = null;
+        hoveredCollapseNodeId = null;
+        hoveredMachineNodeId = null;
+        hoveredProjectionNodeId = null;
         double lx = mouseX, ly = mouseY;
         if (lx < 0 || ly < 0 || lx > width() || ly > height()) return;
         if (showMaterialPanel && isInMaterialPanel(lx, ly)) return;
+        if (machineCandidatePanelNodeId != null && isInMachineCandidatePanel(lx, ly)) return;
+        if (contentCandidatePanelNodeId != null && isInContentCandidatePanel(lx, ly)) return;
         LayoutNode found = findNodeWithButtonAt(lx, ly);
-        if (found != null) hoveredNodeId = found.pathId;
+        if (found != null) {
+            hoveredNodeId = found.pathId;
+            if (isCollapseButtonHit(found, lx, ly)) {
+                hoveredCollapseNodeId = found.pathId;
+                return;
+            }
+            if (isMachineSlotHit(found, lx, ly)) {
+                hoveredMachineNodeId = found.pathId;
+            }
+            if (isProjectionActionHit(found, lx, ly)) {
+                hoveredProjectionNodeId = found.pathId;
+            }
+        }
     }
 
     private boolean isNodeHovered(String pathId) {
         return Objects.equals(pathId, hoveredNodeId) || Objects.equals(pathId, externalHoveredNodeId);
     }
 
+    private boolean isCollapseButtonHovered(String pathId) {
+        return Objects.equals(pathId, hoveredCollapseNodeId);
+    }
+
     private @Nullable LayoutNode findNodeAt(double screenX, double screenY) {
         double wx = panX + screenX / zoom;
         double wy = panY + screenY / zoom;
-        for (LayoutNode ln : flatNodes) {
-            if (wx >= ln.x && wx <= ln.x + nodeW && wy >= ln.y && wy <= ln.y + nodeH) {
-                return ln;
+        int firstLayer = Math.max(0, (int) Math.floor((wy - nodeH) / rowH) - 1);
+        int lastLayer = Math.min(maxDepth, (int) Math.floor((wy + nodeH) / rowH) + 1);
+        for (int layer = firstLayer; layer <= lastLayer; layer++) {
+            for (LayoutNode ln : layerNodes.getOrDefault(layer, List.of())) {
+                if (wx >= ln.x && wx <= ln.x + nodeW && wy >= ln.y && wy <= ln.y + nodeH) {
+                    return ln;
+                }
             }
         }
         return null;
+    }
+
+    private @Nullable LayoutNode findCollapseButtonAt(double screenX, double screenY) {
+        double wx = panX + screenX / zoom;
+        double wy = panY + screenY / zoom;
+        int firstLayer = Math.max(0, (int) Math.floor((wy - nodeH - collapseBtnH) / rowH) - 1);
+        int lastLayer = Math.min(maxDepth, (int) Math.floor(wy / rowH) + 1);
+        for (int layer = firstLayer; layer <= lastLayer; layer++) {
+            for (LayoutNode ln : layerNodes.getOrDefault(layer, List.of())) {
+                if (ln.originalChildCount <= 0) continue;
+                double btnX = ln.x + nodeW / 2.0 - collapseBtnW / 2.0;
+                double btnY = ln.y + nodeH - 1;
+                if (wx >= btnX && wx <= btnX + collapseBtnW && wy >= btnY && wy <= btnY + collapseBtnH) {
+                    return ln;
+                }
+            }
+        }
+        return null;
+    }
+
+    private @Nullable LayoutNode findNodeOrCollapseButtonAt(double screenX, double screenY) {
+        LayoutNode hit = findNodeAt(screenX, screenY);
+        if (hit != null) {
+            return hit;
+        }
+        return findCollapseButtonAt(screenX, screenY);
     }
 
     /** Extended hit-test that includes the collapse button area below the node. */
     private @Nullable LayoutNode findNodeWithButtonAt(double screenX, double screenY) {
-        LayoutNode hit = findNodeAt(screenX, screenY);
-        if (hit != null) return hit;
-        double wx = panX + screenX / zoom;
-        double wy = panY + screenY / zoom;
-        for (LayoutNode ln : flatNodes) {
-            if (ln.originalChildCount <= 0) continue;
-            // Button area: x centered, y from nodeH-2 to nodeH+18
-            double btnX = ln.x + nodeW / 2.0 - 10;
-            double btnY = ln.y + nodeH - 2;
-            if (wx >= btnX && wx <= btnX + 20 && wy >= btnY && wy <= btnY + 20) {
-                return ln;
-            }
-        }
-        return null;
+        return findNodeOrCollapseButtonAt(screenX, screenY);
     }
 
-    private @Nullable MachineInfo getDisplayMachine(ProcessNode node) {
-        List<MachineInfo> opts = node.machineOptions();
+    private boolean isCollapseButtonHit(LayoutNode node, double screenX, double screenY) {
+        if (node == null || node.originalChildCount <= 0) {
+            return false;
+        }
+        double wx = panX + screenX / zoom;
+        double wy = panY + screenY / zoom;
+        double btnX = node.x + nodeW / 2.0 - collapseBtnW / 2.0;
+        double btnY = node.y + nodeH - 1;
+        return wx >= btnX && wx <= btnX + collapseBtnW && wy >= btnY && wy <= btnY + collapseBtnH;
+    }
+
+    private boolean isMachineSlotHit(LayoutNode node, double screenX, double screenY) {
+        if (node == null || node.processNode == null || !isRecipeLayoutNode(node)) {
+            return false;
+        }
+        if (node.processNode.machineOptions().isEmpty() && node.processNode.machine().isBlank()) {
+            return false;
+        }
+        double wx = panX + screenX / zoom;
+        double wy = panY + screenY / zoom;
+        int[] bounds = machineSlotBounds(node.x, node.y);
+        return containsWorldPoint(bounds, wx, wy);
+    }
+
+    private boolean isProjectionActionHit(LayoutNode node, double screenX, double screenY) {
+        if (node == null || node.processNode == null || node.processNode.recipe() == null) {
+            return false;
+        }
+        double wx = panX + screenX / zoom;
+        double wy = panY + screenY / zoom;
+        int[] bounds = projectionButtonBounds(node.x, node.y);
+        return containsWorldPoint(bounds, wx, wy);
+    }
+
+    private boolean isContentCandidateActionHit(LayoutNode node, double screenX, double screenY) {
+        NodeRenderModel model = node == null || node.processNode == null ? null : renderModel(node);
+        SlotVisual visual = model == null ? null : model.selectableVisual();
+        if (model == null || model.selectableSlot() == null || visual == null || visual.count() <= 1) {
+            return false;
+        }
+        double wx = panX + screenX / zoom;
+        double wy = panY + screenY / zoom;
+        int[] bounds = contentCandidateButtonBounds(node);
+        return containsWorldPoint(bounds, wx, wy);
+    }
+
+    private static boolean isRecipeLayoutNode(LayoutNode node) {
+        return node != null
+                && node.processNode != null
+                && (node.originalChildCount > 0 || isRecipeProcessNode(node.processNode));
+    }
+
+    private static boolean isRecipeProcessNode(ProcessNode node) {
+        return node != null && (node.recipe() != null || !node.inputs().isEmpty());
+    }
+
+    private @Nullable MachineInfo getDisplayMachine(LayoutNode layoutNode) {
+        ProcessNode node = layoutNode.processNode;
+        String selectedName = selectedMachineName(layoutNode);
+        for (MachineInfo machine : renderModel(layoutNode).machines()) {
+            if (Objects.equals(machine.name(), selectedName)) {
+                return machine;
+            }
+        }
+        return getDisplayMachine(node, renderModel(layoutNode).machines());
+    }
+
+    private @Nullable MachineInfo getDisplayMachine(ProcessNode node, List<MachineInfo> opts) {
         if (opts.isEmpty()) return null;
         if (opts.size() == 1) return opts.get(0);
         for (MachineInfo mi : opts) if (mi.name().equals(node.machine())) return mi;
@@ -1995,93 +5090,301 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     // ═══════════════════ Tooltip ═══════════════════
 
-    private void updateTooltip(int mouseX, int mouseY) {
+    @Override
+    public @Nullable Tooltip hoverTooltip(int mouseX, int mouseY) {
+        updateHover(mouseX, mouseY);
+        return treeTooltip(mouseX, mouseY);
+    }
+
+    private @Nullable Tooltip treeTooltip(int mouseX, int mouseY) {
         if (mouseX < 0 || mouseY < 0 || mouseX > width() || mouseY > height()) {
-            scene().setHoverTooltip(Tooltip.create());
-            return;
+            return null;
         }
         Tooltip tip = Tooltip.create();
 
-        if (showMaterialPanel && isInMaterialPanel(mouseX, mouseY) && hoveredMatName != null) {
-            MaterialEntry found = null;
-            for (var entries : materialByCategory.values()) {
-                for (MaterialEntry me : entries) {
-                    if (me.name().equals(hoveredMatName)) { found = me; break; }
-                }
-                if (found != null) break;
+        if (machineCandidatePanelNodeId != null && isInMachineCandidatePanel(mouseX, mouseY)) {
+            return buildMachineCandidatePanelTooltip(mouseX, mouseY);
+        }
+        if (contentCandidatePanelNodeId != null && isInContentCandidatePanel(mouseX, mouseY)) {
+            return buildContentCandidatePanelTooltip(mouseX, mouseY);
+        }
+
+        if (hoveredProjectionNodeId != null) {
+            RichTooltipComponent.Builder builder = RichTooltipComponent.builder();
+            builder.section(CirrusLangs.Calculator.Database.projection.string(), cardMetaText);
+            builder.kv(
+                    CirrusLangs.Calculator.Database.effectContext.string(),
+                    0xFF888888,
+                    CirrusLangs.Calculator.Database.effectSettings.string(),
+                    cardMetaText
+            );
+            tip.add(builder.build());
+            return tip;
+        }
+
+        if (hoveredMachineNodeId != null) {
+            LayoutNode node = findLayoutNode(hoveredMachineNodeId);
+            if (node != null && node.processNode != null) {
+                return buildMachineTooltip(node);
             }
-            if (found != null) {
-                var b = FlowChartTooltipComponent.builder();
-                b.section(found.name(), found.refSlot().type().color, found.category().color);
-                b.kv("分类", 0xFF888888, found.category().label, found.category().color);
-                b.divider();
-                switch (found.category()) {
-                    case EXTERNAL_INPUT -> {
-                        b.kv("需求量", 0xFF888888, fmtNum(found.needed()), red);
-                        b.bar(1.0f, red);
-                    }
-                    case INTERMEDIATE -> {
-                        b.kv("消耗量", 0xFF888888, fmtNum(found.needed()), 0xFF88CC88);
-                        b.kv("产出量", 0xFF888888, fmtNum(found.produced()), 0xFFCC8888);
-                        if (found.missing() > 0) b.kv("缺少", 0xFFCC4444, fmtNum(found.missing()), 0xFFFF6666);
-                        float ratio = found.needed() > 0 ? (float) found.produced() / found.needed() : 1.0f;
-                        b.bar(Math.min(1.0f, ratio), ratio >= 1.0f ? green : red);
-                    }
-                    case BYPRODUCT -> {
-                        b.kv("产出量", 0xFF888888, fmtNum(found.produced()), orange);
-                        b.bar((float) found.chance(), orange);
-                    }
-                    case CATALYST -> {
-                        b.kv("用量", 0xFF888888, fmtNum(found.needed()), purple);
-                        b.bar(1.0f, purple);
-                    }
-                }
-                tip.add(b.build());
+        }
+
+        if (hoveredCollapseNodeId != null) {
+            LayoutNode node = findLayoutNode(hoveredCollapseNodeId);
+            if (node != null) {
+                return buildCollapseButtonTooltip(node);
             }
+        }
+
+        MaterialEntry materialEntry = materialEntryAt(mouseX, mouseY);
+        if (materialEntry != null) {
+            var b = RichTooltipComponent.builder();
+            b.section(materialEntry.name(), materialEntry.refSlot().type().color, materialEntry.category().color);
+            b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.category), 0xFF888888,
+                    materialEntry.category().label.string(), materialEntry.category().color);
+            b.divider();
+            switch (materialEntry.category()) {
+                case EXTERNAL_INPUT -> {
+                    b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.required), 0xFF888888,
+                            fmtNum(materialEntry.needed()), red);
+                    b.bar(1.0f, red);
+                }
+                case INTERMEDIATE -> {
+                    b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.consumed), 0xFF888888,
+                            fmtNum(materialEntry.needed()), 0xFF88CC88);
+                    b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.produced), 0xFF888888,
+                            fmtNum(materialEntry.produced()), 0xFFCC8888);
+                    if (materialEntry.missing() > 0) {
+                        b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.missing), 0xFFCC4444,
+                                fmtNum(materialEntry.missing()), 0xFFFF6666);
+                    }
+                    float ratio = materialEntry.needed() > 0 ? (float) materialEntry.produced() / materialEntry.needed() : 1.0f;
+                    b.bar(Math.min(1.0f, ratio), ratio >= 1.0f ? green : red);
+                }
+                case BYPRODUCT -> {
+                    b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.produced), 0xFF888888,
+                            fmtNum(materialEntry.produced()), orange);
+                    b.bar((float) materialEntry.chance(), orange);
+                }
+                case CATALYST -> {
+                    b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.usage), 0xFF888888,
+                            fmtNum(materialEntry.needed()), purple);
+                    b.bar(1.0f, purple);
+                }
+            }
+            tip.add(b.build());
         } else {
             String previewPathId = hoveredNodeId != null ? hoveredNodeId : externalHoveredNodeId;
             if (previewPathId != null) {
-                Tooltip nodeTip = buildNodeTooltipForPath(previewPathId, "配方预览");
+                Tooltip nodeTip = buildNodeTooltipForPath(previewPathId, null);
                 if (nodeTip != null) {
-                    scene().setHoverTooltip(nodeTip);
-                    return;
+                    return nodeTip;
                 }
             }
         }
-        scene().setHoverTooltip(tip);
+        return tip.notEmpty() ? tip : null;
     }
 
-    private void appendNodeTooltip(Tooltip tip, ProcessNode node) {
-        var b = FlowChartTooltipComponent.builder();
-        b.section(node.name(), node.tierColor());
-        b.gap(2);
-        MachineInfo machine = getDisplayMachine(node);
+    private Tooltip buildCollapseButtonTooltip(LayoutNode layoutNode) {
+        Tooltip tip = Tooltip.create();
+        tip.add(ExecutionOverlayUi.tooltipAccentText(
+                ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.shortcutHeader)));
+        tip.add(clickUsage(layoutNode.collapsed
+                ? CirrusLangs.Calc.Tree.expand.component()
+                : CirrusLangs.Calc.Tree.collapse.component()));
+        tip.add(ExecutionOverlayUi.tooltipBody(
+                CirrusLangs.Calc.Tree.childCount,
+                fmtNum(layoutNode.originalChildCount)
+        ));
+        return tip;
+    }
+
+    private static MutableComponent clickUsage(Component usage) {
+        return Component.empty()
+                .append(Component.literal("[")
+                        .withColor(ExecutionOverlayUi.tooltipTextSecondary))
+                .append(InputConstants.Type.MOUSE.getOrCreate(0).getDisplayName().copy()
+                        .withColor(ExecutionOverlayUi.tooltipAccent))
+                .append(Component.literal("] ")
+                        .withColor(ExecutionOverlayUi.tooltipTextSecondary))
+                .append(usage.copy().withColor(ExecutionOverlayUi.tooltipTextSecondary));
+    }
+
+    private void appendNodeTooltip(Tooltip tip, LayoutNode layoutNode) {
+        ProcessNode node = layoutNode.processNode;
+        MaterialSlot primary = primaryOutput(node);
+        if (primary != null) {
+            TooltipStack<?> stack = ExecutionOverlayContentHelper.tooltipStack(primary.content());
+            if (stack != null) {
+                tip.setStack(stack);
+            }
+        }
+        TooltipComponent preview = ExecutionRecipeTooltipPreview.create(
+            node.recipe(),
+            node.inputs(),
+            node.outputs()
+        );
+        if (preview != null) {
+            tip.add(preview);
+        }
+
+        RichTooltipComponent.Builder b = RichTooltipComponent.builder();
+        b.section(primaryName(node), nodeAccentColor(node));
+        MachineInfo machine = node.inputs().isEmpty() ? null : getDisplayMachine(layoutNode);
         if (machine != null) {
             String machineName = machine.name();
-            if (node.machineOptions().size() > 1) {
-                machineName += " +" + (node.machineOptions().size() - 1);
+            int machineCount = renderModel(layoutNode).machines().size();
+            if (machineCount > 1) {
+                machineName += " +" + (machineCount - 1);
             }
-            b.iconText(machine.icon(), 0xFF444466, machineName, node.tierColor(), "机器", 0xFF888888);
-        } else {
-            b.kv("机器", 0xFF888888, node.machine(), node.tierColor());
+            b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Matrix.machine), 0xFF888888,
+                    machineName, nodeAccentColor(node));
+        } else if (!node.inputs().isEmpty()) {
+            b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Matrix.machine), 0xFF888888, node.machine(), nodeAccentColor(node));
         }
-        b.divider();
-        if (!node.inputs().isEmpty()) { b.section("输入", 0xFF88CC88); b.slots(null, 0, node.inputs()); }
-        if (!node.outputs().isEmpty()) { b.section("输出", 0xFFCC8888); b.slots(null, 0, node.outputs()); }
-        b.divider();
-        b.kv("时长", node.durationFormatted());
-        b.kv("速率", 0xFF888888, node.euFormatted(), orange);
-        long seu = (long) node.euPerTick() * node.durationTicks();
-        b.kv("总 EU", 0xFF888888, fmtNum(seu) + " EU", 0xFFFFCC44);
-        b.kv("等级", 0xFF888888, node.tierName(), node.tierColor());
+        if (node.outputs().size() > 1) {
+            b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Matrix.output), 0xFF888888, String.valueOf(node.outputs().size()), green);
+        }
+        if (node.inputs().size() > 1) {
+            b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Matrix.input), 0xFF888888, String.valueOf(node.inputs().size()), 0xFF88CC88);
+        }
+        if (node.durationTicks() > 0) {
+            b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Matrix.duration), 0xFF888888, node.durationFormatted(), cardMetaText);
+        }
+        appendContentCandidateRows(b, primary);
         tip.add(b.build());
     }
 
-    private @Nullable LayoutNode findLayoutNode(String pathId) {
-        for (LayoutNode ln : flatNodes) {
-            if (ln.pathId.equals(pathId)) return ln;
+    private void appendContentCandidateRows(RichTooltipComponent.Builder b, @Nullable MaterialSlot slot) {
+        if (slot == null || slot.content().isEmpty()) {
+            return;
         }
-        return null;
+        SlotVisual visual = slotVisual(slot);
+        int count = visual == null ? 0 : visual.count();
+        if (count <= 1) {
+            return;
+        }
+        b.divider(0x664A535C);
+        b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.candidates), textSecondary,
+                nodeCandidateCountText(count), nodeAccentColorForSlot(slot));
+    }
+
+    private static String nodeCandidateCountText(int count) {
+        return count <= 0 ? "" : String.valueOf(count);
+    }
+
+    private static int nodeAccentColorForSlot(MaterialSlot slot) {
+        return slot == null ? cardMetaText : slot.type().color;
+    }
+
+    private Tooltip buildMachineTooltip(LayoutNode layoutNode) {
+        ProcessNode node = layoutNode.processNode;
+        Tooltip tip = Tooltip.create();
+        RichTooltipComponent.Builder b = RichTooltipComponent.builder();
+        b.section(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.machineCandidates), nodeAccentColor(node));
+        List<MachineInfo> machines = renderModel(layoutNode).machines();
+        String selected = selectedMachineName(layoutNode);
+        if (machines.isEmpty()) {
+            b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Matrix.machine), 0xFF888888, node.machine(), nodeAccentColor(node));
+        } else {
+            int visible = Math.min(8, machines.size());
+            for (int i = 0; i < visible; i++) {
+                MachineInfo machine = machines.get(i);
+                b.kv(
+                        Objects.equals(machine.name(), selected)
+                                ? ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.current)
+                                : ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.candidate),
+                        0xFF888888,
+                        machine.name(),
+                        nodeAccentColor(node)
+                );
+            }
+            if (machines.size() > visible) {
+                b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.more), 0xFF888888,
+                        String.valueOf(machines.size() - visible), cardMetaText);
+            }
+        }
+        tip.add(b.build());
+        return tip;
+    }
+
+    private @Nullable Tooltip buildMachineCandidatePanelTooltip(int mouseX, int mouseY) {
+        if (isInMachineCandidatePanelClose(mouseX, mouseY)) {
+            Tooltip tip = Tooltip.create();
+            RichTooltipComponent.Builder b = RichTooltipComponent.builder();
+            b.textureIconText(Icon.Small.minus, cardMetaText,
+                    ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.close), textPrimary);
+            tip.add(b.build());
+            return tip;
+        }
+        int index = machineCandidateIndexAt(mouseX, mouseY);
+        LayoutNode layoutNode = machineCandidatePanelNodeId == null ? null : findLayoutNode(machineCandidatePanelNodeId);
+        if (layoutNode == null || layoutNode.processNode == null || index < 0) {
+            return null;
+        }
+        List<MachineInfo> machines = renderModel(layoutNode).machines();
+        if (index >= machines.size()) {
+            return null;
+        }
+        MachineInfo machine = machines.get(index);
+        Tooltip tip = Tooltip.create();
+        RichTooltipComponent.Builder b = RichTooltipComponent.builder();
+        ItemStack icon = machine.icon();
+        if (icon != null && !icon.isEmpty()) {
+            tip.setStack(TooltipStack.of(icon.copy()));
+        }
+        b.section(machine.name(), nodeAccentColor(layoutNode.processNode));
+        b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.clickSet), 0xFF888888,
+                machine.name(), textSecondary);
+        tip.add(b.build());
+        return tip;
+    }
+
+    private @Nullable Tooltip buildContentCandidatePanelTooltip(int mouseX, int mouseY) {
+        if (isInContentCandidatePanelClose(mouseX, mouseY)) {
+            Tooltip tip = Tooltip.create();
+            RichTooltipComponent.Builder b = RichTooltipComponent.builder();
+            b.textureIconText(Icon.Small.minus, cardMetaText,
+                    ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.close), textPrimary);
+            tip.add(b.build());
+            return tip;
+        }
+        MaterialSlot slot = contentCandidatePanelSlot();
+        if (slot == null || slot.content().isEmpty()) {
+            return null;
+        }
+        int index = contentCandidateIndexAt(mouseX, mouseY);
+        if (index >= 0) {
+            Tooltip candidateTip = ExecutionOverlayContentHelper.tooltip(slot.content(), index);
+            if (candidateTip != null) {
+                return candidateTip;
+            }
+        }
+        Tooltip tip = Tooltip.create();
+        RichTooltipComponent.Builder b = RichTooltipComponent.builder();
+        SlotVisual visual = slotVisual(slot);
+        b.section(slot.materialName(), slot.type().color);
+        b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.candidates), textSecondary,
+                String.valueOf(visual == null ? 0 : visual.count()), slot.type().color);
+        tip.add(b.build());
+        return tip;
+    }
+
+    private static int nodeAccentColor(ProcessNode node) {
+        if (node == null || node.outputs().isEmpty()) {
+            return cardMetaText;
+        }
+        return switch (node.outputs().getFirst().type()) {
+            case ITEM -> 0xFFA8BAD8;
+            case FLUID -> 0xFF8EC3DC;
+            case ENERGY -> 0xFFB4A3E8;
+            case GAS -> 0xFF8CC9BF;
+            case CATALYST -> 0xFFC1B3E8;
+        };
+    }
+
+    private @Nullable LayoutNode findLayoutNode(String pathId) {
+        return layoutNodeByPath.get(pathId);
     }
 
     // ═══════════════════ Utilities ═══════════════════
@@ -2131,9 +5434,21 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (font.width(text) <= maxPxW) return text;
         String ell = "..";
         int ellW = font.width(ell);
-        while (text.length() > 1 && font.width(text) + ellW > maxPxW)
-            text = text.substring(0, text.length() - 1);
-        return text + ell;
+        int available = maxPxW - ellW;
+        if (available <= 0) {
+            return ell;
+        }
+        int low = 0;
+        int high = text.length();
+        while (low < high) {
+            int mid = (low + high + 1) >>> 1;
+            if (font.width(text.substring(0, mid)) <= available) {
+                low = mid;
+            } else {
+                high = mid - 1;
+            }
+        }
+        return (low <= 0 ? "" : text.substring(0, low)) + ell;
     }
 
     private String cachedTruncate(String text, int maxPxW, Font font) {

@@ -6,5 +6,8 @@
   "mixins": [
   ],
   "client": [
+    "ItemDecoratorHandlerAccessor",
+    "PatchedDataComponentMapMixin",
+    "jei.BookmarkOverlayMixin"
   ]
 }

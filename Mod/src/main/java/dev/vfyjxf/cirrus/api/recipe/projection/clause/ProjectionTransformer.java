@@ -1,14 +1,20 @@
 package dev.vfyjxf.cirrus.api.recipe.projection.clause;
 
 import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContext;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer.DecrementOps;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer.IncrementOps;
 
 public interface ProjectionTransformer<F extends RecipeClause> {
 
-    static <F extends RecipeClause> ProjectionTransformer<F> of(SelectionFunction selector, TransformFunction<F> transformation) {
+    static <F extends RecipeClause> ProjectionTransformer<F> of(ProjectionPlugin plugin, SelectionFunction selector, TransformFunction<F> transformation) {
         return new ProjectionTransformer<>() {
+            @Override
+            public ProjectionPlugin plugin() {
+                return plugin;
+            }
+
             @Override
             public boolean selectProjection(ExecutionContext context, RecipeProjection projection) {
                 return selector.select(context, projection);
@@ -20,6 +26,8 @@ public interface ProjectionTransformer<F extends RecipeClause> {
             }
         };
     }
+
+    ProjectionPlugin plugin();
 
     boolean selectProjection(ExecutionContext context, RecipeProjection projection);
 

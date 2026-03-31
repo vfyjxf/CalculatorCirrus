@@ -15,6 +15,7 @@ public final class PauseReasons {
     public static final PauseReasonKey noAccessibleReceiver = reason("no_accessible_receiver");
     public static final PauseReasonKey noAccessibleProcessor = reason("no_accessible_processor");
     public static final PauseReasonKey inventoryCapacityBlocked = reason("inventory_capacity_blocked");
+    public static final PauseReasonKey routingPlanFailed = reason("routing_plan_failed");
 
     //endregion
 

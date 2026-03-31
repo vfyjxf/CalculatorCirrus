@@ -26,6 +26,6 @@ public class ContentWidget<T> extends Widget {
     @Override
     protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
         super.renderInternal(canvas, mouseX, mouseY, partialTicks);
-        renderer.render(canvas.graphics(), content, width(), height(), partialTicks);
+        renderer.render(canvas.layeredGraphics(), content, width(), height(), partialTicks);
     }
 }

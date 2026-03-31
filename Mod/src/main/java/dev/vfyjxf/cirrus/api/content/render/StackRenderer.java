@@ -12,8 +12,16 @@ import net.minecraft.network.chat.Component;
 
 public interface StackRenderer<T, S> {
 
-    static <T, S> StackRenderer<T, S> getStackRender(StackType<T, S> stackType) {
+    static <T, S> StackRenderer<T, S> getStackRenderer(StackType<T, S> stackType) {
         return ClientContentApiImpl.instance().getStackRenderer(stackType);
+    }
+
+    static <T, S> StackRenderer<T, S> emptyRenderer() {
+        return EmptyStackRenderer.castStackRenderer();
+    }
+
+    static <T, S> StackRenderer<T, S> getStackRenderer(ContentStack<T, S> stack) {
+        return stack.isEmpty() ? emptyRenderer() : getStackRenderer(stack.type());
     }
 
     default void render(GuiGraphics graphics, S stack, int width, int height, float delta) {
@@ -21,22 +29,53 @@ public interface StackRenderer<T, S> {
         decorate(graphics, stack, width, height, delta);
     }
 
+    default void renderAt(GuiGraphics graphics, S stack, int x, int y, int width, int height, float delta) {
+        renderBaseAt(graphics, stack, x, y, width, height, delta);
+        decorateAt(graphics, stack, x, y, width, height, delta);
+    }
+
     default void render(GuiGraphics graphics, ContentStack<T, S> stack, int width, int height, float delta) {
         this.render(graphics, stack.value(), width, height, delta);
+    }
+
+    default void renderAt(GuiGraphics graphics, ContentStack<T, S> stack, int x, int y, int width, int height, float delta) {
+        this.renderAt(graphics, stack.value(), x, y, width, height, delta);
     }
 
     //region base
 
     void renderBase(GuiGraphics graphics, S stack, int width, int height, float delta);
 
+    default void renderBaseAt(GuiGraphics graphics, S stack, int x, int y, int width, int height, float delta) {
+        graphics.pose().pushPose();
+        graphics.pose().translate(x, y, 0);
+        renderBase(graphics, stack, width, height, delta);
+        graphics.pose().popPose();
+    }
+
     default void renderBase(GuiGraphics graphics, ContentStack<T, S> stack, int width, int height, float delta) {
         renderBase(graphics, stack.value(), width, height, delta);
     }
 
+    default void renderBaseAt(GuiGraphics graphics, ContentStack<T, S> stack, int x, int y, int width, int height, float delta) {
+        renderBaseAt(graphics, stack.value(), x, y, width, height, delta);
+    }
+
     void decorate(GuiGraphics graphics, S stack, int width, int height, float delta);
+
+    default void decorateAt(GuiGraphics graphics, S stack, int x, int y, int width, int height, float delta) {
+        graphics.pose().pushPose();
+        graphics.pose().translate(x, y, 0);
+        decorate(graphics, stack, width, height, delta);
+        graphics.pose().popPose();
+    }
 
     default void decorate(GuiGraphics graphics, ContentStack<T, S> stack, int width, int height, float delta) {
         this.decorate(graphics, stack.value(), width, height, delta);
+    }
+
+    default void decorateAt(GuiGraphics graphics, ContentStack<T, S> stack, int x, int y, int width, int height, float delta) {
+        this.decorateAt(graphics, stack.value(), x, y, width, height, delta);
     }
 
     //endregion
@@ -48,6 +87,40 @@ public interface StackRenderer<T, S> {
 
     Component getName(S stack);
 
-    String getDisplayName(S stack);
+}
+
+@SuppressWarnings({"rawtypes", "unchecked"})
+class EmptyStackRenderer implements StackRenderer {
+
+    private static final EmptyStackRenderer instance = new EmptyStackRenderer();
+
+    static <T, S> StackRenderer<T, S> castStackRenderer() {return instance;}
+
+    private EmptyStackRenderer() {}
+
+    @Override
+    public void renderBase(GuiGraphics graphics, Object stack, int width, int height, float delta) {
+
+    }
+
+    @Override
+    public void decorate(GuiGraphics graphics, Object stack, int width, int height, float delta) {
+
+    }
+
+    @Override
+    public Font getFont(Object stack, Minecraft minecraft) {
+        return minecraft.font;
+    }
+
+    @Override
+    public Tooltip getTooltip(Object stack, TooltipContext context) {
+        return Tooltip.create();
+    }
+
+    @Override
+    public Component getName(Object stack) {
+        return Component.empty();
+    }
 
 }

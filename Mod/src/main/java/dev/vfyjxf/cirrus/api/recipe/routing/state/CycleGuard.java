@@ -6,7 +6,6 @@ import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingFailureCode;
 import dev.vfyjxf.cloudlib.util.Checks;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
-import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -36,7 +35,7 @@ public final class CycleGuard {
     private final LoopPolicy loopPolicy;
     private final LoopBudget loopBudget;
     private final IntArrayList stack = new IntArrayList();
-    private final IntOpenHashSet activeRecipes = new IntOpenHashSet();
+    private final Int2IntOpenHashMap activeRecipes = new Int2IntOpenHashMap();
     private final Int2IntOpenHashMap recipeRepeats = new Int2IntOpenHashMap();
     private final Int2IntOpenHashMap sccRepeats = new Int2IntOpenHashMap();
     private int globalLoopExpansions;
@@ -67,7 +66,7 @@ public final class CycleGuard {
      * @return a decision indicating whether expansion is allowed
      */
     public Decision enter(int recipeIndex, int sccId, double amplificationRisk, double hardThreshold) {
-        if (activeRecipes.contains(recipeIndex)) {
+        if (activeRecipes.get(recipeIndex) > 0) {
             globalLoopExpansions++;
             if (loopPolicy == LoopPolicy.forbidAmplification) {
                 return Decision.reject(RoutingFailureCode.cycleAmplificationBlocked, "cycle_reentry_blocked");
@@ -94,7 +93,7 @@ public final class CycleGuard {
         recipeRepeats.put(recipeIndex, nextRecipeRepeats);
         sccRepeats.put(sccId, nextSccRepeats);
         stack.push(recipeIndex);
-        activeRecipes.add(recipeIndex);
+        activeRecipes.put(recipeIndex, activeRecipes.get(recipeIndex) + 1);
         return Decision.accept();
     }
 
@@ -108,7 +107,7 @@ public final class CycleGuard {
         if (!stack.isEmpty() && stack.topInt() == recipeIndex) {
             stack.popInt();
         }
-        activeRecipes.remove(recipeIndex);
+        decrement(activeRecipes, recipeIndex);
         decrement(recipeRepeats, recipeIndex);
         decrement(sccRepeats, sccId);
     }

@@ -45,6 +45,13 @@ public interface StorageSource {
         return contents().anySatisfy(content -> content instanceof ContentResource candidate && candidate.matchesResource(resource));
     }
 
+    default boolean canProvide(StorageTransferRequest request) {
+        if (!canProvide() || !accessibility().accessible()) {
+            return false;
+        }
+        return contents().anySatisfy(content -> content instanceof ContentResource candidate && request.matches(candidate));
+    }
+
     default boolean canReceive(ContentResource resource) {
         return canReceive() && accessibility().accessible();
     }
@@ -53,12 +60,12 @@ public interface StorageSource {
         if (!accessibility().accessible()) {
             return StorageTransferResult.none(this, request, accessibility().guidance());
         }
-        if (!canProvide(request.resource())) {
+        if (!canProvide(request)) {
             return StorageTransferResult.none(this, request, null);
         }
         long available = 0L;
         for (ContentVariant content : contents()) {
-            if (content instanceof ContentResource candidate && candidate.matchesResource(request.resource())) {
+            if (content instanceof ContentResource candidate && request.matches(candidate)) {
                 available = Math.addExact(available, candidate.amount());
             }
         }
@@ -73,7 +80,9 @@ public interface StorageSource {
         if (!accessibility().accessible()) {
             return StorageTransferResult.none(this, request, accessibility().guidance());
         }
-        if (!canReceive(request.resource())) {
+        // Insert targets must always be exact resources. Input-semantic requests only make
+        // sense for extraction, where execution still needs to decide which matching stack to use.
+        if (!request.targetsExactResource() || !canReceive(request.exactResource())) {
             return StorageTransferResult.none(this, request, null);
         }
         return StorageTransferResult.transferred(this, request, request.amount());

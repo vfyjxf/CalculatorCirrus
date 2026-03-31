@@ -6,6 +6,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import it.unimi.dsi.fastutil.objects.Object2LongMap;
 import it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap;
 import org.eclipse.collections.api.factory.Lists;
@@ -251,6 +252,41 @@ public class Stock {
     }
 
     /**
+     * Estimates how much of an input can be satisfied by the current stock without consuming it.
+     *
+     * <p>For enumerable inputs this sums the availability of every enumerated variant. The result is
+     * used only for candidate ordering, so an approximate upper bound is acceptable even if variants
+     * overlap semantically.
+     */
+    public long countMatchingInput(InputContent input) {
+        if (input.isEmpty()) {
+            return 0L;
+        }
+        if (input.isEnumerable()) {
+            long total = 0L;
+            for (ContentVariant variant : input.enumerate()) {
+                total = safeAdd(total, countMatchingVariant(variant));
+            }
+            return total;
+        }
+
+        long total = 0L;
+        for (ContentStack<?, ?> existing : stacks) {
+            long available = stackAmounts.getOrDefault(existing, 0L);
+            if (available > 0L && input.satisfy(existing)) {
+                total = safeAdd(total, available);
+            }
+        }
+        for (var entry : valueAmounts.object2LongEntrySet()) {
+            long available = entry.getLongValue();
+            if (available > 0L && input.satisfy(entry.getKey())) {
+                total = safeAdd(total, available);
+            }
+        }
+        return total;
+    }
+
+    /**
      * Consumes up to {@code amount} of stacks whose content kind matches,
      * potentially spanning multiple stacks.
      *
@@ -293,6 +329,155 @@ public class Stock {
         };
     }
 
+    /**
+     * Consumes up to {@code amount} for the given variant and returns the concrete resources
+     * actually taken from stock.
+     *
+     * <p>This is used when the planner resolves a tag/kind/list demand against stock. The
+     * planner needs both the total consumed amount and the exact concrete resources so it can
+     * emit accurate {@link dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction.ConsumeStock}
+     * actions instead of collapsing everything into an uncertain consume.
+     */
+    public MutableList<ConsumedResource> consumeVariantDetailed(ContentVariant variant, long amount) {
+        MutableList<ConsumedResource> consumed = Lists.mutable.empty();
+        if (amount <= 0) {
+            return consumed;
+        }
+
+        switch (variant) {
+            case ContentStack<?, ?> stack -> {
+                long taken = consume(stack, amount);
+                if (taken > 0) {
+                    consumed.add(new ConsumedResource(stack.normalize(), taken));
+                }
+            }
+            case ContentValue<?> value -> {
+                long taken = consumeValue(value, amount);
+                if (taken > 0) {
+                    consumed.add(new ConsumedResource(value.normalize(), taken));
+                }
+            }
+            case ContentKind<?> kind -> {
+                long remaining = amount;
+                for (ContentStack<?, ?> existing : stacks) {
+                    if (remaining <= 0) {
+                        break;
+                    }
+                    if (!existing.matchesContent(kind)) {
+                        continue;
+                    }
+                    long available = stackAmounts.getOrDefault(existing, 0L);
+                    long taken = Math.min(available, remaining);
+                    if (taken <= 0) {
+                        continue;
+                    }
+                    stackAmounts.put(existing, available - taken);
+                    consumed.add(new ConsumedResource(existing.normalize(), taken));
+                    remaining -= taken;
+                }
+            }
+            case ContentResource resource -> {
+                long taken = consumeResource(resource, amount);
+                if (taken > 0) {
+                    consumed.add(new ConsumedResource(resource.normalize(), taken));
+                }
+            }
+        }
+        return consumed;
+    }
+
+    /**
+     * Consumes up to {@code amount} of concrete resources that satisfy the given input and
+     * returns the exact resources actually removed from stock.
+     *
+     * <p>This path is used for non-enumerable inputs such as some {@code ComplexContent}
+     * implementations where the planner cannot iterate all possible variants but can still
+     * test concrete stock entries via {@link InputContent#satisfy(ContentVariant)}.
+     */
+    public MutableList<ConsumedResource> consumeMatchingDetailed(InputContent input, long amount) {
+        MutableList<ConsumedResource> consumed = Lists.mutable.empty();
+        if (amount <= 0) {
+            return consumed;
+        }
+
+        long remaining = amount;
+        for (ContentStack<?, ?> existing : stacks) {
+            if (remaining <= 0) {
+                break;
+            }
+            long available = stackAmounts.getOrDefault(existing, 0L);
+            if (available <= 0 || !input.satisfy(existing)) {
+                continue;
+            }
+            long taken = Math.min(available, remaining);
+            stackAmounts.put(existing, available - taken);
+            consumed.add(new ConsumedResource(existing.normalize(), taken));
+            remaining -= taken;
+        }
+
+        if (remaining > 0) {
+            for (var entry : valueAmounts.object2LongEntrySet()) {
+                if (remaining <= 0) {
+                    break;
+                }
+                ContentValue<?> value = entry.getKey();
+                long available = entry.getLongValue();
+                if (available <= 0 || !input.satisfy(value)) {
+                    continue;
+                }
+                long taken = Math.min(available, remaining);
+                entry.setValue(available - taken);
+                consumed.add(new ConsumedResource(value, taken));
+                remaining -= taken;
+            }
+        }
+
+        return consumed;
+    }
+
+    /**
+     * Consumes up to {@code amount} of concrete resources that satisfy the given input and
+     * returns the exact resources actually removed from stock.
+     *
+     * <p>This is the stock-only counterpart of planner demand resolution. Enumerable inputs are
+     * consumed variant-by-variant in enumeration order; non-enumerable inputs fall back to
+     * {@link #consumeMatchingDetailed(InputContent, long)}.
+     */
+    public MutableList<ConsumedResource> consumeInputDetailed(InputContent input, long amount) {
+        MutableList<ConsumedResource> consumed = Lists.mutable.empty();
+        if (input.isEmpty() || amount <= 0L) {
+            return consumed;
+        }
+        if (!input.isEnumerable()) {
+            consumed.addAllIterable(consumeMatchingDetailed(input, amount));
+            return consumed;
+        }
+
+        long remaining = amount;
+        for (ContentVariant variant : input.enumerate()) {
+            if (remaining <= 0L) {
+                break;
+            }
+            MutableList<ConsumedResource> fromVariant = consumeVariantDetailed(variant, remaining);
+            consumed.addAllIterable(fromVariant);
+            for (ConsumedResource resource : fromVariant) {
+                remaining -= resource.amount();
+            }
+        }
+        return consumed;
+    }
+
+    /**
+     * Consumes up to {@code amount} satisfying the given input and returns the total amount taken.
+     */
+    public long consumeInput(InputContent input, long amount) {
+        long consumed = 0L;
+        for (ConsumedResource resource : consumeInputDetailed(input, amount)) {
+            consumed = safeAdd(consumed, resource.amount());
+        }
+        return consumed;
+    }
+
     /** Returns {@code true} if the stock contains any amount of the given stack. */
     public boolean contains(ContentStack<?, ?> stack) {
         return countMatching(stack) > 0;
@@ -318,6 +503,29 @@ public class Stock {
         return stacks;
     }
 
+    /**
+     * Returns a concrete snapshot of all currently available resources.
+     *
+     * <p>Each entry is normalized and carries the total amount currently stored
+     * for that exact resource identity.
+     */
+    public MutableList<ConsumedResource> snapshotResources() {
+        MutableList<ConsumedResource> resources = Lists.mutable.empty();
+        for (ContentStack<?, ?> existing : stacks) {
+            long amount = stackAmounts.getOrDefault(existing, 0L);
+            if (amount > 0L) {
+                resources.add(new ConsumedResource(existing.normalize(), amount));
+            }
+        }
+        for (var entry : valueAmounts.object2LongEntrySet()) {
+            long amount = entry.getLongValue();
+            if (amount > 0L) {
+                resources.add(new ConsumedResource(entry.getKey().normalize(), amount));
+            }
+        }
+        return resources;
+    }
+
     /** Creates a deep copy of this stock (both stack and value pools are cloned). */
     public Stock copy() {
         Stock copy = new Stock();
@@ -325,6 +533,15 @@ public class Stock {
         copy.stackAmounts.putAll(this.stackAmounts);
         copy.valueAmounts.putAll(this.valueAmounts);
         return copy;
+    }
+
+    public void restoreFrom(Stock snapshot) {
+        stackAmounts.clear();
+        valueAmounts.clear();
+        stacks.clear();
+        stacks.addAll(snapshot.stacks);
+        stackAmounts.putAll(snapshot.stackAmounts);
+        valueAmounts.putAll(snapshot.valueAmounts);
     }
 
     /** Removes all resources from this stock. */
@@ -337,5 +554,18 @@ public class Stock {
     /** Returns {@code true} if this stock contains no resources of any kind. */
     public boolean isEmpty() {
         return stacks.isEmpty() && valueAmounts.isEmpty();
+    }
+
+    public record ConsumedResource(ContentResource resource, long amount) {
+    }
+
+    private static long safeAdd(long first, long second) {
+        if (second > 0L && first > Long.MAX_VALUE - second) {
+            return Long.MAX_VALUE;
+        }
+        if (second < 0L && first < Long.MIN_VALUE - second) {
+            return Long.MIN_VALUE;
+        }
+        return first + second;
     }
 }

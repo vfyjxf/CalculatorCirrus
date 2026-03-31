@@ -1,7 +1,11 @@
 package dev.vfyjxf.cirrus.api.recipe.routing;
 
-import dev.vfyjxf.cirrus.api.CirrusTypes;
+import dev.vfyjxf.cirrus.api.content.MatchStrategy;
+import dev.vfyjxf.cirrus.api.content.value.ContentKind;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
+import dev.vfyjxf.cirrus.api.content.value.ContentResource;
+import dev.vfyjxf.cirrus.api.content.value.ContentValue;
+import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
@@ -21,6 +25,11 @@ import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContext;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionEngine;
+import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContexts;
+import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeHeuristicContext;
+import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeRoutingHeuristics;
+import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeRoutingHints;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cloudlib.util.Checks;
 import it.unimi.dsi.fastutil.Hash.Strategy;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
@@ -31,13 +40,24 @@ import it.unimi.dsi.fastutil.objects.ObjectSet;
 import it.unimi.dsi.fastutil.objects.ObjectSets;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.collection.ImmutableCollection;
-import org.eclipse.collections.api.factory.SortedSets;
+import org.eclipse.collections.api.factory.Lists;
+import org.eclipse.collections.api.factory.Sets;
+import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.set.ImmutableSet;
-import org.eclipse.collections.api.set.sorted.ImmutableSortedSet;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnmodifiableView;
 
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 
 /**
  * Immutable recipe dependency graph used by the routing engine.
@@ -71,9 +91,16 @@ import java.util.Comparator;
  */
 public final class RecipeGraph {
 
-    private static final int inputIndexCapacity = 10_000;
-    private static final int outputIndexCapacity = 5_000;
-    private static final int nodeMapCapacity = 1_000;
+    private static final int minInputIndexCapacity = 16;
+    private static final int minOutputIndexCapacity = 16;
+    private static final int minNodeMapCapacity = 16;
+    private static final int parallelBuildThreshold = 256;
+    private static final int minRecipesPerBuildWorker = 96;
+
+    private static final Comparator<Node> stableNodeOrder = Comparator
+        .comparing((Node node) -> node.recipe().systemId().toString())
+        .thenComparing(node -> Objects.toString(node.recipe().id(), "null"))
+        .thenComparingInt(node -> node.recipe().hashCode());
 
     private static final Strategy<RecipeContent> contentHashStrategy = new Strategy<>() {
 
@@ -170,20 +197,32 @@ public final class RecipeGraph {
     };
 
     private final ObjectSet<Node> nodes;
+    private final ImmutableList<Node> stableNodes;
     private final Object2ObjectMap<RecipeEntry<?>, Node> nodeByRecipe;
+    private final Object2ObjectMap<OutputContent, ObjectSet<OutputRef>> producersByOutput;
+    private final Object2ObjectMap<ContentKind<?>, ObjectSet<OutputRef>> producersByKind;
     private final Object2ObjectMap<InputContent, ObjectSet<OutputRef>> producersByInput;
     private final Object2ObjectMap<OutputContent, ObjectSet<InputRef>> consumersByOutput;
+    private final Object2ObjectMap<ContentKind<?>, ObjectSet<InputRef>> consumersByKind;
 
     private RecipeGraph(
         ObjectSet<Node> nodes,
+        ImmutableList<Node> stableNodes,
         Object2ObjectMap<RecipeEntry<?>, Node> nodeByRecipe,
+        Object2ObjectMap<OutputContent, ObjectSet<OutputRef>> producersByOutput,
+        Object2ObjectMap<ContentKind<?>, ObjectSet<OutputRef>> producersByKind,
         Object2ObjectMap<InputContent, ObjectSet<OutputRef>> producersByInput,
-        Object2ObjectMap<OutputContent, ObjectSet<InputRef>> consumersByOutput
+        Object2ObjectMap<OutputContent, ObjectSet<InputRef>> consumersByOutput,
+        Object2ObjectMap<ContentKind<?>, ObjectSet<InputRef>> consumersByKind
     ) {
         this.nodes = nodes;
+        this.stableNodes = stableNodes;
         this.nodeByRecipe = nodeByRecipe;
+        this.producersByOutput = producersByOutput;
+        this.producersByKind = producersByKind;
         this.producersByInput = producersByInput;
         this.consumersByOutput = consumersByOutput;
+        this.consumersByKind = consumersByKind;
     }
 
     /**
@@ -193,6 +232,16 @@ public final class RecipeGraph {
      */
     public @UnmodifiableView ObjectSet<Node> nodes() {
         return ObjectSets.unmodifiable(nodes);
+    }
+
+    /**
+     * Returns all recipe nodes in the stable order used by routing catalogs.
+     *
+     * <p>The order is fixed when the graph is built so services can be created
+     * repeatedly without re-sorting immutable graph nodes.
+     */
+    public ImmutableList<Node> stableNodes() {
+        return stableNodes;
     }
 
     /**
@@ -220,6 +269,43 @@ public final class RecipeGraph {
     }
 
     /**
+     * Returns all output refs whose output resource matches the given target resource.
+     *
+     * <p>This is the output-target adapter counterpart to {@link #producersFor(InputContent)}.
+     * Amount is intentionally ignored by the index; callers still use each matched output's
+     * actual amount to calculate craft times.
+     *
+     * @param output the requested output resource
+     * @return unmodifiable set of producers; empty set if none match
+     */
+    public @UnmodifiableView ObjectSet<OutputRef> producersFor(ContentResource output) {
+        OutputContent key = outputContent(output);
+        ObjectSet<OutputRef> refs = producersByOutput.get(key);
+        return refs == null ? ObjectSets.emptySet() : ObjectSets.unmodifiable(refs);
+    }
+
+    /**
+     * Returns producer refs whose output can match a concrete variant from an enumerable input.
+     *
+     * <p>Resource variants use the direct output index. Kind variants use an output-kind index
+     * so tag/list inputs can avoid scanning the full recipe set in large catalogs.
+     */
+    public @UnmodifiableView ObjectSet<OutputRef> producersFor(ContentVariant variant) {
+        return switch (variant) {
+            case ContentResource resource -> producersFor(resource);
+            case ContentKind<?> kind -> producersForKind(kind);
+        };
+    }
+
+    private @UnmodifiableView ObjectSet<OutputRef> producersForKind(ContentKind<?> kind) {
+        if (kind.isEmpty()) {
+            return ObjectSets.emptySet();
+        }
+        ObjectSet<OutputRef> refs = producersByKind.get(kind);
+        return refs == null ? ObjectSets.emptySet() : ObjectSets.unmodifiable(refs);
+    }
+
+    /**
      * Returns all input refs whose input content is satisfied by the given output.
      *
      * <p>This is the reverse lookup — which recipes consume the output of another recipe.
@@ -229,15 +315,28 @@ public final class RecipeGraph {
      */
     public @UnmodifiableView ObjectSet<InputRef> consumersFor(OutputContent output) {
         ObjectSet<InputRef> refs = consumersByOutput.get(output);
-        return refs == null ? ObjectSets.emptySet() : ObjectSets.unmodifiable(refs);
+        ContentKind<?> kind = outputKind(output);
+        ObjectSet<InputRef> kindRefs = kind == null ? null : consumersByKind.get(kind);
+        if (refs == null || refs.isEmpty()) {
+            return kindRefs == null ? ObjectSets.emptySet() : ObjectSets.unmodifiable(kindRefs);
+        }
+        if (kindRefs == null || kindRefs.isEmpty()) {
+            return ObjectSets.unmodifiable(refs);
+        }
+        ObjectOpenHashSet<InputRef> merged = new ObjectOpenHashSet<>(refs.size() + kindRefs.size());
+        merged.addAll(refs);
+        merged.addAll(kindRefs);
+        return ObjectSets.unmodifiable(merged);
     }
 
     /**
      * Builds an immutable graph snapshot from raw recipe entries.
      *
-     * <p>Each recipe is projected through a default {@link ProjectionEngine},
+     * <p>Each routeable recipe is projected through a default {@link ProjectionEngine},
      * its inputs/outputs are merged by content identity, and the global
      * producer/consumer indices are constructed.
+     * Entries that cannot produce a deterministic projection are skipped so
+     * one plugin/category recipe cannot invalidate the entire graph.
      *
      * @param recipes the recipe entries to include in the graph
      * @return a fully constructed, immutable {@code RecipeGraph}
@@ -245,41 +344,142 @@ public final class RecipeGraph {
     public static RecipeGraph buildGraph(RichIterable<RecipeEntry<?>> recipes) {
         Checks.checkNotNull(recipes, "recipes");
 
-        ProjectionEngine projectionEngine = createDefaultProjectionEngine();
-        ExecutionContext executionContext = new ExecutionContext();
-        ImmutableSet<Node> nodes = recipes.collect(entry -> resolveNode(entry, projectionEngine, executionContext)).toImmutableSet();
-        return buildIndices(nodes);
+        List<RecipeEntry<?>> recipeList = Lists.mutable.ofAll(recipes);
+        if (recipeList.isEmpty()) {
+            return buildIndices(Sets.immutable.empty());
+        }
+        GraphBuildContext buildContext = GraphBuildContext.preload(recipeList);
+        if (recipeList.size() < parallelBuildThreshold) {
+            return buildGraphSerial(recipeList, buildContext);
+        }
+
+        int workerCount = graphBuildWorkerCount(recipeList.size());
+        if (workerCount <= 1) {
+            return buildGraphSerial(recipeList, buildContext);
+        }
+        return buildGraphParallel(recipeList, buildContext, workerCount);
     }
 
-    private static Node resolveNode(
-        RecipeEntry<?> recipeEntry,
-        ProjectionEngine projectionEngine,
-        ExecutionContext executionContext
-    ) {
-        MachineEntry machine = recipeEntry.system().conventionMachine();
-        if (machine.isEmpty()) {
-            var machines = RecipeApi.instance().getMachines(recipeEntry.system().systemId(), true);
-            if (machines.notEmpty()) {
-                machine = machines.getAny();
+    private static RecipeGraph buildGraphSerial(List<RecipeEntry<?>> recipes, GraphBuildContext buildContext) {
+        ProjectionEngine projectionEngine = createDefaultProjectionEngine();
+        ExecutionContext executionContext = ProjectionContexts.global();
+        var nodes = Sets.mutable.<Node>empty();
+        for (RecipeEntry<?> entry : recipes) {
+            Node node = tryResolveNode(entry, projectionEngine, executionContext, buildContext);
+            if (node != null) {
+                nodes.add(node);
             }
         }
-        return Node.resolve(recipeEntry.resolve(), recipeEntry.constraint(), machine, projectionEngine, executionContext);
+        return buildIndices(nodes.toImmutable());
+    }
+
+    private static RecipeGraph buildGraphParallel(
+        List<RecipeEntry<?>> recipes,
+        GraphBuildContext buildContext,
+        int workerCount
+    ) {
+        ExecutorService executor = Executors.newFixedThreadPool(workerCount, new GraphBuildThreadFactory());
+        try {
+            int batchSize = (recipes.size() + workerCount - 1) / workerCount;
+            @SuppressWarnings("unchecked")
+            Future<List<Node>>[] futures = new Future[workerCount];
+            int futureCount = 0;
+            for (int start = 0; start < recipes.size(); start += batchSize) {
+                int from = start;
+                int to = Math.min(recipes.size(), start + batchSize);
+                futures[futureCount++] = executor.submit(() -> resolveNodeRange(recipes, from, to, buildContext));
+            }
+
+            var nodes = Sets.mutable.<Node>empty();
+            for (int i = 0; i < futureCount; i++) {
+                for (Node node : futures[i].get()) {
+                    nodes.add(node);
+                }
+            }
+            return buildIndices(nodes.toImmutable());
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return buildGraphSerial(recipes, buildContext);
+        } catch (ExecutionException exception) {
+            return buildGraphSerial(recipes, buildContext);
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    private static List<Node> resolveNodeRange(
+        List<RecipeEntry<?>> recipes,
+        int from,
+        int to,
+        GraphBuildContext buildContext
+    ) {
+        ProjectionEngine projectionEngine = createDefaultProjectionEngine();
+        ExecutionContext executionContext = ProjectionContexts.global();
+        ArrayList<Node> nodes = new ArrayList<>(to - from);
+        for (int i = from; i < to; i++) {
+            Node node = tryResolveNode(recipes.get(i), projectionEngine, executionContext, buildContext);
+            if (node != null) {
+                nodes.add(node);
+            }
+        }
+        return nodes;
+    }
+
+    private static int graphBuildWorkerCount(int recipeCount) {
+        int processors = Runtime.getRuntime().availableProcessors();
+        if (processors <= 1) {
+            return 1;
+        }
+        int byWork = Math.max(1, recipeCount / minRecipesPerBuildWorker);
+        return Math.max(1, Math.min(Math.min(processors, 8), byWork));
+    }
+
+    private static @Nullable Node tryResolveNode(
+        RecipeEntry<?> recipeEntry,
+        ProjectionEngine projectionEngine,
+        ExecutionContext executionContext,
+        GraphBuildContext buildContext
+    ) {
+        try {
+            return resolveNode(recipeEntry, projectionEngine, executionContext, buildContext);
+        } catch (RuntimeException ignored) {
+            // Broad recipe pools can contain display-only or probabilistic recipes.
+            // Those do not belong in deterministic routing, but other recipes still do.
+            return null;
+        }
+    }
+
+    private static @Nullable Node resolveNode(
+        RecipeEntry<?> recipeEntry,
+        ProjectionEngine projectionEngine,
+        ExecutionContext executionContext,
+        GraphBuildContext buildContext
+    ) {
+        MachineEntry machine = buildContext.machineForSystem(recipeEntry.system());
+        RecipeProjection projection = recipeEntry.resolve();
+        if (projection == null) {
+            return null;
+        }
+        return Node.resolve(recipeEntry, projection, recipeEntry.constraint(), machine, projectionEngine, executionContext);
     }
 
     private static RecipeGraph buildIndices(ImmutableSet<Node> resolvedNodes) {
         ObjectSet<Node> nodeSet = new ObjectOpenHashSet<>(resolvedNodes.size());
-        Object2ObjectMap<RecipeEntry<?>, Node> nodeMap = new Object2ObjectOpenHashMap<>(Math.max(nodeMapCapacity, resolvedNodes.size() * 2));
+        Object2ObjectMap<RecipeEntry<?>, Node> nodeMap = new Object2ObjectOpenHashMap<>(Math.max(minNodeMapCapacity, resolvedNodes.size() * 2));
         for (Node node : resolvedNodes) {
             nodeSet.add(node);
             nodeMap.put(node.recipe(), node);
         }
+        var stableNodes = Lists.mutable.ofAll(resolvedNodes);
+        stableNodes.sortThis(stableNodeOrder);
+        ImmutableList<Node> stableNodeList = stableNodes.toImmutable();
 
         int inputCount = Math.toIntExact(resolvedNodes.sumOfInt(node -> node.mergedInputs().size()));
         int outputCount = Math.toIntExact(resolvedNodes.sumOfInt(node -> node.mergedOutputs().size()));
         Object2ObjectMap<RecipeContent, ObjectSet<ContentRef<InputContent>>> inputDemands =
-            new Object2ObjectOpenCustomHashMap<>(Math.max(inputIndexCapacity, inputCount * 2), contentHashStrategy);
+            new Object2ObjectOpenCustomHashMap<>(Math.max(minInputIndexCapacity, inputCount * 2), contentHashStrategy);
         Object2ObjectMap<RecipeContent, ObjectSet<ContentRef<OutputContent>>> outputSupplies =
-            new Object2ObjectOpenCustomHashMap<>(Math.max(outputIndexCapacity, outputCount * 2), contentHashStrategy);
+            new Object2ObjectOpenCustomHashMap<>(Math.max(minOutputIndexCapacity, outputCount * 2), contentHashStrategy);
 
         for (Node node : resolvedNodes) {
             for (InputContent input : node.mergedInputs()) {
@@ -291,11 +491,25 @@ public final class RecipeGraph {
         }
 
         Object2ObjectMap<InputContent, ObjectSet<OutputRef>> producersByInput =
-            new Object2ObjectOpenCustomHashMap<>(Math.max(inputIndexCapacity, inputCount * 2), inputHashStrategy);
+            new Object2ObjectOpenCustomHashMap<>(Math.max(minInputIndexCapacity, inputCount * 2), inputHashStrategy);
+        Object2ObjectMap<OutputContent, ObjectSet<OutputRef>> producersByOutput =
+            new Object2ObjectOpenCustomHashMap<>(Math.max(minOutputIndexCapacity, outputCount * 2), outputHashStrategy);
+        Object2ObjectMap<ContentKind<?>, ObjectSet<OutputRef>> producersByKind =
+            new Object2ObjectOpenHashMap<>(Math.max(minOutputIndexCapacity, outputCount * 2));
         Object2ObjectMap<OutputContent, ObjectSet<InputRef>> consumersByOutput =
-            new Object2ObjectOpenCustomHashMap<>(Math.max(outputIndexCapacity, outputCount * 2), outputHashStrategy);
+            new Object2ObjectOpenCustomHashMap<>(Math.max(minOutputIndexCapacity, outputCount * 2), outputHashStrategy);
+        Object2ObjectMap<ContentKind<?>, ObjectSet<InputRef>> consumersByKind =
+            new Object2ObjectOpenHashMap<>(Math.max(minOutputIndexCapacity, inputCount * 2));
 
         for (Node node : resolvedNodes) {
+            for (OutputContent output : node.mergedOutputs()) {
+                OutputRef ref = new OutputRef(node, output);
+                producersByOutput.computeIfAbsent(output, ignored -> new ObjectOpenHashSet<>()).add(ref);
+                ContentKind<?> outputKind = outputKind(output);
+                if (outputKind != null && outputKind.notEmpty()) {
+                    producersByKind.computeIfAbsent(outputKind, ignored -> new ObjectOpenHashSet<>()).add(ref);
+                }
+            }
             for (InputContent input : node.mergedInputs()) {
                 ObjectSet<ContentRef<OutputContent>> producers = outputSupplies.get(input);
                 if (producers == null || producers.isEmpty()) {
@@ -316,18 +530,119 @@ public final class RecipeGraph {
                     refs.add(new InputRef(consumer.node(), consumer.content()));
                 }
             }
+            for (InputContent input : node.mergedInputs()) {
+                addInputConsumerIndices(consumersByOutput, consumersByKind, node, input);
+            }
         }
 
-        return new RecipeGraph(nodeSet, nodeMap, producersByInput, consumersByOutput);
+        return new RecipeGraph(
+            nodeSet,
+            stableNodeList,
+            nodeMap,
+            producersByOutput,
+            producersByKind,
+            producersByInput,
+            consumersByOutput,
+            consumersByKind
+        );
+    }
+
+    private static void addInputConsumerIndices(
+        Object2ObjectMap<OutputContent, ObjectSet<InputRef>> consumersByOutput,
+        Object2ObjectMap<ContentKind<?>, ObjectSet<InputRef>> consumersByKind,
+        Node node,
+        InputContent input
+    ) {
+        InputRef ref = new InputRef(node, input);
+        ContentResource direct = directInputResource(input);
+        if (direct != null) {
+            consumersByOutput.computeIfAbsent(outputContent(direct), ignored -> new ObjectOpenHashSet<>()).add(ref);
+            return;
+        }
+        if (!input.isEnumerable()) {
+            return;
+        }
+        for (ContentVariant variant : input.enumerate()) {
+            switch (variant) {
+                case ContentResource resource ->
+                    consumersByOutput.computeIfAbsent(outputContent(resource), ignored -> new ObjectOpenHashSet<>()).add(ref);
+                case ContentKind<?> kind when kind.notEmpty() ->
+                    consumersByKind.computeIfAbsent(kind, ignored -> new ObjectOpenHashSet<>()).add(ref);
+                default -> {
+                }
+            }
+        }
+    }
+
+    private static final class GraphBuildContext {
+        private final Map<RecipeSystem<?>, MachineEntry> machineBySystem;
+
+        private GraphBuildContext(Map<RecipeSystem<?>, MachineEntry> machineBySystem) {
+            this.machineBySystem = machineBySystem;
+        }
+
+        private static GraphBuildContext preload(Iterable<RecipeEntry<?>> recipes) {
+            Map<RecipeSystem<?>, MachineEntry> machines = new HashMap<>();
+            for (RecipeEntry<?> recipe : recipes) {
+                RecipeSystem<?> system = recipe.system();
+                machines.computeIfAbsent(system, GraphBuildContext::resolveMachine);
+            }
+            return new GraphBuildContext(machines);
+        }
+
+        private MachineEntry machineForSystem(RecipeSystem<?> system) {
+            MachineEntry machine = machineBySystem.get(system);
+            return machine == null ? MachineEntry.empty : machine;
+        }
+
+        private static MachineEntry resolveMachine(RecipeSystem<?> system) {
+            MachineEntry machine = system.conventionMachine();
+            if (!machine.isEmpty()) {
+                return machine;
+            }
+            var machines = RecipeApi.instance().getMachines(system.systemId(), true);
+            return machines.isEmpty() ? MachineEntry.empty : machines.getAny();
+        }
+    }
+
+    private static final class GraphBuildThreadFactory implements ThreadFactory {
+        private int sequence;
+
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "cirrus-recipe-graph-build-" + sequence++);
+            thread.setDaemon(true);
+            return thread;
+        }
+    }
+
+    private static OutputContent outputContent(ContentResource resource) {
+        return switch (resource) {
+            case ContentStack<?, ?> stack -> OutputContent.fromStack(stack);
+            case ContentValue<?> value -> OutputContent.fromValue(value);
+        };
+    }
+
+    private static @Nullable ContentResource directInputResource(InputContent input) {
+        return switch (input) {
+            case StackContent<?, ?> stack -> stack.content();
+            case ValueContent<?> value -> value.content();
+            default -> null;
+        };
+    }
+
+    private static @Nullable ContentKind<?> outputKind(OutputContent output) {
+        return switch (output.asResource()) {
+            case ContentStack<?, ?> stack -> stack.kind();
+            case ContentValue<?> ignored -> null;
+        };
     }
 
     private static ProjectionEngine createDefaultProjectionEngine() {
-        ProjectionEngine engine = new ProjectionEngine();
-        engine.detectClause(CirrusTypes.Clauses.fluidContainerUnpack);
-        return engine;
+        return new ProjectionEngine();
     }
 
-    private static <T extends RecipeContent> ImmutableSortedSet<T> mergeContents(
+    private static <T extends RecipeContent> ImmutableList<T> mergeContents(
         ImmutableCollection<T> contents,
         Strategy<T> strategy
     ) {
@@ -341,7 +656,141 @@ public final class RecipeGraph {
             T next = (T) existing.copyWithAmount(existing.amount() + content.amount());
             merged.put(content, next);
         }
-        return SortedSets.immutable.ofAll(Comparator.comparingLong(RecipeContent::amount), merged.values());
+        var sorted = Lists.mutable.ofAll(merged.values());
+        sorted.sortThis(RecipeGraph::compareMergedContent);
+        return sorted.toImmutable();
+    }
+
+    private static int compareMergedContent(RecipeContent left, RecipeContent right) {
+        if (left == right) {
+            return 0;
+        }
+        int cmp = Long.compare(left.amount(), right.amount());
+        if (cmp != 0) {
+            return cmp;
+        }
+        cmp = Integer.compare(contentKindRank(left), contentKindRank(right));
+        if (cmp != 0) {
+            return cmp;
+        }
+        cmp = compareContentIdentity(left, right);
+        if (cmp != 0) {
+            return cmp;
+        }
+        return Integer.compare(System.identityHashCode(left), System.identityHashCode(right));
+    }
+
+    private static int contentKindRank(RecipeContent content) {
+        return switch (content) {
+            case EmptyRecipeContent ignored -> 0;
+            case StackContent<?, ?> ignored -> 1;
+            case ValueContent<?> ignored -> 2;
+            case StackListContent ignored -> 3;
+            case TypedStackListContent<?, ?> ignored -> 4;
+            case TagStackContent<?> ignored -> 5;
+            default -> 6;
+        };
+    }
+
+    private static int compareContentIdentity(RecipeContent left, RecipeContent right) {
+        return switch (left) {
+            case EmptyRecipeContent ignored -> 0;
+            case StackContent<?, ?> stack when right instanceof StackContent<?, ?> other ->
+                compareStackIdentity(stack.content(), other.content());
+            case ValueContent<?> value when right instanceof ValueContent<?> other -> {
+                int cmp = value.type().typeId().toString().compareTo(other.type().typeId().toString());
+                if (cmp != 0) {
+                    yield cmp;
+                }
+                yield Integer.compare(value.type().hashCode(), other.type().hashCode());
+            }
+            case StackListContent list when right instanceof StackListContent other ->
+                compareStackLists(list.stacks(), other.stacks());
+            case TypedStackListContent<?, ?> list when right instanceof TypedStackListContent<?, ?> other -> {
+                int cmp = list.type().typeId().toString().compareTo(other.type().typeId().toString());
+                if (cmp != 0) {
+                    yield cmp;
+                }
+                yield compareStackLists(list.stacks(), other.stacks());
+            }
+            case TagStackContent<?> tag when right instanceof TagStackContent<?> other -> {
+                int cmp = tag.type().typeId().toString().compareTo(other.type().typeId().toString());
+                if (cmp != 0) {
+                    yield cmp;
+                }
+                yield tag.tagKey().location().compareTo(other.tagKey().location());
+            }
+            default -> {
+                int cmp = left.getClass().getName().compareTo(right.getClass().getName());
+                if (cmp != 0) {
+                    yield cmp;
+                }
+                yield Integer.compare(contentHashStrategy.hashCode(left), contentHashStrategy.hashCode(right));
+            }
+        };
+    }
+
+    private static int compareStackLists(
+        ImmutableList<? extends ContentStack<?, ?>> left,
+        ImmutableList<? extends ContentStack<?, ?>> right
+    ) {
+        int cmp = Integer.compare(left.size(), right.size());
+        if (cmp != 0) {
+            return cmp;
+        }
+        for (int i = 0; i < left.size(); i++) {
+            cmp = compareStackIdentity(left.get(i), right.get(i));
+            if (cmp != 0) {
+                return cmp;
+            }
+        }
+        return 0;
+    }
+
+    private static int compareStackIdentity(ContentStack<?, ?> left, ContentStack<?, ?> right) {
+        if (left == right) {
+            return 0;
+        }
+        if (left == null || left.isEmpty()) {
+            return right == null || right.isEmpty() ? 0 : -1;
+        }
+        if (right == null || right.isEmpty()) {
+            return 1;
+        }
+        return compareStackIdentityTyped(left.cast(), right.cast());
+    }
+
+    private static <T, S> int compareStackIdentityTyped(ContentStack<T, S> left, ContentStack<?, ?> rightRaw) {
+        ContentStack<?, ?> right = rightRaw;
+        int cmp = left.type().typeId().toString().compareTo(right.type().typeId().toString());
+        if (cmp != 0) {
+            return cmp;
+        }
+        cmp = left.contentType().typeId().toString().compareTo(right.contentType().typeId().toString());
+        if (cmp != 0) {
+            return cmp;
+        }
+        cmp = Integer.compare(stackContentHash(left), stackContentHash(right));
+        if (cmp != 0) {
+            return cmp;
+        }
+        return Integer.compare(stackVariantHash(left), stackVariantHash(right));
+    }
+
+    private static int stackContentHash(ContentStack<?, ?> stack) {
+        return stackContentHashTyped(stack.cast());
+    }
+
+    private static <T, S> int stackContentHashTyped(ContentStack<T, S> stack) {
+        return stack.contentType().hash(stack.content());
+    }
+
+    private static int stackVariantHash(ContentStack<?, ?> stack) {
+        return stackVariantHashTyped(stack.cast());
+    }
+
+    private static <T, S> int stackVariantHashTyped(ContentStack<T, S> stack) {
+        return stack.variantType().hashIdentity(stack.value());
     }
 
     private static <T, S> int hashStackIdentity(ContentStack<T, S> stack) {
@@ -373,16 +822,18 @@ public final class RecipeGraph {
         private final RecipeConstraint<?> recipeConstraint;
         private final MachineEntry machineEntry;
         private final ProjectedRecipe projectedRecipe;
-        private final ImmutableSortedSet<InputContent> mergedInputs;
-        private final ImmutableSortedSet<OutputContent> mergedOutputs;
+        private final ImmutableList<InputContent> mergedInputs;
+        private final ImmutableList<OutputContent> mergedOutputs;
+        private final RecipeRoutingHints routingHints;
 
         private Node(
             RecipeProjection view,
             RecipeConstraint<?> recipeConstraint,
             MachineEntry machineEntry,
             ProjectedRecipe projectedRecipe,
-            ImmutableSortedSet<InputContent> mergedInputs,
-            ImmutableSortedSet<OutputContent> mergedOutputs
+            ImmutableList<InputContent> mergedInputs,
+            ImmutableList<OutputContent> mergedOutputs,
+            RecipeRoutingHints routingHints
         ) {
             this.view = view;
             this.recipeConstraint = recipeConstraint;
@@ -390,15 +841,18 @@ public final class RecipeGraph {
             this.projectedRecipe = projectedRecipe;
             this.mergedInputs = mergedInputs;
             this.mergedOutputs = mergedOutputs;
+            this.routingHints = routingHints;
         }
 
         private static Node resolve(
+            RecipeEntry<?> recipeEntry,
             RecipeProjection view,
             RecipeConstraint<?> recipeConstraint,
             MachineEntry machineEntry,
             ProjectionEngine projectionEngine,
             ExecutionContext executionContext
         ) {
+            Checks.checkNotNull(recipeEntry, "recipeEntry");
             Checks.checkNotNull(view, "view");
             Checks.checkNotNull(recipeConstraint, "recipeConstraint");
             Checks.checkNotNull(machineEntry, "machineEntry");
@@ -407,15 +861,32 @@ public final class RecipeGraph {
             Checks.checkArgument(projected.isConstantInputs(), "inputs must be constant");
             Checks.checkArgument(projected.isConstantOutputs(), "outputs must be constant");
 
-            ImmutableSortedSet<InputContent> mergedInputs = mergeContents(
+            ImmutableList<InputContent> mergedInputs = mergeContents(
                 projected.inputs().reject(RecipeContent::isEmpty),
                 inputHashStrategy
             );
-            ImmutableSortedSet<OutputContent> mergedOutputs = mergeContents(
+            ImmutableList<OutputContent> mergedOutputs = mergeContents(
                 projected.outputs().reject(RecipeContent::isEmpty),
                 outputHashStrategy
             );
-            return new Node(view, recipeConstraint, machineEntry, projected, mergedInputs, mergedOutputs);
+            RecipeHeuristicContext heuristicContext = new RecipeHeuristicContext(
+                recipeEntry,
+                recipeEntry.id(),
+                recipeEntry.systemId(),
+                machineEntry,
+                projected,
+                mergedInputs,
+                mergedOutputs
+            );
+            RecipeRoutingHints hints = systemRoutingHints(recipeEntry)
+                .merge(RecipeRoutingHeuristics.matchingHints(heuristicContext));
+            return new Node(view, recipeConstraint, machineEntry, projected, mergedInputs, mergedOutputs, hints);
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        private static RecipeRoutingHints systemRoutingHints(RecipeEntry<?> recipeEntry) {
+            RecipeSystem system = recipeEntry.system();
+            return system.routingHints(recipeEntry.recipe());
         }
 
         /** Returns the original recipe entry this node was built from. */
@@ -443,7 +914,7 @@ public final class RecipeGraph {
          *
          * <p>Slots with identical content identity are merged and their amounts summed.
          */
-        public ImmutableSortedSet<InputContent> mergedInputs() {
+        public ImmutableList<InputContent> mergedInputs() {
             return mergedInputs;
         }
 
@@ -452,8 +923,12 @@ public final class RecipeGraph {
          *
          * <p>Slots with identical content identity are merged and their amounts summed.
          */
-        public ImmutableSortedSet<OutputContent> mergedOutputs() {
+        public ImmutableList<OutputContent> mergedOutputs() {
             return mergedOutputs;
+        }
+
+        public RecipeRoutingHints routingHints() {
+            return routingHints;
         }
 
         @Override
@@ -493,8 +968,7 @@ public final class RecipeGraph {
     public record OutputRef(
         Node node,
         OutputContent output
-    ) {
-    }
+    ) {}
 
     /**
      * A reference to a specific input slot of a {@link Node}, used as an element in
@@ -506,8 +980,7 @@ public final class RecipeGraph {
     public record InputRef(
         Node node,
         InputContent input
-    ) {
-    }
+    ) {}
 
     /**
      * Internal reference pairing a node with one of its content slots.
@@ -516,6 +989,5 @@ public final class RecipeGraph {
     private record ContentRef<T extends RecipeContent>(
         Node node,
         T content
-    ) {
-    }
+    ) {}
 }

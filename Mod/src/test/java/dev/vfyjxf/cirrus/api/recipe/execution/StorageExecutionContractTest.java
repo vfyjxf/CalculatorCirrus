@@ -12,13 +12,11 @@ import dev.vfyjxf.cirrus.api.recipe.storage.StorageSource;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageSourceRenderer;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageSourceType;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageTransferRequest;
-import dev.vfyjxf.cirrus.api.recipe.storage.StorageTransferResult;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
 import net.minecraft.tags.TagKey;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
-import org.eclipse.collections.api.factory.Maps;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -63,8 +61,8 @@ class StorageExecutionContractTest {
         var receiver = new FakeStorageSource("receiver", Lists.immutable.empty(), false, true, StorageAccessibility.accessible);
         StorageApi api = new FakeStorageApi(provider, receiver);
 
-        var extract = api.simulateExtract(provider, new StorageTransferRequest(requested, 4L));
-        var insert = api.simulateInsert(receiver, new StorageTransferRequest(requested, 4L));
+        var extract = api.simulateExtract(provider, StorageTransferRequest.forResource(requested, 4L));
+        var insert = api.simulateInsert(receiver, StorageTransferRequest.forResource(requested, 4L));
 
         assertSame(provider, extract.source());
         assertEquals(4L, extract.transferredAmount());
@@ -73,6 +71,28 @@ class StorageExecutionContractTest {
         assertSame(receiver, insert.source());
         assertEquals(4L, insert.transferredAmount());
         assertTrue(insert.completed());
+    }
+
+    @Test
+    void runtimeApiCountsAvailableResourcesAcrossAccessibleProviders() {
+        var requested = resource(1L);
+        var providerA = new FakeStorageSource("provider_a", Lists.immutable.of(resource(4L)), true, false, StorageAccessibility.accessible);
+        var providerB = new FakeStorageSource("provider_b", Lists.immutable.of(resource(7L)), true, false, StorageAccessibility.accessible);
+        var blocked = new FakeStorageSource(
+            "blocked",
+            Lists.immutable.of(resource(99L)),
+            true,
+            false,
+            StorageAccessibility.inaccessible(StorageGuidance.simple(Component.literal("Walk closer")))
+        );
+        StorageApi api = new FakeStorageApi(providerA, providerB, blocked);
+
+        StorageTransferRequest request = StorageTransferRequest.forResource(requested, 9L);
+
+        assertEquals(9L, api.countAvailable(request));
+        assertTrue(api.hasAvailable(request));
+        assertEquals(11L, api.countAvailable(StorageTransferRequest.forResource(requested, 20L)));
+        assertFalse(api.hasAvailable(StorageTransferRequest.forResource(requested, 20L)));
     }
 
     @Test
@@ -87,7 +107,7 @@ class StorageExecutionContractTest {
         );
         StorageApi api = new FakeStorageApi(blocked);
 
-        var result = api.simulateExtract(blocked, new StorageTransferRequest(requested, 4L));
+        var result = api.simulateExtract(blocked, StorageTransferRequest.forResource(requested, 4L));
 
         assertFalse(result.completed());
         assertEquals(0L, result.transferredAmount());
@@ -105,7 +125,7 @@ class StorageExecutionContractTest {
         var chest = new FakeStorageSource("chest", Lists.immutable.empty(), false, true, StorageAccessibility.accessible);
         StorageApi api = new FakeStorageApi(playerInventory, chest);
 
-        var result = api.simulateInsertFirstAvailable(new StorageTransferRequest(requested, 6L));
+        var result = api.simulateInsertFirstAvailable(StorageTransferRequest.forResource(requested, 6L));
 
         assertSame(chest, result.source());
         assertEquals(6L, result.transferredAmount());

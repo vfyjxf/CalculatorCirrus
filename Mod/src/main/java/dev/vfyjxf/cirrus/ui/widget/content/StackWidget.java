@@ -12,7 +12,7 @@ public class StackWidget<T, S> extends Widget {
 
     public StackWidget(ContentStack<T, S> stack) {
         this.stack = stack;
-        this.renderer = StackRenderer.getStackRender(stack.type());
+        this.renderer = StackRenderer.getStackRenderer(stack);
     }
 
     public ContentStack<T, S> stack() {
@@ -25,13 +25,14 @@ public class StackWidget<T, S> extends Widget {
 
     public void setStack(ContentStack<T, S> stack) {
         this.stack = stack;
-        this.renderer = StackRenderer.getStackRender(stack.type());
+        this.renderer = StackRenderer.getStackRenderer(stack);
     }
 
     @Override
     protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
         super.renderInternal(canvas, mouseX, mouseY, partialTicks);
-        renderer.render(canvas.graphics(), stack, width(), height(), partialTicks);
+        if (stack.isEmpty()) return;
+        renderer.render(canvas.layeredGraphics(), stack, width(), height(), partialTicks);
     }
 }
 

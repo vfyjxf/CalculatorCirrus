@@ -1,15 +1,20 @@
 package dev.vfyjxf.cirrus.api.recipe.routing.service;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
-import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.routing.RecipeGraph;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan;
-import dev.vfyjxf.cirrus.api.recipe.routing.planner.AssuredPlanner;
-import dev.vfyjxf.cirrus.api.recipe.routing.planner.PlannerContext;
-import dev.vfyjxf.cirrus.api.recipe.routing.planner.RoutePlanner;
-import dev.vfyjxf.cirrus.api.recipe.routing.planner.StandardPlanner;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultRuleProfiles;
+import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.HeuristicPolicy;
+import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeRoutingHints;
+import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeUsePolicy;
+import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
+import dev.vfyjxf.cirrus.recipe.routing.planner.AssuredPlanner;
+import dev.vfyjxf.cirrus.recipe.routing.planner.PlannerContext;
+import dev.vfyjxf.cirrus.recipe.routing.planner.RoutePlanner;
+import dev.vfyjxf.cirrus.recipe.routing.planner.StandardPlanner;
+import dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultRuleDefinitions;
+import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleCollection;
+import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleDefinition;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleProfile;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicy;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicyDecision;
@@ -26,12 +31,15 @@ import org.eclipse.collections.api.factory.Maps;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.map.MutableMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Objects;
+import java.util.Map;
 
 /**
  * Public routing orchestration service — the single runtime entry point for
@@ -62,6 +70,10 @@ import java.util.Objects;
  * @see RoutePlanner
  */
 public final class RoutingService {
+    private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Calculator");
+    private static final int maxCachedPolicyAnalyses = 16;
+    private static final Object policyAnalysisCacheLock = new Object();
+    private static final Map<PolicyAnalysisCacheKey, PolicyAnalysis> policyAnalysisCache = new HashMap<>();
 
     private final RecipeGraph graph;
     private final RoutingRecipeCatalog catalog;
@@ -92,9 +104,7 @@ public final class RoutingService {
         this.tagIndex = new TagIndex(catalog);
         this.userWorkspace = new UserTagWorkspace(tagIndex);
         registerSourcePolicy(SourcePolicy.defaultPolicy());
-        registerRuleProfile(DefaultRuleProfiles.standardDefault());
-        registerRuleProfile(DefaultRuleProfiles.assuredBoundedDefault());
-        registerRuleProfile(DefaultRuleProfiles.assuredProvenCompat());
+        registerRuleCollection(DefaultRuleDefinitions.defaultCollection());
     }
 
     /**
@@ -109,23 +119,39 @@ public final class RoutingService {
      */
     public RoutingOutcome route(RoutingRequest request) {
         Checks.checkNotNull(request, "request");
+        logger.info(
+            "routing.start target={} mode={} profile={} sourcePolicy={} budgetNodes={} budgetCandidates={} heuristic={} stockEmpty={}",
+            describeTarget(request.target()),
+            request.plannerMode(),
+            request.ruleProfileId(),
+            request.sourcePolicyId(),
+            request.budget().maxExpandedNodes(),
+            request.budget().maxGeneratedCandidates(),
+            request.heuristicPolicy(),
+            request.stock().isEmpty()
+        );
         RoutingOutcome invalid = validateRequest(request);
         if (invalid != null) {
+            logRouteFinish(invalid);
             return invalid;
         }
 
         SourcePolicy sourcePolicy = sourcePolicies.getIfAbsent(request.sourcePolicyId(), SourcePolicy::defaultPolicy);
         RuleProfile profile = ruleProfiles.get(request.ruleProfileId());
         if (profile == null) {
-            return invalidFailure(request, RoutingFailureCode.invalidRequest, "cirrus.routing.unknown_rule_profile");
+            RoutingOutcome failed = invalidFailure(request, RoutingFailureCode.invalidRequest, "cirrus.routing.unknown_rule_profile");
+            logRouteFinish(failed);
+            return failed;
         }
 
         TagSnapshot snapshot = request.tagSnapshot() != null ? request.tagSnapshot() : userWorkspace.snapshot();
-        SourcePolicyDecision sourceDecision = sourcePolicyRule.apply(snapshot, sourcePolicy);
-        SccAnalysis sccAnalysis = SccAnalysis.build(graph, catalog, sourceDecision.allowedRecipes());
+        PolicyAnalysis policyAnalysis = cachedPolicyAnalysis(snapshot, sourcePolicy);
+        SourcePolicyDecision sourceDecision = policyAnalysis.sourceDecision();
+        SccAnalysis sccAnalysis = policyAnalysis.sccAnalysis();
 
+        RoutingOutcome outcome;
         if (request.target() instanceof RoutingRequest.RecipeTarget recipeTarget) {
-            return routeRecipeTarget(
+            outcome = routeRecipeTarget(
                 request,
                 recipeTarget,
                 profile,
@@ -133,17 +159,70 @@ public final class RoutingService {
                 snapshot,
                 sccAnalysis
             );
+        } else {
+            RoutingRequest.OutputTarget outputTarget = (RoutingRequest.OutputTarget) request.target();
+            outcome = routeOutputTarget(
+                request,
+                outputTarget,
+                profile,
+                sourceDecision,
+                snapshot,
+                sccAnalysis
+            );
+        }
+        logRouteFinish(outcome);
+        return outcome;
+    }
+
+    private PolicyAnalysis cachedPolicyAnalysis(TagSnapshot snapshot, SourcePolicy sourcePolicy) {
+        PolicyAnalysisCacheKey key = new PolicyAnalysisCacheKey(
+            graph,
+            catalog.size(),
+            snapshot.version(),
+            snapshot.tagToRecipes().hashCode(),
+            sourcePolicy.hashCode()
+        );
+        synchronized (policyAnalysisCacheLock) {
+            PolicyAnalysis cached = policyAnalysisCache.get(key);
+            if (cached != null) {
+                PolicyAnalysis touched = cached.touch();
+                policyAnalysisCache.put(key, touched);
+                return touched;
+            }
         }
 
-        RoutingRequest.OutputTarget outputTarget = (RoutingRequest.OutputTarget) request.target();
-        return routeOutputTarget(
-            request,
-            outputTarget,
-            profile,
-            sourceDecision,
-            snapshot,
-            sccAnalysis
-        );
+        SourcePolicyDecision sourceDecision = sourcePolicyRule.apply(snapshot, sourcePolicy);
+        SccAnalysis sccAnalysis = SccAnalysis.build(graph, catalog, sourceDecision.allowedRecipes());
+        PolicyAnalysis analysis = new PolicyAnalysis(sourceDecision, sccAnalysis, System.nanoTime());
+        synchronized (policyAnalysisCacheLock) {
+            PolicyAnalysis existing = policyAnalysisCache.get(key);
+            if (existing != null) {
+                PolicyAnalysis touched = existing.touch();
+                policyAnalysisCache.put(key, touched);
+                return touched;
+            }
+            policyAnalysisCache.put(key, analysis);
+            trimPolicyAnalysisCache();
+            return analysis;
+        }
+    }
+
+    private static void trimPolicyAnalysisCache() {
+        while (policyAnalysisCache.size() > maxCachedPolicyAnalyses) {
+            PolicyAnalysisCacheKey oldestKey = null;
+            long oldestAccess = Long.MAX_VALUE;
+            for (var entry : policyAnalysisCache.entrySet()) {
+                long lastAccess = entry.getValue().lastAccessNanos();
+                if (lastAccess < oldestAccess) {
+                    oldestAccess = lastAccess;
+                    oldestKey = entry.getKey();
+                }
+            }
+            if (oldestKey == null) {
+                return;
+            }
+            policyAnalysisCache.remove(oldestKey);
+        }
     }
 
     /**
@@ -162,6 +241,17 @@ public final class RoutingService {
      */
     public void registerRuleProfile(RuleProfile ruleProfile) {
         ruleProfiles.put(ruleProfile.profileId(), ruleProfile);
+    }
+
+    public void registerRuleDefinition(RuleDefinition ruleDefinition) {
+        registerSourcePolicy(ruleDefinition.sourcePolicy());
+        registerRuleProfile(ruleDefinition.toProfile());
+    }
+
+    public void registerRuleCollection(RuleCollection collection) {
+        for (RuleDefinition rule : collection.rules()) {
+            registerRuleDefinition(rule);
+        }
     }
 
     /** Returns the tag index used by this service. */
@@ -218,15 +308,27 @@ public final class RoutingService {
         TagSnapshot snapshot,
         SccAnalysis sccAnalysis
     ) {
-        List<ProducerCandidate> producers = findProducers(outputTarget.output(), sourceDecision.allowedRecipes());
+        List<ProducerCandidate> producers = findProducers(
+            outputTarget.output(),
+            outputTarget.amount(),
+            sourceDecision.allowedRecipes(),
+            request.stock(),
+            request.heuristicPolicy()
+        );
+        logger.info(
+            "producer.search output={} amount={} producers={} allowedRecipes={} maxAttempts={} heuristic={}",
+            outputTarget.output(),
+            outputTarget.amount(),
+            producers.size(),
+            sourceDecision.allowedRecipes().cardinality(),
+            request.maxProducerCandidates(),
+            request.heuristicPolicy()
+        );
         if (producers.isEmpty()) {
             return invalidFailure(request, RoutingFailureCode.noFeasibleSource, "cirrus.routing.no_output_producer");
         }
 
-        producers.sort(Comparator
-            .comparingDouble((ProducerCandidate candidate) -> candidate.estimatedUnitCost)
-            .thenComparingInt(candidate -> candidate.depthEstimate)
-            .thenComparing(candidate -> candidate.stableId));
+        producers.sort(producerComparator(request.inventorySensitivityProfile()));
 
         int maxAttempts = Math.min(request.maxProducerCandidates(), producers.size());
         MutableList<String> triedProducerIds = Lists.mutable.empty();
@@ -238,9 +340,19 @@ public final class RoutingService {
 
         for (int i = 0; i < maxAttempts; i++) {
             ProducerCandidate candidate = producers.get(i);
-            triedProducerIds.add(candidate.stableId);
+            triedProducerIds.add(candidate.stableId());
 
-            int times = (int) Math.ceil((double) outputTarget.amount() / candidate.producedPerCraft);
+            int times = (int) Math.ceil((double) outputTarget.amount() / candidate.producedPerCraft());
+            logger.info(
+                "producer.try index={} recipe={} producedPerCraft={} craftTimes={} unitCost={} depth={} stockShortage={}",
+                i,
+                candidate.stableId(),
+                candidate.producedPerCraft(),
+                times,
+                candidate.estimatedUnitCost(),
+                candidate.depthEstimate(),
+                candidate.inventoryShortage()
+            );
             RoutingRequest subRequest = new RoutingRequest(
                 request.plannerMode(),
                 request.ruleProfileId(),
@@ -251,10 +363,11 @@ public final class RoutingService {
                 request.budget(),
                 request.stock(),
                 snapshot,
-                new RoutingRequest.RecipeTarget(candidate.node.recipe(), times),
+                new RoutingRequest.RecipeTarget(candidate.node().recipe(), times),
                 request.inventorySensitivityProfile(),
                 request.tagResolvePolicy(),
                 request.effectiveTagResolvePolicy(),
+                request.preferredVariants(),
                 request.adapterSelectionPolicy(),
                 request.maxProducerCandidates(),
                 request.loopPolicy(),
@@ -262,10 +375,23 @@ public final class RoutingService {
                 request.explorationEnabled(),
                 request.explorationPolicyId(),
                 request.explorationSeed(),
-                request.explorationBudgetShare()
+                request.explorationBudgetShare(),
+                request.heuristicPolicy()
             );
 
             RoutingOutcome outcome = routeRecipeTarget(subRequest, (RoutingRequest.RecipeTarget) subRequest.target(), profile, sourceDecision, snapshot, sccAnalysis);
+            logger.info(
+                "producer.result index={} recipe={} status={} planActions={} issues={} elapsedMs={} expanded={} generated={} accepted={}",
+                i,
+                candidate.stableId(),
+                outcome.status(),
+                outcome.plan() == null ? 0 : outcome.plan().actions().size(),
+                outcome.issues().size(),
+                outcome.metrics().elapsedMs(),
+                outcome.metrics().expandedNodes(),
+                outcome.metrics().generatedCandidates(),
+                outcome.metrics().acceptedCandidates()
+            );
             totalElapsedMs += outcome.metrics().elapsedMs();
             totalExpanded += outcome.metrics().expandedNodes();
             totalGenerated += outcome.metrics().generatedCandidates();
@@ -362,7 +488,29 @@ public final class RoutingService {
         );
     }
 
-    private List<ProducerCandidate> findProducers(ContentResource output, BitSet allowedRecipes) {
+    private List<ProducerCandidate> findProducers(
+        ContentResource output,
+        long requestedAmount,
+        BitSet allowedRecipes,
+        Stock stock,
+        HeuristicPolicy heuristicPolicy
+    ) {
+        var indexedProducers = graph.producersFor(output);
+        if (!indexedProducers.isEmpty()) {
+            List<ProducerCandidate> candidates = new ArrayList<>(indexedProducers.size());
+            for (RecipeGraph.OutputRef ref : indexedProducers) {
+                int index = catalog.indexOf(ref.node().recipe());
+                if (index < 0 || !allowedRecipes.get(index) || ref.output().amount() <= 0) {
+                    continue;
+                }
+                if (!heuristicAllowsOutputProducer(ref.node(), heuristicPolicy)) {
+                    continue;
+                }
+                candidates.add(producerCandidate(ref.node(), index, ref.output().amount(), requestedAmount, stock));
+            }
+            return candidates;
+        }
+
         List<ProducerCandidate> candidates = new ArrayList<>();
         for (int index = allowedRecipes.nextSetBit(0); index >= 0; index = allowedRecipes.nextSetBit(index + 1)) {
             RecipeGraph.Node node = catalog.nodeAt(index);
@@ -375,15 +523,96 @@ public final class RoutingService {
             if (bestAmount <= 0) {
                 continue;
             }
-            String stableId = catalog.stableRecipeId(index);
-            candidates.add(new ProducerCandidate(node, index, bestAmount, estimateUnitCost(node), estimateDepth(node), stableId));
+            if (!heuristicAllowsOutputProducer(node, heuristicPolicy)) {
+                continue;
+            }
+            candidates.add(producerCandidate(node, index, bestAmount, requestedAmount, stock));
         }
         return candidates;
+    }
+
+    private boolean heuristicAllowsOutputProducer(RecipeGraph.Node node, HeuristicPolicy policy) {
+        if (policy == HeuristicPolicy.ignoreHints) {
+            return true;
+        }
+        return switch (node.routingHints().usePolicy()) {
+            case normal, discouraged -> true;
+            case lastResort -> policy == HeuristicPolicy.allowLastResort || policy == HeuristicPolicy.includeAll;
+            case disabledByDefault, targetOnly -> policy == HeuristicPolicy.includeAll;
+        };
+    }
+
+    private ProducerCandidate producerCandidate(
+        RecipeGraph.Node node,
+        int index,
+        long producedPerCraft,
+        long requestedAmount,
+        Stock stock
+    ) {
+        String stableId = catalog.stableRecipeId(index);
+        int craftTimes = (int) Math.ceil((double) requestedAmount / producedPerCraft);
+        return new ProducerCandidate(
+            node,
+            index,
+            producedPerCraft,
+            estimateUnitCost(node) + heuristicUnitPenalty(node.routingHints()),
+            estimateDepth(node),
+            1.0d - estimateStockCoverage(node, stock, craftTimes),
+            stableId
+        );
+    }
+
+    private double heuristicUnitPenalty(RecipeRoutingHints hints) {
+        double penalty = hints.penalty();
+        if (hints.usePolicy() == RecipeUsePolicy.discouraged) {
+            penalty += 1_000.0d;
+        } else if (hints.usePolicy() == RecipeUsePolicy.lastResort) {
+            penalty += 50_000.0d;
+        }
+        return penalty;
+    }
+
+    private Comparator<ProducerCandidate> producerComparator(InventorySensitivityProfile profile) {
+        return switch (profile) {
+            case high -> Comparator
+                .comparingDouble(ProducerCandidate::inventoryShortage)
+                .thenComparingDouble(ProducerCandidate::estimatedUnitCost)
+                .thenComparingInt(ProducerCandidate::depthEstimate)
+                .thenComparing(ProducerCandidate::stableId);
+            case balanced -> Comparator
+                .comparingDouble(ProducerCandidate::estimatedUnitCost)
+                .thenComparingDouble(ProducerCandidate::inventoryShortage)
+                .thenComparingInt(ProducerCandidate::depthEstimate)
+                .thenComparing(ProducerCandidate::stableId);
+            case low -> Comparator
+                .comparingDouble(ProducerCandidate::estimatedUnitCost)
+                .thenComparingDouble(ProducerCandidate::inventoryShortage)
+                .thenComparingInt(ProducerCandidate::depthEstimate)
+                .thenComparing(ProducerCandidate::stableId);
+        };
     }
 
     private double estimateUnitCost(RecipeGraph.Node node) {
         // Quick deterministic estimate used only for producer ordering in adapter mode.
         return node.mergedInputs().size() + (node.mergedOutputs().size() * 0.1);
+    }
+
+    private double estimateStockCoverage(RecipeGraph.Node node, Stock stock, int craftTimes) {
+        double totalRequired = 0.0d;
+        double totalCovered = 0.0d;
+        for (InputContent input : node.mergedInputs()) {
+            long required = input.notConsumed() ? input.amount() : input.amount() * craftTimes;
+            if (required <= 0L) {
+                continue;
+            }
+            long available = Math.min(required, stock.countMatchingInput(input));
+            totalRequired += required;
+            totalCovered += available;
+        }
+        if (totalRequired <= 0.0d) {
+            return 1.0d;
+        }
+        return Math.min(1.0d, totalCovered / totalRequired);
     }
 
     private int estimateDepth(RecipeGraph.Node node) {
@@ -418,6 +647,7 @@ public final class RoutingService {
             true,
             messageKey,
             Maps.immutable.empty(),
+            new RoutingIssuePayload.Empty(),
             null,
             null,
             Maps.immutable.empty()
@@ -450,13 +680,84 @@ public final class RoutingService {
         return new RoutingOutcome(RoutingStatus.failed, null, Lists.immutable.of(issue), metrics, null);
     }
 
+    private static void logRouteFinish(RoutingOutcome outcome) {
+        RoutingMetrics metrics = outcome.metrics();
+        logger.info(
+            "routing.finish status={} planActions={} issues={} elapsedMs={} expanded={} generated={} accepted={} budgetUsed={} budgetLimit={} budgetExhausted={} budgetStop={} adapterAttempts={} adapterStatus={}",
+            outcome.status(),
+            outcome.plan() == null ? 0 : outcome.plan().actions().size(),
+            outcome.issues().size(),
+            metrics.elapsedMs(),
+            metrics.expandedNodes(),
+            metrics.generatedCandidates(),
+            metrics.acceptedCandidates(),
+            metrics.budgetUsed(),
+            metrics.budgetLimit(),
+            metrics.budgetExhausted(),
+            metrics.budgetStopReason(),
+            metrics.adapterAttemptCount(),
+            metrics.adapterBestIntermediateStatus()
+        );
+        if (!outcome.issues().isEmpty()) {
+            int limit = Math.min(8, outcome.issues().size());
+            for (int index = 0; index < limit; index++) {
+                RoutingIssue issue = outcome.issues().get(index);
+                logger.info(
+                    "routing.issue index={} code={} severity={} blocking={} message={} payload={}",
+                    index,
+                    issue.code(),
+                    issue.severity(),
+                    issue.blocking(),
+                    issue.messageKey(),
+                    issue.payload()
+                );
+            }
+            if (outcome.issues().size() > limit) {
+                logger.info("routing.issue omitted={}", outcome.issues().size() - limit);
+            }
+        }
+    }
+
+    private static String describeTarget(RoutingRequest.Target target) {
+        return switch (target) {
+            case null -> "<null>";
+            case RoutingRequest.RecipeTarget recipe -> "recipe:" + describeRecipe(recipe.recipe()) + "x" + recipe.times();
+            case RoutingRequest.OutputTarget output -> "output:" + output.output() + "x" + output.amount();
+        };
+    }
+
+    private static String describeRecipe(dev.vfyjxf.cirrus.api.recipe.RecipeEntry<?> recipe) {
+        net.minecraft.resources.ResourceLocation id = recipe.id();
+        return id == null ? recipe.systemId() + "#" + recipe.hashCode() : id.toString();
+    }
+
     private record ProducerCandidate(
         RecipeGraph.Node node,
         int recipeIndex,
         long producedPerCraft,
         double estimatedUnitCost,
         int depthEstimate,
+        double inventoryShortage,
         String stableId
     ) {
+    }
+
+    private record PolicyAnalysisCacheKey(
+        RecipeGraph graph,
+        int recipeCount,
+        long tagSnapshotVersion,
+        int tagSnapshotHash,
+        int sourcePolicyHash
+    ) {
+    }
+
+    private record PolicyAnalysis(
+        SourcePolicyDecision sourceDecision,
+        SccAnalysis sccAnalysis,
+        long lastAccessNanos
+    ) {
+        private PolicyAnalysis touch() {
+            return new PolicyAnalysis(sourceDecision, sccAnalysis, System.nanoTime());
+        }
     }
 }

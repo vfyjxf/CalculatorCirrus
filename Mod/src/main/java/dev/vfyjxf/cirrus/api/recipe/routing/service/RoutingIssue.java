@@ -29,6 +29,7 @@ public record RoutingIssue(
     boolean blocking,
     String messageKey,
     ImmutableMap<String, String> messageArgs,
+    RoutingIssuePayload payload,
     @Nullable Integer anchorActionId,
     @Nullable Integer anchorActionIndex,
     ImmutableMap<String, String> details
@@ -39,7 +40,23 @@ public record RoutingIssue(
         Checks.checkNotNull(severity, "severity");
         Checks.checkNotNull(messageKey, "messageKey");
         Checks.checkNotNull(messageArgs, "messageArgs");
+        Checks.checkNotNull(payload, "payload");
         Checks.checkNotNull(details, "details");
+    }
+
+    public Object[] translationArgs() {
+        return payload.translationArgs();
+    }
+
+    private Object[] messageArgsOrdered() {
+        if (messageArgs.isEmpty()) {
+            return new Object[0];
+        }
+        return messageArgs.keyValuesView()
+            .toList()
+            .sortThisBy(pair -> pair.getOne())
+            .collect(pair -> pair.getTwo())
+            .toArray(new Object[messageArgs.size()]);
     }
 
     /** Severity level of a routing issue. */

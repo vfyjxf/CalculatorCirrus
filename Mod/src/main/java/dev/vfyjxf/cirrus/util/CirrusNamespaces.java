@@ -6,7 +6,7 @@ import dev.vfyjxf.cloudlib.api.util.Namespace;
 public final class CirrusNamespaces {
 
     public static Namespace ofMod(String path) {
-        return Namespace.of(CirrusConstants.MOD_ID, path);
+        return Namespace.of(CirrusConstants.modId, path);
     }
 
     private CirrusNamespaces() {}

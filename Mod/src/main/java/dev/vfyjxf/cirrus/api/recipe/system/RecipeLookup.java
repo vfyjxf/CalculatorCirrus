@@ -20,7 +20,7 @@ public interface RecipeLookup<T> {
     }
 
     static <T> RecipeLookup<T> ofSystem(RecipeSystem<T> system) {
-        return new SystemRecipeLookup<>(system, system.allRecipes());
+        return new SystemRecipeLookup<>(system.allRecipes());
     }
 
     @Contract("_->this")

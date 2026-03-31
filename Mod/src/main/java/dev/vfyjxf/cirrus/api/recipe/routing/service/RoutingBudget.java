@@ -42,7 +42,7 @@ public record RoutingBudget(
         return new RoutingBudget(1_200, 6_000, 30, 2_000, 0.05, LoopBudget.standardDefault());
     }
 
-    /** Default budget for assured modes — significantly larger limits. */
+
     public static RoutingBudget assuredDefault() {
         return new RoutingBudget(12_000, 60_000, 120, 15_000, 0.20, LoopBudget.assuredDefault());
     }

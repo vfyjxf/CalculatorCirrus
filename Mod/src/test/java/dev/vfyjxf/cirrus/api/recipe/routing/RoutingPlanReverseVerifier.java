@@ -66,24 +66,36 @@ final class RoutingPlanReverseVerifier {
         MutableMap<RecipeEntry<?>, RecipeGraph.Node> recipeNodeMap,
         MutableList<String> errors
     ) {
-        Inventory inventory = Inventory.fromStock(request.stock());
+        Inventory stockInventory = Inventory.fromStock(request.stock());
+        Inventory executionInventory = new Inventory();
         long targetRecipeExecTimes = 0;
 
         for (PlanAction action : plan.actions()) {
             switch (action) {
-                case PlanAction.ConsumeStockAction consume -> {
-                    long consumed = inventory.consumeExact(consume.resource(), consume.amount());
+                case PlanAction.ConsumeStock consume -> {
+                    long consumed = stockInventory.consumeExact(consume.resource(), consume.amount());
                     if (consumed < consume.amount()) {
                         errors.add("consume action underflow: need " + consume.amount() + ", got " + consumed);
                     }
+                    executionInventory.add(consume.resource(), consumed);
                 }
-                case PlanAction.ReserveCatalystAction reserve -> {
-                    long available = inventory.countByInput(reserve.input());
+                case PlanAction.PendingInput pending -> {
+                    long consumed = 0;
+                    for (Stock.ConsumedResource consumedResource : stockInventory.consumeByInputDetailed(pending.input(), pending.amount())) {
+                        consumed += consumedResource.amount();
+                        executionInventory.add(consumedResource.resource(), consumedResource.amount());
+                    }
+                    if (consumed < pending.amount()) {
+                        errors.add("pending input underflow: need " + pending.amount() + ", got " + consumed);
+                    }
+                }
+                case PlanAction.ReserveCatalyst reserve -> {
+                    long available = stockInventory.countByInput(reserve.input()) + executionInventory.countByInput(reserve.input());
                     if (available < reserve.amount()) {
                         errors.add("reserve catalyst unavailable: need " + reserve.amount() + ", got " + available);
                     }
                 }
-                case PlanAction.ExecuteRecipeAction exec -> {
+                case PlanAction.ExecuteRecipe exec -> {
                     RecipeGraph.Node node = recipeNodeMap.get(exec.recipe());
                     if (node == null) {
                         errors.add("execute references recipe not in graph: " + exec.recipe());
@@ -96,20 +108,23 @@ final class RoutingPlanReverseVerifier {
                     validateExecuteBindings(exec, node, errors);
                     for (PlanAction.InputBinding inputBinding : exec.boundInputs()) {
                         if (inputBinding.input().notConsumed()) {
-                            long available = inventory.countByInput(inputBinding.input());
+                            long available = stockInventory.countByInput(inputBinding.input()) + executionInventory.countByInput(inputBinding.input());
                             if (available < inputBinding.amount()) {
                                 errors.add("catalyst input unavailable in execute: need " + inputBinding.amount() + ", got " + available);
                             }
                             continue;
                         }
-                        long consumed = inventory.consumeByInput(inputBinding.input(), inputBinding.amount());
+                        long consumed = 0;
+                        for (Stock.ConsumedResource consumedResource : executionInventory.consumeByInputDetailed(inputBinding.input(), inputBinding.amount())) {
+                            consumed += consumedResource.amount();
+                        }
                         if (consumed < inputBinding.amount()) {
                             errors.add("execute input underflow: need " + inputBinding.amount() + ", got " + consumed);
                         }
                     }
 
                     for (PlanAction.OutputBinding outputBinding : exec.expectedOutputs()) {
-                        inventory.add(outputBinding.resource(), outputBinding.amount());
+                        executionInventory.add(outputBinding.resource(), outputBinding.amount());
                     }
                 }
             }
@@ -121,7 +136,7 @@ final class RoutingPlanReverseVerifier {
     }
 
     private static void validateExecuteBindings(
-        PlanAction.ExecuteRecipeAction exec,
+        PlanAction.ExecuteRecipe exec,
         RecipeGraph.Node node,
         MutableList<String> errors
     ) {
@@ -178,11 +193,14 @@ final class RoutingPlanReverseVerifier {
         for (int i = plan.actions().size() - 1; i >= 0; i--) {
             PlanAction action = plan.actions().get(i);
             switch (action) {
-                case PlanAction.ConsumeStockAction consume -> consumeDemand(demands, consume.resource(), consume.amount());
-                case PlanAction.ReserveCatalystAction ignored -> {
+                case PlanAction.ConsumeStock consume -> consumeDemand(demands, consume.resource(), consume.amount());
+                case PlanAction.PendingInput pending -> {
+                    demands.add(Demand.byInput(pending.input(), pending.amount(), "pendingInput"));
+                }
+                case PlanAction.ReserveCatalyst ignored -> {
                     // Reservation is validated in forward replay; reverse closure tracks consumed flows only.
                 }
-                case PlanAction.ExecuteRecipeAction exec -> {
+                case PlanAction.ExecuteRecipe exec -> {
                     long usefulProduced = 0;
                     for (PlanAction.OutputBinding outputBinding : exec.expectedOutputs()) {
                         usefulProduced += consumeDemand(demands, outputBinding.resource(), outputBinding.amount());
@@ -350,11 +368,12 @@ final class RoutingPlanReverseVerifier {
             return 0;
         }
 
-        long consumeByInput(InputContent input, long amount) {
+        java.util.List<Stock.ConsumedResource> consumeByInputDetailed(InputContent input, long amount) {
             if (amount <= 0) {
-                return 0;
+                return java.util.List.of();
             }
             long remaining = amount;
+            java.util.ArrayList<Stock.ConsumedResource> consumed = new java.util.ArrayList<>();
             for (ResourceBucket bucket : buckets) {
                 if (remaining <= 0) {
                     break;
@@ -362,11 +381,12 @@ final class RoutingPlanReverseVerifier {
                 if (!input.satisfy(bucket.resource)) {
                     continue;
                 }
-                long consumed = Math.min(bucket.amount, remaining);
-                bucket.amount -= consumed;
-                remaining -= consumed;
+                long taken = Math.min(bucket.amount, remaining);
+                bucket.amount -= taken;
+                remaining -= taken;
+                consumed.add(new Stock.ConsumedResource(bucket.resource, taken));
             }
-            return amount - remaining;
+            return java.util.List.copyOf(consumed);
         }
 
         long countByInput(InputContent input) {

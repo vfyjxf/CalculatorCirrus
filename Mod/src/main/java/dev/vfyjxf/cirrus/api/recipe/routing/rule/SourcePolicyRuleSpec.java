@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.routing.rule;
 
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 
@@ -30,6 +32,14 @@ public record SourcePolicyRuleSpec(
     SourcePolicyAction action,
     boolean override
 ) {
+    public static final Codec<SourcePolicyRuleSpec> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+        Namespace.codec.fieldOf("rule_id").forGetter(SourcePolicyRuleSpec::ruleId),
+        Codec.BOOL.fieldOf("enabled").forGetter(SourcePolicyRuleSpec::enabled),
+        TagExpr.CODEC.fieldOf("when").forGetter(SourcePolicyRuleSpec::when),
+        SourcePolicyAction.CODEC.fieldOf("action").forGetter(SourcePolicyRuleSpec::action),
+        Codec.BOOL.fieldOf("override").forGetter(SourcePolicyRuleSpec::override)
+    ).apply(instance, SourcePolicyRuleSpec::new));
+
     public SourcePolicyRuleSpec {
         Checks.checkNotNull(ruleId, "ruleId");
         Checks.checkNotNull(when, "when");

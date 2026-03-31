@@ -5,7 +5,7 @@ import com.mojang.serialization.Codec;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.constraint.RecipeConstraint;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
-import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
+import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeRoutingHints;
 import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import mezz.jei.api.recipe.RecipeType;
@@ -46,12 +46,12 @@ public interface RecipeSystem<R> {
 
     //region recipe info
 
-    default boolean supports(R recipe) {
-        return contains(recipe);
-    }
-
     default boolean contains(R recipe) {
         return basicType().isInstance(recipe);
+    }
+
+    default RecipeClaim claim(R recipe) {
+        return contains(recipe) ? RecipeClaim.normal : RecipeClaim.none;
     }
 
     @Nullable
@@ -71,8 +71,9 @@ public interface RecipeSystem<R> {
 
     //region resolve
 
-    //TODO:empty or failed?
-    RecipeProjection resolveRecipe(R recipe);
+    default ResolveResult resolveFallback(ResolveContext context, R recipe) {
+        return ResolveResult.failed(ResolveError.unsupported);
+    }
 
     //endregion
 
@@ -82,13 +83,16 @@ public interface RecipeSystem<R> {
         return false;
     }
 
-
     default <T> @Nullable T getData(SystemDataType<T> type) throws IllegalStateException {
         throw new IllegalStateException("No data for " + type.id());
     }
 
     default RecipeConstraint<R> getRecipeConstraint(R recipe) {
         return RecipeConstraint.ingredientConstraint();
+    }
+
+    default RecipeRoutingHints routingHints(R recipe) {
+        return RecipeRoutingHints.empty();
     }
 
     /**
@@ -105,13 +109,16 @@ public interface RecipeSystem<R> {
     //region util
 
     static MutableList<ContentStack<Item, ItemStack>> getMachinesFromJei(RecipeType<?> recipeType) {
-        return CirrusJeiPlugin.recipeManager()
-                              .createRecipeCatalystLookup(recipeType)
-                              .get()
-                              .flatMap(i -> i.getItemStack().stream())
-                              .map(ContentStack::fromStack)
-                              .collect(Collectors2.toList())
-                              .collect(ContentStack::normalize);
+        var manager = CirrusJeiPlugin.recipeManagerOrNull();
+        if (manager == null) {
+            return org.eclipse.collections.api.factory.Lists.mutable.empty();
+        }
+        return manager.createRecipeCatalystLookup(recipeType)
+                      .get()
+                      .flatMap(i -> i.getItemStack().stream())
+                      .map(ContentStack::fromStack)
+                      .collect(Collectors2.toList())
+                      .collect(ContentStack::normalize);
     }
 
     default RecipeLookup<R> createLookup() {

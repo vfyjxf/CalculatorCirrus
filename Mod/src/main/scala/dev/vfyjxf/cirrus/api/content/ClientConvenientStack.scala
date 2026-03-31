@@ -16,13 +16,13 @@ extension [T, S](stack: ContentStack[T, S]) {
   }
 
   inline def renderStack(graphics: GuiGraphics, width: Int, height: Int, delta: Float): Unit = {
-    given StackRenderer[T, S] = StackRenderer.getStackRender(stack.`type`())
+    given StackRenderer[T, S] = StackRenderer.getStackRenderer(stack.`type`())
 
     render(graphics, width, height, delta)
   }
 
   inline def decorateStack(graphics: GuiGraphics, width: Int, height: Int, delta: Float): Unit = {
-    given StackRenderer[T, S] = StackRenderer.getStackRender(stack.`type`())
+    given StackRenderer[T, S] = StackRenderer.getStackRenderer(stack.`type`())
 
     decorate(graphics, width, height, delta)
   }

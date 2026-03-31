@@ -14,13 +14,15 @@ import org.eclipse.collections.api.list.ImmutableList;
  * Action instances are immutable so a generated plan can be replayed reliably on
  * the client side.
  *
- * <p>The sealed hierarchy defines three action types:
+ * <p>The sealed hierarchy defines four action types:
  * <ul>
- *     <li>{@link ConsumeStockAction} — consume a resource directly from the
+ *     <li>{@link ConsumeStock} — consume a resource directly from the
  *         player's available inventory.</li>
- *     <li>{@link ReserveCatalystAction} — reserve a non-consumed (catalyst) input
+ *     <li>{@link PendingInput} — preserve the original {@link InputContent} semantics as a
+ *         pending external requirement when planning cannot resolve a source.</li>
+ *     <li>{@link ReserveCatalyst} — reserve a non-consumed (catalyst) input
  *         that must be present but is not used up by the recipe.</li>
- *     <li>{@link ExecuteRecipeAction} — execute a recipe a given number of times
+ *     <li>{@link ExecuteRecipe} — execute a recipe a given number of times
  *         with fully bound inputs and expected outputs.</li>
  * </ul>
  *
@@ -28,17 +30,24 @@ import org.eclipse.collections.api.list.ImmutableList;
  * @see PlanBuilder
  */
 public sealed interface PlanAction permits
-    PlanAction.ConsumeStockAction,
-    PlanAction.ReserveCatalystAction,
-    PlanAction.ExecuteRecipeAction {
+    PlanAction.ConsumeStock,
+    PlanAction.PendingInput,
+    PlanAction.ReserveCatalyst,
+    PlanAction.ExecuteRecipe {
 
-    /** Globally unique action identifier within one plan. */
+    /**
+     * Globally unique action identifier within one plan.
+     */
     int actionId();
 
-    /** Zero-based insertion order index within the plan's action list. */
+    /**
+     * Zero-based insertion order index within the plan's action list.
+     */
     int actionIndex();
 
-    /** Whether this action blocks subsequent execution until completed. */
+    /**
+     * Whether this action blocks subsequent execution until completed.
+     */
     boolean blocking();
 
     /**
@@ -50,15 +59,39 @@ public sealed interface PlanAction permits
      * @param resource    the resource to consume
      * @param amount      the amount to consume (must be positive)
      */
-    record ConsumeStockAction(
+    record ConsumeStock(
         int actionId,
         int actionIndex,
         boolean blocking,
+        InputContent input,
         ContentResource resource,
         long amount
     ) implements PlanAction {
-        public ConsumeStockAction {
+        public ConsumeStock {
+            Checks.checkNotNull(input, "input");
             Checks.checkNotNull(resource, "resource");
+            Checks.checkArgument(amount > 0, "amount must be positive");
+            Checks.checkArgument(actionId >= 0, "actionId must be non-negative");
+            Checks.checkArgument(actionIndex >= 0, "actionIndex must be non-negative");
+        }
+    }
+
+    /**
+     * Mark an unresolved demand as a pending external input while preserving the
+     * original input semantics.
+     *
+     * <p>This is used when the planner cannot resolve a source and should stop
+     * expanding the chain instead of forcing the request down to base materials.
+     */
+    record PendingInput(
+        int actionId,
+        int actionIndex,
+        boolean blocking,
+        InputContent input,
+        long amount
+    ) implements PlanAction {
+        public PendingInput {
+            Checks.checkNotNull(input, "input");
             Checks.checkArgument(amount > 0, "amount must be positive");
             Checks.checkArgument(actionId >= 0, "actionId must be non-negative");
             Checks.checkArgument(actionIndex >= 0, "actionIndex must be non-negative");
@@ -76,7 +109,7 @@ public sealed interface PlanAction permits
      * @param amount      the amount to reserve (must be positive)
      * @param fromRecipe  the recipe that requires this catalyst
      */
-    record ReserveCatalystAction(
+    record ReserveCatalyst(
         int actionId,
         int actionIndex,
         boolean blocking,
@@ -84,7 +117,7 @@ public sealed interface PlanAction permits
         long amount,
         RecipeEntry<?> fromRecipe
     ) implements PlanAction {
-        public ReserveCatalystAction {
+        public ReserveCatalyst {
             Checks.checkNotNull(input, "input");
             Checks.checkNotNull(fromRecipe, "fromRecipe");
             Checks.checkArgument(amount > 0, "amount must be positive");
@@ -105,7 +138,7 @@ public sealed interface PlanAction permits
      * @param boundInputs     resolved input bindings with amounts
      * @param expectedOutputs expected output bindings with amounts
      */
-    record ExecuteRecipeAction(
+    record ExecuteRecipe(
         int actionId,
         int actionIndex,
         boolean blocking,
@@ -114,7 +147,7 @@ public sealed interface PlanAction permits
         ImmutableList<InputBinding> boundInputs,
         ImmutableList<OutputBinding> expectedOutputs
     ) implements PlanAction {
-        public ExecuteRecipeAction {
+        public ExecuteRecipe {
             Checks.checkNotNull(recipe, "recipe");
             Checks.checkNotNull(boundInputs, "boundInputs");
             Checks.checkNotNull(expectedOutputs, "expectedOutputs");

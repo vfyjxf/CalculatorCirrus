@@ -5,10 +5,8 @@ import dev.vfyjxf.cirrus.api.recipe.routing.RecipeGraph;
 import dev.vfyjxf.cloudlib.util.Checks;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
-import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 
-import java.util.Comparator;
 import java.util.Objects;
 
 /**
@@ -27,11 +25,6 @@ import java.util.Objects;
  * @see dev.vfyjxf.cirrus.api.recipe.routing.state.SccAnalysis
  */
 public final class RoutingRecipeCatalog {
-
-    private static final Comparator<RecipeGraph.Node> stableOrder = Comparator
-        .comparing((RecipeGraph.Node node) -> node.recipe().systemId().toString())
-        .thenComparing(node -> Objects.toString(node.recipe().id(), "null"))
-        .thenComparingInt(node -> node.recipe().hashCode());
 
     private final ImmutableList<RecipeGraph.Node> nodes;
     private final Object2IntMap<RecipeEntry<?>> indexByRecipe;
@@ -55,15 +48,14 @@ public final class RoutingRecipeCatalog {
      */
     public static RoutingRecipeCatalog fromGraph(RecipeGraph graph) {
         Checks.checkNotNull(graph, "graph");
-        var ordered = Lists.mutable.ofAll(graph.nodes());
-        ordered.sortThis(stableOrder);
+        ImmutableList<RecipeGraph.Node> ordered = graph.stableNodes();
 
         Object2IntOpenHashMap<RecipeEntry<?>> indices = new Object2IntOpenHashMap<>(ordered.size());
         indices.defaultReturnValue(-1);
         for (int i = 0; i < ordered.size(); i++) {
             indices.put(ordered.get(i).recipe(), i);
         }
-        return new RoutingRecipeCatalog(ordered.toImmutable(), indices);
+        return new RoutingRecipeCatalog(ordered, indices);
     }
 
     /** Returns the total number of recipes in this catalog. */

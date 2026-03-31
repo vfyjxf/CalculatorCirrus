@@ -1,21 +1,101 @@
 package dev.vfyjxf.cirrus.ui;
 
+import dev.vfyjxf.cloudlib.api.ui.texture.BatchableTexture;
 import dev.vfyjxf.cloudlib.api.ui.texture.ImageTexture;
 import dev.vfyjxf.cloudlib.api.ui.texture.NineSliceTexture;
+import dev.vfyjxf.cloudlib.api.ui.texture.SizedTexture;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.resources.ResourceLocation;
+
+import javax.imageio.ImageIO;
+import java.io.IOException;
+import java.io.InputStream;
 
 import static dev.vfyjxf.cirrus.util.CirrusLocations.ofMod;
 
 public final class CirrusTextures {
 
-    // ═══════════════════ Background ═══════════════════
+    private record SpriteSize(int width, int height) {
+    }
+
+    private static ImageTexture autoSprite(String relativePath) {
+        SpriteSize size = loadSpriteSize(relativePath);
+        return ImageTexture.sprite(ofMod(relativePath), size.width(), size.height());
+    }
+
+    private static SizedTexture croppedGuiTexture(
+        String relativePath,
+        int u,
+        int v,
+        int sourceWidth,
+        int sourceHeight,
+        int displayWidth,
+        int displayHeight
+    ) {
+        SpriteSize size = loadSpriteSize(relativePath);
+        return new CroppedGuiTexture(
+            ofMod("textures/cirrus/gui/" + relativePath + ".png"),
+            u,
+            v,
+            sourceWidth,
+            sourceHeight,
+            size.width(),
+            size.height(),
+            displayWidth,
+            displayHeight
+        );
+    }
+
+    private static SpriteSize loadSpriteSize(String relativePath) {
+        String namespace = ofMod(relativePath).getNamespace();
+        String path = ofMod(relativePath).getPath();
+        String resourcePath = "assets/" + namespace + "/textures/cirrus/gui/" + path + ".png";
+        try (InputStream stream = CirrusTextures.class.getClassLoader().getResourceAsStream(resourcePath)) {
+            if (stream == null) {
+                throw new IllegalStateException("Missing sprite resource: " + resourcePath);
+            }
+            var image = ImageIO.read(stream);
+            if (image == null) {
+                throw new IllegalStateException("Unreadable sprite resource: " + resourcePath);
+            }
+            return new SpriteSize(image.getWidth(), image.getHeight());
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read sprite size: " + resourcePath, e);
+        }
+    }
+
+    private record CroppedGuiTexture(
+        ResourceLocation location,
+        int u,
+        int v,
+        int sourceWidth,
+        int sourceHeight,
+        int textureWidth,
+        int textureHeight,
+        int width,
+        int height
+    ) implements SizedTexture, BatchableTexture {
+        @Override
+        public void render(GuiGraphics graphics, int x, int y, int width, int height) {
+            graphics.blit(location, x, y, width, height, u, v, sourceWidth, sourceHeight, textureWidth, textureHeight);
+        }
+
+        @Override
+        public void emit(VertexEmitter emitter, float x, float y, float width, float height, int color) {
+            float u0 = (float) u / textureWidth;
+            float v0 = (float) v / textureHeight;
+            float u1 = (float) (u + sourceWidth) / textureWidth;
+            float v1 = (float) (v + sourceHeight) / textureHeight;
+            emitter.textured(location, x, y, width, height, u0, v0, u1, v1, color);
+        }
+    }
 
     public static final class Background {
         public static final NineSliceTexture frame = NineSliceTexture.sprite(ofMod("background/frame"), 32, 37, 10, 10, 10, 10);
         public static final NineSliceTexture flat = NineSliceTexture.sprite(ofMod("background/flat"), 18, 18, 4, 4, 4, 4);
         public static final NineSliceTexture inset = NineSliceTexture.sprite(ofMod("background/inset"), 18, 18, 4, 4, 4, 4);
         public static final NineSliceTexture dark = NineSliceTexture.sprite(ofMod("background/dark"), 16, 16, 4, 4, 4, 4);
-        public static final NineSliceTexture controlBar = NineSliceTexture.sprite(ofMod("background/control_bar"), 90, 20, 3, 3, 3, 3);
-
+        public static final NineSliceTexture scroll = NineSliceTexture.sprite(ofMod("background/scoll"), 18, 9, 4, 4, 4, 4);
         public static final class Outlined {
             public static final NineSliceTexture inset = NineSliceTexture.sprite(ofMod("background/outlined/inset"), 20, 20, 4, 4, 4, 4);
             public static final NineSliceTexture flat = NineSliceTexture.sprite(ofMod("background/outlined/flat"), 20, 20, 4, 4, 4, 4);
@@ -27,13 +107,19 @@ public final class CirrusTextures {
         }
 
         public static final class Slot {
+            public static final NineSliceTexture base = NineSliceTexture.sprite(ofMod("background/slot/base"), 18, 18, 4, 4, 4, 4);
             public static final NineSliceTexture dark = NineSliceTexture.sprite(ofMod("background/slot/dark"), 18, 18, 4, 4, 4, 4);
         }
 
+        public static final class Paged {
+            public static final NineSliceTexture arrow = NineSliceTexture.sprite(ofMod("background/paged/arrow"), 9, 10, 3, 3, 3, 3);
+            public static final NineSliceTexture button = NineSliceTexture.sprite(ofMod("background/paged/button"), 8, 10, 3, 3, 3, 3);
+        }
+
         public static final class Tab {
-            public static final ImageTexture select = ImageTexture.sprite(ofMod("background/tab/select"), 21, 22);
-            public static final ImageTexture hover = ImageTexture.sprite(ofMod("background/tab/hover"), 21, 22);
-            public static final ImageTexture unselect = ImageTexture.sprite(ofMod("background/tab/unselect"), 20, 22);
+            public static final ImageTexture select = ImageTexture.sprite(ofMod("tab/select"), 21, 22);
+            public static final ImageTexture hover = ImageTexture.sprite(ofMod("tab/hover"), 21, 22);
+            public static final ImageTexture unselect = ImageTexture.sprite(ofMod("tab/unselect"), 20, 22);
         }
 
         public static final class Sign {
@@ -49,27 +135,45 @@ public final class CirrusTextures {
             public static final NineSliceTexture down = NineSliceTexture.sprite(ofMod("toggle/button/down"), 14, 15, 4);
         }
 
-        public static final class Switch {
-            //region rocker
-            public static final ImageTexture rockerOn = ImageTexture.sprite(ofMod("toggle/switch/rocker_on"), 20, 13);
-            public static final ImageTexture rockerOnHover = ImageTexture.sprite(ofMod("toggle/switch/rocker_on_hover"), 20, 13);
-            public static final ImageTexture rockerOff = ImageTexture.sprite(ofMod("toggle/switch/rocker_off"), 20, 13);
-            public static final ImageTexture rockerOffHover = ImageTexture.sprite(ofMod("toggle/switch/rocker_off_hover"), 20, 13);
-            //endregion
+            public static final class Switch {
+                public static final class Rock {
+                    // Trace toggle uses split rocker parts instead of a full slide texture.
+                    public static final ImageTexture leftOn = autoSprite("toggle/switch/rock_left_on");
+                    public static final ImageTexture leftOnHover = autoSprite("toggle/switch/rock_left_on_hover");
+                    public static final ImageTexture leftOff = autoSprite("toggle/switch/rock_left_off");
+                    public static final ImageTexture leftOffHover = autoSprite("toggle/switch/rock_left_off_hover");
+                    public static final ImageTexture rightOn = autoSprite("toggle/switch/rock_right_on");
+                    public static final ImageTexture rightOnHover = autoSprite("toggle/switch/rock_right_on_hover");
+                    public static final ImageTexture rightOff = autoSprite("toggle/switch/rock_right_off");
+                    public static final ImageTexture rightOffHover = autoSprite("toggle/switch/rock_right_off_hover");
 
-            //region slide
-            public static final ImageTexture slideOn = ImageTexture.sprite(ofMod("toggle/switch/slide_on"), 20, 13);
-            public static final ImageTexture slideOnHover = ImageTexture.sprite(ofMod("toggle/switch/slide_on_hover"), 20, 12);
-            public static final ImageTexture slideOff = ImageTexture.sprite(ofMod("toggle/switch/slide_off"), 20, 13);
-            public static final ImageTexture slideOffHover = ImageTexture.sprite(ofMod("toggle/switch/slide_off_hover"), 20, 12);
-            //endregion
+                    public static final class Bg {
+                        public static final ImageTexture onLeft = autoSprite("toggle/switch/background/rock_on_left");
+                        public static final ImageTexture onHoverLeft = autoSprite("toggle/switch/background/rock_on_hover_left");
+                    public static final ImageTexture onRight = autoSprite("toggle/switch/background/rock_on_right");
+                    public static final ImageTexture onHoverRight = autoSprite("toggle/switch/background/rock_on_hover_right");
+                    public static final ImageTexture offLeft = autoSprite("toggle/switch/background/rock_off_left");
+                    public static final ImageTexture offHoverLeft = autoSprite("toggle/switch/background/rock_off_hover_left");
+                    public static final ImageTexture offRight = autoSprite("toggle/switch/background/rock_off_right");
+                    public static final ImageTexture offHoverRight = autoSprite("toggle/switch/background/rock_off_hover_right");
+                }
+            }
 
-            //region background
-            public static final class RockerBg {
-                public static final ImageTexture on = ImageTexture.sprite(ofMod("toggle/switch/background/rock_on"), 20, 13);
-                public static final ImageTexture onHover = ImageTexture.sprite(ofMod("toggle/switch/background/rock_on_hover"), 20, 13);
-                public static final ImageTexture off = ImageTexture.sprite(ofMod("toggle/switch/background/rock_off"), 20, 13);
-                public static final ImageTexture offHover = ImageTexture.sprite(ofMod("toggle/switch/background/rock_off_hover"), 20, 13);
+            public static final class Slide {
+                public static final ImageTexture on = autoSprite("toggle/switch/slide_on");
+                public static final ImageTexture onHover = autoSprite("toggle/switch/slide_on_hover");
+                public static final ImageTexture off = autoSprite("toggle/switch/slide_off");
+                public static final ImageTexture offHover = autoSprite("toggle/switch/slide_off_hover");
+            }
+
+            //region calc
+            public static final class Calc {
+                public static final SizedTexture gridOn = croppedGuiTexture("toggle/switch/clac/grid_on", 2, 2, 5, 6, 10, 12);
+                public static final SizedTexture gridOff = croppedGuiTexture("toggle/switch/clac/grid_off", 2, 2, 5, 6, 10, 12);
+                public static final SizedTexture gridHover = croppedGuiTexture("toggle/switch/clac/grid_hover", 2, 2, 5, 6, 10, 12);
+                public static final SizedTexture listOn = croppedGuiTexture("toggle/switch/clac/list_on", 2, 2, 5, 6, 10, 12);
+                public static final SizedTexture listOff = croppedGuiTexture("toggle/switch/clac/list_off", 2, 2, 5, 6, 10, 12);
+                public static final SizedTexture listHover = croppedGuiTexture("toggle/switch/clac/list_hover", 2, 2, 5, 6, 10, 12);
             }
             //endregion
         }
@@ -101,17 +205,23 @@ public final class CirrusTextures {
 
     public static final class Button {
         public static final class Calc {
-            public static final NineSliceTexture primary = NineSliceTexture.sprite(ofMod("button/calc/primary"), 62, 10, 3, 3, 3, 3);
+            public static final NineSliceTexture primary = NineSliceTexture.sprite(ofMod("background/paged/button"), 8, 10, 3, 3, 3, 3);
         }
     }
-
-    // ═══════════════════ Icon ═══════════════════
 
     public static final class Icon {
         // Calculator tab icons (16×16)
         public static final ImageTexture calculatorSelect = ImageTexture.sprite(ofMod("icon/calc/calculator_select"), 16, 16);
         public static final ImageTexture calculatorHover = ImageTexture.sprite(ofMod("icon/calc/calculator_hover"), 16, 16);
         public static final ImageTexture calculatorUnselect = ImageTexture.sprite(ofMod("icon/calc/calculator_unselect"), 16, 16);
+        public static final ImageTexture calculatorOpen = ImageTexture.sprite(ofMod("icon/calc/calculator_open"), 16, 16);
+        public static final ImageTexture calculatorOpenPressed = ImageTexture.sprite(ofMod("icon/calc/calculator_open_pressed"), 16, 16);
+        public static final ImageTexture calculatorJei = ImageTexture.sprite(ofMod("icon/calc/calculator_jei"), 16, 16);
+        public static final ImageTexture calculatorJeiPressed = ImageTexture.sprite(ofMod("icon/calc/calculator_jei_pressed"), 16, 16);
+        public static final ImageTexture calculatorTarget = ImageTexture.sprite(ofMod("icon/calc/calculator_target"), 12, 12);
+        public static final ImageTexture calculatorTargetPressed = ImageTexture.sprite(ofMod("icon/calc/calculator_target_pressed"), 12, 12);
+        public static final ImageTexture sortAscending = ImageTexture.sprite(ofMod("icon/calc/sort_ascending"), 16, 16);
+        public static final ImageTexture sortDescending = ImageTexture.sprite(ofMod("icon/calc/sort_descending"), 16, 16);
 
         public static final ImageTexture contextSelect = ImageTexture.sprite(ofMod("icon/calc/context_select"), 16, 16);
         public static final ImageTexture contextHover = ImageTexture.sprite(ofMod("icon/calc/context_hover"), 16, 16);
@@ -137,6 +247,16 @@ public final class CirrusTextures {
         public static final ImageTexture searchSelected = ImageTexture.sprite(ofMod("icon/search_selected"), 10, 10);
         public static final ImageTexture setting = ImageTexture.sprite(ofMod("icon/setting"), 10, 10);
         public static final ImageTexture settingSelected = ImageTexture.sprite(ofMod("icon/setting_selected"), 10, 10);
+        public static final ImageTexture finished = ImageTexture.sprite(ofMod("icon/finished"), 11, 11);
+        public static final ImageTexture next = ImageTexture.sprite(ofMod("icon/next"), 12, 12);
+        public static final ImageTexture nextPressed = ImageTexture.sprite(ofMod("icon/next_pressed"), 12, 12);
+        public static final ImageTexture pause = ImageTexture.sprite(ofMod("icon/pause"), 11, 11);
+        public static final ImageTexture play = ImageTexture.sprite(ofMod("icon/play"), 11, 11);
+        public static final ImageTexture start = ImageTexture.sprite(ofMod("icon/start"), 12, 12);
+        public static final ImageTexture startPressed = ImageTexture.sprite(ofMod("icon/start_pressed"), 12, 12);
+
+        public static final NineSliceTexture scrollBarHorizontal = NineSliceTexture.sprite(ofMod("icon/scrollbar_horizontal"), 7, 9, 2, 2, 3, 3);
+        public static final NineSliceTexture scrollTrackFill = NineSliceTexture.sprite(ofMod("icon/scroll_track_fill"), 3, 3, 1, 1, 1, 1);
 
         // Small icons (5×6)
         public static final class Small {
@@ -148,6 +268,10 @@ public final class CirrusTextures {
             public static final ImageTexture minusSelected = ImageTexture.sprite(ofMod("icon/small/minus_selected"), 5, 6);
             public static final ImageTexture plus = ImageTexture.sprite(ofMod("icon/small/plus"), 5, 6);
             public static final ImageTexture plusSelected = ImageTexture.sprite(ofMod("icon/small/plus_selected"), 5, 6);
+        }
+
+        public static final class Middle {
+            public static final ImageTexture arrowRight = autoSprite("icon/middle/arrow_right");
         }
 
         public static final class Calc {
@@ -176,6 +300,39 @@ public final class CirrusTextures {
             // Use existing complete icons from the atlas (no ad-hoc slicing).
             public static final ImageTexture layerNav = ImageTexture.sprite(ofMod("icon/calc/path/tree_path"), 16, 16);
             public static final ImageTexture calculate = ImageTexture.sprite(ofMod("icon/arrow_right"), 10, 10);
+
+            public static final class Map {
+                public static final ImageTexture background = ImageTexture.sprite(ofMod("icon/calc/map/background"), 48, 24);
+            }
+
+            public static final class Sort {
+                public static final ImageTexture availableFirst = ImageTexture.sprite(ofMod("icon/calc/sort/available_first"), 16, 16);
+                public static final ImageTexture availableFirstPressed = ImageTexture.sprite(ofMod("icon/calc/sort/available_first_pressed"), 16, 16);
+                public static final ImageTexture id = ImageTexture.sprite(ofMod("icon/calc/sort/id"), 16, 16);
+                public static final ImageTexture idPressed = ImageTexture.sprite(ofMod("icon/calc/sort/id_pressed"), 16, 16);
+                public static final ImageTexture missingFirst = ImageTexture.sprite(ofMod("icon/calc/sort/missing_first"), 16, 16);
+                public static final ImageTexture missingFirstPressed = ImageTexture.sprite(ofMod("icon/calc/sort/missing_first_pressed"), 16, 16);
+                public static final ImageTexture number = ImageTexture.sprite(ofMod("icon/calc/sort/number"), 16, 16);
+                public static final ImageTexture numberPressed = ImageTexture.sprite(ofMod("icon/calc/sort/number_pressed"), 16, 16);
+                public static final ImageTexture name = ImageTexture.sprite(ofMod("icon/calc/sort_name"), 16, 16);
+                public static final ImageTexture namePressed = ImageTexture.sprite(ofMod("icon/calc/sort_name_pressed"), 16, 16);
+            }
+        }
+
+        public static final class Execution {
+            public static final ImageTexture executionDisabledJei = ImageTexture.sprite(ofMod("icon/exc/execution_disabled_jei"), 16, 16);
+            public static final ImageTexture executionDisabledJeiPressed = ImageTexture.sprite(ofMod("icon/exc/execution_disabled_jei_pressed"), 16, 16);
+            public static final ImageTexture executionEnabledJei = ImageTexture.sprite(ofMod("icon/exc/execution_enabled_jei"), 16, 16);
+            public static final ImageTexture executionEnabledJeiPressed = ImageTexture.sprite(ofMod("icon/exc/execution_enabled_jei_pressed"), 16, 16);
+
+            public static final class Category {
+                public static final ImageTexture recipe = ImageTexture.sprite(ofMod("icon/exc/category/recipe_selected"), 16, 16);
+                public static final ImageTexture recipeSelected = ImageTexture.sprite(ofMod("icon/exc/category/recipe"), 16, 16);
+                public static final ImageTexture timeline = ImageTexture.sprite(ofMod("icon/exc/category/timeline_selected"), 16, 16);
+                public static final ImageTexture timelineSelected = ImageTexture.sprite(ofMod("icon/exc/category/timeline"), 16, 16);
+                public static final ImageTexture ingredients = ImageTexture.sprite(ofMod("icon/exc/category/ingredients_selected"), 16, 16);
+                public static final ImageTexture ingredientsSelected = ImageTexture.sprite(ofMod("icon/exc/category/ingredients"), 16, 16);
+            }
         }
 
         // Sign icons
@@ -196,10 +353,8 @@ public final class CirrusTextures {
             }
         }
 
-        public static final NineSliceTexture scrollBar = NineSliceTexture.sprite(ofMod("icon/scrollbar"), 7, 8, 2, 4, 3, 3);
+        public static final NineSliceTexture scrollBarVertical = NineSliceTexture.sprite(ofMod("icon/scrollbar"), 7, 8, 2, 4, 3, 3);
     }
-
-    // ═══════════════════ Sign ═══════════════════
 
     public static final class Sign {
         public static final class Group {
@@ -207,9 +362,11 @@ public final class CirrusTextures {
             public static final ImageTexture fluid = ImageTexture.sprite(ofMod("sign/group/fluid"), 3, 19);
             public static final ImageTexture item = ImageTexture.sprite(ofMod("sign/group/item"), 3, 19);
         }
-    }
 
-    // ═══════════════════ Tab (standalone) ═══════════════════
+        public static final class Exc {
+            public static final ImageTexture path = ImageTexture.sprite(ofMod("sign/exc/path"), 9, 9);
+        }
+    }
 
     public static final class Tab {
         public static final ImageTexture select = ImageTexture.sprite(ofMod("tab/select"), 21, 22);

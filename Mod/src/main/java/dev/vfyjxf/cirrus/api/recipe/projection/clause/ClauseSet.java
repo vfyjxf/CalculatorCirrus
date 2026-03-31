@@ -55,7 +55,7 @@ public final class ClauseSet {
 
     public boolean hasClause(Namespace clauseId) {
         Checks.checkNotNull(clauseId, "clauseId");
-        return patches.get(clauseId) != null || prototype.contains(clauseId);
+        return patches.get(clauseId) != null || (!patches.containsKey(clauseId) && prototype.containsKey(clauseId));
     }
 
     public boolean hasClause(ClauseType clauseType) {
@@ -104,40 +104,6 @@ public final class ClauseSet {
             else ret.put(k, v);
         });
         return ret;
-    }
-
-    //endregion
-
-    //region compatibility
-
-    @Deprecated(forRemoval = false)
-    public ClauseSet addFacet(RecipeClause facet) {
-        return addClause(facet);
-    }
-
-    @Deprecated(forRemoval = false)
-    public ClauseSet removeFacet(ClauseType facetType) {
-        return removeClause(facetType);
-    }
-
-    @Deprecated(forRemoval = false)
-    public ClauseSet removeFacet(Namespace facetId) {
-        return removeClause(facetId);
-    }
-
-    @Deprecated(forRemoval = false)
-    public RecipeClause getFacet(Namespace facetId) {
-        return getClause(facetId);
-    }
-
-    @Deprecated(forRemoval = false)
-    public RecipeClause getFacet(ClauseType facetType) {
-        return getClause(facetType);
-    }
-
-    @Deprecated(forRemoval = false)
-    public RichIterable<RecipeClause> allFacets() {
-        return allClauses();
     }
 
     //endregion

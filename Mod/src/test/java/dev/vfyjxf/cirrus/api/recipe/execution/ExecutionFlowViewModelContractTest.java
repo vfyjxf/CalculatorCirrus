@@ -12,6 +12,8 @@ import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowViewModel;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -36,7 +38,7 @@ class ExecutionFlowViewModelContractTest {
         var withdraw = new InteractionStep.WithdrawResourceStep(
             ExecutionSideRequirement.client,
             ExecutionCapability.inventoryTransfer,
-            resource(1L),
+            new InteractionStep.WithdrawTarget.Resource(resource(1L)),
             1L
         );
         var open = new InteractionStep.OpenInteractionStep(
@@ -44,7 +46,7 @@ class ExecutionFlowViewModelContractTest {
             ExecutionCapability.interactionAccess,
             recipe,
             1,
-            "crafting_table"
+            Namespace.of("test", "crafting_table")
         );
         var execute = new InteractionStep.ExecuteRecipeStep(
             ExecutionSideRequirement.client,
@@ -132,7 +134,7 @@ class ExecutionFlowViewModelContractTest {
         var withdraw = new InteractionStep.WithdrawResourceStep(
             ExecutionSideRequirement.client,
             ExecutionCapability.inventoryTransfer,
-            resource(1L),
+            new InteractionStep.WithdrawTarget.Resource(resource(1L)),
             1L
         );
         var manual = new InteractionStep.ManualCheckpointStep(
@@ -306,7 +308,7 @@ class ExecutionFlowViewModelContractTest {
         }
 
         @Override
-        public RecipeProjection resolveRecipe(TestRecipe recipe) {
+        public ResolveResult resolveFallback(ResolveContext context, TestRecipe recipe) {
             throw new UnsupportedOperationException("Test fixture does not resolve recipes");
         }
 

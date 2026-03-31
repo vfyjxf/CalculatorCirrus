@@ -1,7 +1,6 @@
 package dev.vfyjxf.cirrus.api.recipe.execution;
 
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
-import dev.vfyjxf.cirrus.api.recipe.execution.core.PauseReasons;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowStatus;
 import dev.vfyjxf.cloudlib.util.Checks;
@@ -10,6 +9,8 @@ import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.Optional;
 
 /**
  * UI-agnostic telemetry snapshot for execution state observation.
@@ -33,13 +34,10 @@ public record ExecutionTelemetrySnapshot(
 ) {
 
     public ExecutionTelemetrySnapshot {
-        Checks.checkNotNull(status, "status");
         Checks.checkArgument(completedSteps >= 0, "completedSteps must be non-negative");
         Checks.checkArgument(totalSteps >= 0, "totalSteps must be non-negative");
         Checks.checkArgument(progress >= 0.0d, "progress must be non-negative");
         Checks.checkArgument(progress <= 1.0d, "progress must be <= 1.0");
-        Checks.checkNotNull(path, "path");
-        Checks.checkNotNull(warnings, "warnings");
         Checks.checkArgument(ratePerSecond >= 0.0d, "ratePerSecond must be non-negative");
     }
 
@@ -47,16 +45,9 @@ public record ExecutionTelemetrySnapshot(
         String id,
         String label,
         @Nullable String detail
-    ) {
-        public NodeContext {
-            Checks.checkNotNull(id, "id");
-            Checks.checkNotNull(label, "label");
-        }
-    }
+    ) {}
 
     public static ExecutionTelemetrySnapshot from(ExecutionSession session, double ratePerSecond, boolean autoAdvanceEnabled) {
-        Checks.checkNotNull(session, "session");
-
         ExecutionFlowNode root = session.flowViewModel().root();
         InteractionStep currentStep = session.currentStep();
         InteractionStep nextStep = nextStep(session);
@@ -123,7 +114,7 @@ public record ExecutionTelemetrySnapshot(
     }
 
     private static @Nullable String errorSummary(@Nullable PauseReason pauseReason) {
-        if (!isFailureLikePauseReason(pauseReason)) {
+        if (pauseReason == null) {
             return null;
         }
         ExecutionGuidance guidance = pauseReason.guidance();
@@ -134,14 +125,10 @@ public record ExecutionTelemetrySnapshot(
     }
 
     private static @Nullable String errorDetail(@Nullable PauseReason pauseReason) {
-        if (!isFailureLikePauseReason(pauseReason) || pauseReason.guidance() == null || pauseReason.guidance().detail() == null) {
+        if (pauseReason == null || pauseReason.guidance() == null || pauseReason.guidance().detail() == null) {
             return null;
         }
         return pauseReason.guidance().detail().getString();
-    }
-
-    private static boolean isFailureLikePauseReason(@Nullable PauseReason pauseReason) {
-        return pauseReason != null && !pauseReason.key().equals(PauseReasons.awaitingPlayerAction);
     }
 
     private static NodeContext nodeContext(@Nullable ExecutionFlowNode node, @Nullable InteractionStep step, boolean pathNode) {
@@ -188,9 +175,9 @@ public record ExecutionTelemetrySnapshot(
         return false;
     }
 
-    private static java.util.Optional<ExecutionFlowNode> findNode(ExecutionFlowNode node, InteractionStep target) {
+    private static Optional<ExecutionFlowNode> findNode(ExecutionFlowNode node, InteractionStep target) {
         if (node.steps().contains(target)) {
-            return java.util.Optional.of(node);
+            return Optional.of(node);
         }
         for (ExecutionFlowNode child : node.children()) {
             var found = findNode(child, target);
@@ -198,12 +185,10 @@ public record ExecutionTelemetrySnapshot(
                 return found;
             }
         }
-        return java.util.Optional.empty();
+        return Optional.empty();
     }
 
     private record NodePath(ImmutableList<NodeContext> path) {
-        private NodePath {
-            Checks.checkNotNull(path, "path");
-        }
+        private NodePath {}
     }
 }

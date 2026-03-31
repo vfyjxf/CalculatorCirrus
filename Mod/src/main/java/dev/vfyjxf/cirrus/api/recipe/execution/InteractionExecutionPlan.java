@@ -14,9 +14,7 @@ public record InteractionExecutionPlan(
 ) {
 
     public InteractionExecutionPlan {
-        Checks.checkNotNull(targetRecipe, "targetRecipe");
         Checks.checkArgument(targetTimes > 0, "targetTimes must be positive");
-        Checks.checkNotNull(steps, "steps");
     }
 
     //region derived state

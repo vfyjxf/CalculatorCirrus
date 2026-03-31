@@ -7,4 +7,6 @@ public interface JeiRecipeTypeBridgeRegister {
 
     void registerRecipeTypeForSystem(Namespace systemId, RecipeType<?> recipeType);
 
+    boolean hasRecipeTypeBridge(RecipeType<?> recipeType);
+
 }

@@ -1,7 +1,8 @@
 package dev.vfyjxf.cirrus.api.register;
 
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
-import dev.vfyjxf.cirrus.api.recipe.system.extension.RecipeSystemExtension;
+import dev.vfyjxf.cirrus.api.recipe.system.extension.RecipeSubsystem;
+import dev.vfyjxf.cirrus.api.recipe.system.extension.SubsystemOrder;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jetbrains.annotations.ApiStatus;
 
@@ -10,6 +11,19 @@ public interface RecipeSystemRegister {
 
     void registerSystem(RecipeSystem<?> system);
 
-    void registerExtension(Namespace systemId, RecipeSystemExtension extension);
+    default <R> void registerSubsystem(
+        Namespace systemId,
+        Namespace subsystemId,
+        RecipeSubsystem<R> subsystem
+    ) {
+        registerSubsystem(systemId, subsystemId, subsystem, SubsystemOrder.standard());
+    }
+
+    <R> void registerSubsystem(
+        Namespace systemId,
+        Namespace subsystemId,
+        RecipeSubsystem<R> subsystem,
+        SubsystemOrder order
+    );
 
 }

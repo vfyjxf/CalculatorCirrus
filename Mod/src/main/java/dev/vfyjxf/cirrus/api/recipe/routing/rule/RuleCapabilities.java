@@ -1,12 +1,14 @@
 package dev.vfyjxf.cirrus.api.recipe.routing.rule;
 
+import com.mojang.serialization.Codec;
 import dev.vfyjxf.cloudlib.util.Checks;
+import org.eclipse.collections.api.factory.Sets;
 import org.eclipse.collections.api.set.ImmutableSet;
 
 /**
  * Set of {@link RuleCapabilityFlag} values declared by a {@link RuleProfile}.
  *
- * <p>Used by the {@link dev.vfyjxf.cirrus.api.recipe.routing.planner.AssuredPlanner}
+ * <p>Used by the internal assured routing planner
  * to determine which planning modes are safe to use with the current profile.
  *
  * @param flags the immutable set of declared capability flags
@@ -14,6 +16,9 @@ import org.eclipse.collections.api.set.ImmutableSet;
 public record RuleCapabilities(
     ImmutableSet<RuleCapabilityFlag> flags
 ) {
+    public static final Codec<RuleCapabilities> CODEC = RuleCapabilityFlag.CODEC.listOf()
+        .xmap(flags -> new RuleCapabilities(Sets.immutable.ofAll(flags)), capabilities -> capabilities.flags().stream().toList());
+
     public RuleCapabilities {
         Checks.checkNotNull(flags, "flags");
     }

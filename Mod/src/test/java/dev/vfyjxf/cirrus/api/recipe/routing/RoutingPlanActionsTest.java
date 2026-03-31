@@ -30,7 +30,11 @@ class RoutingPlanActionsTest {
         assertNotNull(recipe);
 
         PlanBuilder builder = new PlanBuilder(1L, 2L, recipe, 1);
-        builder.addConsumeStock(ContentStack.fromStack(new ItemStack(Items.OAK_LOG, 1)), 1);
+        builder.addConsumeStock(
+            RoutingTestFixtures.in(Items.OAK_LOG, 1),
+            ContentStack.fromStack(new ItemStack(Items.OAK_LOG, 1)),
+            1
+        );
         builder.addReserveCatalyst(RoutingTestFixtures.in(Items.STICK, 1), 1, recipe);
         builder.addExecuteRecipe(
             recipe,

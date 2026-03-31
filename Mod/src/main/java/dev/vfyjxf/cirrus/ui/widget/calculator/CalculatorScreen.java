@@ -5,9 +5,7 @@ import dev.vfyjxf.cirrus.CirrusConstants;
 import dev.vfyjxf.cirrus.ui.widget.TabContainer;
 import dev.vfyjxf.cloudlib.api.ui.InputContext;
 import dev.vfyjxf.cloudlib.api.ui.base.BasicScreen;
-import dev.vfyjxf.cloudlib.api.ui.base.SceneLayer;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
-import dev.vfyjxf.cloudlib.api.ui.debug.Inspector;
 import dev.vfyjxf.cloudlib.api.ui.style.UIStyle;
 import dev.vfyjxf.taffy.style.TaffyDimension;
 import net.minecraft.client.KeyMapping;
@@ -21,56 +19,45 @@ import net.neoforged.neoforge.client.settings.KeyConflictContext;
 import net.neoforged.neoforge.client.settings.KeyModifier;
 import org.lwjgl.glfw.GLFW;
 
-import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.*;
-import static dev.vfyjxf.taffy.style.LengthPercentageAuto.auto;
-import static dev.vfyjxf.taffy.style.LengthPercentageAuto.length;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.marginAuto;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeOf;
 
-@EventBusSubscriber(modid = CirrusConstants.MOD_ID, value = Dist.CLIENT)
+@EventBusSubscriber(modid = CirrusConstants.modId, value = Dist.CLIENT)
 public class CalculatorScreen extends BasicScreen {
 
-    //region keybinds
+	//region keybinds
 
-    private static final KeyMapping openCalculatorScreen = new KeyMapping(
-        "Open Calculator Screen",
-        KeyConflictContext.GUI,
-        KeyModifier.CONTROL,
-        InputConstants.Type.KEYSYM,
-        GLFW.GLFW_KEY_C,
-        "cirrus"
-    );
+	private static final KeyMapping openCalculatorScreen = new KeyMapping(
+			"Open Calculator Screen",
+			KeyConflictContext.GUI,
+			KeyModifier.CONTROL,
+			InputConstants.Type.KEYSYM,
+			GLFW.GLFW_KEY_C,
+			"cirrus"
+	);
 
-    @SubscribeEvent
-    private static void onInputKey(InputEvent.Key event) {
-        if (FMLEnvironment.production) return;
-        InputContext inputContext = InputContext.fromEvent(event);
-        if (inputContext.released(openCalculatorScreen)) {
-            Minecraft.getInstance().setScreen(new CalculatorScreen());
-        }
-    }
+	@SubscribeEvent
+	private static void onInputKey(InputEvent.Key event) {
+		if (FMLEnvironment.production) return;
+		InputContext inputContext = InputContext.fromEvent(event);
+		if (inputContext.released(openCalculatorScreen)) {
+			Minecraft.getInstance().setScreen(new CalculatorScreen());
+		}
+	}
 
-    //endregion
+	//endregion
 
-    public CalculatorScreen() {
-        var container = new WidgetGroup<>();
-        container.useStyle(UIStyle.of(
-            marginAuto()
-        ));
-        container.addWidget(new TabContainer());
-        mainGroup.addWidget(container);
-        mainGroup.useStyle(
-            sizeOf(TaffyDimension.percent(1), TaffyDimension.percent(1))
-        );
-//        mainGroup.addWidget(
-//            Inspector.create()
-//                     .setTrackMouse(true)
-//                     .useStyle(
-//                         positionAbsolute(),
-//                         inset(auto(), length(0), length(0), auto()),
-//                         sizeOf(280, 180)
-//                     )
-//                     .setSceneLayer(SceneLayer.debug)
-//        );
-    }
+	public CalculatorScreen() {
+		var container = new WidgetGroup<>();
+		container.useStyle(UIStyle.of(
+				marginAuto()
+		));
+		container.addWidget(new TabContainer());
+		mainGroup.addWidget(container);
+		mainGroup.useStyle(
+				sizeOf(TaffyDimension.percent(1), TaffyDimension.percent(1))
+		);
+	}
 
 
 }

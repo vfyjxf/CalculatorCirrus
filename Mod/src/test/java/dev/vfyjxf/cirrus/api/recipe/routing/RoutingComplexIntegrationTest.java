@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.api.recipe.routing;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicy;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicyAction;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicyRuleSpec;
@@ -252,17 +253,17 @@ class RoutingComplexIntegrationTest {
 
     private static void assertNoJunkExecution(dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan plan) {
         for (var action : plan.actions()) {
-            if (action instanceof dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction.ExecuteRecipeAction exec &&
+            if (action instanceof PlanAction.ExecuteRecipe exec &&
                 exec.recipe().id() != null &&
                 exec.recipe().id().getPath().startsWith("junk_")) {
                 fail("plan executed junk recipe: " + exec.recipe().id());
             }
-            if (action instanceof dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction.ExecuteRecipeAction exec &&
+            if (action instanceof PlanAction.ExecuteRecipe exec &&
                 exec.recipe().id() != null &&
                 exec.recipe().id().getPath().contains("_junk_")) {
                 fail("plan executed seed junk recipe: " + exec.recipe().id());
             }
-            if (action instanceof dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction.ExecuteRecipeAction exec &&
+            if (action instanceof PlanAction.ExecuteRecipe exec &&
                 exec.recipe().id() != null &&
                 exec.recipe().id().getPath().startsWith("mega_decoy_")) {
                 fail("plan executed decoy recipe: " + exec.recipe().id());
@@ -275,7 +276,7 @@ class RoutingComplexIntegrationTest {
         java.util.Set<String> bannedIds
     ) {
         for (var action : plan.actions()) {
-            if (action instanceof dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction.ExecuteRecipeAction exec &&
+            if (action instanceof PlanAction.ExecuteRecipe exec &&
                 exec.recipe().id() != null &&
                 bannedIds.contains(exec.recipe().id().getPath())) {
                 fail("plan executed player-banned recipe: " + exec.recipe().id());
@@ -287,7 +288,7 @@ class RoutingComplexIntegrationTest {
         StringBuilder builder = new StringBuilder();
         for (var action : plan.actions()) {
             builder.append(action.actionId()).append(":").append(action.getClass().getSimpleName());
-            if (action instanceof dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction.ExecuteRecipeAction exec) {
+            if (action instanceof PlanAction.ExecuteRecipe exec) {
                 builder.append(":").append(exec.recipe().id());
                 builder.append(":").append(exec.times());
                 builder.append(":").append(exec.boundInputs().size());

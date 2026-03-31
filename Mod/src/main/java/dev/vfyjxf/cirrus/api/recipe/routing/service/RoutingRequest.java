@@ -2,6 +2,8 @@ package dev.vfyjxf.cirrus.api.recipe.routing.service;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.HeuristicPolicy;
 import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultRuleProfiles;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicy;
@@ -9,6 +11,8 @@ import dev.vfyjxf.cirrus.api.recipe.routing.tag.TagSnapshot;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.Map;
 
 /**
  * Immutable request describing all parameters for one routing run.
@@ -61,6 +65,7 @@ public record RoutingRequest(
     InventorySensitivityProfile inventorySensitivityProfile,
     @Nullable TagResolvePolicy tagResolvePolicy,
     TagResolvePolicy effectiveTagResolvePolicy,
+    Map<String, String> preferredVariants,
     OutputSelectionPolicy adapterSelectionPolicy,
     int maxProducerCandidates,
     LoopPolicy loopPolicy,
@@ -68,7 +73,8 @@ public record RoutingRequest(
     boolean explorationEnabled,
     @Nullable Namespace explorationPolicyId,
     @Nullable Long explorationSeed,
-    double explorationBudgetShare
+    double explorationBudgetShare,
+    HeuristicPolicy heuristicPolicy
 ) {
     public RoutingRequest {
         Checks.checkNotNull(plannerMode, "plannerMode");
@@ -80,11 +86,14 @@ public record RoutingRequest(
         Checks.checkNotNull(target, "target");
         Checks.checkNotNull(inventorySensitivityProfile, "inventorySensitivityProfile");
         Checks.checkNotNull(effectiveTagResolvePolicy, "effectiveTagResolvePolicy");
+        Checks.checkNotNull(preferredVariants, "preferredVariants");
+        preferredVariants = Map.copyOf(preferredVariants);
         Checks.checkNotNull(adapterSelectionPolicy, "adapterSelectionPolicy");
         Checks.checkNotNull(loopPolicy, "loopPolicy");
         Checks.checkNotNull(loopBudget, "loopBudget");
         Checks.checkArgument(maxProducerCandidates > 0, "maxProducerCandidates must be positive");
         Checks.checkArgument(explorationBudgetShare >= 0 && explorationBudgetShare <= 1, "explorationBudgetShare must be in [0,1]");
+        Checks.checkNotNull(heuristicPolicy, "heuristicPolicy");
     }
 
     /**
@@ -147,6 +156,7 @@ public record RoutingRequest(
         private Target target;
         private InventorySensitivityProfile inventorySensitivityProfile = InventorySensitivityProfile.balanced;
         private TagResolvePolicy tagResolvePolicy;
+        private Map<String, String> preferredVariants = Map.of();
         private OutputSelectionPolicy adapterSelectionPolicy = OutputSelectionPolicy.bestEffortSingleRecipe;
         private Integer maxProducerCandidates;
         private LoopPolicy loopPolicy = LoopPolicy.forbidAmplification;
@@ -155,6 +165,7 @@ public record RoutingRequest(
         private Namespace explorationPolicyId;
         private Long explorationSeed;
         private Double explorationBudgetShare;
+        private HeuristicPolicy heuristicPolicy = HeuristicPolicy.defaultSafe;
 
         private Builder() {
         }
@@ -219,6 +230,20 @@ public record RoutingRequest(
             return this;
         }
 
+        public Builder preferredVariants(Map<String, String> preferredVariants) {
+            this.preferredVariants = Map.copyOf(preferredVariants);
+            return this;
+        }
+
+        public Builder preferVariant(InputContent input, String variantKey) {
+            Checks.checkNotNull(input, "input");
+            Checks.checkNotNull(variantKey, "variantKey");
+            java.util.LinkedHashMap<String, String> copy = new java.util.LinkedHashMap<>(preferredVariants);
+            copy.put(RoutingVariantKeys.inputKey(input), variantKey);
+            this.preferredVariants = Map.copyOf(copy);
+            return this;
+        }
+
         public Builder targetRecipe(RecipeEntry<?> recipe, int times) {
             this.target = new RecipeTarget(recipe, times);
             return this;
@@ -269,6 +294,11 @@ public record RoutingRequest(
             return this;
         }
 
+        public Builder heuristicPolicy(HeuristicPolicy heuristicPolicy) {
+            this.heuristicPolicy = heuristicPolicy;
+            return this;
+        }
+
         public RoutingRequest build() {
             Checks.checkNotNull(target, "target");
             Namespace resolvedRuleProfile = ruleProfileId != null ? ruleProfileId : switch (plannerMode) {
@@ -310,6 +340,7 @@ public record RoutingRequest(
                 resolvedInventoryProfile,
                 tagResolvePolicy,
                 resolvedTagResolvePolicy,
+                preferredVariants,
                 adapterSelectionPolicy,
                 resolvedMaxProducerCandidates,
                 loopPolicy,
@@ -317,7 +348,8 @@ public record RoutingRequest(
                 resolvedExplorationEnabled,
                 explorationPolicyId,
                 explorationSeed,
-                resolvedExplorationShare
+                resolvedExplorationShare,
+                heuristicPolicy
             );
         }
 

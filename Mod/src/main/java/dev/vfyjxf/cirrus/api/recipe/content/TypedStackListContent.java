@@ -79,6 +79,11 @@ public final class TypedStackListContent<T, S> implements InputContent {
     }
 
     @Override
+    public boolean preserveOriginalShortageSemantics() {
+        return true;
+    }
+
+    @Override
     public TypedStackListContent<T, S> copyWithAmount(long amount) {
         return new TypedStackListContent<>(type, stacks, amount, chance);
     }
@@ -102,7 +107,7 @@ public final class TypedStackListContent<T, S> implements InputContent {
             ContentStack<?, ?> b = o.stacks.get(i);
             if (!a.matches(b, MatchStrategy.identityAndComponent)) return false;
         }
-        return false;
+        return true;
     }
 
     @Override

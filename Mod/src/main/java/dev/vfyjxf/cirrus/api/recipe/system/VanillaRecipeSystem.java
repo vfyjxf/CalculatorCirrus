@@ -73,8 +73,8 @@ public interface VanillaRecipeSystem<T extends Recipe<?>> extends RecipeSystem<R
     }
 
     @Override
-    default boolean supports(RecipeHolder<T> recipe) {
-        return recipeType() == recipe.value().getType();
+    default RecipeClaim claim(RecipeHolder<T> recipe) {
+        return recipeType() == recipe.value().getType() ? RecipeClaim.normal : RecipeClaim.none;
     }
 
     @Override

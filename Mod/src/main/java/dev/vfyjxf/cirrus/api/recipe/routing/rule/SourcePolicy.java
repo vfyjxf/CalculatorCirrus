@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.routing.rule;
 
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.factory.Lists;
@@ -28,6 +30,11 @@ public record SourcePolicy(
     ImmutableList<SourcePolicyRuleSpec> rules
 ) {
     public static final Namespace defaultPolicyId = Namespace.of("cirrus", "routing/source_policy/default");
+    public static final Codec<SourcePolicy> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+        Namespace.codec.fieldOf("policy_id").forGetter(SourcePolicy::policyId),
+        Codec.LONG.fieldOf("version").forGetter(SourcePolicy::version),
+        dev.vfyjxf.cloudlib.api.util.Codecs.immutableList(SourcePolicyRuleSpec.CODEC).fieldOf("rules").forGetter(SourcePolicy::rules)
+    ).apply(instance, SourcePolicy::new));
 
     public SourcePolicy {
         Checks.checkNotNull(policyId, "policyId");

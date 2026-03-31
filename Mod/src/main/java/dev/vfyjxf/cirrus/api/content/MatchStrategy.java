@@ -25,10 +25,10 @@ import java.util.function.BiPredicate;
  * @see VariantType
  */
 public record MatchStrategy(
-    boolean withIdentity,
-    boolean withAmount,
-    boolean withComponent,
-    BiPredicate<DataComponentMap, DataComponentMap> componentMatcher
+        boolean withIdentity,
+        boolean withAmount,
+        boolean withComponent,
+        BiPredicate<DataComponentMap, DataComponentMap> componentMatcher
 ) {
 
     //region Extra Component Match Strategies
@@ -46,14 +46,14 @@ public record MatchStrategy(
     //endregion
 
     public MatchStrategy(
-        boolean withIdentity,
-        boolean withAmount,
-        boolean withComponent,
-        BiPredicate<DataComponentMap, DataComponentMap> componentMatcher
+            boolean withIdentity,
+            boolean withAmount,
+            boolean withComponent,
+            BiPredicate<DataComponentMap, DataComponentMap> componentMatcher
     ) {
         this.withIdentity = withIdentity || withComponent;//ok,ok,I don't think a stack's component will be meaningful without identity.
         this.withAmount = withAmount;
-        this.withComponent = withIdentity;
+        this.withComponent = withComponent;
         this.componentMatcher = (a, b) -> {
             if (!withComponent || a == b) return true;
             if (a == null || b == null) return false;
@@ -62,11 +62,11 @@ public record MatchStrategy(
     }
 
     public MatchStrategy(
-        boolean withIdentity,
-        boolean withAmount,
-        boolean withComponent
+            boolean withIdentity,
+            boolean withAmount,
+            boolean withComponent
     ) {
-        this(withIdentity, withAmount, withComponent, nothing);
+        this(withIdentity, withAmount, withComponent, withComponent ? same : nothing);
     }
 
     public boolean testComponents(@Nullable DataComponentMap a, @Nullable DataComponentMap b) {

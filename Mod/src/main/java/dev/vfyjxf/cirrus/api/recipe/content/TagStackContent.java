@@ -90,6 +90,11 @@ public final class TagStackContent<T> implements InputContent {
     }
 
     @Override
+    public boolean preserveOriginalShortageSemantics() {
+        return true;
+    }
+
+    @Override
     public TagStackContent<T> copyWithAmount(long amount) {
         return new TagStackContent<>(type, tagKey, amount, chance);
     }

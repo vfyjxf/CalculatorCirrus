@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.api.recipe.projection.clause;
 
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 
@@ -9,11 +10,13 @@ import java.util.function.BiPredicate;
 
 public record ClauseType(
     Namespace id,
+    ProjectionPlugin plugin,
     BiPredicate<RecipeEntry<?>, RecipeContent> selector
 ) {
 
     public ClauseType {
         Checks.checkNotNull(id, "id");
+        Checks.checkNotNull(plugin, "plugin");
         Checks.checkNotNull(selector, "selector");
     }
 

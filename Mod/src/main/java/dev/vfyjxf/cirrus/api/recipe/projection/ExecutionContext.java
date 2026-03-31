@@ -8,7 +8,24 @@ import java.util.concurrent.ConcurrentMap;
 
 public final class ExecutionContext {
 
+    private final @Nullable ExecutionContext parent;
     private final ConcurrentMap<ExecutionContextKey<?>, Object> values = new ConcurrentHashMap<>();
+
+    public ExecutionContext() {
+        this(null);
+    }
+
+    private ExecutionContext(@Nullable ExecutionContext parent) {
+        this.parent = parent;
+    }
+
+    public ExecutionContext child() {
+        return new ExecutionContext(this);
+    }
+
+    public @Nullable ExecutionContext parent() {
+        return parent;
+    }
 
     //region data access
 
@@ -22,8 +39,14 @@ public final class ExecutionContext {
     public <T> @Nullable T find(ExecutionContextKey<T> key) {
         Checks.checkNotNull(key, "key");
         Object value = values.get(key);
-        if (value == null) return null;
-        return key.valueType().cast(value);
+        if (value != null) return key.valueType().cast(value);
+        return parent == null ? null : parent.find(key);
+    }
+
+    public <T> @Nullable T findLocal(ExecutionContextKey<T> key) {
+        Checks.checkNotNull(key, "key");
+        Object value = values.get(key);
+        return value == null ? null : key.valueType().cast(value);
     }
 
     public <T> T get(ExecutionContextKey<T> key) {
@@ -33,6 +56,11 @@ public final class ExecutionContext {
     }
 
     public boolean has(ExecutionContextKey<?> key) {
+        Checks.checkNotNull(key, "key");
+        return values.containsKey(key) || (parent != null && parent.has(key));
+    }
+
+    public boolean hasLocal(ExecutionContextKey<?> key) {
         Checks.checkNotNull(key, "key");
         return values.containsKey(key);
     }

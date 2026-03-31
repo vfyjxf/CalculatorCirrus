@@ -16,27 +16,30 @@ import org.eclipse.collections.api.set.MutableSet;
 import org.eclipse.collections.impl.collector.Collectors2;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 //TODO:我们应该扩充Tag的概念吗，支持不使用minecraft注册表的系统？
 public record TagType<T>(
-    Namespace typeId,
-    ContentType<T> contentType,
-    ResourceKey<Registry<T>> registryKey
-) {
-
-    public static <T> TagType<T> fromRegistry(
-        String id,
+        Namespace typeId,
         ContentType<T> contentType,
         ResourceKey<Registry<T>> registryKey
+) {
+    private static final Map<CacheKey, MutableSet<TagKey<?>>> allTagsCache = new ConcurrentHashMap<>();
+
+    public static <T> TagType<T> fromRegistry(
+            String id,
+            ContentType<T> contentType,
+            ResourceKey<Registry<T>> registryKey
     ) {
         return fromRegistry(Namespace.parse(id), contentType, registryKey);
     }
 
     public static <T> TagType<T> fromRegistry(
-        Namespace id,
-        ContentType<T> contentType,
-        ResourceKey<Registry<T>> registryKey
+            Namespace id,
+            ContentType<T> contentType,
+            ResourceKey<Registry<T>> registryKey
     ) {
         return new TagType<>(id, contentType, registryKey);
     }
@@ -59,8 +62,8 @@ public record TagType<T>(
 
     public boolean hasTag(ResourceLocation tagKey) {
         return registry()
-            .getTags()
-            .anyMatch(tag -> tag.getFirst().location().equals(tagKey));
+                .getTags()
+                .anyMatch(tag -> tag.getFirst().location().equals(tagKey));
     }
 
     public boolean hasTag(TagKey<T> tagKey) {
@@ -114,8 +117,17 @@ public record TagType<T>(
     }
 
     public MutableSet<TagKey<T>> allTags() {
-        return registry().getTagNames()
-                         .collect(Collectors2.toSet());
+        CacheKey key = new CacheKey(typeId, registryKey.location());
+        @SuppressWarnings("unchecked")
+        MutableSet<TagKey<T>> tags = (MutableSet<TagKey<T>>) (MutableSet<?>) allTagsCache.computeIfAbsent(
+                key,
+                ignored -> registry().getTagNames().collect(Collectors2.toSet())
+        );
+        return tags;
+    }
+
+    public static void clearAllTagsCache() {
+        allTagsCache.clear();
     }
 
     //endregion
@@ -131,8 +143,10 @@ public record TagType<T>(
     @Override
     public String toString() {
         return "Tag{" +
-               "typeId=" + typeId +
-               ", contentType=" + contentType +
-               '}';
+                "typeId=" + typeId +
+                ", contentType=" + contentType +
+                '}';
     }
+
+    private record CacheKey(Namespace typeId, ResourceLocation registryLocation) {}
 }

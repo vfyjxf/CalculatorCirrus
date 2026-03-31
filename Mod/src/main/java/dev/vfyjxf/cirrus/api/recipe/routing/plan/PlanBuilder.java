@@ -53,13 +53,25 @@ public final class PlanBuilder {
     /**
      * Appends a stock-consumption action.
      *
+     * @param input    the original input semantics that this stock consume satisfies
      * @param resource the resource to consume from stock
      * @param amount   the amount to consume
      * @return the created action
      */
-    public PlanAction.ConsumeStockAction addConsumeStock(ContentResource resource, long amount) {
+    public PlanAction.ConsumeStock addConsumeStock(InputContent input, ContentResource resource, long amount) {
         int index = actions.size();
-        var action = new PlanAction.ConsumeStockAction(nextActionId++, index, false, resource, amount);
+        var action = new PlanAction.ConsumeStock(nextActionId++, index, false, input, resource, amount);
+        actions.add(action);
+        return action;
+    }
+
+    /**
+     * Appends a pending-input action that keeps the original input semantics when the
+     * planner cannot resolve a source.
+     */
+    public PlanAction.PendingInput addPendingInput(InputContent input, long amount) {
+        int index = actions.size();
+        var action = new PlanAction.PendingInput(nextActionId++, index, false, input, amount);
         actions.add(action);
         return action;
     }
@@ -72,9 +84,9 @@ public final class PlanBuilder {
      * @param fromRecipe the recipe requiring this catalyst
      * @return the created action
      */
-    public PlanAction.ReserveCatalystAction addReserveCatalyst(InputContent input, long amount, RecipeEntry<?> fromRecipe) {
+    public PlanAction.ReserveCatalyst addReserveCatalyst(InputContent input, long amount, RecipeEntry<?> fromRecipe) {
         int index = actions.size();
-        var action = new PlanAction.ReserveCatalystAction(nextActionId++, index, false, input, amount, fromRecipe);
+        var action = new PlanAction.ReserveCatalyst(nextActionId++, index, false, input, amount, fromRecipe);
         actions.add(action);
         return action;
     }
@@ -88,14 +100,14 @@ public final class PlanBuilder {
      * @param expectedOutputs the expected output bindings
      * @return the created action
      */
-    public PlanAction.ExecuteRecipeAction addExecuteRecipe(
+    public PlanAction.ExecuteRecipe addExecuteRecipe(
         RecipeEntry<?> recipe,
         int times,
         ImmutableList<PlanAction.InputBinding> boundInputs,
         ImmutableList<PlanAction.OutputBinding> expectedOutputs
     ) {
         int index = actions.size();
-        var action = new PlanAction.ExecuteRecipeAction(
+        var action = new PlanAction.ExecuteRecipe(
             nextActionId++,
             index,
             false,
@@ -113,6 +125,18 @@ public final class PlanBuilder {
         return actions.toImmutable();
     }
 
+    public Snapshot snapshot() {
+        return new Snapshot(actions.size(), nextActionId);
+    }
+
+    public void restore(Snapshot snapshot) {
+        Checks.checkNotNull(snapshot, "snapshot");
+        while (actions.size() > snapshot.actionCount()) {
+            actions.remove(actions.size() - 1);
+        }
+        nextActionId = snapshot.nextActionId();
+    }
+
     /** Returns {@code true} if at least one action has been added. */
     public boolean hasActions() {
         return actions.notEmpty();
@@ -125,6 +149,13 @@ public final class PlanBuilder {
      */
     public RoutingPlan build() {
         return new RoutingPlan(planVersion, tagSnapshotVersion, targetRecipe, targetTimes, actions.toImmutable());
+    }
+
+    public record Snapshot(int actionCount, int nextActionId) {
+        public Snapshot {
+            Checks.checkArgument(actionCount >= 0, "actionCount must be non-negative");
+            Checks.checkArgument(nextActionId >= 0, "nextActionId must be non-negative");
+        }
     }
 }
 

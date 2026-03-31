@@ -23,11 +23,13 @@ import dev.vfyjxf.cirrus.api.recipe.storage.StorageSource;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageSourceRenderer;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageSourceType;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.TagKey;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.eclipse.collections.api.RichIterable;
@@ -37,6 +39,7 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnmodifiableView;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -68,8 +71,8 @@ final class ExecutionTranslatorFixtures {
         this.workbenchCatalyst = InputContent.fromItemStack(new ItemStack(Items.CRAFTING_TABLE), 1, RecipeContent.MIN_CHANCE);
         this.craftPlanksRecipe = new FakeRecipe(
             "craft_planks",
-            java.util.List.of(InputContent.fromItemStack(new ItemStack(Items.OAK_LOG), 1)),
-            java.util.List.of(OutputContent.fromItemStack(new ItemStack(Items.OAK_PLANKS), 4))
+            List.of(InputContent.fromItemStack(new ItemStack(Items.OAK_LOG), 1)),
+            List.of(OutputContent.fromItemStack(new ItemStack(Items.OAK_PLANKS), 4))
         );
         this.recipeSystem.register(craftPlanksRecipe);
         this.craftPlanksEntry = RecipeEntry.of(recipeSystem, craftPlanksRecipe);
@@ -97,16 +100,47 @@ final class ExecutionTranslatorFixtures {
 
     //region plan actions
 
-    PlanAction.ConsumeStockAction consumeOakLog(long amount) {
-        return new PlanAction.ConsumeStockAction(0, 0, false, oakLogResource(), amount);
+    PlanAction.ConsumeStock consumeOakLog(long amount) {
+        return new PlanAction.ConsumeStock(
+            0,
+            0,
+            false,
+            InputContent.fromResource(oakLogResource()).copyWithAmount(amount),
+            oakLogResource(),
+            amount
+        );
     }
 
-    PlanAction.ReserveCatalystAction reserveWorkbenchCatalyst(long amount) {
-        return new PlanAction.ReserveCatalystAction(0, 0, false, workbenchCatalyst(), amount, craftPlanksEntry);
+    PlanAction.ConsumeStock consumeAnyPlankAsResolvedOak(long amount) {
+        InputContent input = InputContent.fromItemTag(ItemTags.PLANKS, amount);
+        return new PlanAction.ConsumeStock(
+            0,
+            0,
+            false,
+            input,
+            oakPlanksResource(),
+            amount
+        );
     }
 
-    PlanAction.ExecuteRecipeAction craftPlanks(int times) {
-        return new PlanAction.ExecuteRecipeAction(
+    PlanAction.PendingInput consumeAnyPlank(long amount) {
+        return new PlanAction.PendingInput(
+            0,
+            0,
+            false,
+            // Keep this tag-shaped on purpose: translator tests assert that execution
+            // still sees a semantic input instead of an arbitrary concrete plank stack.
+            InputContent.fromItemTag(ItemTags.PLANKS, amount),
+            amount
+        );
+    }
+
+    PlanAction.ReserveCatalyst reserveWorkbenchCatalyst(long amount) {
+        return new PlanAction.ReserveCatalyst(0, 0, false, workbenchCatalyst(), amount, craftPlanksEntry);
+    }
+
+    PlanAction.ExecuteRecipe craftPlanks(int times) {
+        return new PlanAction.ExecuteRecipe(
             0,
             0,
             false,
@@ -118,12 +152,14 @@ final class ExecutionTranslatorFixtures {
     }
 
     RoutingPlan plan(PlanAction action) {
-        PlanBuilder builder = new PlanBuilder(1L, 1L, craftPlanksEntry, 1);
+        int targetTimes = action instanceof PlanAction.ExecuteRecipe execute ? execute.times() : 1;
+        PlanBuilder builder = new PlanBuilder(1L, 1L, craftPlanksEntry, targetTimes);
         switch (action) {
-            case PlanAction.ConsumeStockAction consume -> builder.addConsumeStock(consume.resource(), consume.amount());
-            case PlanAction.ReserveCatalystAction reserve ->
+            case PlanAction.ConsumeStock consume -> builder.addConsumeStock(consume.input(), consume.resource(), consume.amount());
+            case PlanAction.PendingInput pending -> builder.addPendingInput(pending.input(), pending.amount());
+            case PlanAction.ReserveCatalyst reserve ->
                 builder.addReserveCatalyst(reserve.input(), reserve.amount(), reserve.fromRecipe());
-            case PlanAction.ExecuteRecipeAction execute ->
+            case PlanAction.ExecuteRecipe execute ->
                 builder.addExecuteRecipe(execute.recipe(), execute.times(), execute.boundInputs(), execute.expectedOutputs());
         }
         return builder.build();
@@ -150,13 +186,13 @@ final class ExecutionTranslatorFixtures {
     //region fake interaction
 
     record FakeInteractionApi(
-        String interactionId,
+        Namespace interactionId,
         boolean automaticPerformerAvailable,
         ExecutionGuidance guidance
     ) implements InteractionApi {
         static FakeInteractionApi automatic(String interactionId) {
             return new FakeInteractionApi(
-                interactionId,
+                Namespace.of("test", interactionId),
                 true,
                 ExecutionGuidance.simple(Component.literal("Automatic performer available"))
             );
@@ -164,7 +200,7 @@ final class ExecutionTranslatorFixtures {
 
         static FakeInteractionApi guided(String interactionId, String summary) {
             return new FakeInteractionApi(
-                interactionId,
+                Namespace.of("test", interactionId),
                 false,
                 ExecutionGuidance.simple(Component.literal(summary))
             );
@@ -311,9 +347,9 @@ final class ExecutionTranslatorFixtures {
         }
 
         @Override
-        public RecipeProjection resolveRecipe(FakeRecipe recipe) {
+        public ResolveResult resolveFallback(ResolveContext context, FakeRecipe recipe) {
             register(recipe);
-            return RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs());
+            return ResolveResult.resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
         }
 
         @Override

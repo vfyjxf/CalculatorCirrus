@@ -23,6 +23,9 @@ import java.util.Map;
  *         ({@link #tieBreakPolicy()}).</li>
  *     <li><b>Explore policy</b> — optional near-tie perturbation
  *         ({@link #explorePolicy()}).</li>
+ *     <li><b>Unresolved-input rule</b> — terminal handling for inputs that
+ *         still cannot be satisfied after recursive expansion
+ *         ({@link #unresolvedInputRule()}).</li>
  * </ol>
  *
  * <p>Additionally, tuning parameters control planner behavior:
@@ -51,12 +54,14 @@ public final class RuleProfile {
     private final RankPolicy rankPolicy;
     private final TieBreakPolicy tieBreakPolicy;
     private final ExplorePolicy explorePolicy;
+    private final UnresolvedInputRule unresolvedInputRule;
     private final RuleCapabilities capabilities;
     private final int shortlistK;
     private final int rollbackWidth;
     private final double nearTieEpsilon;
     private final double amplificationSoftThreshold;
     private final double amplificationHardThreshold;
+    private final boolean liftMultiSemanticChildShortages;
 
     /**
      * Creates a new rule profile with all components and tuning parameters.
@@ -68,12 +73,14 @@ public final class RuleProfile {
      * @param rankPolicy                  score-vector comparator
      * @param tieBreakPolicy              deterministic secondary ordering
      * @param explorePolicy               optional near-tie perturbation
+     * @param unresolvedInputRule         terminal handling for unresolved inputs
      * @param capabilities                declared mathematical properties
      * @param shortlistK                  maximum candidates per demand (must be positive)
      * @param rollbackWidth               alternatives to try on failure (non-negative)
      * @param nearTieEpsilon              epsilon for near-tie detection (non-negative)
      * @param amplificationSoftThreshold  soft threshold for cycle amplification risk
      * @param amplificationHardThreshold  hard threshold for cycle amplification risk
+     * @param liftMultiSemanticChildShortages whether child unresolved-stock warnings should be lifted to tag/list parents
      */
     public RuleProfile(
         Namespace profileId,
@@ -83,12 +90,14 @@ public final class RuleProfile {
         RankPolicy rankPolicy,
         TieBreakPolicy tieBreakPolicy,
         ExplorePolicy explorePolicy,
+        UnresolvedInputRule unresolvedInputRule,
         RuleCapabilities capabilities,
         int shortlistK,
         int rollbackWidth,
         double nearTieEpsilon,
         double amplificationSoftThreshold,
-        double amplificationHardThreshold
+        double amplificationHardThreshold,
+        boolean liftMultiSemanticChildShortages
     ) {
         this.profileId = Checks.checkNotNull(profileId, "profileId");
         this.scoreKeys = Checks.checkNotNull(scoreKeys, "scoreKeys");
@@ -97,6 +106,7 @@ public final class RuleProfile {
         this.rankPolicy = Checks.checkNotNull(rankPolicy, "rankPolicy");
         this.tieBreakPolicy = Checks.checkNotNull(tieBreakPolicy, "tieBreakPolicy");
         this.explorePolicy = Checks.checkNotNull(explorePolicy, "explorePolicy");
+        this.unresolvedInputRule = Checks.checkNotNull(unresolvedInputRule, "unresolvedInputRule");
         this.capabilities = Checks.checkNotNull(capabilities, "capabilities");
         Checks.checkArgument(shortlistK > 0, "shortlistK must be positive");
         Checks.checkArgument(rollbackWidth >= 0, "rollbackWidth must be non-negative");
@@ -108,6 +118,7 @@ public final class RuleProfile {
         this.nearTieEpsilon = nearTieEpsilon;
         this.amplificationSoftThreshold = amplificationSoftThreshold;
         this.amplificationHardThreshold = amplificationHardThreshold;
+        this.liftMultiSemanticChildShortages = liftMultiSemanticChildShortages;
 
         Map<String, Integer> map = new HashMap<>();
         for (int i = 0; i < scoreKeys.size(); i++) {
@@ -151,6 +162,11 @@ public final class RuleProfile {
         return explorePolicy;
     }
 
+    /** Returns the terminal rule for unresolved inputs. */
+    public UnresolvedInputRule unresolvedInputRule() {
+        return unresolvedInputRule;
+    }
+
     /** Returns the declared mathematical capability flags. */
     public RuleCapabilities capabilities() {
         return capabilities;
@@ -179,6 +195,10 @@ public final class RuleProfile {
     /** Returns the hard threshold for cycle-amplification risk rejection. */
     public double amplificationHardThreshold() {
         return amplificationHardThreshold;
+    }
+
+    public boolean liftMultiSemanticChildShortages() {
+        return liftMultiSemanticChildShortages;
     }
 
     /**

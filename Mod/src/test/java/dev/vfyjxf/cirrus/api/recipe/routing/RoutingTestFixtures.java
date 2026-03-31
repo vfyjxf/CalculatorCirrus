@@ -5,6 +5,8 @@ import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingService;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.resources.ResourceLocation;
@@ -106,8 +108,8 @@ final class RoutingTestFixtures {
         }
 
         @Override
-        public RecipeProjection resolveRecipe(FakeRecipe recipe) {
-            return RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs());
+        public ResolveResult resolveFallback(ResolveContext context, FakeRecipe recipe) {
+            return ResolveResult.resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
         }
 
         @Override

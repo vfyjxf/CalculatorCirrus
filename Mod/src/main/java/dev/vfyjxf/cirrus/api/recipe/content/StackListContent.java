@@ -74,6 +74,11 @@ public final class StackListContent implements InputContent {
     }
 
     @Override
+    public boolean preserveOriginalShortageSemantics() {
+        return true;
+    }
+
+    @Override
     public StackListContent copyWithAmount(long amount) {
         return new StackListContent(this.stacks, amount, this.chance);
     }

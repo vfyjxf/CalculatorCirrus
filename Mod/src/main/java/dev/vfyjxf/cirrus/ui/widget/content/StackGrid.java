@@ -14,7 +14,7 @@ import org.eclipse.collections.api.multimap.list.MutableListMultimap;
 
 import java.util.Comparator;
 
-import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.*;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.displayGrid;
 
 /**
  * Batchable grid for rendering stacks.

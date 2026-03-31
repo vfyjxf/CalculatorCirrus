@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.api.recipe.projection.clause;
 
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 /**
@@ -13,4 +14,6 @@ public interface RecipeClause {
      * @return the unique id of this clause
      */
     Namespace id();
+
+    ProjectionPlugin plugin();
 }

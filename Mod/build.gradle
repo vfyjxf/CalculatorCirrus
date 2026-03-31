@@ -96,11 +96,8 @@ dependencies {
 
     api("dev.vfyjxf:cloudlib")
 
-    implementation("dev.vfyjxf:moddevmcp:0.3") {
-        transitive = false
-    }
-
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+    compileOnly("mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}")
 //    jarJar(project(":Integration"))
     compileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
@@ -110,6 +107,8 @@ dependencies {
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
     testImplementation "net.neoforged:testframework:${project.neo_version}"
+    testCompileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
+    testCompileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
 
 //    testCompileOnly 'com.google.auto.service:auto-service:1.1.1'
 //    testAnnotationProcessor 'com.google.auto.service:auto-service:1.1.1'
@@ -123,6 +122,10 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    minHeapSize = "1g"
+    maxHeapSize = "3g"
+    systemProperty 'moddev.skill.exportRoot', layout.buildDirectory.dir('moddev-service').get().asFile.absolutePath
+    systemProperty 'moddevmcp.project.root', rootProject.projectDir.absolutePath
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

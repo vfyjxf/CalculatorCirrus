@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.recipe.clause;
 
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer.ActionResult;
@@ -20,8 +21,9 @@ public record DurabilityCostClause(
 ) implements RecipeClause {
 
     public static final Namespace id = CirrusNamespaces.ofMod("input/durability_cost");
-    public static final ClauseType type = new ClauseType(id, (entry, content) -> checkContent(content));
+    public static final ClauseType type = new ClauseType(id, ProjectionPlugin.builtin, (entry, content) -> checkContent(content));
     public static final ContentTransformer<StackContent<Item, ItemStack>, DurabilityCostClause> transformer = ContentTransformer.of(
+        ProjectionPlugin.builtin,
         (context, projection, content, asInput) -> checkContent(content),
         (context, recipe, content, clause, asInput, increment, decrement) -> {
             var stack = content.content();
@@ -57,5 +59,10 @@ public record DurabilityCostClause(
     @Override
     public Namespace id() {
         return id;
+    }
+
+    @Override
+    public ProjectionPlugin plugin() {
+        return ProjectionPlugin.builtin;
     }
 }

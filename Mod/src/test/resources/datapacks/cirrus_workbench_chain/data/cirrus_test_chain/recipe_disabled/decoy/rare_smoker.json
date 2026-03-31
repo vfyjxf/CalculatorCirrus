@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    {
+      "item": "minecraft:furnace"
+    },
+    {
+      "item": "minecraft:blaze_powder"
+    },
+    {
+      "item": "minecraft:ancient_debris"
+    }
+  ],
+  "result": {
+    "count": 1,
+    "id": "minecraft:smoker"
+  }
+}

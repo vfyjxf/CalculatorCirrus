@@ -2,7 +2,6 @@ package dev.vfyjxf.cirrus.api.recipe.execution.view;
 
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
-import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.network.chat.Component;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.jetbrains.annotations.Nullable;
@@ -18,15 +17,6 @@ public record ExecutionFlowNode(
     ImmutableList<InteractionStep> steps,
     ImmutableList<ExecutionFlowNode> children
 ) {
-
-    public ExecutionFlowNode {
-        Checks.checkNotNull(nodeId, "nodeId");
-        Checks.checkNotNull(label, "label");
-        Checks.checkNotNull(status, "status");
-        Checks.checkNotNull(steps, "steps");
-        Checks.checkNotNull(children, "children");
-    }
-
     //region factories
 
     public static ExecutionFlowNode pending(

@@ -144,20 +144,17 @@ public final class FluidStackType extends BasicStackType<Fluid, FluidStack> {
     @Override
     public long mergeDiff(FluidStack stack1, FluidStack stack2, MatchStrategy strategy) {
         if (stack1 == stack2) return 0;
-        boolean identity = stack1.getFluid() == stack2.getFluid();
-        boolean components = !strategy.withComponent() || strategy.testComponents(stack1.getComponents(), stack2.getComponents());
-        if (identity && components) {
-            return stack1.getAmount() - stack2.getAmount();
-        } else return 0;
+        if (stack1.getFluid() != stack2.getFluid()) return 0;
+        if (strategy.withComponent() && !strategy.testComponents(stack1.getComponents(), stack2.getComponents())) return 0;
+        return stack1.getAmount() - stack2.getAmount();
     }
 
     @Override
     public boolean matches(FluidStack stack1, FluidStack stack2, VariantType<Fluid, FluidStack> variantType, MatchStrategy strategy) {
         if (stack1 == stack2) return true;
-        boolean identity = !strategy.withIdentity() || stack1.getFluid() == stack2.getFluid();
-        boolean amount = !strategy.withAmount() || stack1.getAmount() == stack2.getAmount();
-        boolean components = !strategy.withComponent() || strategy.testComponents(stack1.getComponents(), stack2.getComponents());
-        return identity && amount && components;
+        if (strategy.withIdentity() && stack1.getFluid() != stack2.getFluid()) return false;
+        if (strategy.withAmount() && stack1.getAmount() != stack2.getAmount()) return false;
+        return !strategy.withComponent() || strategy.testComponents(stack1.getComponents(), stack2.getComponents());
     }
 
     //endregion

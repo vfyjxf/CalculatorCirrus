@@ -30,12 +30,17 @@ public record ItemMachineEntry(
     public ItemMachineEntry {
         Checks.checkNotNull(machineStack, "machineStack");
         Checks.checkNotNull(constraint, "constraint");
-        Checks.checkArgument(machineStack.isEmpty(), "machineStack cannot be empty");
+        Checks.checkArgument(!machineStack.isEmpty(), "machineStack cannot be empty");
     }
 
     @Override
     public boolean isEmpty() {
         return machineStack.isEmpty();
+    }
+
+    @Override
+    public ItemStack toItemStack() {
+        return machineStack.type().toItemStack(machineStack);
     }
 
     @Override

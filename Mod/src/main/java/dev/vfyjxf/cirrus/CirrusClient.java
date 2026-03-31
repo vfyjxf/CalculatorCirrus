@@ -2,14 +2,17 @@ package dev.vfyjxf.cirrus;
 
 import dev.vfyjxf.cirrus.api.plugin.CirrusPlugin;
 import dev.vfyjxf.cirrus.api.plugin.ClientCirrusPlugin;
-import dev.vfyjxf.cirrus.event.EventListeners;
+import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.content.ClientContentApiImpl;
 import dev.vfyjxf.cirrus.content.ClientContentRegistryBuilder;
 import dev.vfyjxf.cirrus.content.ContentApiImpl;
-import dev.vfyjxf.cirrus.ui.execution.workbench.WorkbenchExecutionOverlayManager;
-import dev.vfyjxf.cirrus.ui.widget.execution.ExecutionOverlayCommandEntry;
-import dev.vfyjxf.cirrus.ui.widget.flowchart.FlowChartTooltipComponent;
-import dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator.ExecutionRecipePreviewTooltipComponent;
+import dev.vfyjxf.cirrus.internal.integration.jei.JeiFallbackRecipeSystemPlugin;
+import dev.vfyjxf.cirrus.recipe.execution.ExecutionDriverRegistry;
+import dev.vfyjxf.cirrus.ui.execution.tooltip.ExecutionRecipeLayoutTooltipComponent;
+import dev.vfyjxf.cirrus.ui.execution.tooltip.JeiRecipeTooltipComponent;
+import dev.vfyjxf.cirrus.ui.tooltip.RichTooltipComponent;
+import dev.vfyjxf.cirrus.ui.widget.calculator.CalculatorInputKeyMappings;
+import dev.vfyjxf.cirrus.ui.widget.calculator.RecipeDatabaseKeyMappings;
 import dev.vfyjxf.cirrus.util.StartEventObserver;
 import dev.vfyjxf.cloudlib.api.plugin.AnnotationPluginLookup;
 import dev.vfyjxf.cloudlib.api.plugin.PluginDispatcher;
@@ -20,13 +23,13 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.client.event.RegisterClientTooltipComponentFactoriesEvent;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import org.eclipse.collections.api.list.MutableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@Mod(value = CirrusConstants.MOD_ID, dist = Dist.CLIENT)
+@Mod(value = CirrusConstants.modId, dist = Dist.CLIENT)
 public final class CirrusClient extends Cirrus {
 
     public static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Client");
@@ -34,22 +37,27 @@ public final class CirrusClient extends Cirrus {
 
     public CirrusClient(ModContainer modContainer, IEventBus modBus) {
         super(modBus);
+        ExecutionOverlayClientConfig.register(modContainer);
         new StartEventObserver(this::load, this::unload).register();
-        WorkbenchExecutionOverlayManager.register();
-        EventListeners.register(RegisterClientCommandsEvent.class, ExecutionOverlayCommandEntry::register);
-
         clientPlugins = PluginLoader.loadAndDispatcher(logger, "Client Cirrus Plugin", AnnotationPluginLookup.of(ClientCirrusPlugin.class), pluginExecutor);
         modBus.addListener(this::registerTooltipFactories);
+        modBus.addListener(this::registerKeyMappings);
     }
 
     private void registerTooltipFactories(RegisterClientTooltipComponentFactoriesEvent event) {
-        event.register(FlowChartTooltipComponent.class, FlowChartTooltipComponent::toClient);
-        event.register(ExecutionRecipePreviewTooltipComponent.class, ExecutionRecipePreviewTooltipComponent::toClient);
+        event.register(RichTooltipComponent.class, RichTooltipComponent::toClient);
+        event.register(ExecutionRecipeLayoutTooltipComponent.class, ExecutionRecipeLayoutTooltipComponent::toClient);
+        event.register(JeiRecipeTooltipComponent.class, JeiRecipeTooltipComponent::toClient);
+    }
+
+    private void registerKeyMappings(RegisterKeyMappingsEvent event) {
+        RecipeDatabaseKeyMappings.register(event);
+        CalculatorInputKeyMappings.register(event);
     }
 
     @Override
     protected MutableList<CirrusPlugin> builtinPlugins() {
-        return MutableLists.empty();
+        return MutableLists.with(new JeiFallbackRecipeSystemPlugin());
     }
 
     @Override
@@ -64,6 +72,16 @@ public final class CirrusClient extends Cirrus {
         );
         var contentApi = new ClientContentApiImpl(contentRegistry);
         ContentApiImpl.attach(contentApi);
+    }
+
+    @Override
+    protected void buildExecutionDriverApi(ExecutionDriverRegistry driverRegistry, ProgressTracker tracker) {
+        clientPlugins.dispatchLogged(
+                plugin -> plugin.registerExecutionDriver(driverRegistry),
+                "Registering Client Execution Drivers",
+                logger,
+                tracker.phase("Registering Client Execution Drivers")
+        );
     }
 
 }
