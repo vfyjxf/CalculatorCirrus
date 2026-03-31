@@ -1994,31 +1994,26 @@ public final class WorkbenchExecutionDemoController implements ExecutionOverlayC
 
     //region interaction
 
-    private static final class WorkbenchInteractionApi implements InteractionApi {
-        private final SessionEnvironment environment;
-
-        private WorkbenchInteractionApi(SessionEnvironment environment) {
-            this.environment = environment;
-        }
+    private record WorkbenchInteractionApi(SessionEnvironment environment) implements InteractionApi {
 
         @Override
-        public InteractionProbeResult probe(RecipeEntry<?> recipe) {
-            return new InteractionProbeResult.Supported("minecraft:crafting_table", false, environment.interactionOpen());
-        }
-
-        @Override
-        public InteractionGuideResult guide(RecipeEntry<?> recipe) {
-            return new InteractionGuideResult(openWorkbenchGuidance);
-        }
-
-        @Override
-        public InteractionPerformResult perform(InteractionContext context) {
-            if (!environment.interactionOpen()) {
-                return new InteractionPerformResult.Failed(openWorkbenchGuidance);
+            public InteractionProbeResult probe(RecipeEntry<?> recipe) {
+                return new InteractionProbeResult.Supported("minecraft:crafting_table", false, environment.interactionOpen());
             }
-            return environment.performCraft(context.recipe(), context.times(), context.inputs(), context.expectedOutputs());
+
+            @Override
+            public InteractionGuideResult guide(RecipeEntry<?> recipe) {
+                return new InteractionGuideResult(openWorkbenchGuidance);
+            }
+
+            @Override
+            public InteractionPerformResult perform(InteractionContext context) {
+                if (!environment.interactionOpen()) {
+                    return new InteractionPerformResult.Failed(openWorkbenchGuidance);
+                }
+                return environment.performCraft(context.recipe(), context.times(), context.inputs(), context.expectedOutputs());
+            }
         }
-    }
 
     //endregion
 
