@@ -17,6 +17,7 @@ import dev.vfyjxf.cirrus.api.recipe.database.DatabaseKind;
 import dev.vfyjxf.cirrus.api.recipe.database.DatabaseRecipeRef;
 import dev.vfyjxf.cirrus.api.recipe.database.FileRecipeDatabaseRepository;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseCatalogCache;
+import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseFailureRegistry;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseIndex;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseRecord;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseResult;
@@ -6710,7 +6711,12 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         Map<Namespace, List<Namespace>> systemTags,
         RecipeDatabaseIndex.BuildProgress progress
     ) {
-        return RecipeDatabaseCatalogCache.getOrBuild(systems, systemTags, progress);
+        return RecipeDatabaseCatalogCache.getOrBuild(
+            systems,
+            systemTags,
+            progress,
+            RecipeDatabaseFailureRegistry.shared()
+        );
     }
 
     private static Map<String, List<RecipeEntry<?>>> resolveExplicitEntries(

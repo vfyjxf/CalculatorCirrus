@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan;
+import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingStatus;
 import dev.vfyjxf.cirrus.recipe.execution.ExecutionTargetRecipeState;
 import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
 import dev.vfyjxf.cirrus.ui.CirrusUiAsync;
@@ -33,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -220,6 +222,37 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 	}
 
 	void showCalculationResult() {
+        showCalculationResult("unspecified");
+	}
+
+	private void showCalculationResult(String reason) {
+        if (pendingCalculation != null && !pendingCalculation.isDone()) {
+            logger.warn(
+                "calculator.ui.showResultWhilePending reason={} requestId={} target={} graphNodes={} debug={}",
+                reason,
+                calculationRequestId,
+                CalculatorTargetRecipeState.current() == null ? "none" : describeRecipe(CalculatorTargetRecipeState.current().recipe()),
+                graph.nodeCount(),
+                calculationDebugText
+            );
+        } else if (graph.nodeCount() == 0) {
+            logger.warn(
+                "calculator.ui.showResultEmptyGraph reason={} requestId={} target={} pending={} calculated={} debug={}",
+                reason,
+                calculationRequestId,
+                CalculatorTargetRecipeState.current() == null ? "none" : describeRecipe(CalculatorTargetRecipeState.current().recipe()),
+                pendingCalculation != null,
+                calculated,
+                calculationDebugText
+            );
+        } else if (logger.isDebugEnabled()) {
+            logger.debug(
+                "calculator.ui.showResult reason={} requestId={} graphNodes={}",
+                reason,
+                calculationRequestId,
+                graph.nodeCount()
+            );
+        }
 		ProcessView viewToShow = processView;
 		bodyArea.clear();
         suspendedProjectionReturnContent = null;
@@ -329,7 +362,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 	void toggleSettingsPanel() {
 		if (settingsPanelOpen) {
 			if (calculated) {
-				showCalculationResult();
+				showCalculationResult("toggleSettingsPanel");
 			} else {
 				showEmptyState();
 			}
@@ -361,7 +394,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
         this.graph = Objects.requireNonNull(graph, "graph");
         applyCalculatorTarget(CalculatorTargetRecipeState.current());
 		if (calculated) {
-			showCalculationResult();
+			showCalculationResult("externalSetProcessGraph");
 		}
 	}
 	//endregion
@@ -435,7 +468,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 		if (selection == null) {
 			calculationRequestId++;
 			routingPlan = null;
-			showCalculationResult();
+			showCalculationResult("noSelection");
 			return;
 		}
 		int times = amount >= Integer.MAX_VALUE ? Integer.MAX_VALUE : Math.max(1, (int) amount);
@@ -460,23 +493,52 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 		controlBar.setTargetItem(CalculatorTargetRecipeState.previewStack(selection.recipe()));
 		showCalculatingState();
         pendingCalculation = CirrusUiAsync.recipeTask(() -> {
-			CalculatorProcessGraphBuilder.BuildResult buildResult = CalculatorProcessGraphBuilder.buildResult(
-				recipe,
-				times,
-				stock,
-				preferences,
-				graphRouteMode
-			);
-			return new CalculationResult(
-				requestId,
-				recipe,
-				requestedAmount,
-				buildResult.routeMode(),
-                buildResult.graph(),
-                buildResult.routingPlan(),
-                buildResult.debugInfo(),
-                buildResult.debugTrace()
-			);
+            long startNanos = System.nanoTime();
+            logger.info(
+                "calculator.ui.worker.start requestId={} target={} times={} mode={}",
+                requestId,
+                describeRecipe(recipe),
+                times,
+                graphRouteMode
+            );
+            try {
+                CalculatorProcessGraphBuilder.BuildResult buildResult = CalculatorProcessGraphBuilder.buildResult(
+                    recipe,
+                    times,
+                    stock,
+                    preferences,
+                    graphRouteMode
+                );
+                logger.info(
+                    "calculator.ui.worker.finish requestId={} target={} elapsedMs={} graphNodes={} planActions={} debug={}",
+                    requestId,
+                    describeRecipe(recipe),
+                    (System.nanoTime() - startNanos) / 1_000_000L,
+                    buildResult.graph().nodeCount(),
+                    buildResult.routingPlan() == null ? 0 : buildResult.routingPlan().actions().size(),
+                    buildResult.debugInfo().toDebugText()
+                );
+                return new CalculationResult(
+                    requestId,
+                    recipe,
+                    requestedAmount,
+                    buildResult.routeMode(),
+                    buildResult.graph(),
+                    buildResult.routingPlan(),
+                    buildResult.debugInfo(),
+                    buildResult.debugTrace()
+                );
+            } catch (RuntimeException exception) {
+                logger.error(
+                    "calculator.ui.worker.exception requestId={} target={} elapsedMs={} cause={}",
+                    requestId,
+                    describeRecipe(recipe),
+                    (System.nanoTime() - startNanos) / 1_000_000L,
+                    describeThrowable(exception),
+                    exception
+                );
+                throw exception;
+            }
 		});
     }
 
@@ -512,7 +574,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
             && projectionDetailPage.debugRecipeDetailOpen();
     }
 
-	private void completeCalculation(CalculationResult result) {
+    private void completeCalculation(CalculationResult result) {
         if (result.requestId() != calculationRequestId) {
             return;
         }
@@ -524,24 +586,51 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
         amount = result.amount();
         controlBar.setAmount(result.amount());
         controlBar.setTargetItem(CalculatorTargetRecipeState.previewStack(result.recipe()));
-        logger.info(
-            "calculator.ui.finish requestId={} target={} mode={} graphNodes={} planActions={} debug={}",
-            result.requestId(),
-            describeRecipe(result.recipe()),
-            result.routeMode(),
-            result.graph().nodeCount(),
-            result.routingPlan() == null ? 0 : result.routingPlan().actions().size(),
-            result.debugInfo().toDebugText()
-        );
-        showCalculationResult();
+        String graphIssue = CalculatorProcessGraphBuilder.debugTargetGraphIssueForTests(result.recipe(), result.graph());
+        boolean failed = result.debugInfo().routingStatus() == RoutingStatus.failed
+            || result.debugInfo().exception() != null
+            || graphIssue != null;
+        if (failed) {
+            logger.debug(
+                "calculator.ui.finish requestId={} target={} mode={} graphNodes={} graphIssue={} planActions={} debug={}",
+                result.requestId(),
+                describeRecipe(result.recipe()),
+                result.routeMode(),
+                result.graph().nodeCount(),
+                graphIssue,
+                result.routingPlan() == null ? 0 : result.routingPlan().actions().size(),
+                result.debugInfo().toDebugText()
+            );
+        } else {
+            logger.info(
+                "calculator.ui.finish requestId={} target={} mode={} graphNodes={} planActions={} debug={}",
+                result.requestId(),
+                describeRecipe(result.recipe()),
+                result.routeMode(),
+                result.graph().nodeCount(),
+                result.routingPlan() == null ? 0 : result.routingPlan().actions().size(),
+                result.debugInfo().toDebugText()
+            );
+        }
+        if (!result.debugTrace().isEmpty()) {
+            logger.debug(
+                "calculator.ui.finish trace requestId={}\n{}",
+                result.requestId(),
+                String.join("\n", result.debugTrace())
+            );
+        }
+        showCalculationResult("calculationComplete");
 	}
 
 	private void consumeCompletedCalculation(CompletableFuture<CalculationResult> future) {
 		pendingCalculation = null;
 		try {
 			completeCalculation(future.join());
-		} catch (CompletionException | java.util.concurrent.CancellationException exception) {
-			completeFailedCalculation();
+		} catch (CompletionException exception) {
+			Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+			completeFailedCalculation(cause);
+		} catch (CancellationException exception) {
+			logger.debug("calculator.ui.cancelled requestId={}", calculationRequestId);
 		}
 	}
 
@@ -559,17 +648,27 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 		);
 	}
 
-	private void completeFailedCalculation() {
+	private void completeFailedCalculation(@Nullable Throwable cause) {
 		graph = new ProcessGraph();
 		routingPlan = null;
-        calculationDebugText = "failed requestId=" + calculationRequestId;
-        calculationDebugTrace = List.of(calculationDebugText);
-        logger.error("calculator.ui.failed requestId={}", calculationRequestId);
-		showCalculationResult();
+        calculationDebugText = "failed requestId=" + calculationRequestId + (cause == null ? "" : " cause=" + describeThrowable(cause));
+        calculationDebugTrace = cause == null
+            ? List.of(calculationDebugText)
+            : List.of("cause=" + describeThrowable(cause));
+        logger.warn("calculator.ui.failed requestId={} diagnostics=\n{}", calculationRequestId, debugCalculationDiagnostics());
+        if (cause != null) {
+            logger.warn("calculator.ui.failed stack requestId={}", calculationRequestId, cause);
+        }
+		showCalculationResult("calculationFailed");
 	}
 
     private static String describeRecipe(RecipeEntry<?> recipe) {
         return recipe.id() == null ? recipe.systemId() + "#" + recipe.hashCode() : recipe.id().toString();
+    }
+
+    private static String describeThrowable(Throwable throwable) {
+        String message = throwable.getMessage();
+        return throwable.getClass().getSimpleName() + (message == null || message.isBlank() ? "" : ":" + message);
     }
 
 	void toggleTreeMaterialPanel() {
@@ -622,7 +721,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
         Widget returnContent = suspendedProjectionReturnContent;
         suspendedProjectionReturnContent = null;
         if (returnContent == null) {
-            showCalculationResult();
+            showCalculationResult("returnFromProjectionDetail");
         } else {
             if (returnContent.parent() != bodyArea) {
                 bodyArea.addWidget(returnContent);

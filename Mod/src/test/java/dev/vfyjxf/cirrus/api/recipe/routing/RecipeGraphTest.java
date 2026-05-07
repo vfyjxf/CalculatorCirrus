@@ -28,6 +28,8 @@ import dev.vfyjxf.cirrus.recipe.system.CraftingRecipeSystem;
 import dev.vfyjxf.cirrus.recipe.clause.FluidContainerUnpackClause;
 import dev.vfyjxf.cirrus.recipe.clause.GuaranteedOutputClause;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.ItemTags;
@@ -97,6 +99,36 @@ class RecipeGraphTest {
 
         assertFalse(recipeGraph.nodes().isEmpty(), "graph should contain resolved crafting recipes");
         assertTrue(recipeGraph.nodes().size() <= entries.size(), "graph cannot have more nodes than source recipes");
+    }
+
+    @Test
+    void graphCandidateBucketsDoNotExposeComponentMismatches(MinecraftServer server) {
+        ItemStack producerStack = new ItemStack(Items.STONE);
+        producerStack.set(DataComponents.CUSTOM_NAME, Component.literal("producer"));
+        ItemStack consumerStack = new ItemStack(Items.STONE);
+        consumerStack.set(DataComponents.CUSTOM_NAME, Component.literal("consumer"));
+
+        OutputContent producerOutput = OutputContent.fromItemStack(producerStack, 1);
+        InputContent consumerInput = InputContent.fromItemStack(consumerStack, 1);
+        var produceNamedStone = new RoutingTestFixtures.FakeRecipe(
+            "produce_named_stone",
+            java.util.List.of(RoutingTestFixtures.in(Items.DIRT, 1)),
+            java.util.List.of(producerOutput)
+        );
+        var consumeNamedStone = new RoutingTestFixtures.FakeRecipe(
+            "consume_named_stone",
+            java.util.List.of(consumerInput),
+            java.util.List.of(RoutingTestFixtures.out(Items.DIAMOND, 1))
+        );
+
+        RecipeGraph graph = RoutingTestFixtures.graph(produceNamedStone, consumeNamedStone);
+
+        assertTrue(graph.producersFor(consumerInput).isEmpty());
+        assertTrue(graph.producersFor(ContentStack.fromStack(consumerStack)).isEmpty());
+        assertFalse(graph.producersFor(ContentStack.fromStack(producerStack)).isEmpty());
+        assertTrue(graph.consumersFor(producerOutput).stream().noneMatch(ref ->
+            "consume_named_stone".equals(Objects.requireNonNull(ref.node().recipe().id()).getPath())
+        ));
     }
 
     @Test

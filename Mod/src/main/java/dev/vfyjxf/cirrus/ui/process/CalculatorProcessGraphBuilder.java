@@ -7,6 +7,9 @@ import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.recipe.database.DatabaseRecipeRef;
+import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseFailureCapture;
+import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseFailureRegistry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
@@ -32,6 +35,8 @@ import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingOutcome;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingRequest;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingService;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingStatus;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveError;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MachineInfo;
@@ -41,6 +46,7 @@ import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.eclipse.collections.api.factory.Lists;
@@ -219,14 +225,20 @@ public final class CalculatorProcessGraphBuilder {
         int safeTimes = Math.max(1, times);
         RecipePathSettings.Catalog catalog = RecipePathSettings.calculatorCatalog(target);
         if (usesFastCalculatorPreview(target, safeTimes, stock, preferredVariants, routeMode)) {
-            ProcessGraph graph = fromProjectedRecipe(target, safeTimes);
+            FallbackDebugTrace fallbackTrace = new FallbackDebugTrace();
+            ProcessGraph graph = fromProjectedRecipe(target, safeTimes, fallbackTrace);
             CalculatorBuildDebugInfo debugInfo = baseDebug(target, safeTimes, RouteMode.calculator, catalog.recipes().size())
                 .withGraph(graph, false);
             logSuspiciousBuild(debugInfo, null);
-            return new BuildResult(graph, null, RouteMode.calculator, debugInfo, List.of(
-                "summary fastPreview=true",
-                "route skipped reason=smallTargetPreview"
-            ));
+            ArrayList<String> trace = new ArrayList<>();
+            trace.add("summary fastPreview=true");
+            trace.add("route skipped reason=smallTargetPreview");
+            trace.addAll(fallbackTrace.lines());
+            String graphIssue = targetGraphIssue(target, graph);
+            if (graphIssue != null) {
+                trace.add("graph fastPreviewInvalid reason=" + graphIssue + " " + graphSummary(graph));
+            }
+            return new BuildResult(graph, null, RouteMode.calculator, debugInfo, trace);
         }
 
         RouteResult routeResult = routeResult(target, safeTimes, stock, preferredVariants, routeMode);
@@ -236,13 +248,18 @@ public final class CalculatorProcessGraphBuilder {
         if (plan != null) {
             try {
                 ProcessGraph graph = fromRoutingPlan(plan, routeMode);
+                String graphIssue = targetGraphIssue(plan.targetRecipe(), graph);
                 if (graph.nodeCount() > 0) {
                     CalculatorBuildDebugInfo debugInfo = routeResult.debugInfo().withGraph(graph, false);
                     logSuspiciousBuild(debugInfo, routeResult.outcome());
                     trace.add("graph builtFrom=routePlan nodes=" + graph.nodeCount() + " edges=" + graph.edgeCount());
+                    if (graphIssue != null) {
+                        trace.add("graph routePlanIssue reason=" + graphIssue + " " + graphSummary(graph));
+                        logger.warn("Calculator route graph diagnostics: reason={} {}", graphIssue, graphSummary(graph));
+                    }
                     return new BuildResult(graph, plan, routeMode, debugInfo, trace);
                 }
-                trace.add("graph routePlanConvertedToEmpty");
+                trace.add("graph routePlanRejected reason=" + graphIssue + " " + graphSummary(graph));
             } catch (RuntimeException exception) {
                 routeResult = routeResult.withException(exception);
                 trace.add("graph routePlanConversionException=" + exception.getClass().getSimpleName() + ":" + exception.getMessage());
@@ -255,6 +272,10 @@ public final class CalculatorProcessGraphBuilder {
         CalculatorBuildDebugInfo debugInfo = routeResult.debugInfo().withGraph(fallback, true);
         logSuspiciousBuild(debugInfo, routeResult.outcome());
         trace.add("graph builtFrom=fallback nodes=" + fallback.nodeCount() + " edges=" + fallback.edgeCount());
+        String fallbackIssue = targetGraphIssue(target, fallback);
+        if (fallbackIssue != null) {
+            trace.add("graph fallbackInvalid reason=" + fallbackIssue + " " + graphSummary(fallback));
+        }
         return new BuildResult(fallback, plan, routeMode, debugInfo, trace);
     }
 
@@ -568,8 +589,112 @@ public final class CalculatorProcessGraphBuilder {
     }
 
     private static String describeRecipe(RecipeEntry<?> recipe) {
-        ResourceLocation id = recipe.id();
-        return id == null ? recipe.systemId() + "#" + recipe.hashCode() : id.toString();
+        try {
+            ResourceLocation id = recipe.id();
+            return id == null ? recipe.systemId() + "#" + recipe.hashCode() : id.toString();
+        } catch (RuntimeException | LinkageError ignored) {
+            return recipe.systemId() + "#" + recipe.hashCode();
+        }
+    }
+
+    private static @Nullable String targetGraphIssue(RecipeEntry<?> target, ProcessGraph graph) {
+        if (graph.nodeCount() == 0) {
+            return "emptyGraph";
+        }
+        String preferredRoot = graph.preferredRootNodeId();
+        if (preferredRoot == null) {
+            return "missingPreferredRoot";
+        }
+        ProcessNode root = graph.node(preferredRoot);
+        if (root == null) {
+            return "preferredRootMissingNode:" + preferredRoot;
+        }
+        if (!target.equals(root.recipe())) {
+            return "preferredRootNotTarget rootRecipe=" + describeNodeRecipe(root);
+        }
+        List<ProcessNode> sinks = graph.sinks();
+        if (sinks.size() != 1) {
+            return "sinkCount=" + sinks.size();
+        }
+        if (!root.id().equals(sinks.getFirst().id())) {
+            return "sinkIsNotPreferredRoot:" + sinks.getFirst().id();
+        }
+        return null;
+    }
+
+    public static @Nullable String debugTargetGraphIssueForTests(RecipeEntry<?> target, ProcessGraph graph) {
+        return targetGraphIssue(target, graph);
+    }
+
+    private static String graphSummary(ProcessGraph graph) {
+        return "nodes=" + graph.nodeCount()
+            + " edges=" + graph.edgeCount()
+            + " sinks=" + graph.sinks().size()
+            + " sources=" + graph.sources().size()
+            + " preferredRoot=" + graph.preferredRootNodeId()
+            + " sinkSample=" + nodeSample(graph.sinks(), 4);
+    }
+
+    private static String nodeSample(List<ProcessNode> nodes, int limit) {
+        if (nodes.isEmpty()) {
+            return "[]";
+        }
+        StringBuilder builder = new StringBuilder("[");
+        int count = 0;
+        for (ProcessNode node : nodes) {
+            if (count >= limit) {
+                builder.append(",...");
+                break;
+            }
+            if (count > 0) {
+                builder.append(',');
+            }
+            builder.append(node.id()).append('|').append(describeNodeRecipe(node));
+            count++;
+        }
+        builder.append(']');
+        return builder.toString();
+    }
+
+    private static String describeNodeRecipe(ProcessNode node) {
+        RecipeEntry<?> recipe = node.recipe();
+        return recipe == null ? "source" : describeRecipe(recipe);
+    }
+
+    private static String nullToEmpty(@Nullable String text) {
+        return text == null ? "" : text;
+    }
+
+    private static @Nullable DatabaseRecipeRef recipeRef(@Nullable RecipeEntry<?> entry) {
+        if (entry == null) {
+            return null;
+        }
+        try {
+            return DatabaseRecipeRef.fromEntry(entry);
+        } catch (RuntimeException | LinkageError exception) {
+            logger.debug(
+                "calculator.recipeRef.unavailable system={} recipe={}",
+                entry.systemId(),
+                entry.recipe(),
+                exception
+            );
+            return null;
+        }
+    }
+
+    private static String recipeClassName(@Nullable RecipeEntry<?> entry) {
+        if (entry == null || entry.recipe() == null) {
+            return "";
+        }
+        Object recipe = entry.recipe();
+        if (recipe instanceof RecipeHolder<?> holder) {
+            return "RecipeHolder(" + holder.value().getClass().getName() + ")";
+        }
+        return recipe.getClass().getName();
+    }
+
+    private static boolean cacheableUnsupported(@Nullable ResolveError error) {
+        return error == ResolveError.unsupported || error == ResolveError.invalidRecipe;
     }
 
     private static void logSuspiciousBuild(CalculatorBuildDebugInfo debugInfo, @Nullable RoutingOutcome outcome) {
@@ -582,7 +707,7 @@ public final class CalculatorProcessGraphBuilder {
             int limit = Math.min(8, outcome.issues().size());
             for (int index = 0; index < limit; index++) {
                 var issue = outcome.issues().get(index);
-                logger.info(
+                logger.debug(
                     "calculator.route.issue index={} code={} severity={} blocking={} message={} payload={}",
                     index,
                     issue.code(),
@@ -593,7 +718,7 @@ public final class CalculatorProcessGraphBuilder {
                 );
             }
             if (outcome.issues().size() > limit) {
-                logger.info("calculator.route.issue omitted={}", outcome.issues().size() - limit);
+                logger.debug("calculator.route.issue omitted={}", outcome.issues().size() - limit);
             }
         }
     }
@@ -685,14 +810,25 @@ public final class CalculatorProcessGraphBuilder {
     }
 
     private static ProjectionComplexity projectionComplexity(RecipeEntry<?> target) {
-        RecipeProjection projection = target.resolve();
+        RecipeProjection projection;
+        try {
+            projection = target.resolveResult().projection();
+        } catch (RuntimeException | LinkageError exception) {
+            logger.debug(
+                "calculator.projectionComplexity.resolveException target={} cause={}",
+                describeRecipe(target),
+                exception.toString(),
+                exception
+            );
+            return new ProjectionComplexity(8);
+        }
         if (projection == null) {
             return new ProjectionComplexity(6);
         }
         ProjectedRecipe projected;
         try {
             projected = new ProjectionEngine().project(calculatorProjectionContext(target, 1), projection);
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException | LinkageError ignored) {
             return new ProjectionComplexity(8);
         }
 
@@ -750,7 +886,11 @@ public final class CalculatorProcessGraphBuilder {
 
             ProjectedNodeBuild nodeBuild = createProjectedNodeBuild(graph, projectionIndex, frame.target(), frame.times(), buildContext, nodeCounter);
             if (nodeBuild == null) {
-                trace.add("fallback.nodeUnavailable target=" + describeRecipe(frame.target()) + " times=" + frame.times());
+                trace.add(
+                    "fallback.nodeUnavailable target=" + describeRecipe(frame.target())
+                        + " times=" + frame.times()
+                        + " reason=" + projectionIndex.unavailableReason(frame.target(), frame.times())
+                );
                 active.remove(frame.target());
                 if (frame.parent() != null) {
                     frame.parent().connectSource();
@@ -809,7 +949,7 @@ public final class CalculatorProcessGraphBuilder {
         }
         if (graph.nodeCount() == 0) {
             trace.add("fallback.empty action=singleProjectedRecipe");
-            return fromSingleProjectedRecipe(target, times);
+            return fromSingleProjectedRecipe(target, times, trace);
         }
         trace.add("fallback.finish nodes=" + graph.nodeCount() + " edges=" + graph.edgeCount());
         return graph;
@@ -825,7 +965,7 @@ public final class CalculatorProcessGraphBuilder {
                 return touched.index();
             }
         }
-        FallbackProjectionIndex built = FallbackProjectionIndex.build(catalog.recipes().castToList());
+        FallbackProjectionIndex built = FallbackProjectionIndex.build(catalog.recipes().castToList(), catalog.databaseId());
         FallbackProjectionIndexCacheEntry entry = new FallbackProjectionIndexCacheEntry(built, System.nanoTime());
         synchronized (fallbackProjectionIndexCacheLock) {
             FallbackProjectionIndexCacheEntry existing = fallbackProjectionIndexCache.remove(key);
@@ -872,9 +1012,9 @@ public final class CalculatorProcessGraphBuilder {
         ProjectedRecipe projected;
         try {
             projected = projectionIndex.project(target, times);
-        } catch (RuntimeException ignored) {
-            return null;
-        }
+            } catch (RuntimeException | LinkageError ignored) {
+                return null;
+            }
 
         List<MaterialSlot> inputs = new ArrayList<>(projected.inputs().size());
         for (InputContent input : projected.inputs()) {
@@ -906,11 +1046,61 @@ public final class CalculatorProcessGraphBuilder {
     }
 
     private static ProcessGraph fromSingleProjectedRecipe(RecipeEntry<?> target, int times) {
-        RecipeProjection projection = target.resolve();
-        if (projection == null) {
+        return fromSingleProjectedRecipe(target, times, new FallbackDebugTrace());
+    }
+
+    private static ProcessGraph fromSingleProjectedRecipe(RecipeEntry<?> target, int times, FallbackDebugTrace trace) {
+        ResolveResult result;
+        try {
+            result = target.resolveResult();
+        } catch (RuntimeException | LinkageError exception) {
+            trace.add(
+                "fallback.single.resolveException target=" + describeRecipe(target)
+                    + " times=" + times
+                    + " cause=" + exception.getClass().getSimpleName() + ":" + nullToEmpty(exception.getMessage())
+            );
+            logger.debug(
+                "calculator.fallback.single.resolveException target={} times={} cause={}",
+                describeRecipe(target),
+                times,
+                exception.toString(),
+                exception
+            );
             return new ProcessGraph();
         }
-        ProjectedRecipe projected = new ProjectionEngine().project(calculatorProjectionContext(target, times), projection);
+        RecipeProjection projection = result.projection();
+        if (projection == null) {
+            trace.add(
+                "fallback.single.unresolved target=" + describeRecipe(target)
+                    + " times=" + times
+                    + " error=" + result.error()
+            );
+            logger.debug(
+                "calculator.fallback.single.unresolved target={} times={} error={}",
+                describeRecipe(target),
+                times,
+                result.error()
+            );
+            return new ProcessGraph();
+        }
+        ProjectedRecipe projected;
+        try {
+            projected = new ProjectionEngine().project(calculatorProjectionContext(target, times), projection);
+        } catch (RuntimeException | LinkageError exception) {
+            trace.add(
+                "fallback.single.projectException target=" + describeRecipe(target)
+                    + " times=" + times
+                    + " cause=" + exception.getClass().getSimpleName() + ":" + nullToEmpty(exception.getMessage())
+            );
+            logger.debug(
+                "calculator.fallback.single.projectException target={} times={} cause={}",
+                describeRecipe(target),
+                times,
+                exception.toString(),
+                exception
+            );
+            return new ProcessGraph();
+        }
         List<MaterialSlot> inputs = projected.inputs()
             .reject(RecipeContent::isEmpty)
             .collect(input -> inputSlot(input, Math.multiplyExact(input.amount(), times)))
@@ -936,6 +1126,7 @@ public final class CalculatorProcessGraphBuilder {
         ));
         graph.preferredRootNodeId(recipeNodeId(target, 0));
         connectSourceInputs(graph, recipeNodeId(target, 0), 0, inputs);
+        trace.add("fallback.single.finish nodes=" + graph.nodeCount() + " edges=" + graph.edgeCount());
         return graph;
     }
 
@@ -1490,35 +1681,93 @@ public final class CalculatorProcessGraphBuilder {
 
     private static final class FallbackProjectionIndex {
         private final ProjectionEngine projectionEngine = new ProjectionEngine();
+        private final String databaseId;
         private final List<RecipeEntry<?>> candidates;
         private final Map<RecipeEntry<?>, RecipeProjection> projections = new HashMap<>();
         private final Map<RecipeEntry<?>, ProjectedRecipe> baseProjects = new HashMap<>();
         private final Map<String, ArrayList<ProjectedOutput>> outputsByResource = new HashMap<>();
         private final Map<String, ArrayList<ProjectedOutput>> outputsByKind = new HashMap<>();
         private final Map<RecipeEntry<?>, List<ProjectedOutput>> projectedOutputsByRecipe = new HashMap<>();
+        private final Set<DatabaseRecipeRef> skippedRefs = new HashSet<>();
+        private final Set<RecipeEntry<?>> skippedRecipes = new HashSet<>();
+        private final Map<RecipeEntry<?>, String> unavailableReasons = new HashMap<>();
         private final List<ProjectedOutput> outputs = new ArrayList<>();
         private final Map<ContentResource, String> resourceKeys = new IdentityHashMap<>();
+        private long failureRegistryVersion = Long.MIN_VALUE;
         private int lazyScanIndex;
         private boolean scannedAllOutputs;
 
-        private FallbackProjectionIndex(List<RecipeEntry<?>> candidates) {
+        private FallbackProjectionIndex(List<RecipeEntry<?>> candidates, String databaseId) {
+            this.databaseId = databaseId == null ? "" : databaseId;
             this.candidates = List.copyOf(candidates);
+            refreshFailureSkips();
         }
 
-        private static FallbackProjectionIndex build(List<RecipeEntry<?>> candidates) {
-            return new FallbackProjectionIndex(candidates);
+        private static FallbackProjectionIndex build(List<RecipeEntry<?>> candidates, String databaseId) {
+            return new FallbackProjectionIndex(candidates, databaseId);
         }
 
         private @Nullable RecipeProjection projection(RecipeEntry<?> recipe) {
+            if (shouldSkip(recipe)) {
+                return null;
+            }
             RecipeProjection projection = projections.get(recipe);
             if (projection != null) {
                 return projection;
             }
-            projection = recipe.resolve();
+            ResolveResult result;
+            try {
+                ArrayList<RecipeDatabaseFailureRegistry.Failure> capturedFailures = new ArrayList<>(1);
+                result = RecipeDatabaseFailureCapture.capture(
+                    databaseId,
+                    recipeRef(recipe),
+                    recipeClassName(recipe),
+                    capturedFailures::add,
+                    recipe::resolveResult
+                );
+                if (!capturedFailures.isEmpty()) {
+                    skippedRecipes.add(recipe);
+                    recordFailures(capturedFailures);
+                    unavailableReasons.put(recipe, "resolveFailureCaptured");
+                    return null;
+                }
+            } catch (RuntimeException | LinkageError exception) {
+                recordFailure(recipe, exception);
+                unavailableReasons.put(
+                    recipe,
+                    "resolveException:" + exception.getClass().getSimpleName() + ":" + nullToEmpty(exception.getMessage())
+                );
+                return null;
+            }
+            projection = result.projection();
             if (projection != null) {
                 projections.put(recipe, projection);
+            } else {
+                if (cacheableUnsupported(result.error())) {
+                    recordUnsupported(recipe, result.error());
+                }
+                unavailableReasons.put(recipe, "resolveError:" + result.error());
             }
             return projection;
+        }
+
+        private String unavailableReason(RecipeEntry<?> recipe, int times) {
+            String cached = unavailableReasons.get(recipe);
+            if (cached != null) {
+                return cached;
+            }
+            RecipeProjection projection = projection(recipe);
+            if (projection == null) {
+                return unavailableReasons.getOrDefault(recipe, "projectionUnavailable");
+            }
+            try {
+                projectionEngine.project(calculatorProjectionContext(recipe, times), projection);
+                return "unknown";
+            } catch (RuntimeException | LinkageError exception) {
+                String reason = "projectException:" + exception.getClass().getSimpleName() + ":" + nullToEmpty(exception.getMessage());
+                unavailableReasons.put(recipe, reason);
+                return reason;
+            }
         }
 
         private ProjectedRecipe project(RecipeEntry<?> recipe, int times) {
@@ -1530,6 +1779,9 @@ public final class CalculatorProcessGraphBuilder {
         }
 
         private @Nullable ProjectedRecipe baseProject(RecipeEntry<?> recipe) {
+            if (shouldSkip(recipe)) {
+                return null;
+            }
             ProjectedRecipe cached = baseProjects.get(recipe);
             if (cached != null) {
                 return cached;
@@ -1540,7 +1792,11 @@ public final class CalculatorProcessGraphBuilder {
             }
             try {
                 cached = projectionEngine.project(calculatorProjectionContext(recipe, 1), projection);
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException | LinkageError exception) {
+                unavailableReasons.put(
+                    recipe,
+                    "projectException:" + exception.getClass().getSimpleName() + ":" + nullToEmpty(exception.getMessage())
+                );
                 return null;
             }
             baseProjects.put(recipe, cached);
@@ -1650,7 +1906,7 @@ public final class CalculatorProcessGraphBuilder {
         private @Nullable ProducerMatch scanRemainingCandidates(RecipeEntry<?> target, InputContent input, Set<RecipeEntry<?>> activePath) {
             while (lazyScanIndex < candidates.size()) {
                 RecipeEntry<?> candidate = candidates.get(lazyScanIndex++);
-                if (!canUseProducer(candidate, target, activePath)) {
+                if (shouldSkip(candidate) || !canUseProducer(candidate, target, activePath)) {
                     continue;
                 }
                 List<ProjectedOutput> candidateOutputs = projectedOutputs(candidate);
@@ -1670,6 +1926,100 @@ public final class CalculatorProcessGraphBuilder {
             Set<RecipeEntry<?>> activePath
         ) {
             return !producer.equals(target) && !activePath.contains(producer);
+        }
+
+        private boolean shouldSkip(RecipeEntry<?> recipe) {
+            if (skippedRecipes.contains(recipe)) {
+                return true;
+            }
+            DatabaseRecipeRef ref = recipeRef(recipe);
+            if (ref == null) {
+                return false;
+            }
+            refreshFailureSkips();
+            return skippedRefs.contains(ref);
+        }
+
+        private void refreshFailureSkips() {
+            RecipeDatabaseFailureRegistry registry = RecipeDatabaseFailureRegistry.shared();
+            long version = registry.version();
+            if (version == failureRegistryVersion) {
+                return;
+            }
+            skippedRefs.clear();
+            skippedRefs.addAll(registry.failedRecipeRefs());
+            skippedRefs.addAll(registry.unsupportedRecipeRefs());
+            failureRegistryVersion = version;
+        }
+
+        private void recordFailure(RecipeEntry<?> recipe, Throwable throwable) {
+            DatabaseRecipeRef ref = recipeRef(recipe);
+            if (ref == null) {
+                skippedRecipes.add(recipe);
+                logger.warn(
+                    "Skipped calculator fallback recipe after resolver failure: database={}, recipe={}, recipeClass={}, exception={}, message={}",
+                    databaseId,
+                    describeRecipe(recipe),
+                    recipeClassName(recipe),
+                    throwable.getClass().getName(),
+                    throwable.getMessage(),
+                    throwable
+                );
+                return;
+            }
+            skippedRecipes.add(recipe);
+            RecipeDatabaseFailureRegistry.shared().recordFailures(List.of(
+                RecipeDatabaseFailureRegistry.Failure.from(ref, databaseId, recipeClassName(recipe), throwable)
+            ));
+            skippedRefs.add(ref);
+            failureRegistryVersion = RecipeDatabaseFailureRegistry.shared().version();
+            logger.warn(
+                "Skipped calculator fallback recipe after resolver failure: database={}, system={}, recipe={}, recipeClass={}, exception={}, message={}",
+                databaseId,
+                ref.system(),
+                ref.recipe(),
+                recipeClassName(recipe),
+                throwable.getClass().getName(),
+                throwable.getMessage(),
+                throwable
+            );
+        }
+
+        private void recordFailures(List<RecipeDatabaseFailureRegistry.Failure> failures) {
+            RecipeDatabaseFailureRegistry.shared().recordFailures(failures);
+            for (RecipeDatabaseFailureRegistry.Failure failure : failures) {
+                skippedRefs.add(failure.ref());
+                logger.warn(
+                    "Skipped calculator fallback recipe after captured resolver failure: database={}, system={}, recipe={}, recipeClass={}, exception={}, message={}",
+                    failure.database(),
+                    failure.ref().system(),
+                    failure.ref().recipe(),
+                    failure.recipeClass(),
+                    failure.exception(),
+                    failure.message(),
+                    failure.cause()
+                );
+            }
+            failureRegistryVersion = RecipeDatabaseFailureRegistry.shared().version();
+        }
+
+        private void recordUnsupported(RecipeEntry<?> recipe, ResolveError error) {
+            DatabaseRecipeRef ref = recipeRef(recipe);
+            if (ref == null) {
+                skippedRecipes.add(recipe);
+                return;
+            }
+            skippedRecipes.add(recipe);
+            RecipeDatabaseFailureRegistry.shared().recordUnsupported(List.of(
+                new RecipeDatabaseFailureRegistry.Unsupported(
+                    ref,
+                    databaseId,
+                    recipeClassName(recipe),
+                    error == null ? "" : error.name()
+                )
+            ));
+            skippedRefs.add(ref);
+            failureRegistryVersion = RecipeDatabaseFailureRegistry.shared().version();
         }
     }
 

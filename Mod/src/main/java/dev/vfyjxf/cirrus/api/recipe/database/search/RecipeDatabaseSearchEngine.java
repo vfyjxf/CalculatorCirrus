@@ -20,6 +20,7 @@ import java.util.BitSet;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -31,7 +32,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.regex.Pattern;
 
 public final class RecipeDatabaseSearchEngine {
@@ -39,6 +39,7 @@ public final class RecipeDatabaseSearchEngine {
     private static final int[] emptyPosting = new int[0];
     private static final int parallelThreshold = 4096;
     private static final int textCandidateLimit = 2048;
+    private static final int linearUniqueThreshold = 64;
 
     private final List<RecipeDatabaseRecord> records;
     private final RecipeDatabaseSearchDocument[] documents;
@@ -48,11 +49,11 @@ public final class RecipeDatabaseSearchEngine {
     private @Nullable List<RecipeDatabaseResult> allResults;
 
     private RecipeDatabaseSearchEngine(
-        List<RecipeDatabaseRecord> records,
-        RecipeDatabaseSearchDocument[] documents,
-        int[] allRecipeIds,
-        EnumMap<SearchField, FieldIndex> fields,
-        Map<Namespace, int[]> systems
+            List<RecipeDatabaseRecord> records,
+            RecipeDatabaseSearchDocument[] documents,
+            int[] allRecipeIds,
+            EnumMap<SearchField, FieldIndex> fields,
+            Map<Namespace, int[]> systems
     ) {
         this.records = records;
         this.documents = documents;
@@ -85,15 +86,37 @@ public final class RecipeDatabaseSearchEngine {
 
         SearchField[] searchFields = SearchField.values();
         FieldIndex[] built = new FieldIndex[searchFields.length];
-        parallelRanges(searchFields.length, "cirrus-db-search-field-", (from, to) -> {
-            for (int index = from; index < to; index++) {
-                SearchField field = searchFields[index];
-                if (FieldIndex.shouldBuildPostingIndex(field) || field == SearchField.contains) {
-                    built[index] = FieldIndex.build(documents, field);
+        ExecutorService sharedExecutor = null;
+        int sharedWorkers = 0;
+        if (documents.length >= parallelThreshold) {
+            sharedWorkers = Math.min(documents.length, Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
+            sharedExecutor = Executors.newFixedThreadPool(sharedWorkers, daemonThreadFactory("cirrus-db-search-"));
+            try {
+                for (int index = 0; index < searchFields.length; index++) {
+                    SearchField field = searchFields[index];
+                    if (FieldIndex.shouldBuildPostingIndex(field) || field == SearchField.contains) {
+                        long fieldStartNanos = System.nanoTime();
+                        built[index] = FieldIndex.build(documents, field, sharedExecutor, sharedWorkers);
+                        logFieldBuild(field, built[index], documents.length, fieldStartNanos);
+                    }
                 }
+                buildScanOnlyFields(documents, searchFields, built, sharedExecutor, sharedWorkers);
+            } finally {
+                sharedExecutor.shutdown();
             }
-        });
-        buildScanOnlyFields(documents, searchFields, built);
+        } else {
+            parallelRanges(searchFields.length, "cirrus-db-search-field-", (from, to) -> {
+                for (int index = from; index < to; index++) {
+                    SearchField field = searchFields[index];
+                    if (FieldIndex.shouldBuildPostingIndex(field) || field == SearchField.contains) {
+                        long fieldStartNanos = System.nanoTime();
+                        built[index] = FieldIndex.build(documents, field);
+                        logFieldBuild(field, built[index], documents.length, fieldStartNanos);
+                    }
+                }
+            });
+            buildScanOnlyFields(documents, searchFields, built, null, 0);
+        }
         EnumMap<SearchField, FieldIndex> fields = new EnumMap<>(SearchField.class);
         for (SearchField field : searchFields) {
             fields.put(field, built[field.ordinal()]);
@@ -104,9 +127,11 @@ public final class RecipeDatabaseSearchEngine {
     }
 
     private static void buildScanOnlyFields(
-        RecipeDatabaseSearchDocument[] documents,
-        SearchField[] searchFields,
-        FieldIndex[] built
+            RecipeDatabaseSearchDocument[] documents,
+            SearchField[] searchFields,
+            FieldIndex[] built,
+            @Nullable ExecutorService sharedExecutor,
+            int sharedWorkers
     ) {
         int scanFieldCount = 0;
         for (SearchField field : searchFields) {
@@ -123,6 +148,10 @@ public final class RecipeDatabaseSearchEngine {
             if (built[field.ordinal()] == null && !FieldIndex.shouldBuildPostingIndex(field) && field != SearchField.contains) {
                 scanFields[scanCursor++] = field;
             }
+        }
+        if (sharedExecutor != null && documents.length >= parallelThreshold && sharedWorkers > 1) {
+            buildScanOnlyFieldsParallel(documents, searchFields, scanFields, built, sharedExecutor, sharedWorkers);
+            return;
         }
         IntScratch[] recordsByField = new IntScratch[searchFields.length];
         for (int recipeId = 0; recipeId < documents.length; recipeId++) {
@@ -143,6 +172,88 @@ public final class RecipeDatabaseSearchEngine {
             int ordinal = field.ordinal();
             if (built[ordinal] == null) {
                 IntScratch records = recordsByField[ordinal];
+                built[ordinal] = FieldIndex.scanOnly(records == null ? emptyPosting : records.toArray());
+            }
+        }
+    }
+
+    private static void buildScanOnlyFieldsParallel(
+        RecipeDatabaseSearchDocument[] documents,
+        SearchField[] searchFields,
+        SearchField[] scanFields,
+        FieldIndex[] built,
+        ExecutorService executor,
+        int workers
+    ) {
+        int total = documents.length;
+        int chunkSize = Math.max(1024, Math.min(8192, (total + workers * 8 - 1) / (workers * 8)));
+        int chunkCount = (total + chunkSize - 1) / chunkSize;
+        IntScratch[][] locals = new IntScratch[chunkCount][];
+        AtomicInteger nextChunk = new AtomicInteger();
+        try {
+            ArrayList<Future<?>> futures = new ArrayList<>(workers);
+            for (int worker = 0; worker < workers; worker++) {
+                futures.add(executor.submit(() -> {
+                    while (true) {
+                        int chunk = nextChunk.getAndIncrement();
+                        if (chunk >= chunkCount) {
+                            return;
+                        }
+                        int from = chunk * chunkSize;
+                        int to = Math.min(total, from + chunkSize);
+                        IntScratch[] recordsByField = new IntScratch[searchFields.length];
+                        for (int recipeId = from; recipeId < to; recipeId++) {
+                            RecipeDatabaseSearchDocument document = documents[recipeId];
+                            for (SearchField field : scanFields) {
+                                int ordinal = field.ordinal();
+                                if (document.present(field)) {
+                                    IntScratch records = recordsByField[ordinal];
+                                    if (records == null) {
+                                        records = new IntScratch();
+                                        recordsByField[ordinal] = records;
+                                    }
+                                    records.add(recipeId);
+                                }
+                            }
+                        }
+                        locals[chunk] = recordsByField;
+                    }
+                }));
+            }
+            for (Future<?> future : futures) {
+                future.get();
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while building recipe database scan fields", exception);
+        } catch (ExecutionException exception) {
+            throw new IllegalStateException("Failed to build recipe database scan fields", exception.getCause());
+        }
+
+        IntScratch[] mergedByField = new IntScratch[searchFields.length];
+        for (int chunk = 0; chunk < locals.length; chunk++) {
+            IntScratch[] local = locals[chunk];
+            if (local == null) {
+                continue;
+            }
+            for (SearchField field : scanFields) {
+                int ordinal = field.ordinal();
+                IntScratch records = local[ordinal];
+                if (records == null) {
+                    continue;
+                }
+                IntScratch merged = mergedByField[ordinal];
+                if (merged == null) {
+                    merged = new IntScratch();
+                    mergedByField[ordinal] = merged;
+                }
+                merged.addAll(records);
+            }
+        }
+        for (SearchField field : searchFields) {
+            int ordinal = field.ordinal();
+            if (built[ordinal] == null) {
+                IntScratch records = mergedByField[ordinal];
                 built[ordinal] = FieldIndex.scanOnly(records == null ? emptyPosting : records.toArray());
             }
         }
@@ -211,22 +322,22 @@ public final class RecipeDatabaseSearchEngine {
     }
 
     private ArrayList<RecipeDatabaseResult> matchedResults(
-        SearchExpression expression,
-        @Nullable Namespace system,
-        @Nullable int[] candidates
+            SearchExpression expression,
+            @Nullable Namespace system,
+            int @Nullable [] candidates
     ) {
         int size = candidateSize(candidates);
         if (size >= parallelThreshold) {
-            AtomicReferenceArray<RecipeDatabaseResult> matches = new AtomicReferenceArray<>(candidates == null ? records.size() : candidates.length);
-            parallelRanges(matches.length(), "cirrus-db-search-", (from, to) -> {
+            RecipeDatabaseResult[] matches = new RecipeDatabaseResult[candidates == null ? records.size() : candidates.length];
+            parallelRanges(matches.length, "cirrus-db-search-", (from, to) -> {
                 for (int cursor = from; cursor < to; cursor++) {
                     int recipeId = candidates == null ? cursor : candidates[cursor];
-                    matches.set(cursor, matchedResult(expression, system, recipeId));
+                    matches[cursor] = matchedResult(expression, system, recipeId);
                 }
             });
             ArrayList<RecipeDatabaseResult> results = new ArrayList<>(Math.min(size, 256));
-            for (int cursor = 0; cursor < matches.length(); cursor++) {
-                RecipeDatabaseResult result = matches.get(cursor);
+            for (int cursor = 0; cursor < matches.length; cursor++) {
+                RecipeDatabaseResult result = matches[cursor];
                 if (result != null) {
                     results.add(result);
                 }
@@ -364,15 +475,18 @@ public final class RecipeDatabaseSearchEngine {
             return contentTextCandidates(field, term);
         }
         if (!field.indexed()) {
-            return term.operator() == SearchOperator.exists ? field.fieldRecords() : null;
+            if (term.operator() == SearchOperator.exists || "*".equals(term.value())) {
+                return field.fieldRecords();
+            }
+            return null;
         }
         return switch (term.operator()) {
             case exists -> field.fieldRecords();
-            case contains -> field.contains(normalize(term.value()));
-            case exact -> field.exact(normalize(term.value()));
+            case contains -> withScanFallback(field, field.contains(normalize(term.value())));
+            case exact -> withScanFallback(field, field.exact(normalize(term.value())));
             case wildcard -> {
                 String literal = longestWildcardLiteral(term.value());
-                yield literal.isBlank() ? field.fieldRecords() : field.contains(normalize(literal));
+                yield literal.isBlank() ? field.fieldRecords() : withScanFallback(field, field.contains(normalize(literal)));
             }
             case range, greaterThan, greaterThanOrEqual, lessThan, lessThanOrEqual -> null;
         };
@@ -392,13 +506,13 @@ public final class RecipeDatabaseSearchEngine {
         for (SearchField sourceField : containsSourceFields()) {
             FieldIndex field = field(sourceField);
             @Nullable int[] posting = switch (operator) {
-                case contains -> field.contains(needle);
-                case exact -> field.exact(needle);
+                case contains -> withScanFallback(field, field.contains(needle));
+                case exact -> withScanFallback(field, field.exact(needle));
                 case wildcard -> {
                     String literal = longestWildcardLiteral(term.value());
                     yield literal.isBlank()
                         ? field.fieldRecords()
-                        : field.indexed() ? field.contains(normalize(literal)) : null;
+                        : field.indexed() ? withScanFallback(field, field.contains(normalize(literal))) : null;
                 }
                 default -> emptyPosting;
             };
@@ -418,13 +532,13 @@ public final class RecipeDatabaseSearchEngine {
             return null;
         }
         return switch (term.operator()) {
-            case contains -> field.contains(normalize(term.value()));
-            case exact -> field.exact(normalize(term.value()));
+            case contains -> withScanFallback(field, field.contains(normalize(term.value())));
+            case exact -> withScanFallback(field, field.exact(normalize(term.value())));
             case wildcard -> {
                 String literal = longestWildcardLiteral(term.value());
                 yield literal.isBlank()
                     ? field.fieldRecords()
-                    : field.indexed() ? field.contains(normalize(literal)) : null;
+                    : field.indexed() ? withScanFallback(field, field.contains(normalize(literal))) : null;
             }
             default -> emptyPosting;
         };
@@ -438,16 +552,25 @@ public final class RecipeDatabaseSearchEngine {
             return null;
         }
         return switch (term.operator()) {
-            case contains -> field.contains(normalize(term.value()));
-            case exact -> field.exact(normalize(term.value()));
+            case contains -> withScanFallback(field, field.contains(normalize(term.value())));
+            case exact -> withScanFallback(field, field.exact(normalize(term.value())));
             case wildcard -> {
                 String literal = longestWildcardLiteral(term.value());
                 yield literal.isBlank()
                     ? field.fieldRecords()
-                    : field.indexed() ? field.contains(normalize(literal)) : null;
+                    : field.indexed() ? withScanFallback(field, field.contains(normalize(literal))) : null;
             }
             default -> emptyPosting;
         };
+    }
+
+    private int[] withScanFallback(FieldIndex field, @Nullable int[] indexedPosting) {
+        if (indexedPosting == null) {
+            return null;
+        }
+        return field.scanFallbackRecords().length == 0
+            ? indexedPosting
+            : union(indexedPosting, field.scanFallbackRecords());
     }
 
     private SearchMatch matches(SearchExpression expression, int recipeId) {
@@ -523,18 +646,18 @@ public final class RecipeDatabaseSearchEngine {
         int best = 0;
         for (SearchField field : containsSourceFields()) {
             SearchTerm sourceTerm = new SearchTerm(
-                field,
-                term.operator(),
-                term.value(),
-                term.upperBound(),
-                term.amountOperator(),
-                term.amount(),
-                term.amountUpperBound(),
-                term.strict()
+                    field,
+                    term.operator(),
+                    term.value(),
+                    term.upperBound(),
+                    term.amountOperator(),
+                    term.amount(),
+                    term.amountUpperBound(),
+                    term.strict()
             );
             SearchMatch match = sourceTerm.hasAmount()
-                ? matchContentAmount(document, sourceTerm)
-                : isContentField(field)
+                    ? matchContentAmount(document, sourceTerm)
+                    : isContentField(field)
                     ? matchContentText(document, sourceTerm)
                     : matchText(document, field, term.value(), term.strict(), TextMode.contains);
             if (match.matched()) {
@@ -719,15 +842,15 @@ public final class RecipeDatabaseSearchEngine {
     }
 
     private static SearchField[] containsSourceFields() {
-        return new SearchField[] {
-            SearchField.in,
-            SearchField.in_id,
-            SearchField.out,
-            SearchField.out_id,
-            SearchField.cat,
-            SearchField.cat_id,
-            SearchField.byproduct,
-            SearchField.byproduct_id
+        return new SearchField[]{
+                SearchField.in,
+                SearchField.in_id,
+                SearchField.out,
+                SearchField.out_id,
+                SearchField.cat,
+                SearchField.cat_id,
+                SearchField.byproduct,
+                SearchField.byproduct_id
         };
     }
 
@@ -740,22 +863,24 @@ public final class RecipeDatabaseSearchEngine {
     }
 
     private static void logBuildStats(
-        int records,
-        FieldIndex[] fields,
-        long documentsNanos,
-        long fieldsNanos,
-        long totalNanos
+            int records,
+            FieldIndex[] fields,
+            long documentsNanos,
+            long fieldsNanos,
+            long totalNanos
     ) {
         int indexedFields = 0;
         int scanOnlyFields = 0;
         int termCount = 0;
         int postingCount = 0;
         int fieldRecordCount = 0;
+        int scanFallbackRecordCount = 0;
         for (FieldIndex field : fields) {
             if (field == null) {
                 continue;
             }
             fieldRecordCount += field.fieldRecords().length;
+            scanFallbackRecordCount += field.scanFallbackRecords().length;
             if (field.indexed()) {
                 indexedFields++;
                 termCount += field.termCount();
@@ -765,19 +890,20 @@ public final class RecipeDatabaseSearchEngine {
             }
         }
         logger.info(
-            "Built recipe database search index: records={}, indexedFields={}, scanOnlyFields={}, terms={}, postings={}, fieldRecords={}, postingExpansion={}, termExpansion={}, fieldRecordExpansion={}, documentsMs={}, fieldsMs={}, totalMs={}",
+            "Built recipe database search index: records={}, indexedFields={}, scanOnlyFields={}, terms={}, postings={}, fieldRecords={}, scanFallbackRecords={}, postingExpansion={}, termExpansion={}, fieldRecordExpansion={}, documentsMs={}, fieldsMs={}, totalMs={}",
             records,
             indexedFields,
             scanOnlyFields,
             termCount,
             postingCount,
             fieldRecordCount,
+            scanFallbackRecordCount,
             ratio(postingCount, records),
             ratio(termCount, records),
             ratio(fieldRecordCount, records),
-            nanosToMillis(documentsNanos),
-            nanosToMillis(fieldsNanos),
-            nanosToMillis(totalNanos)
+                nanosToMillis(documentsNanos),
+                nanosToMillis(fieldsNanos),
+                nanosToMillis(totalNanos)
         );
         if (logger.isInfoEnabled()) {
             SearchField[] searchFields = SearchField.values();
@@ -788,22 +914,44 @@ public final class RecipeDatabaseSearchEngine {
                     continue;
                 }
                 detail
-                    .append(' ')
-                    .append(searchField)
-                    .append('[')
-                    .append(field.indexed() ? "idx" : "scan")
-                    .append(" records=")
-                    .append(field.fieldRecords().length)
-                    .append(" terms=")
-                    .append(field.termCount())
+                        .append(' ')
+                        .append(searchField)
+                        .append('[')
+                        .append(field.indexed() ? "idx" : "scan")
+                        .append(" records=")
+                        .append(field.fieldRecords().length)
+                        .append(" terms=")
+                        .append(field.termCount())
                     .append(" postings=")
                     .append(field.postingCount())
+                    .append(" fallback=")
+                    .append(field.scanFallbackRecords().length)
                     .append(" exp=")
                     .append(ratio(field.postingCount(), Math.max(1, field.fieldRecords().length)))
                     .append(']');
             }
             logger.info("{}", detail);
         }
+    }
+
+    private static void logFieldBuild(SearchField searchField, @Nullable FieldIndex field, int records, long startNanos) {
+        if (!logger.isDebugEnabled() || field == null) {
+            return;
+        }
+        Runtime runtime = Runtime.getRuntime();
+        logger.debug(
+            "Recipe database search field built: field={}, records={}, indexed={}, fieldRecords={}, terms={}, postings={}, scanFallbackRecords={}, elapsedMs={}, heapUsedMiB={}, heapCommittedMiB={}",
+            searchField,
+            records,
+            field.indexed(),
+            field.fieldRecords().length,
+            field.termCount(),
+            field.postingCount(),
+            field.scanFallbackRecords().length,
+            nanosToMillis(System.nanoTime() - startNanos),
+            (runtime.totalMemory() - runtime.freeMemory()) >> 20,
+            runtime.totalMemory() >> 20
+        );
     }
 
     private static long nanosToMillis(long nanos) {
@@ -846,9 +994,9 @@ public final class RecipeDatabaseSearchEngine {
 
     private static void sortResults(ArrayList<RecipeDatabaseResult> results) {
         results.sort(Comparator
-            .comparingInt(RecipeDatabaseResult::matchScore).reversed()
-            .thenComparingInt(RecipeDatabaseResult::databasePriority)
-            .thenComparingInt(RecipeDatabaseResult::matchOrder));
+                .comparingInt(RecipeDatabaseResult::matchScore).reversed()
+                .thenComparingInt(RecipeDatabaseResult::databasePriority)
+                .thenComparingInt(RecipeDatabaseResult::matchOrder));
     }
 
     private static int[] intersect(int[] left, int[] right) {
@@ -973,6 +1121,7 @@ public final class RecipeDatabaseSearchEngine {
 
     private static final class FieldIndex {
         private final int[] fieldRecords;
+        private final int[] scanFallbackRecords;
         private final String[] terms;
         private final Map<String, Integer> termIds;
         private final EncodedPostings postings;
@@ -982,14 +1131,16 @@ public final class RecipeDatabaseSearchEngine {
 
         private FieldIndex(
             int[] fieldRecords,
+            int[] scanFallbackRecords,
             String[] terms,
             Map<String, Integer> termIds,
             EncodedPostings postings,
-            List<String> textCandidates,
-            boolean indexed,
-            int postingCount
+                List<String> textCandidates,
+                boolean indexed,
+                int postingCount
         ) {
             this.fieldRecords = fieldRecords;
+            this.scanFallbackRecords = scanFallbackRecords;
             this.terms = terms;
             this.termIds = termIds;
             this.postings = postings;
@@ -999,22 +1150,150 @@ public final class RecipeDatabaseSearchEngine {
         }
 
         private static FieldIndex empty() {
-            return new FieldIndex(emptyPosting, new String[0], Map.of(), EncodedPostings.empty, List.of(), false, 0);
+            return new FieldIndex(emptyPosting, emptyPosting, new String[0], Map.of(), EncodedPostings.empty, List.of(), false, 0);
         }
 
         private static FieldIndex build(RecipeDatabaseSearchDocument[] documents, SearchField field) {
+            return build(documents, field, null, 0);
+        }
+
+        private static FieldIndex build(
+            RecipeDatabaseSearchDocument[] documents,
+            SearchField field,
+            @Nullable ExecutorService sharedExecutor,
+            int sharedWorkers
+        ) {
             if (field == SearchField.contains) {
                 return empty();
             }
             if (!shouldBuildPostingIndex(field)) {
                 return buildScanOnly(documents, field);
             }
-            FieldAccumulator accumulator = new FieldAccumulator();
+            int documentPostingBudget = documentPostingBudget(documents.length);
+            if (documents.length >= parallelThreshold) {
+                return buildParallel(documents, field, documentPostingBudget, sharedExecutor, sharedWorkers);
+            }
+            FieldAccumulator accumulator = new FieldAccumulator(documentPostingBudget);
             for (int recipeId = 0; recipeId < documents.length; recipeId++) {
                 RecipeDatabaseSearchDocument document = documents[recipeId];
                 accumulator.addDocument(recipeId, document, field);
             }
             return accumulator.freeze(documents, field);
+        }
+
+        private static FieldIndex buildParallel(
+            RecipeDatabaseSearchDocument[] documents,
+            SearchField field,
+            int documentPostingBudget,
+            @Nullable ExecutorService sharedExecutor,
+            int sharedWorkers
+        ) {
+            int total = documents.length;
+            int workers = sharedExecutor == null
+                ? Math.min(total, Math.max(1, Runtime.getRuntime().availableProcessors() - 1))
+                : Math.max(1, Math.min(total, sharedWorkers));
+            if (workers <= 1 || total < workers * 2) {
+                FieldAccumulator accumulator = new FieldAccumulator(documentPostingBudget);
+                for (int recipeId = 0; recipeId < documents.length; recipeId++) {
+                    accumulator.addDocument(recipeId, documents[recipeId], field);
+                }
+                return accumulator.freeze(documents, field);
+            }
+
+            int chunkSize = Math.max(512, Math.min(4096, (total + workers * 8 - 1) / (workers * 8)));
+            int chunkCount = (total + chunkSize - 1) / chunkSize;
+            LocalFieldAccumulator[] locals = new LocalFieldAccumulator[chunkCount];
+            AtomicInteger nextChunk = new AtomicInteger();
+            ExecutorService executor = sharedExecutor == null
+                ? Executors.newFixedThreadPool(workers, daemonThreadFactory("cirrus-db-search-" + field + "-"))
+                : sharedExecutor;
+            try {
+                ArrayList<Future<?>> futures = new ArrayList<>(workers);
+                for (int worker = 0; worker < workers; worker++) {
+                    futures.add(executor.submit(() -> {
+                        while (true) {
+                            int chunk = nextChunk.getAndIncrement();
+                            if (chunk >= chunkCount) {
+                                return;
+                            }
+                            int from = chunk * chunkSize;
+                            int to = Math.min(total, from + chunkSize);
+                            LocalFieldAccumulator local = new LocalFieldAccumulator(documentPostingBudget);
+                            for (int recipeId = from; recipeId < to; recipeId++) {
+                                local.addDocument(recipeId, documents[recipeId], field);
+                            }
+                            locals[chunk] = local;
+                        }
+                    }));
+                }
+                for (Future<?> future : futures) {
+                    future.get();
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while building recipe database search field: " + field, exception);
+            } catch (ExecutionException exception) {
+                throw new IllegalStateException("Failed to build recipe database search field: " + field, exception.getCause());
+            } finally {
+                if (sharedExecutor == null) {
+                    executor.shutdown();
+                }
+            }
+            return mergeLocals(locals, field);
+        }
+
+        private static FieldIndex mergeLocals(LocalFieldAccumulator[] locals, SearchField field) {
+            FieldDictionary dictionary = new FieldDictionary();
+            LinkedHashSet<String> textCandidates = new LinkedHashSet<>();
+            IntScratch fieldRecords = new IntScratch();
+            IntScratch scanFallbackRecords = new IntScratch();
+            DensePostingBuilder postings = new DensePostingBuilder(0);
+
+            for (int chunk = 0; chunk < locals.length; chunk++) {
+                LocalFieldAccumulator local = locals[chunk];
+                if (local == null) {
+                    continue;
+                }
+                fieldRecords.addAll(local.fieldRecords);
+                scanFallbackRecords.addAll(local.scanFallbackRecords);
+                for (String candidate : local.textCandidates) {
+                    if (textCandidates.size() >= textCandidateLimit) {
+                        break;
+                    }
+                    textCandidates.add(candidate);
+                }
+                for (Map.Entry<String, LocalPostingList> entry : local.postingsByTerm.entrySet()) {
+                    int termId = dictionary.idFor(entry.getKey());
+                    postings.incrementBy(termId, entry.getValue().size());
+                }
+            }
+
+            postings.resize(dictionary.size());
+            postings.allocate();
+            for (int chunk = 0; chunk < locals.length; chunk++) {
+                LocalFieldAccumulator local = locals[chunk];
+                if (local == null) {
+                    continue;
+                }
+                for (Map.Entry<String, LocalPostingList> entry : local.postingsByTerm.entrySet()) {
+                    int termId = dictionary.existingId(entry.getKey());
+                    LocalPostingList recipeIds = entry.getValue();
+                    for (int index = 0; index < recipeIds.size(); index++) {
+                        postings.add(termId, recipeIds.get(index));
+                    }
+                }
+            }
+
+            return new FieldIndex(
+                fieldRecords.toArray(),
+                scanFallbackRecords.toArray(),
+                dictionary.terms(),
+                dictionary.idMap(),
+                postings.freeze(),
+                List.copyOf(textCandidates),
+                true,
+                postings.postingCount()
+            );
         }
 
         private static FieldIndex buildScanOnly(RecipeDatabaseSearchDocument[] documents, SearchField field) {
@@ -1024,11 +1303,11 @@ public final class RecipeDatabaseSearchEngine {
                     fieldRecords.add(recipeId);
                 }
             }
-            return new FieldIndex(fieldRecords.toArray(), new String[0], Map.of(), EncodedPostings.empty, List.of(), false, 0);
+            return new FieldIndex(fieldRecords.toArray(), emptyPosting, new String[0], Map.of(), EncodedPostings.empty, List.of(), false, 0);
         }
 
         private static FieldIndex scanOnly(int[] fieldRecords) {
-            return new FieldIndex(fieldRecords, new String[0], Map.of(), EncodedPostings.empty, List.of(), false, 0);
+            return new FieldIndex(fieldRecords, emptyPosting, new String[0], Map.of(), EncodedPostings.empty, List.of(), false, 0);
         }
 
         private static boolean shouldBuildPostingIndex(SearchField field) {
@@ -1036,25 +1315,28 @@ public final class RecipeDatabaseSearchEngine {
                 return false;
             }
             return switch (field) {
-                case id,
-                    mod,
-                    system,
-                    db,
-                    machine,
-                    in,
-                    in_id,
-                    out,
-                    out_id,
-                    cat,
-                    cat_id,
-                    byproduct,
-                    byproduct_id -> true;
+                case mod,
+                     system,
+                     db,
+                     machine,
+                     in,
+                     in_id,
+                     out,
+                     out_id,
+                     cat,
+                     cat_id,
+                     byproduct,
+                     byproduct_id -> true;
                 default -> false;
             };
         }
 
         private int[] fieldRecords() {
             return fieldRecords;
+        }
+
+        private int[] scanFallbackRecords() {
+            return scanFallbackRecords;
         }
 
         private boolean indexed() {
@@ -1088,10 +1370,14 @@ public final class RecipeDatabaseSearchEngine {
             PostingUnion matches = new PostingUnion();
             for (int termId = 0; termId < terms.length; termId++) {
                 if (terms[termId].contains(needle)) {
-                    matches.add(postings.slice(termId));
+                    postings.addToUnion(termId, matches);
                 }
             }
             return matches.toArray();
+        }
+
+        private static int documentPostingBudget(int documentCount) {
+            return Math.max(2048, Math.max(1, documentCount / 16));
         }
 
     }
@@ -1100,21 +1386,31 @@ public final class RecipeDatabaseSearchEngine {
         private final FieldDictionary dictionary = new FieldDictionary();
         private final LinkedHashSet<String> textCandidates = new LinkedHashSet<>();
         private final IntScratch fieldRecords = new IntScratch();
+        private final IntScratch scanFallbackRecords = new IntScratch();
+        private final BitSet scanFallbackDocuments = new BitSet();
         private final DensePostingBuilder postings = new DensePostingBuilder(0);
+        private final int documentPostingBudget;
+
+        private FieldAccumulator(int documentPostingBudget) {
+            this.documentPostingBudget = Math.max(1, documentPostingBudget);
+        }
 
         private void addDocument(int recipeId, RecipeDatabaseSearchDocument document, SearchField field) {
             String[] normalized = document.normalizedText(field);
             if (normalized.length > 0) {
                 String[] raw = document.rawText(field);
+                if (usesScanFallback(recipeId, raw, normalized)) {
+                    if (document.present(field)) {
+                        fieldRecords.add(recipeId);
+                    }
+                    return;
+                }
                 IntScratch unique = new IntScratch();
                 for (int index = 0; index < normalized.length; index++) {
                     if (textCandidates.size() < textCandidateLimit) {
                         textCandidates.add(raw[index]);
                     }
                     unique.addIfAbsent(dictionary.idFor(normalized[index]));
-                }
-                if (unique.size() > Short.MAX_VALUE) {
-                    throw new IllegalStateException("Too many terms in one recipe field: " + field);
                 }
                 for (int index = 0; index < unique.size(); index++) {
                     postings.increment(unique.get(index));
@@ -1125,6 +1421,18 @@ public final class RecipeDatabaseSearchEngine {
             }
         }
 
+        private boolean usesScanFallback(int recipeId, String[] raw, String[] normalized) {
+            if (normalized.length <= documentPostingBudget) {
+                return false;
+            }
+            for (int index = 0; index < raw.length && textCandidates.size() < textCandidateLimit; index++) {
+                textCandidates.add(raw[index]);
+            }
+            scanFallbackRecords.add(recipeId);
+            scanFallbackDocuments.set(recipeId);
+            return true;
+        }
+
         private FieldIndex freeze(RecipeDatabaseSearchDocument[] documents, SearchField field) {
             postings.resize(dictionary.size());
             postings.allocate();
@@ -1133,16 +1441,20 @@ public final class RecipeDatabaseSearchEngine {
             }
             return new FieldIndex(
                 fieldRecords.toArray(),
+                scanFallbackRecords.toArray(),
                 dictionary.terms(),
                 dictionary.idMap(),
                 postings.freeze(),
-                List.copyOf(textCandidates),
-                true,
-                postings.postingCount()
+                    List.copyOf(textCandidates),
+                    true,
+                    postings.postingCount()
             );
         }
 
         private void addPostingData(int recipeId, RecipeDatabaseSearchDocument document, SearchField field) {
+            if (scanFallbackDocuments.get(recipeId)) {
+                return;
+            }
             String[] normalized = document.normalizedText(field);
             if (normalized.length == 0) {
                 return;
@@ -1154,6 +1466,128 @@ public final class RecipeDatabaseSearchEngine {
             for (int index = 0; index < unique.size(); index++) {
                 postings.add(unique.get(index), recipeId);
             }
+        }
+    }
+
+    private static final class LocalFieldAccumulator {
+        private final LinkedHashMap<String, LocalPostingList> postingsByTerm = new LinkedHashMap<>();
+        private final LinkedHashSet<String> textCandidates = new LinkedHashSet<>();
+        private final IntScratch fieldRecords = new IntScratch();
+        private final IntScratch scanFallbackRecords = new IntScratch();
+        private final int documentPostingBudget;
+
+        private LocalFieldAccumulator(int documentPostingBudget) {
+            this.documentPostingBudget = Math.max(1, documentPostingBudget);
+        }
+
+        private void addDocument(int recipeId, RecipeDatabaseSearchDocument document, SearchField field) {
+            String[] normalized = document.normalizedText(field);
+            if (normalized.length > 0) {
+                String[] raw = document.rawText(field);
+                if (usesScanFallback(recipeId, raw, normalized)) {
+                    if (document.present(field)) {
+                        fieldRecords.add(recipeId);
+                    }
+                    return;
+                }
+                addTerms(recipeId, raw, normalized);
+            }
+            if (document.present(field)) {
+                fieldRecords.add(recipeId);
+            }
+        }
+
+        private boolean usesScanFallback(int recipeId, String[] raw, String[] normalized) {
+            if (normalized.length <= documentPostingBudget) {
+                return false;
+            }
+            for (int index = 0; index < raw.length && textCandidates.size() < textCandidateLimit; index++) {
+                textCandidates.add(raw[index]);
+            }
+            scanFallbackRecords.add(recipeId);
+            return true;
+        }
+
+        private void addTerms(int recipeId, String[] raw, String[] normalized) {
+            if (normalized.length <= linearUniqueThreshold) {
+                ArrayList<String> uniqueTerms = new ArrayList<>(Math.min(normalized.length, linearUniqueThreshold));
+                for (int index = 0; index < normalized.length; index++) {
+                    String term = normalized[index];
+                    if (term == null || term.isBlank() || contains(uniqueTerms, term)) {
+                        continue;
+                    }
+                    uniqueTerms.add(term);
+                    addCandidate(raw[index]);
+                    addPosting(term, recipeId);
+                }
+                return;
+            }
+
+            HashSet<String> uniqueTerms = new HashSet<>(normalized.length * 2);
+            for (int index = 0; index < normalized.length; index++) {
+                String term = normalized[index];
+                if (term == null || term.isBlank() || !uniqueTerms.add(term)) {
+                    continue;
+                }
+                addCandidate(raw[index]);
+                addPosting(term, recipeId);
+            }
+        }
+
+        private void addPosting(String term, int recipeId) {
+            LocalPostingList postings = postingsByTerm.get(term);
+            if (postings == null) {
+                postingsByTerm.put(term, new LocalPostingList(recipeId));
+            } else {
+                postings.add(recipeId);
+            }
+        }
+
+        private void addCandidate(String raw) {
+            if (textCandidates.size() < textCandidateLimit) {
+                textCandidates.add(raw);
+            }
+        }
+
+        private static boolean contains(ArrayList<String> values, String value) {
+            for (String candidate : values) {
+                if (candidate.equals(value)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    private static final class LocalPostingList {
+        private int first;
+        private @Nullable IntScratch rest;
+
+        private LocalPostingList(int first) {
+            this.first = first;
+        }
+
+        private void add(int recipeId) {
+            IntScratch target = rest;
+            if (target == null) {
+                target = new IntScratch();
+                rest = target;
+            }
+            target.add(recipeId);
+        }
+
+        private int size() {
+            return 1 + (rest == null ? 0 : rest.size());
+        }
+
+        private int get(int index) {
+            if (index == 0) {
+                return first;
+            }
+            if (rest == null) {
+                throw new IndexOutOfBoundsException(index);
+            }
+            return rest.get(index - 1);
         }
     }
 
@@ -1197,7 +1631,6 @@ public final class RecipeDatabaseSearchEngine {
     }
 
     private static final class DensePostingBuilder {
-        private static final int bitSetThreshold = 4096;
         private int[] counts;
         private int[] offsets;
         private int[] cursor;
@@ -1216,6 +1649,14 @@ public final class RecipeDatabaseSearchEngine {
         private void increment(int termId) {
             ensureTerm(termId + 1);
             counts[termId]++;
+        }
+
+        private void incrementBy(int termId, int amount) {
+            if (amount <= 0) {
+                return;
+            }
+            ensureTerm(termId + 1);
+            counts[termId] += amount;
         }
 
         private void allocate() {
@@ -1249,24 +1690,9 @@ public final class RecipeDatabaseSearchEngine {
         }
 
         private EncodedPostings freeze() {
-            PostingSet[] postingSets = new PostingSet[counts.length];
-            for (int termId = 0; termId < counts.length; termId++) {
-                int start = offsets[termId];
-                int end = offsets[termId + 1];
-                int size = end - start;
-                if (size == 0) {
-                    postingSets[termId] = IntPosting.empty;
-                } else if (size >= bitSetThreshold) {
-                    BitSet bits = new BitSet(data[end - 1] + 1);
-                    for (int cursor = start; cursor < end; cursor++) {
-                        bits.set(data[cursor]);
-                    }
-                    postingSets[termId] = new BitSetPosting(bits, size);
-                } else {
-                    postingSets[termId] = new IntPosting(Arrays.copyOfRange(data, start, end));
-                }
-            }
-            return new EncodedPostings(postingSets);
+            return data == null
+                ? EncodedPostings.empty
+                : new EncodedPostings(offsets, Arrays.copyOf(data, data.length));
         }
 
         private int postingCount() {
@@ -1274,36 +1700,23 @@ public final class RecipeDatabaseSearchEngine {
         }
     }
 
-    private record EncodedPostings(PostingSet[] postings) {
-        private static final EncodedPostings empty = new EncodedPostings(new PostingSet[0]);
+    private record EncodedPostings(int[] offsets, int[] data) {
+        private static final EncodedPostings empty = new EncodedPostings(emptyPosting, emptyPosting);
 
         private int[] slice(int termId) {
-            return postings[termId].toArray();
-        }
-    }
-
-    private interface PostingSet {
-        int[] toArray();
-    }
-
-    private record IntPosting(int[] values) implements PostingSet {
-        private static final IntPosting empty = new IntPosting(emptyPosting);
-
-        @Override
-        public int[] toArray() {
-            return values;
-        }
-    }
-
-    private record BitSetPosting(BitSet bits, int cardinality) implements PostingSet {
-        @Override
-        public int[] toArray() {
-            int[] out = new int[cardinality];
-            int cursor = 0;
-            for (int bit = bits.nextSetBit(0); bit >= 0; bit = bits.nextSetBit(bit + 1)) {
-                out[cursor++] = bit;
+            if (termId < 0 || termId + 1 >= offsets.length) {
+                return emptyPosting;
             }
-            return out;
+            int start = offsets[termId];
+            int end = offsets[termId + 1];
+            return start == end ? emptyPosting : Arrays.copyOfRange(data, start, end);
+        }
+
+        private void addToUnion(int termId, PostingUnion union) {
+            if (termId < 0 || termId + 1 >= offsets.length) {
+                return;
+            }
+            union.add(data, offsets[termId], offsets[termId + 1]);
         }
     }
 
@@ -1315,13 +1728,21 @@ public final class RecipeDatabaseSearchEngine {
             if (posting.length == 0) {
                 return;
             }
-            int[] merged = new int[size + posting.length];
+            add(posting, 0, posting.length);
+        }
+
+        private void add(int[] posting, int fromInclusive, int toExclusive) {
+            int postingLength = toExclusive - fromInclusive;
+            if (postingLength <= 0) {
+                return;
+            }
+            int[] merged = new int[size + postingLength];
             int left = 0;
-            int right = 0;
+            int right = fromInclusive;
             int count = 0;
-            while (left < size || right < posting.length) {
+            while (left < size || right < toExclusive) {
                 int next;
-                if (right >= posting.length || left < size && values[left] < posting[right]) {
+                if (right >= toExclusive || left < size && values[left] < posting[right]) {
                     next = values[left++];
                 } else if (left >= size || posting[right] < values[left]) {
                     next = posting[right++];
@@ -1346,9 +1767,16 @@ public final class RecipeDatabaseSearchEngine {
     private static final class IntScratch {
         private int[] values = new int[8];
         private int size;
+        private @Nullable HashSet<Integer> uniqueValues;
 
         private void addIfAbsent(int value) {
             if (value < 0) {
+                return;
+            }
+            if (uniqueValues != null) {
+                if (uniqueValues.add(value)) {
+                    add(value);
+                }
                 return;
             }
             for (int index = 0; index < size; index++) {
@@ -1356,10 +1784,14 @@ public final class RecipeDatabaseSearchEngine {
                     return;
                 }
             }
-            if (size >= values.length) {
-                values = Arrays.copyOf(values, values.length + Math.max(8, values.length));
+            if (size >= linearUniqueThreshold) {
+                uniqueValues = new HashSet<>(Math.max(128, size * 2));
+                for (int index = 0; index < size; index++) {
+                    uniqueValues.add(values[index]);
+                }
+                uniqueValues.add(value);
             }
-            values[size++] = value;
+            add(value);
         }
 
         private int size() {
@@ -1375,6 +1807,22 @@ public final class RecipeDatabaseSearchEngine {
                 values = Arrays.copyOf(values, values.length + Math.max(8, values.length));
             }
             values[size++] = value;
+        }
+
+        private void addAll(IntScratch other) {
+            if (other == null || other.size == 0) {
+                return;
+            }
+            int required = size + other.size;
+            if (required > values.length) {
+                int next = values.length;
+                while (next < required) {
+                    next += Math.max(8, next);
+                }
+                values = Arrays.copyOf(values, next);
+            }
+            System.arraycopy(other.values, 0, values, size, other.size);
+            size = required;
         }
 
         private int[] toArray() {

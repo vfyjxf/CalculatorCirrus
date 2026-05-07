@@ -307,6 +307,57 @@ class TreeCanvasWidgetContractTest {
     }
 
     @Test
+    void cyclicProcessGraphStopsAtCycleTerminus() {
+        ProcessGraph graph = new ProcessGraph();
+        graph.addNode(new ProcessNode(
+                "target/a",
+                "Target A",
+                "Crafting Table",
+                List.of(new ProcessNode.MaterialSlot("b", 1, ProcessNode.MaterialType.ITEM)),
+                List.of(new ProcessNode.MaterialSlot("a", 1, ProcessNode.MaterialType.ITEM)),
+                0,
+                0,
+                0,
+                List.of(),
+                null
+        ));
+        graph.addNode(new ProcessNode(
+                "step/b",
+                "Step B",
+                "Crafting Table",
+                List.of(new ProcessNode.MaterialSlot("a", 1, ProcessNode.MaterialType.ITEM)),
+                List.of(new ProcessNode.MaterialSlot("b", 1, ProcessNode.MaterialType.ITEM)),
+                0,
+                0,
+                0,
+                List.of(),
+                null
+        ));
+        graph.addEdge(new dev.vfyjxf.cirrus.ui.process.ProcessEdge(
+                "step/b",
+                "target/a",
+                "b",
+                1,
+                ProcessNode.MaterialType.ITEM
+        ));
+        graph.addEdge(new dev.vfyjxf.cirrus.ui.process.ProcessEdge(
+                "target/a",
+                "step/b",
+                "a",
+                1,
+                ProcessNode.MaterialType.ITEM
+        ));
+        graph.preferredRootNodeId("target/a");
+
+        TreeCanvasWidget widget = new TreeCanvasWidget();
+        widget.setGraph(graph);
+        widget.expandAllNodes();
+
+        assertTrue(widget.debugLayoutNodeCount() <= 3);
+        assertEquals(0, widget.getCollapsedNodePaths().size());
+    }
+
+    @Test
     void materialPanelScrollbarOnlyAppearsWhenFilteredContentOverflows() {
         TreeCanvasWidget widget = new TreeCanvasWidget();
         widget.setGraph(materialSearchGraph());

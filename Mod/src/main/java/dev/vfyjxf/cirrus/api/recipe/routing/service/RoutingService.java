@@ -119,6 +119,7 @@ public final class RoutingService {
      */
     public RoutingOutcome route(RoutingRequest request) {
         Checks.checkNotNull(request, "request");
+        long routeStartNanos = System.nanoTime();
         logger.info(
             "routing.start target={} mode={} profile={} sourcePolicy={} budgetNodes={} budgetCandidates={} heuristic={} stockEmpty={}",
             describeTarget(request.target()),
@@ -132,7 +133,7 @@ public final class RoutingService {
         );
         RoutingOutcome invalid = validateRequest(request);
         if (invalid != null) {
-            logRouteFinish(invalid);
+            logRouteFinish(invalid, routeStartNanos);
             return invalid;
         }
 
@@ -140,12 +141,28 @@ public final class RoutingService {
         RuleProfile profile = ruleProfiles.get(request.ruleProfileId());
         if (profile == null) {
             RoutingOutcome failed = invalidFailure(request, RoutingFailureCode.invalidRequest, "cirrus.routing.unknown_rule_profile");
-            logRouteFinish(failed);
+            logRouteFinish(failed, routeStartNanos);
             return failed;
         }
 
         TagSnapshot snapshot = request.tagSnapshot() != null ? request.tagSnapshot() : userWorkspace.snapshot();
+        logger.info(
+            "routing.analysis.start target={} graphNodes={} catalog={} snapshot={} tags={} sourcePolicyHash={}",
+            describeTarget(request.target()),
+            graph.nodes().size(),
+            catalog.size(),
+            snapshot.version(),
+            snapshot.tagToRecipes().size(),
+            sourcePolicy.hashCode()
+        );
         PolicyAnalysis policyAnalysis = cachedPolicyAnalysis(snapshot, sourcePolicy);
+        logger.info(
+            "routing.analysis.finish target={} elapsedMs={} allowed={} cyclicSccs={}",
+            describeTarget(request.target()),
+            (System.nanoTime() - routeStartNanos) / 1_000_000L,
+            policyAnalysis.sourceDecision().allowedRecipes().cardinality(),
+            policyAnalysis.sccAnalysis().cyclicSccCount()
+        );
         SourcePolicyDecision sourceDecision = policyAnalysis.sourceDecision();
         SccAnalysis sccAnalysis = policyAnalysis.sccAnalysis();
 
@@ -170,11 +187,12 @@ public final class RoutingService {
                 sccAnalysis
             );
         }
-        logRouteFinish(outcome);
+        logRouteFinish(outcome, routeStartNanos);
         return outcome;
     }
 
     private PolicyAnalysis cachedPolicyAnalysis(TagSnapshot snapshot, SourcePolicy sourcePolicy) {
+        long startNanos = System.nanoTime();
         PolicyAnalysisCacheKey key = new PolicyAnalysisCacheKey(
             graph,
             catalog.size(),
@@ -187,18 +205,49 @@ public final class RoutingService {
             if (cached != null) {
                 PolicyAnalysis touched = cached.touch();
                 policyAnalysisCache.put(key, touched);
+                logger.debug(
+                    "routing.analysis.cacheHit catalog={} snapshot={} allowed={} elapsedMs={}",
+                    catalog.size(),
+                    snapshot.version(),
+                    touched.sourceDecision().allowedRecipes().cardinality(),
+                    (System.nanoTime() - startNanos) / 1_000_000L
+                );
                 return touched;
             }
         }
 
+        long policyStartNanos = System.nanoTime();
         SourcePolicyDecision sourceDecision = sourcePolicyRule.apply(snapshot, sourcePolicy);
+        long sccStartNanos = System.nanoTime();
+        logger.info(
+            "routing.analysis.policy catalog={} snapshot={} rules={} allowed={} policyMs={}",
+            catalog.size(),
+            snapshot.version(),
+            sourcePolicy.rules().size(),
+            sourceDecision.allowedRecipes().cardinality(),
+            (sccStartNanos - policyStartNanos) / 1_000_000L
+        );
         SccAnalysis sccAnalysis = SccAnalysis.build(graph, catalog, sourceDecision.allowedRecipes());
+        logger.info(
+            "routing.analysis.scc catalog={} allowed={} cyclicSccs={} sccMs={} totalMs={}",
+            catalog.size(),
+            sourceDecision.allowedRecipes().cardinality(),
+            sccAnalysis.cyclicSccCount(),
+            (System.nanoTime() - sccStartNanos) / 1_000_000L,
+            (System.nanoTime() - startNanos) / 1_000_000L
+        );
         PolicyAnalysis analysis = new PolicyAnalysis(sourceDecision, sccAnalysis, System.nanoTime());
         synchronized (policyAnalysisCacheLock) {
             PolicyAnalysis existing = policyAnalysisCache.get(key);
             if (existing != null) {
                 PolicyAnalysis touched = existing.touch();
                 policyAnalysisCache.put(key, touched);
+                logger.debug(
+                    "routing.analysis.cacheRace catalog={} snapshot={} elapsedMs={}",
+                    catalog.size(),
+                    snapshot.version(),
+                    (System.nanoTime() - startNanos) / 1_000_000L
+                );
                 return touched;
             }
             policyAnalysisCache.put(key, analysis);
@@ -680,14 +729,17 @@ public final class RoutingService {
         return new RoutingOutcome(RoutingStatus.failed, null, Lists.immutable.of(issue), metrics, null);
     }
 
-    private static void logRouteFinish(RoutingOutcome outcome) {
+    private static void logRouteFinish(RoutingOutcome outcome, long routeStartNanos) {
         RoutingMetrics metrics = outcome.metrics();
+        long routeElapsedMs = (System.nanoTime() - routeStartNanos) / 1_000_000L;
         logger.info(
-            "routing.finish status={} planActions={} issues={} elapsedMs={} expanded={} generated={} accepted={} budgetUsed={} budgetLimit={} budgetExhausted={} budgetStop={} adapterAttempts={} adapterStatus={}",
+            "routing.finish status={} planActions={} issues={} routeElapsedMs={} plannerElapsedMs={} analysisAndDispatchMs={} expanded={} generated={} accepted={} budgetUsed={} budgetLimit={} budgetExhausted={} budgetStop={} adapterAttempts={} adapterStatus={}",
             outcome.status(),
             outcome.plan() == null ? 0 : outcome.plan().actions().size(),
             outcome.issues().size(),
+            routeElapsedMs,
             metrics.elapsedMs(),
+            Math.max(0L, routeElapsedMs - metrics.elapsedMs()),
             metrics.expandedNodes(),
             metrics.generatedCandidates(),
             metrics.acceptedCandidates(),
@@ -702,7 +754,7 @@ public final class RoutingService {
             int limit = Math.min(8, outcome.issues().size());
             for (int index = 0; index < limit; index++) {
                 RoutingIssue issue = outcome.issues().get(index);
-                logger.info(
+                logger.debug(
                     "routing.issue index={} code={} severity={} blocking={} message={} payload={}",
                     index,
                     issue.code(),
@@ -713,7 +765,7 @@ public final class RoutingService {
                 );
             }
             if (outcome.issues().size() > limit) {
-                logger.info("routing.issue omitted={}", outcome.issues().size() - limit);
+                logger.debug("routing.issue omitted={}", outcome.issues().size() - limit);
             }
         }
     }

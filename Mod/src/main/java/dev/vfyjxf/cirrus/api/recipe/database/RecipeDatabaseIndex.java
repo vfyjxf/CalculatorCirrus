@@ -23,8 +23,12 @@ import dev.vfyjxf.cirrus.api.recipe.search.SearchOperator;
 import dev.vfyjxf.cirrus.api.recipe.search.SearchParser;
 import dev.vfyjxf.cirrus.api.recipe.search.SearchTerm;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveError;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 import org.jetbrains.annotations.Nullable;
@@ -35,22 +39,30 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReferenceArray;
+import java.util.concurrent.atomic.LongAdder;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
 
 public final class RecipeDatabaseIndex {
     private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Database");
     private static final int parallelFlushBatch = 256;
+    private static final int recordBuildChunk = 64;
+    private static final int stackSearchCacheLimit = 8192;
+    private static final int statsTopLimit = 8;
     private static final RecipeDatabaseIndex empty = new RecipeDatabaseIndex(List.of(), RecipeDatabaseSearchEngine.empty(), null, new int[0], Map.of());
     private final List<RecipeDatabaseRecord> records;
     private final RecipeDatabaseSearchEngine searchEngine;
@@ -163,6 +175,17 @@ public final class RecipeDatabaseIndex {
         Map<String, List<RecipeEntry<?>>> explicitEntries,
         BuildProgress progress
     ) {
+        return build(databases, systems, systemTags, explicitEntries, progress, null);
+    }
+
+    public static RecipeDatabaseIndex build(
+        List<DatabaseDefinition> databases,
+        RichIterable<? extends RecipeSystem<?>> systems,
+        Map<Namespace, List<Namespace>> systemTags,
+        Map<String, List<RecipeEntry<?>>> explicitEntries,
+        BuildProgress progress,
+        @Nullable RecipeDatabaseFailureRegistry failureRegistry
+    ) {
         if (databases == null || databases.isEmpty() || systems == null) {
             return ofRecords(List.of());
         }
@@ -217,17 +240,83 @@ public final class RecipeDatabaseIndex {
             }
         }
         reporter.update(BuildPhase.COLLECTING, totalSources, totalSources);
+        Set<DatabaseRecipeRef> knownFailedRecipes = failureRegistry == null ? Set.of() : failureRegistry.failedRecipeRefs();
+        Set<DatabaseRecipeRef> knownUnsupportedRecipes = failureRegistry == null ? Set.of() : failureRegistry.unsupportedRecipeRefs();
+        int skippedKnownFailures = 0;
+        int skippedKnownUnsupported = 0;
+        if ((!knownFailedRecipes.isEmpty() || !knownUnsupportedRecipes.isEmpty()) && !items.isEmpty()) {
+            ArrayList<WorkItem> filteredItems = new ArrayList<>(items.size());
+            for (WorkItem item : items) {
+                if (item.ref() != null && knownFailedRecipes.contains(item.ref())) {
+                    skippedKnownFailures++;
+                    continue;
+                }
+                if (item.ref() != null && knownUnsupportedRecipes.contains(item.ref())) {
+                    skippedKnownUnsupported++;
+                    continue;
+                }
+                filteredItems.add(item);
+            }
+            items = filteredItems;
+            if (skippedKnownFailures > 0) {
+                logger.info(
+                    "Skipped known failed recipe database records: workItems={}, knownFailedRecipes={}",
+                    skippedKnownFailures,
+                    knownFailedRecipes.size()
+                );
+            }
+            if (skippedKnownUnsupported > 0) {
+                logger.info(
+                    "Skipped known unsupported recipe database records: workItems={}, knownUnsupportedRecipes={}",
+                    skippedKnownUnsupported,
+                    knownUnsupportedRecipes.size()
+                );
+            }
+        }
+        int duplicateWorkItems = 0;
+        if (!items.isEmpty()) {
+            WorkItemDedupResult deduped = dedupeWorkItems(items);
+            items = deduped.items();
+            duplicateWorkItems = deduped.duplicates();
+            if (duplicateWorkItems > 0) {
+                logger.info(
+                    "Skipped duplicate recipe database work items before resolve: duplicates={}, remaining={}",
+                    duplicateWorkItems,
+                    items.size()
+                );
+            }
+        }
         long recordsStartNanos = System.nanoTime();
-        List<RecipeDatabaseRecord> records = buildRecords(items, reporter);
+        ConcurrentLinkedQueue<RecipeDatabaseFailureRegistry.Failure> failures = new ConcurrentLinkedQueue<>();
+        ConcurrentLinkedQueue<RecipeDatabaseFailureRegistry.Unsupported> unsupported = new ConcurrentLinkedQueue<>();
+        List<RecipeDatabaseRecord> records = buildRecords(
+            items,
+            reporter,
+            knownFailedRecipes,
+            knownUnsupportedRecipes,
+            failures,
+            unsupported
+        );
+        if (failureRegistry != null && !failures.isEmpty()) {
+            failureRegistry.recordFailures(failures);
+        }
+        if (failureRegistry != null && !unsupported.isEmpty()) {
+            failureRegistry.recordUnsupported(unsupported);
+        }
         long searchStartNanos = System.nanoTime();
         RecipeDatabaseIndex index = new RecipeDatabaseIndex(records, reporter);
         long endNanos = System.nanoTime();
         logger.info(
-            "Built recipe database index: databases={}, systems={}, workItems={}, records={}, recordMs={}, searchMs={}, totalMs={}",
+            "Built recipe database index: databases={}, systems={}, workItems={}, records={}, skippedKnownFailures={}, skippedKnownUnsupported={}, skippedDuplicates={}, newFailures={}, newUnsupported={}, recordMs={}, searchMs={}, totalMs={}",
             enabled.size(),
             systemList.size(),
-            items.size(),
+            items.size() + skippedKnownFailures + skippedKnownUnsupported + duplicateWorkItems,
             records.size(),
+            skippedKnownFailures,
+            skippedKnownUnsupported,
+            duplicateWorkItems,
+            failures.size(),
+            unsupported.size(),
             nanosToMillis(searchStartNanos - recordsStartNanos),
             nanosToMillis(endNanos - searchStartNanos),
             nanosToMillis(endNanos - recordsStartNanos)
@@ -598,33 +687,121 @@ public final class RecipeDatabaseIndex {
         );
     }
 
-    private static List<RecipeDatabaseRecord> buildRecords(List<WorkItem> items, BuildProgress progress) {
+    private static List<RecipeDatabaseRecord> buildRecords(
+        List<WorkItem> items,
+        BuildProgress progress,
+        Set<DatabaseRecipeRef> knownFailedRecipes,
+        Set<DatabaseRecipeRef> knownUnsupportedRecipes,
+        Queue<RecipeDatabaseFailureRegistry.Failure> failures,
+        Queue<RecipeDatabaseFailureRegistry.Unsupported> unsupported
+    ) {
         if (items == null || items.isEmpty()) {
             progress.update(BuildPhase.RESOLVING_RECORDS, 0, 0);
             progress.update(BuildPhase.DEDUPING_RECORDS, 0, 0);
             return List.of();
         }
 
-        AtomicReferenceArray<RecipeDatabaseRecord> resolved = new AtomicReferenceArray<>(items.size());
+        Set<DatabaseRecipeRef> failedRecipes = ConcurrentHashMap.newKeySet();
+        if (knownFailedRecipes != null && !knownFailedRecipes.isEmpty()) {
+            failedRecipes.addAll(knownFailedRecipes);
+        }
+        Set<DatabaseRecipeRef> unsupportedRecipes = ConcurrentHashMap.newKeySet();
+        if (knownUnsupportedRecipes != null && !knownUnsupportedRecipes.isEmpty()) {
+            unsupportedRecipes.addAll(knownUnsupportedRecipes);
+        }
+        RecipeDatabaseRecord[] resolved = new RecipeDatabaseRecord[items.size()];
         AtomicInteger resolvedCount = new AtomicInteger();
         AtomicInteger failedCount = new AtomicInteger();
+        AtomicInteger unsupportedCount = new AtomicInteger();
+        AtomicInteger resolveDebugBucket = logger.isDebugEnabled() ? new AtomicInteger(-1) : null;
+        ResolveStats resolveStats = logger.isDebugEnabled() ? new ResolveStats() : null;
+        int[] resolveOrder = interleavedResolveOrder(items);
+        long resolveStartNanos = System.nanoTime();
         progress.update(BuildPhase.RESOLVING_RECORDS, 0, items.size());
-        parallelRanges(items.size(), "cirrus-database-record-", (from, to) -> {
+        parallelChunks(items.size(), recordBuildChunk, "cirrus-database-record-", (from, to) -> {
+            ArrayList<RecipeDatabaseFailureRegistry.Failure> capturedFailures = new ArrayList<>(1);
+            StackSearchCache stackSearchCache = new StackSearchCache(stackSearchCacheLimit);
             int pendingProgress = 0;
-            for (int index = from; index < to; index++) {
+            for (int cursor = from; cursor < to; cursor++) {
+                int index = resolveOrder == null ? cursor : resolveOrder[cursor];
                 WorkItem item = items.get(index);
-                try {
-                    RecipeDatabaseRecord record = recordForEntry(item.database(), item.entry(), item.tags());
-                    if (record != null) {
-                        resolved.set(index, record);
+                DatabaseRecipeRef ref = item.ref();
+                if (ref != null && (failedRecipes.contains(ref) || unsupportedRecipes.contains(ref))) {
+                    pendingProgress++;
+                    if (pendingProgress >= parallelFlushBatch) {
+                        int done = resolvedCount.addAndGet(pendingProgress);
+                        pendingProgress = 0;
+                        if (shouldReportProgress(done, items.size())) {
+                            progress.update(BuildPhase.RESOLVING_RECORDS, done, items.size());
+                        }
+                        logBuildProgress("resolve", done, items.size(), resolveStartNanos, resolveDebugBucket);
                     }
-                } catch (RuntimeException exception) {
+                    continue;
+                }
+                try {
+                    capturedFailures.clear();
+                    RecordBuildResult result = RecipeDatabaseFailureCapture.capture(
+                        item.database().id(),
+                        ref,
+                        item.recipeClass(),
+                        capturedFailures::add,
+                        () -> recordForEntry(item.database(), item.entry(), item.tags(), stackSearchCache)
+                    );
+                    if (!capturedFailures.isEmpty()) {
+                        failedCount.incrementAndGet();
+                        if (resolveStats != null) {
+                            resolveStats.failed.increment();
+                        }
+                        addCapturedFailures(capturedFailures, failedRecipes, failures);
+                        logger.warn(
+                            "Skipped recipe database record after resolver failure: database={}, system={}, recipe={}",
+                            item.database().id(),
+                            item.entry() == null ? "<null>" : item.entry().systemId(),
+                            ref == null ? "<unknown>" : ref.recipe()
+                        );
+                    } else if (result.record() != null) {
+                        resolved[index] = result.record();
+                        if (resolveStats != null) {
+                            resolveStats.resolved.increment();
+                        }
+                    } else {
+                        ResolveError error = result.error();
+                        recordEmpty(resolveStats, item, error);
+                        if (cacheableUnsupported(error)) {
+                            unsupportedCount.incrementAndGet();
+                        }
+                        if (cacheableUnsupported(error) && ref != null && unsupportedRecipes.add(ref)) {
+                            if (unsupported != null) {
+                                unsupported.add(new RecipeDatabaseFailureRegistry.Unsupported(
+                                    ref,
+                                    item.database().id(),
+                                    item.recipeClass(),
+                                    error == null ? "" : error.name()
+                                ));
+                            }
+                        }
+                    }
+                } catch (RuntimeException | LinkageError exception) {
                     failedCount.incrementAndGet();
+                    if (resolveStats != null) {
+                        resolveStats.failed.increment();
+                    }
+                    if (ref != null && failedRecipes.add(ref) && failures != null) {
+                        failures.add(RecipeDatabaseFailureRegistry.Failure.from(
+                            ref,
+                            item.database().id(),
+                            item.recipeClass(),
+                            exception
+                        ));
+                    }
                     logger.warn(
-                        "Failed to resolve recipe database record: database={}, system={}, recipe={}",
+                        "Failed to resolve recipe database record: database={}, system={}, recipe={}, recipeClass={}, exception={}, message={}",
                         item.database().id(),
                         item.entry() == null ? "<null>" : item.entry().systemId(),
-                        item.entry(),
+                        ref == null ? "<unknown>" : ref.recipe(),
+                        item.recipeClass(),
+                        exception.getClass().getName(),
+                        exception.getMessage(),
                         exception
                     );
                 }
@@ -635,6 +812,7 @@ public final class RecipeDatabaseIndex {
                     if (shouldReportProgress(done, items.size())) {
                         progress.update(BuildPhase.RESOLVING_RECORDS, done, items.size());
                     }
+                    logBuildProgress("resolve", done, items.size(), resolveStartNanos, resolveDebugBucket);
                 }
             }
             if (pendingProgress > 0) {
@@ -642,20 +820,29 @@ public final class RecipeDatabaseIndex {
                 if (shouldReportProgress(done, items.size())) {
                     progress.update(BuildPhase.RESOLVING_RECORDS, done, items.size());
                 }
+                logBuildProgress("resolve", done, items.size(), resolveStartNanos, resolveDebugBucket);
             }
         });
         progress.update(BuildPhase.RESOLVING_RECORDS, items.size(), items.size());
+        logBuildProgress("resolve", items.size(), items.size(), resolveStartNanos, resolveDebugBucket);
 
         ArrayList<RecipeDatabaseRecord> records = new ArrayList<>();
-        Set<RecipeEntry<?>> seen = new java.util.HashSet<>();
+        Set<DatabaseRecipeRef> seenRefs = new HashSet<>();
+        Set<RecipeEntry<?>> seenEntriesWithoutRef = new HashSet<>();
         int duplicateCount = 0;
         progress.update(BuildPhase.DEDUPING_RECORDS, 0, items.size());
         for (int index = 0; index < items.size(); index++) {
-            RecipeDatabaseRecord record = resolved.get(index);
-            if (record != null && seen.add(record.recipe())) {
-                records.add(record);
-            } else if (record != null) {
-                duplicateCount++;
+            RecipeDatabaseRecord record = resolved[index];
+            if (record != null) {
+                DatabaseRecipeRef ref = recipeRef(record.recipe());
+                boolean first = ref == null
+                    ? seenEntriesWithoutRef.add(record.recipe())
+                    : seenRefs.add(ref);
+                if (first) {
+                    records.add(record);
+                } else {
+                    duplicateCount++;
+                }
             }
             int done = index + 1;
             if (shouldReportProgress(done, items.size())) {
@@ -663,37 +850,213 @@ public final class RecipeDatabaseIndex {
             }
         }
         progress.update(BuildPhase.DEDUPING_RECORDS, items.size(), items.size());
-        if (failedCount.get() > 0 || duplicateCount > 0 || records.size() != items.size()) {
+        if (failedCount.get() > 0 || unsupportedCount.get() > 0 || duplicateCount > 0 || records.size() != items.size()) {
             logger.info(
-                "Resolved recipe database records: workItems={}, records={}, failed={}, duplicates={}, empty={}",
+                "Resolved recipe database records: workItems={}, records={}, failed={}, unsupported={}, duplicates={}, empty={}",
                 items.size(),
                 records.size(),
                 failedCount.get(),
+                unsupportedCount.get(),
                 duplicateCount,
-                items.size() - records.size() - failedCount.get() - duplicateCount
+                items.size() - records.size() - failedCount.get() - unsupportedCount.get() - duplicateCount
             );
         }
+        logResolveStats(resolveStats, items.size());
         return records;
     }
 
-    private static @Nullable RecipeDatabaseRecord recordForEntry(
-        DatabaseDefinition database,
-        RecipeEntry<?> entry,
-        List<Namespace> systemTags
+    private static @Nullable int[] interleavedResolveOrder(List<WorkItem> items) {
+        if (items == null || items.size() <= recordBuildChunk * 4) {
+            return null;
+        }
+        LinkedHashMap<Namespace, IntScratch> bySystem = new LinkedHashMap<>();
+        for (int index = 0; index < items.size(); index++) {
+            WorkItem item = items.get(index);
+            Namespace systemId = item.entry() == null ? Namespace.of("cirrus", "unknown") : item.entry().systemId();
+            bySystem.computeIfAbsent(systemId, ignored -> new IntScratch()).add(index);
+        }
+        if (bySystem.size() <= 1) {
+            return null;
+        }
+
+        IntScratch[] groups = bySystem.values().toArray(new IntScratch[0]);
+        int[] order = new int[items.size()];
+        int[] cursors = new int[groups.length];
+        int written = 0;
+        boolean advanced;
+        do {
+            advanced = false;
+            for (int group = 0; group < groups.length; group++) {
+                IntScratch indexes = groups[group];
+                int cursor = cursors[group];
+                if (cursor >= indexes.size()) {
+                    continue;
+                }
+                int burst = Math.min(recordBuildChunk, indexes.size() - cursor);
+                for (int i = 0; i < burst; i++) {
+                    order[written++] = indexes.get(cursor + i);
+                }
+                cursors[group] = cursor + burst;
+                advanced = true;
+            }
+        } while (advanced);
+
+        return written == items.size() ? order : null;
+    }
+
+    private static void addCapturedFailures(
+        Iterable<RecipeDatabaseFailureRegistry.Failure> capturedFailures,
+        Set<DatabaseRecipeRef> failedRecipes,
+        Queue<RecipeDatabaseFailureRegistry.Failure> failures
     ) {
+        if (capturedFailures == null || failures == null) {
+            return;
+        }
+        for (RecipeDatabaseFailureRegistry.Failure failure : capturedFailures) {
+            if (failure == null) {
+                continue;
+            }
+            logger.warn(
+                "Captured recipe database resolver failure: database={}, system={}, recipe={}, recipeClass={}, exception={}, message={}",
+                failure.database(),
+                failure.ref().system(),
+                failure.ref().recipe(),
+                failure.recipeClass(),
+                failure.exception(),
+                failure.message(),
+                failure.cause()
+            );
+            if (failure != null && failedRecipes.add(failure.ref())) {
+                failures.add(failure);
+            }
+        }
+    }
+
+    private static @Nullable DatabaseRecipeRef recipeRef(@Nullable RecipeEntry<?> entry) {
         if (entry == null) {
             return null;
         }
-        RecipeProjection projection = entry.resolve();
-        RecipeDatabaseSearchDocument searchDocument = document(database, entry, systemTags, projection);
-        RecipeProjection storedProjection = projection == null ? null : snapshotProjection(projection);
-        return new RecipeDatabaseRecord(
+        try {
+            return DatabaseRecipeRef.fromEntry(entry);
+        } catch (RuntimeException | LinkageError exception) {
+            logger.warn(
+                "Failed to read recipe database ref: system={}",
+                entry.systemId(),
+                exception
+            );
+            return null;
+        }
+    }
+
+    private static String recipeClass(@Nullable RecipeEntry<?> entry) {
+        if (entry == null || entry.recipe() == null) {
+            return "";
+        }
+        Object recipe = entry.recipe();
+        if (recipe instanceof RecipeHolder<?> holder) {
+            return "RecipeHolder(" + holder.value().getClass().getName() + ")";
+        }
+        return recipe.getClass().getName();
+    }
+
+    private static boolean cacheableUnsupported(@Nullable ResolveError error) {
+        return error == ResolveError.unsupported || error == ResolveError.invalidRecipe;
+    }
+
+    private static final class ResolveStats {
+        private final LongAdder resolved = new LongAdder();
+        private final LongAdder failed = new LongAdder();
+        private final LongAdder unsupported = new LongAdder();
+        private final LongAdder empty = new LongAdder();
+        private final Map<Namespace, LongAdder> unsupportedBySystem = new ConcurrentHashMap<>();
+        private final Map<String, LongAdder> unsupportedByClass = new ConcurrentHashMap<>();
+        private final Map<ResolveError, LongAdder> unsupportedByError = new ConcurrentHashMap<>();
+        private final Map<Namespace, LongAdder> emptyBySystem = new ConcurrentHashMap<>();
+        private final Map<String, LongAdder> emptyByClass = new ConcurrentHashMap<>();
+        private final Map<ResolveError, LongAdder> emptyByError = new ConcurrentHashMap<>();
+    }
+
+    private record RecordBuildResult(
+        @Nullable RecipeDatabaseRecord record,
+        @Nullable ResolveError error
+    ) {
+        private static RecordBuildResult resolved(RecipeDatabaseRecord record) {
+            return new RecordBuildResult(record, null);
+        }
+
+        private static RecordBuildResult empty(@Nullable ResolveError error) {
+            return new RecordBuildResult(null, error);
+        }
+    }
+
+    private static final class StackSearchCache {
+        private final int limit;
+        private final HashMap<StackKey, String> displayNames = new HashMap<>();
+        private final HashMap<StackKey, String> contentIds = new HashMap<>();
+
+        private StackSearchCache(int limit) {
+            this.limit = Math.max(1, limit);
+        }
+
+        private <T, S> String displayName(ContentStack<T, S> stack) {
+            StackKey key = StackKey.of(stack);
+            String cached = displayNames.get(key);
+            if (cached != null) {
+                return cached;
+            }
+            String value = RecipeDatabaseIndex.displayName(stack);
+            if (displayNames.size() < limit) {
+                displayNames.putIfAbsent(key, value);
+            }
+            return value;
+        }
+
+        private <T, S> String contentId(ContentStack<T, S> stack) {
+            StackKey key = StackKey.of(stack);
+            String cached = contentIds.get(key);
+            if (cached != null) {
+                return cached;
+            }
+            String value = RecipeDatabaseIndex.contentId(stack);
+            if (contentIds.size() < limit) {
+                contentIds.putIfAbsent(key, value);
+            }
+            return value;
+        }
+    }
+
+    private record StackKey(
+        Object type,
+        Object content,
+        Object components
+    ) {
+        private static StackKey of(ContentStack<?, ?> stack) {
+            return new StackKey(stack.type(), stack.content(), stack.componentsPatch());
+        }
+    }
+
+    private static RecordBuildResult recordForEntry(
+        DatabaseDefinition database,
+        RecipeEntry<?> entry,
+        List<Namespace> systemTags,
+        StackSearchCache cache
+    ) {
+        if (entry == null) {
+            return RecordBuildResult.empty(ResolveError.unsupported);
+        }
+        ResolveResult result = entry.resolveResult(ResolveContext.empty());
+        if (!result.resolved()) {
+            return RecordBuildResult.empty(result.error());
+        }
+        RecipeProjection projection = snapshotProjection(result.projection());
+        RecipeDatabaseSearchDocument searchDocument = document(database, entry, systemTags, projection, cache);
+        return RecordBuildResult.resolved(new RecipeDatabaseRecord(
             entry,
             database,
             searchDocument,
-            storedProjection,
+            projection,
             systemTags
-        );
+        ));
     }
 
     private static RecipeProjection snapshotProjection(RecipeProjection projection) {
@@ -714,6 +1077,100 @@ public final class RecipeDatabaseIndex {
         );
     }
 
+    private static void recordEmpty(
+        @Nullable ResolveStats stats,
+        WorkItem item,
+        @Nullable ResolveError error
+    ) {
+        if (stats == null) {
+            return;
+        }
+        ResolveError effectiveError = error == null ? ResolveError.unsupported : error;
+        Namespace systemId = item.entry() == null ? Namespace.of("cirrus", "unknown") : item.entry().systemId();
+        String recipeClass = item.recipeClass();
+        if (cacheableUnsupported(effectiveError)) {
+            stats.unsupported.increment();
+            stats.unsupportedByError.computeIfAbsent(effectiveError, ignored -> new LongAdder()).increment();
+            stats.unsupportedBySystem.computeIfAbsent(systemId, ignored -> new LongAdder()).increment();
+            stats.unsupportedByClass.computeIfAbsent(recipeClass, ignored -> new LongAdder()).increment();
+            return;
+        }
+        stats.empty.increment();
+        stats.emptyByError.computeIfAbsent(effectiveError, ignored -> new LongAdder()).increment();
+        stats.emptyBySystem.computeIfAbsent(systemId, ignored -> new LongAdder()).increment();
+        stats.emptyByClass.computeIfAbsent(recipeClass, ignored -> new LongAdder()).increment();
+    }
+
+    private static void logResolveStats(@Nullable ResolveStats stats, int total) {
+        if (stats == null) {
+            return;
+        }
+        long failed = stats.failed.sum();
+        long unsupported = stats.unsupported.sum();
+        long empty = stats.empty.sum();
+        if (failed <= 0 && unsupported <= 0 && empty <= 0) {
+            return;
+        }
+        logger.info(
+            "Recipe database resolve summary: workItems={}, resolved={}, failed={}, unsupported={}, empty={}",
+            total,
+            stats.resolved.sum(),
+            failed,
+            unsupported,
+            empty
+        );
+        logger.info(
+            "Recipe database resolve unsupported top systems: {}",
+            topCounts(stats.unsupportedBySystem, stats.unsupportedBySystem.size(), stats.unsupportedBySystem.size())
+        );
+        logger.info(
+            "Recipe database resolve unsupported top classes: {}",
+            topCounts(stats.unsupportedByClass, stats.unsupportedByClass.size(), stats.unsupportedByClass.size())
+        );
+        logger.info(
+            "Recipe database resolve empty top systems: {}",
+            topCounts(stats.emptyBySystem, stats.emptyBySystem.size(), stats.emptyBySystem.size())
+        );
+        logger.info(
+            "Recipe database resolve empty top classes: {}",
+            topCounts(stats.emptyByClass, stats.emptyByClass.size(), stats.emptyByClass.size())
+        );
+        if (logger.isDebugEnabled()) {
+            logger.debug(
+                "Recipe database resolve empty by error: {}",
+                topCounts(stats.emptyByError, stats.emptyByError.size(), stats.emptyByError.size())
+            );
+            logger.debug(
+                "Recipe database resolve unsupported by error: {}",
+                topCounts(stats.unsupportedByError, stats.unsupportedByError.size(), stats.unsupportedByError.size())
+            );
+        }
+    }
+
+    private static <T> List<String> topCounts(Map<T, LongAdder> counts, int limit, int debugLimit) {
+        if (counts == null || counts.isEmpty() || limit <= 0) {
+            return List.of();
+        }
+        int max = logger.isDebugEnabled() ? Math.max(limit, debugLimit) : Math.min(limit, statsTopLimit);
+        ArrayList<Map.Entry<T, LongAdder>> entries = new ArrayList<>(counts.entrySet());
+        entries.sort((left, right) -> {
+            int cmp = Long.compare(right.getValue().sum(), left.getValue().sum());
+            if (cmp != 0) {
+                return cmp;
+            }
+            return String.valueOf(left.getKey()).compareTo(String.valueOf(right.getKey()));
+        });
+        ArrayList<String> out = new ArrayList<>(Math.min(max, entries.size()));
+        int index = 0;
+        for (Map.Entry<T, LongAdder> entry : entries) {
+            if (index++ >= max) {
+                break;
+            }
+            out.add(entry.getKey() + "=" + entry.getValue().sum());
+        }
+        return out;
+    }
+
     private static ClausedContent<InputContent> snapshotInput(ClausedContent<InputContent> input) {
         return new ClausedContent<>(snapshotContent(input.content()), input.schema(), input.clauses().merge());
     }
@@ -731,7 +1188,8 @@ public final class RecipeDatabaseIndex {
         DatabaseDefinition database,
         RecipeEntry<?> entry,
         List<Namespace> systemTags,
-        @Nullable RecipeProjection projection
+        @Nullable RecipeProjection projection,
+        StackSearchCache cache
     ) {
         RecipeDatabaseSearchDocument.Builder builder = RecipeDatabaseSearchDocument.builder();
         ResourceLocation id = entry.id();
@@ -754,42 +1212,42 @@ public final class RecipeDatabaseIndex {
             builder.text(SearchField.context, tag.toString());
         }
         if (projection != null) {
-            addProjection(builder, projection);
+            addProjection(builder, projection, cache);
         }
         return builder.build();
     }
 
-    private static void addProjection(RecipeDatabaseSearchDocument.Builder builder, RecipeProjection projection) {
+    private static void addProjection(RecipeDatabaseSearchDocument.Builder builder, RecipeProjection projection, StackSearchCache cache) {
         for (ClausedContent<InputContent> input : projection.inputs()) {
-            addContent(builder, SearchField.in, input.content());
+            addContent(builder, SearchField.in, input.content(), cache);
             if (input.content().notConsumed()) {
-                addContent(builder, SearchField.cat, input.content());
+                addContent(builder, SearchField.cat, input.content(), cache);
             }
         }
         for (ClausedContent<OutputContent> output : projection.outputs()) {
-            addContent(builder, SearchField.out, output.content());
+            addContent(builder, SearchField.out, output.content(), cache);
             if (output.content().chance() < RecipeContent.MAX_CHANCE) {
-                addContent(builder, SearchField.byproduct, output.content());
+                addContent(builder, SearchField.byproduct, output.content(), cache);
             }
         }
     }
 
-    private static void addContent(RecipeDatabaseSearchDocument.Builder builder, SearchField field, RecipeContent content) {
+    private static void addContent(RecipeDatabaseSearchDocument.Builder builder, SearchField field, RecipeContent content, StackSearchCache cache) {
         if (content == null || content.isEmpty()) {
             return;
         }
         builder.number(field, content.amount());
         builder.number(SearchField.chance, content.chance());
         switch (content) {
-            case StackContent<?, ?> stack -> addStack(builder, field, stack.content(), content.amount());
+            case StackContent<?, ?> stack -> addStack(builder, field, stack.content(), content.amount(), cache);
             case StackListContent list -> {
                 for (var stack : list.stacks()) {
-                    addStack(builder, field, stack, content.amount());
+                    addStack(builder, field, stack, content.amount(), cache);
                 }
             }
             case TypedStackListContent<?, ?> list -> {
                 for (var stack : list.stacks()) {
-                    addStack(builder, field, stack, content.amount());
+                    addStack(builder, field, stack, content.amount(), cache);
                 }
             }
             case TagStackContent<?> tag -> {
@@ -806,18 +1264,21 @@ public final class RecipeDatabaseIndex {
         RecipeDatabaseSearchDocument.Builder builder,
         SearchField field,
         ContentStack<T, S> stack,
-        double amount
+        double amount,
+        StackSearchCache cache
     ) {
         if (stack == null || stack.isEmpty()) {
             return;
         }
         ContentKind nameKind = stack.isFluid() ? ContentKind.fluidName : stack.isItem() ? ContentKind.itemName : ContentKind.otherName;
         ContentKind idKind = stack.isFluid() ? ContentKind.fluidId : stack.isItem() ? ContentKind.itemId : ContentKind.otherId;
-        builder.searchableContentAliases(field, nameAliases(stack), amount, nameKind);
-        builder.searchableContentAliases(idField(field), List.of(
-            contentId(stack),
-            stack.type().toString(stack.value())
-        ), amount, idKind);
+        if (stack.isItem() || stack.isFluid()) {
+            builder.searchableContent(field, cache.displayName(stack), amount, nameKind);
+        } else {
+            builder.searchableContent(field, stack.type().toString(stack.value()), amount, nameKind);
+        }
+        builder.searchableContent(idField(field), cache.contentId(stack), amount, idKind);
+        builder.searchableContent(idField(field), stack.type().toString(stack.value()), amount, idKind);
     }
 
     private static <T> void addValue(
@@ -829,12 +1290,8 @@ public final class RecipeDatabaseIndex {
         if (value == null) {
             return;
         }
-        builder.searchableContentAliases(field, List.of(
-            value.type().toString(value.content())
-        ), amount, ContentKind.otherName);
-        builder.searchableContentAliases(idField(field), List.of(
-            value.type().typeId().toString()
-        ), amount, ContentKind.otherId);
+        builder.searchableContent(field, value.type().toString(value.content()), amount, ContentKind.otherName);
+        builder.searchableContent(idField(field), value.type().typeId().toString(), amount, ContentKind.otherId);
         builder.number(field, value.value());
         if (value.type().typeId().path().contains("time")) {
             builder.number(SearchField.time, value.value());
@@ -856,13 +1313,6 @@ public final class RecipeDatabaseIndex {
 
     private static <T, S> String displayName(ContentStack<T, S> stack) {
         return stack.type().toItemStack(stack).getHoverName().getString();
-    }
-
-    private static <T, S> List<String> nameAliases(ContentStack<T, S> stack) {
-        if (stack.isItem() || stack.isFluid()) {
-            return List.of(displayName(stack));
-        }
-        return List.of(stack.type().toString(stack.value()));
     }
 
     private static <T, S> String contentId(ContentStack<T, S> stack) {
@@ -907,12 +1357,87 @@ public final class RecipeDatabaseIndex {
             .thenComparing(DatabaseDefinition::id);
     }
 
-    private record WorkItem(DatabaseDefinition database, RecipeEntry<?> entry, List<Namespace> tags) {
+    private record WorkItem(
+        DatabaseDefinition database,
+        RecipeEntry<?> entry,
+        List<Namespace> tags,
+        @Nullable DatabaseRecipeRef ref,
+        String recipeClass
+    ) {
+        private WorkItem(DatabaseDefinition database, RecipeEntry<?> entry, List<Namespace> tags) {
+            this(database, entry, tags, recipeRef(entry), RecipeDatabaseIndex.recipeClass(entry));
+        }
+    }
+
+    private static WorkItemDedupResult dedupeWorkItems(List<WorkItem> items) {
+        if (items.size() <= 1) {
+            return new WorkItemDedupResult(new ArrayList<>(items), 0);
+        }
+        ArrayList<WorkItem> deduped = new ArrayList<>(items.size());
+        Set<DatabaseRecipeRef> seenRefs = new HashSet<>();
+        Set<RecipeEntry<?>> seenEntriesWithoutRef = new HashSet<>();
+        int duplicates = 0;
+        for (WorkItem item : items) {
+            DatabaseRecipeRef ref = item.ref();
+            boolean first = ref == null
+                ? seenEntriesWithoutRef.add(item.entry())
+                : seenRefs.add(ref);
+            if (first) {
+                deduped.add(item);
+            } else {
+                duplicates++;
+            }
+        }
+        return new WorkItemDedupResult(deduped, duplicates);
+    }
+
+    private record WorkItemDedupResult(
+        ArrayList<WorkItem> items,
+        int duplicates
+    ) {
     }
 
     @FunctionalInterface
     private interface RangeTask {
         void run(int fromInclusive, int toExclusive);
+    }
+
+    private static void parallelChunks(int total, int chunkSize, String threadNamePrefix, RangeTask task) {
+        if (total <= 0) {
+            return;
+        }
+        int workers = Math.min(total, Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
+        if (workers <= 1 || total < workers * 2) {
+            task.run(0, total);
+            return;
+        }
+        int chunk = Math.max(1, chunkSize);
+        AtomicInteger next = new AtomicInteger();
+        ExecutorService executor = Executors.newFixedThreadPool(workers, daemonThreadFactory(threadNamePrefix));
+        try {
+            ArrayList<Future<?>> futures = new ArrayList<>(workers);
+            for (int worker = 0; worker < workers; worker++) {
+                futures.add(executor.submit(() -> {
+                    while (true) {
+                        int from = next.getAndAdd(chunk);
+                        if (from >= total) {
+                            return;
+                        }
+                        task.run(from, Math.min(total, from + chunk));
+                    }
+                }));
+            }
+            for (Future<?> future : futures) {
+                future.get();
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while building recipe database records", exception);
+        } catch (ExecutionException exception) {
+            throw new IllegalStateException("Failed to build recipe database records", exception.getCause());
+        } finally {
+            executor.shutdown();
+        }
     }
 
     private static void parallelRanges(int total, String threadNamePrefix, RangeTask task) {
@@ -965,6 +1490,45 @@ public final class RecipeDatabaseIndex {
         return (done & 1023) == 0;
     }
 
+    private static void logBuildProgress(
+        String stage,
+        int done,
+        int total,
+        long startNanos,
+        @Nullable AtomicInteger lastBucket
+    ) {
+        if (!logger.isDebugEnabled() || lastBucket == null || total <= 0) {
+            return;
+        }
+        int bucket = done >= total ? Integer.MAX_VALUE : done >>> 15;
+        while (true) {
+            int previous = lastBucket.get();
+            if (bucket <= previous) {
+                return;
+            }
+            if (lastBucket.compareAndSet(previous, bucket)) {
+                break;
+            }
+        }
+        long elapsedNanos = Math.max(1L, System.nanoTime() - startNanos);
+        long elapsedMs = nanosToMillis(elapsedNanos);
+        long ratePerSecond = elapsedNanos <= 0 ? 0L : done * 1_000_000_000L / elapsedNanos;
+        Runtime runtime = Runtime.getRuntime();
+        long usedMiB = (runtime.totalMemory() - runtime.freeMemory()) >> 20;
+        long committedMiB = runtime.totalMemory() >> 20;
+        logger.debug(
+            "Recipe database build progress: stage={}, done={}, total={}, percent={}%, elapsedMs={}, ratePerSecond={}, heapUsedMiB={}, heapCommittedMiB={}",
+            stage,
+            done,
+            total,
+            total == 0 ? 100 : done * 100L / total,
+            elapsedMs,
+            ratePerSecond,
+            usedMiB,
+            committedMiB
+        );
+    }
+
     private static long nanosToMillis(long nanos) {
         return nanos / 1_000_000L;
     }
@@ -978,6 +1542,14 @@ public final class RecipeDatabaseIndex {
                 values = java.util.Arrays.copyOf(values, values.length + Math.max(8, values.length));
             }
             values[size++] = value;
+        }
+
+        private int get(int index) {
+            return values[index];
+        }
+
+        private int size() {
+            return size;
         }
 
         private int[] toArray() {

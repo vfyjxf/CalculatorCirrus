@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 
 import com.mojang.blaze3d.platform.Lighting;
+import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
@@ -38,12 +39,16 @@ import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.api.ui.scroll.ScrollState;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipStack;
+import dev.vfyjxf.cloudlib.api.ui.texture.BatchableTexture;
 import dev.vfyjxf.cloudlib.api.ui.texture.ImageTexture;
 import dev.vfyjxf.cloudlib.api.ui.texture.SizedTexture;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
@@ -131,6 +136,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private static final int tagCandidateCell = 16;
     private static final int candidateScrollbarW = 6;
     private static final int maxTreeWidth = 3500;  // Width cap for auto-collapse
+    private static final int maxLayoutCoordinate = 1_000_000_000;
     private static final float minZoom = 0.15f;
     private static final float maxZoom = 3.0f;
     private static final float detailLodZoom = 0.10f;
@@ -189,6 +195,51 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     private record DeferredItem(ItemStack stack, int x, int y, float scale) {}
     private record DeferredFluid(FluidStack fluid, int x, int y, float scale, float pt) {}
+    private record LayerRange(int first, int last) {
+        private boolean isEmpty() {
+            return last < first;
+        }
+    }
+    private record RenderOrigin(int x, int y) {
+        private int localX(int worldX) {
+            return localCoord(worldX, x);
+        }
+
+        private int localY(int worldY) {
+            return localCoord(worldY, y);
+        }
+    }
+    private static final class DynamicResourceTexture implements SizedTexture, BatchableTexture {
+        private final ResourceLocation location;
+        private final int width;
+        private final int height;
+
+        private DynamicResourceTexture(ResourceLocation location, int width, int height) {
+            this.location = location;
+            this.width = width;
+            this.height = height;
+        }
+
+        @Override
+        public int width() {
+            return width;
+        }
+
+        @Override
+        public int height() {
+            return height;
+        }
+
+        @Override
+        public void render(GuiGraphics graphics, int x, int y, int width, int height) {
+            graphics.blit(location, x, y, width, height, 0, 0, this.width, this.height, this.width, this.height);
+        }
+
+        @Override
+        public void emit(VertexEmitter emitter, float x, float y, float width, float height, int color) {
+            emitter.textured(location, x, y, width, height, 0.0f, 0.0f, 1.0f, 1.0f, color);
+        }
+    }
     private static final class RenderSession {
         private final SceneCanvas canvas;
         private final float pt;
@@ -495,6 +546,10 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         int lastLayer(int maxDepth) {
             return Math.min(maxDepth, (int) Math.floor(maxY / rowH) + 1);
         }
+
+        LayerRange layerRange(int maxDepth) {
+            return new LayerRange(firstLayer(), lastLayer(maxDepth));
+        }
     }
     public record ContentCandidateSelection(String pathId, String inputKey, String variantKey, int visualIndex) {}
 
@@ -582,7 +637,6 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private Map<String, LayoutNode> layoutNodeByPath = Map.of();
     private Map<Integer, List<LayoutNode>> layerNodes = Map.of();
     private Map<Integer, List<LayoutNode>> layerNodesByX = Map.of();
-    private Map<Integer, List<LayoutLink>> layerLinks = Map.of();
     private int maxDepth = 0;
     private int layoutWidth = 2000, layoutHeight = 1000;
     // Minimap bounding box (world coords, computed from flatNodes)
@@ -591,6 +645,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private Set<String> userExpandedPaths = new HashSet<>();
     private boolean forceExpandAll = false;
     private @Nullable String trackedNodeId = null;
+    private Set<String> trackedPathIds = Set.of();
     private int highlightedLayer = -1;  // -1 = none
     private @Nullable LayoutNode fullRootLayout;
     private String currentRootPathId = "root";
@@ -663,16 +718,8 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private final ArrayList<LayoutNode> visibleNodesScratch = new ArrayList<>(256);
     private final ArrayList<LayoutLink> visibleLinksScratch = new ArrayList<>(256);
     private final ArrayList<LayoutNode> visibleTrackedNodesScratch = new ArrayList<>(32);
-    private final ArrayList<LayoutNode> visibleNormalNodesScratch = new ArrayList<>(224);
     private final ArrayList<LayoutLink> visibleTrackedLinksScratch = new ArrayList<>(32);
-    private final ArrayList<LayoutLink> visibleNormalLinksScratch = new ArrayList<>(224);
     private int[] minimapPixelScratch = new int[0];
-    private int[] minimapRunX = new int[256];
-    private int[] minimapRunY = new int[256];
-    private int[] minimapRunW = new int[256];
-    private int[] minimapRunH = new int[256];
-    private int[] minimapRunColor = new int[256];
-    private int minimapRunCount = 0;
     private boolean minimapRunsDirty = true;
     private int minimapCacheContentW = -1;
     private int minimapCacheContentH = -1;
@@ -685,16 +732,23 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private double minimapCacheScale = -1.0;
     private double minimapCacheDrawX = 0.0;
     private double minimapCacheDrawY = 0.0;
-    private @Nullable String minimapCacheTrackedNodeId = null;
+    private @Nullable DynamicTexture minimapTexture;
+    private @Nullable ResourceLocation minimapTextureLocation;
+    private @Nullable SizedTexture minimapTextureView;
+    private int minimapTextureW = -1;
+    private int minimapTextureH = -1;
     private final String[] layerLabelCache = new String[maxLayerLabelCache];
     private final Map<String, List<LayoutNode>> pathChildrenCache = new HashMap<>();
     private final Map<String, List<ProcessEdge>> incomingEdgesByNodeId = new HashMap<>();
     private final Map<String, List<MachineInfo>> machineCandidatesByNodeId = new HashMap<>();
+    private final ArrayDeque<String> layoutBuildStack = new ArrayDeque<>();
+    private final HashSet<String> layoutBuildStackIds = new HashSet<>();
     //endregion
 
     //region Constructor
     public TreeCanvasWidget() {
         setFocusable(true);
+        onDestroy(self -> releaseMinimapTexture());
         onMouseClicked((input, ctx) -> {
             FloatPos local = input.mouseRelative(TreeCanvasWidget.this);
             double mx = local.x(), my = local.y();
@@ -1352,7 +1406,30 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             return;
         }
         this.trackedNodeId = pathId;
+        rebuildTrackedPathCache();
         markMinimapDirty();
+    }
+
+    private void rebuildTrackedPathCache() {
+        if (trackedNodeId == null || trackedNodeId.isBlank() || layoutNodeByPath.isEmpty()) {
+            trackedPathIds = Set.of();
+            return;
+        }
+        String[] parts = trackedNodeId.split("-");
+        LinkedHashSet<String> ids = new LinkedHashSet<>(parts.length);
+        StringBuilder current = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i == 0) {
+                current.append(parts[i]);
+            } else {
+                current.append("-").append(parts[i]);
+            }
+            String path = current.toString();
+            if (layoutNodeByPath.containsKey(path)) {
+                ids.add(path);
+            }
+        }
+        trackedPathIds = ids.isEmpty() ? Set.of() : Set.copyOf(ids);
     }
 
     /** Highlight a node from external UI (e.g., path breadcrumbs). */
@@ -1542,9 +1619,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         this.flatLinks = fLinks;
         this.layoutNodeByPath = indexLayoutNodes(fNodes);
         this.layerNodes = freezeLayerNodes(lNodes, false);
-        this.layerNodesByX = this.layerNodes;
-        this.layerLinks = indexLayoutLinks(fLinks);
+        this.layerNodesByX = freezeLayerNodes(lNodes, true);
         updateLayoutMetrics(fNodes, 0);
+        rebuildTrackedPathCache();
         markMinimapDirty();
     }
 
@@ -1567,7 +1644,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         this.machineCandidatePanelNodeId = null;
         this.contentCandidatePanelNodeId = null;
         this.trackedNodeId = null;
-        this.minimapCacheTrackedNodeId = null;
+        this.trackedPathIds = Set.of();
         this.minimapRunsDirty = true;
         this.forceExpandAll = false;
         this.selectedMachineByPath.clear();
@@ -1618,7 +1695,8 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             rootLayout = null; fullRootLayout = null;
             flatNodes = List.of(); flatLinks = List.of();
             layoutNodeByPath = Map.of();
-            layerNodes = Map.of(); layerLinks = Map.of(); maxDepth = 0;
+            layerNodes = Map.of(); layerNodesByX = Map.of(); maxDepth = 0;
+            rebuildTrackedPathCache();
             clearRenderCaches();
             return;
         }
@@ -1628,7 +1706,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             collapseLevel = 0;
             for (int attempt = 0; attempt < 6; attempt++) {
                 pathChildrenCache.clear();
-                fullRootLayout = buildLayoutTree(targetNode, 0, "root");
+                fullRootLayout = buildLayoutTreeRoot(targetNode);
                 computeWidths(fullRootLayout);
                 if (fullRootLayout.treeWidth <= maxTreeWidth) break;
                 collapseLevel++;
@@ -1636,7 +1714,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         } else {
             // User-initiated toggle: keep current collapseLevel, just rebuild once
             pathChildrenCache.clear();
-            fullRootLayout = buildLayoutTree(targetNode, 0, "root");
+            fullRootLayout = buildLayoutTreeRoot(targetNode);
             computeWidths(fullRootLayout);
         }
 
@@ -1650,7 +1728,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             flatLinks = List.of();
             layoutNodeByPath = Map.of();
             layerNodes = Map.of();
-            layerLinks = Map.of();
+            layerNodesByX = Map.of();
             maxDepth = 0;
             layoutWidth = 500;
             layoutHeight = 500;
@@ -1658,6 +1736,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             mmWorldMinY = 0;
             mmWorldW = 1;
             mmWorldH = 1;
+            rebuildTrackedPathCache();
             markMinimapDirty();
             return;
         }
@@ -1684,9 +1763,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         this.flatLinks = fLinks;
         this.layoutNodeByPath = indexLayoutNodes(fNodes);
         this.layerNodes = freezeLayerNodes(lNodes, false);
-        this.layerNodesByX = this.layerNodes;
-        this.layerLinks = indexLayoutLinks(fLinks);
+        this.layerNodesByX = freezeLayerNodes(lNodes, true);
         updateLayoutMetrics(fNodes, fullRootLayout.treeWidth + offsetX * 2);
+        rebuildTrackedPathCache();
         markMinimapDirty();
 
         // Auto-track the deepest main trunk node
@@ -1791,10 +1870,22 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         minimapRunsDirty = true;
     }
 
+    private void releaseMinimapTexture() {
+        if (minimapTextureLocation != null) {
+            Minecraft.getInstance().getTextureManager().release(minimapTextureLocation);
+        } else if (minimapTexture != null) {
+            minimapTexture.close();
+        }
+        minimapTexture = null;
+        minimapTextureLocation = null;
+        minimapTextureView = null;
+        minimapTextureW = -1;
+        minimapTextureH = -1;
+    }
+
     private void ensureMinimapRuns(SceneCanvas canvas) {
         MinimapProjection proj = minimapProjection();
         if (proj == null) {
-            minimapRunCount = 0;
             minimapRunsDirty = false;
             return;
         }
@@ -1811,8 +1902,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
                 && minimapCacheLinkCount == flatLinks.size()
                 && Double.compare(minimapCacheScale, proj.scale) == 0
                 && Double.compare(minimapCacheDrawX, proj.drawX) == 0
-                && Double.compare(minimapCacheDrawY, proj.drawY) == 0
-                && Objects.equals(minimapCacheTrackedNodeId, trackedNodeId)) {
+                && Double.compare(minimapCacheDrawY, proj.drawY) == 0) {
             return;
         }
         rebuildMinimapRuns(proj, canvas);
@@ -1822,7 +1912,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         int contentW = proj.contentW;
         int contentH = proj.contentH;
         if (contentW <= 0 || contentH <= 0 || mmWorldW <= 0 || mmWorldH <= 0) {
-            minimapRunCount = 0;
+            releaseMinimapTexture();
             minimapRunsDirty = false;
             minimapCacheContentW = contentW;
             minimapCacheContentH = contentH;
@@ -1835,7 +1925,6 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             minimapCacheScale = proj.scale;
             minimapCacheDrawX = proj.drawX;
             minimapCacheDrawY = proj.drawY;
-            minimapCacheTrackedNodeId = trackedNodeId;
             return;
         }
         int pixelCount = contentW * contentH;
@@ -1869,7 +1958,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             stampMinimapRect(contentW, contentH, rx, ry, rw, rh, color);
         }
 
-        compactMinimapRuns(contentW, contentH);
+        uploadMinimapTexture(contentW, contentH);
         minimapRunsDirty = false;
         minimapCacheContentW = contentW;
         minimapCacheContentH = contentH;
@@ -1882,64 +1971,35 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         minimapCacheScale = proj.scale;
         minimapCacheDrawX = proj.drawX;
         minimapCacheDrawY = proj.drawY;
-        minimapCacheTrackedNodeId = trackedNodeId;
     }
 
-    private void compactMinimapRuns(int contentW, int contentH) {
-        minimapRunCount = 0;
-        Map<Long, Integer> activeRuns = new HashMap<>();
+    private void uploadMinimapTexture(int contentW, int contentH) {
+        if (minimapTexture == null || minimapTextureW != contentW || minimapTextureH != contentH) {
+            releaseMinimapTexture();
+            minimapTexture = new DynamicTexture(contentW, contentH, true);
+            minimapTextureLocation = Minecraft.getInstance().getTextureManager().register("cirrus_tree_minimap", minimapTexture);
+            minimapTextureView = new DynamicResourceTexture(minimapTextureLocation, contentW, contentH);
+            minimapTextureW = contentW;
+            minimapTextureH = contentH;
+        }
+        NativeImage pixels = minimapTexture.getPixels();
+        if (pixels == null) {
+            minimapTextureView = null;
+            return;
+        }
         int index = 0;
         for (int y = 0; y < contentH; y++) {
-            Map<Long, Integer> nextActiveRuns = new HashMap<>();
-            int x = 0;
-            while (x < contentW) {
-                int color = minimapPixelScratch[index + x];
-                if (color == 0) {
-                    x++;
-                    continue;
-                }
-                int start = x;
-                while (x < contentW && minimapPixelScratch[index + x] == color) {
-                    x++;
-                }
-                int width = x - start;
-                long key = minimapRunKey(start, width, color);
-                Integer activeIndex = activeRuns.get(key);
-                if (activeIndex != null) {
-                    minimapRunH[activeIndex]++;
-                    nextActiveRuns.put(key, activeIndex);
-                } else {
-                    int runIndex = appendMinimapRun(start, y, width, 1, color);
-                    nextActiveRuns.put(key, runIndex);
-                }
+            for (int x = 0; x < contentW; x++) {
+                pixels.setPixelRGBA(x, y, argbToAbgr(minimapPixelScratch[index++]));
             }
-            index += contentW;
-            activeRuns = nextActiveRuns;
         }
+        minimapTexture.upload();
     }
 
-    private static long minimapRunKey(int x, int w, int color) {
-        return ((long) (x & 0xFFFF) << 48)
-                | ((long) (w & 0xFFFF) << 32)
-                | (color & 0xFFFFFFFFL);
-    }
-
-    private int appendMinimapRun(int x, int y, int w, int h, int color) {
-        if (w <= 0 || h <= 0) return -1;
-        if (minimapRunCount == minimapRunX.length) {
-            int newCap = minimapRunCount + Math.max(64, minimapRunCount >> 1);
-            minimapRunX = Arrays.copyOf(minimapRunX, newCap);
-            minimapRunY = Arrays.copyOf(minimapRunY, newCap);
-            minimapRunW = Arrays.copyOf(minimapRunW, newCap);
-            minimapRunH = Arrays.copyOf(minimapRunH, newCap);
-            minimapRunColor = Arrays.copyOf(minimapRunColor, newCap);
-        }
-        minimapRunX[minimapRunCount] = x;
-        minimapRunY[minimapRunCount] = y;
-        minimapRunW[minimapRunCount] = w;
-        minimapRunH[minimapRunCount] = h;
-        minimapRunColor[minimapRunCount] = color;
-        return minimapRunCount++;
+    private static int argbToAbgr(int argb) {
+        return (argb & 0xFF00FF00)
+                | ((argb & 0x00FF0000) >>> 16)
+                | ((argb & 0x000000FF) << 16);
     }
 
     private void stampMinimapRect(int contentW, int contentH, int x, int y, int w, int h, int color) {
@@ -1987,6 +2047,12 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         return v;
     }
 
+    private LayoutNode buildLayoutTreeRoot(ProcessNode pn) {
+        layoutBuildStack.clear();
+        layoutBuildStackIds.clear();
+        return buildLayoutTree(pn, 0, "root");
+    }
+
     private LayoutNode buildLayoutTree(ProcessNode pn, int depth, String pathId) {
         LayoutNode node = new LayoutNode(pn, pathId, depth);
 
@@ -1995,6 +2061,14 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         node.incomingEdges = incoming;
         node.originalChildCount = incoming.size();
         node.renderModel = createRenderModel(node, pn);
+
+        boolean cycleTerminus = layoutBuildStackIds.contains(pn.id());
+        if (cycleTerminus) {
+            node.originalChildCount = 0;
+            node.collapsed = true;
+            node.autoCollapsed = true;
+            return node;
+        }
 
         // Auto-collapse heuristic — aggressiveness increases with collapseLevel
         boolean shouldAutoCollapse = false;
@@ -2012,8 +2086,15 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         node.collapsed = isCollapsed;
         node.autoCollapsed = shouldAutoCollapse && !userExpandedPaths.contains(pathId) && !collapsedPaths.contains(pathId);
 
-        if (!isCollapsed) {
-            ensureChildrenBuilt(node);
+        layoutBuildStack.addLast(pn.id());
+        layoutBuildStackIds.add(pn.id());
+        try {
+            if (!isCollapsed) {
+                ensureChildrenBuilt(node);
+            }
+        } finally {
+            layoutBuildStack.removeLast();
+            layoutBuildStackIds.remove(pn.id());
         }
         return node;
     }
@@ -2025,6 +2106,24 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (!node.children.isEmpty() || node.originalChildCount <= 0) {
             return;
         }
+        boolean seededCurrent = false;
+        String currentNodeId = node.processNode.id();
+        if (!layoutBuildStackIds.contains(currentNodeId)) {
+            layoutBuildStack.addLast(currentNodeId);
+            layoutBuildStackIds.add(currentNodeId);
+            seededCurrent = true;
+        }
+        try {
+            ensureChildrenBuiltWithActiveStack(node);
+        } finally {
+            if (seededCurrent) {
+                layoutBuildStack.removeLast();
+                layoutBuildStackIds.remove(currentNodeId);
+            }
+        }
+    }
+
+    private void ensureChildrenBuiltWithActiveStack(LayoutNode node) {
         String cacheKey = childCacheKey(node);
         List<LayoutNode> cached = pathChildrenCache.get(cacheKey);
         if (cached != null) {
@@ -2057,29 +2156,37 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (n.children.isEmpty() || n.collapsed) {
             n.treeWidth = nodeW;
         } else {
-            int w = 0;
+            long w = 0;
             for (int i = 0; i < n.children.size(); i++) {
                 computeWidths(n.children.get(i));
                 w += n.children.get(i).treeWidth;
                 if (i > 0) w += gapX;
+                if (w >= maxLayoutCoordinate) {
+                    w = maxLayoutCoordinate;
+                    break;
+                }
             }
-            n.treeWidth = Math.max(nodeW, w);
+            n.treeWidth = Math.max(nodeW, clampLayoutCoordinate(w));
         }
     }
 
     private void assignPositions(LayoutNode n, int startX) {
-        n.x = startX + n.treeWidth / 2 - nodeW / 2;
-        n.y = n.depth * rowH + (rowH / 2 - nodeH / 2);
+        n.x = clampLayoutCoordinate((long) startX + n.treeWidth / 2L - nodeW / 2L);
+        n.y = clampLayoutCoordinate((long) n.depth * rowH + (rowH / 2 - nodeH / 2));
 
         if (!n.collapsed && !n.children.isEmpty()) {
-            int childrenSum = Math.max(0, n.children.size() - 1) * gapX;
+            long childrenSum = (long) Math.max(0, n.children.size() - 1) * gapX;
             for (LayoutNode child : n.children) {
                 childrenSum += child.treeWidth;
+                if (childrenSum >= maxLayoutCoordinate) {
+                    childrenSum = maxLayoutCoordinate;
+                    break;
+                }
             }
-            int offset = startX + (n.treeWidth - childrenSum) / 2;
+            int offset = clampLayoutCoordinate((long) startX + (n.treeWidth - childrenSum) / 2L);
             for (LayoutNode c : n.children) {
                 assignPositions(c, offset);
-                offset += c.treeWidth + gapX;
+                offset = saturatingAdd(offset, saturatingAdd(c.treeWidth, gapX));
             }
         }
     }
@@ -2090,7 +2197,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         byLayer.computeIfAbsent(n.depth, k -> new ArrayList<>()).add(n);
         if (!n.collapsed) {
             for (LayoutNode c : n.children) {
-                links.add(new LayoutLink(n, c, n.pathId + "->" + c.pathId));
+                LayoutLink link = new LayoutLink(n, c, n.pathId + "->" + c.pathId);
+                c.incomingLink = link;
+                links.add(link);
                 flatten(c, nodes, links, byLayer);
             }
         }
@@ -2124,37 +2233,6 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             if (sortByX) {
                 copy.sort(Comparator.comparingInt(node -> node.x));
             }
-            out.put(layer, List.copyOf(copy));
-        }
-        return out;
-    }
-
-    private static Map<Integer, List<LayoutLink>> indexLayoutLinks(List<LayoutLink> links) {
-        if (links.isEmpty()) {
-            return Map.of();
-        }
-        Map<Integer, List<LayoutLink>> byLayer = new HashMap<>();
-        for (LayoutLink link : links) {
-            byLayer.computeIfAbsent(link.source.depth, ignored -> new ArrayList<>()).add(link);
-        }
-        return freezeLayerLinks(byLayer);
-    }
-
-    private static Map<Integer, List<LayoutLink>> freezeLayerLinks(Map<Integer, List<LayoutLink>> source) {
-        if (source.isEmpty()) {
-            return Map.of();
-        }
-        ArrayList<Integer> layers = new ArrayList<>(source.keySet());
-        layers.sort(Integer::compareTo);
-        LinkedHashMap<Integer, List<LayoutLink>> out = new LinkedHashMap<>(layers.size());
-        for (Integer layer : layers) {
-            List<LayoutLink> links = source.getOrDefault(layer, List.of());
-            if (links.isEmpty()) {
-                out.put(layer, List.of());
-                continue;
-            }
-            ArrayList<LayoutLink> copy = new ArrayList<>(links);
-            copy.sort(Comparator.comparingInt(link -> link.target.x));
             out.put(layer, List.copyOf(copy));
         }
         return out;
@@ -2606,15 +2684,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         canvas.withClip(abs.x(), abs.y(), vw, height(), () -> {
             WorldViewport viewport = worldViewport(vw, height());
             drawLayerOverlay(canvas, font);
+            RenderOrigin origin = renderOrigin(viewport);
             canvas.pushTransform();
             canvas.scale(zoom);
-            canvas.translate((float) -panX, (float) -panY);
+            canvas.translate((float) (origin.x() - panX), (float) (origin.y() - panY));
 
             drawGrid(canvas);
-            drawLayerBands(canvas, font);
+            drawLayerBands(canvas, font, origin);
             collectVisibleTreeBatch(viewport, visibleNodesScratch, visibleLinksScratch);
-            drawConnections(canvas, visibleLinksScratch);
-            renderVisibleTreeBatch(canvas, font, visibleNodesScratch, partialTicks);
+            drawConnections(canvas, visibleLinksScratch, origin);
+            renderVisibleTreeBatch(canvas, font, visibleNodesScratch, partialTicks, origin);
             canvas.popTransform();
         });
 
@@ -2630,29 +2709,56 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         // Intentionally left blank: user requested removing background dot grid.
     }
 
-    private void drawLayerBands(SceneCanvas canvas, Font font) {
-        double visMinY = panY, visMaxY = panY + height() / zoom;
-        int bandX = (int) (panX - 200);
-        int bandW = (int) (viewportW() / zoom + 400);
+    private RenderOrigin renderOrigin(WorldViewport viewport) {
+        return new RenderOrigin((int) Math.floor(viewport.minX()), (int) Math.floor(viewport.minY()));
+    }
 
-        for (int i = 0; i <= maxDepth; i++) {
+    private static int localCoord(int world, int origin) {
+        long local = (long) world - origin;
+        if (local < Integer.MIN_VALUE) return Integer.MIN_VALUE;
+        if (local > Integer.MAX_VALUE) return Integer.MAX_VALUE;
+        return (int) local;
+    }
+
+    private static int saturatingAdd(int a, int b) {
+        long value = (long) a + b;
+        return clampLayoutCoordinate(value);
+    }
+
+    private static int clampLayoutCoordinate(long value) {
+        if (value < -maxLayoutCoordinate) return -maxLayoutCoordinate;
+        if (value > maxLayoutCoordinate) return maxLayoutCoordinate;
+        return (int) value;
+    }
+
+    private void drawLayerBands(SceneCanvas canvas, Font font, RenderOrigin origin) {
+        double visMinY = panY, visMaxY = panY + height() / zoom;
+        int bandX = localCoord((int) (panX - 200), origin.x());
+        int bandW = (int) (viewportW() / zoom + 400);
+        LayerRange range = visibleLayerRange();
+        if (range.isEmpty()) {
+            return;
+        }
+
+        for (int i = range.first(); i <= range.last(); i++) {
             int bandTop = i * rowH;
             int bandBot = bandTop + rowH;
             if (bandBot < visMinY || bandTop > visMaxY) continue;
+            int localBandTop = origin.localY(bandTop);
 
             boolean isHighlighted = (i == highlightedLayer);
 
             // Alternating band background (even layers slightly lighter)
             if (isHighlighted) {
-                canvas.fill(bandX, bandTop, bandW, rowH, withAlpha(green, 0x30));
+                canvas.fill(bandX, localBandTop, bandW, rowH, withAlpha(green, 0x30));
             } else if (i % 2 == 0) {
-                canvas.fill(bandX, bandTop, bandW, rowH, 0x30FFFFFF);
+                canvas.fill(bandX, localBandTop, bandW, rowH, 0x30FFFFFF);
             }
 
             // Horizontal divider line at top of layer
-            canvas.fill(bandX, bandTop, bandW, 1, isHighlighted ? withAlpha(green, 0xD8) : layerLine);
+            canvas.fill(bandX, localBandTop, bandW, 1, isHighlighted ? withAlpha(green, 0xD8) : layerLine);
             if (isHighlighted) {
-                canvas.fill(bandX, bandBot - 1, bandW, 1, withAlpha(green, 0xD8));
+                canvas.fill(bandX, origin.localY(bandBot - 1), bandW, 1, withAlpha(green, 0xD8));
             }
 
         }
@@ -2666,8 +2772,12 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         double visMaxWX = panX + viewportW() / zoom;
         int worldRepeatAnchorX = 320;
         int worldRepeatSpacing = 500;
+        LayerRange range = visibleLayerRange();
+        if (range.isEmpty()) {
+            return;
+        }
 
-        for (int i = 0; i <= maxDepth; i++) {
+        for (int i = range.first(); i <= range.last(); i++) {
             int bandTopWorld = i * rowH;
             int bandBottomWorld = bandTopWorld + rowH;
             int bandTop = (int) Math.round((bandTopWorld - panY) * zoom);
@@ -2700,9 +2810,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     // ═══════════════════ Connections (Manhattan routing) ═══════════════════
 
     private boolean isNodeInTrackedPath(String nodeId) {
-        if (trackedNodeId == null) return false;
-        if (nodeId.equals(trackedNodeId)) return true;
-        return trackedNodeId.startsWith(nodeId + "-");
+        return trackedPathIds.contains(nodeId);
     }
 
     private WorldViewport worldViewport(int viewportWidth, int viewportHeight) {
@@ -2712,23 +2820,75 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         return new WorldViewport(panX, panY, panX + w / safeZoom, panY + h / safeZoom);
     }
 
+    private LayerRange visibleLayerRange() {
+        return worldViewport(viewportW(), height()).layerRange(maxDepth);
+    }
+
     private void collectVisibleTreeBatch(WorldViewport viewport, List<LayoutNode> nodes, List<LayoutLink> links) {
         nodes.clear();
         links.clear();
-        int firstLayer = viewport.firstLayer();
-        int lastLayer = viewport.lastLayer(maxDepth);
-        for (int layer = firstLayer; layer <= lastLayer; layer++) {
-            for (LayoutNode node : layerNodes.getOrDefault(layer, List.of())) {
-                if (viewport.intersectsNode(node)) {
+        visibleTrackedNodesScratch.clear();
+        visibleTrackedLinksScratch.clear();
+        LayerRange range = viewport.layerRange(maxDepth);
+        if (range.isEmpty()) {
+            return;
+        }
+        for (int layer = range.first(); layer <= range.last(); layer++) {
+            List<LayoutNode> layerList = layerNodesByX.getOrDefault(layer, List.of());
+            int first = firstNodeEndingAfter(layerList, viewport.minX());
+            for (int i = first; i < layerList.size(); i++) {
+                LayoutNode node = layerList.get(i);
+                if (node.x > viewport.maxX()) {
+                    break;
+                }
+                if (!viewport.intersectsNode(node)) {
+                    continue;
+                }
+                LayoutLink incoming = node.incomingLink;
+                if (incoming != null && viewport.intersectsConnection(incoming)) {
+                    if (isNodeInTrackedPath(incoming.target.pathId)) {
+                        visibleTrackedLinksScratch.add(incoming);
+                    } else {
+                        links.add(incoming);
+                    }
+                }
+                if (isNodeInTrackedPath(node.pathId)) {
+                    visibleTrackedNodesScratch.add(node);
+                } else {
                     nodes.add(node);
                 }
             }
-            for (LayoutLink link : layerLinks.getOrDefault(layer, List.of())) {
-                if (viewport.intersectsConnection(link)) {
-                    links.add(link);
-                }
+        }
+        links.addAll(visibleTrackedLinksScratch);
+        nodes.addAll(visibleTrackedNodesScratch);
+    }
+
+    private static int firstNodeEndingAfter(List<LayoutNode> nodes, double worldX) {
+        int low = 0;
+        int high = nodes.size();
+        while (low < high) {
+            int mid = (low + high) >>> 1;
+            if (nodes.get(mid).x + nodeW < worldX) {
+                low = mid + 1;
+            } else {
+                high = mid;
             }
         }
+        return low;
+    }
+
+    private static int firstNodeCenterAfter(List<LayoutNode> nodes, double worldX) {
+        int low = 0;
+        int high = nodes.size();
+        while (low < high) {
+            int mid = (low + high) >>> 1;
+            if (nodes.get(mid).x + nodeW / 2.0 < worldX) {
+                low = mid + 1;
+            } else {
+                high = mid;
+            }
+        }
+        return low;
     }
 
     private String layerLabel(int layer) {
@@ -2743,24 +2903,17 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         return "LAYER " + layer;
     }
 
-    private void drawConnections(SceneCanvas canvas, List<LayoutLink> visibleLinks) {
+    private void drawConnections(SceneCanvas canvas, List<LayoutLink> visibleLinks, RenderOrigin origin) {
         for (LayoutLink link : visibleLinks) {
-            if (!isNodeInTrackedPath(link.target.pathId)) {
-                drawConnection(canvas, link, false);
-            }
-        }
-        for (LayoutLink link : visibleLinks) {
-            if (isNodeInTrackedPath(link.target.pathId)) {
-                drawConnection(canvas, link, true);
-            }
+            drawConnection(canvas, link, isNodeInTrackedPath(link.target.pathId), origin);
         }
     }
 
-    private void drawConnection(SceneCanvas canvas, LayoutLink link, boolean tracked) {
-        int startX = link.source.x + nodeW / 2;
-        int startY = link.source.y + nodeH;
-        int endX = link.target.x + nodeW / 2;
-        int endY = link.target.y;
+    private void drawConnection(SceneCanvas canvas, LayoutLink link, boolean tracked, RenderOrigin origin) {
+        int startX = origin.localX(link.source.x + nodeW / 2);
+        int startY = origin.localY(link.source.y + nodeH);
+        int endX = origin.localX(link.target.x + nodeW / 2);
+        int endY = origin.localY(link.target.y);
         int midY = (startY + endY) / 2;
 
         boolean isCatalyst = link.target.processNode != null && hasCatalystInput(link.target.processNode);
@@ -2870,8 +3023,8 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         // Keep minimap with a single background layer (no extra chrome frame).
         canvas.texture(Background.inset, contentX, contentY, contentW, contentH);
         ensureMinimapRuns(canvas);
-        for (int i = 0; i < minimapRunCount; i++) {
-            canvas.fill(contentX + minimapRunX[i], contentY + minimapRunY[i], minimapRunW[i], minimapRunH[i], minimapRunColor[i]);
+        if (minimapTextureView != null) {
+            canvas.texture(minimapTextureView, contentX, contentY, contentW, contentH);
         }
 
         // Viewport indicator (pan is in world-space, offset by bounding box origin)
@@ -2917,22 +3070,23 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     // ═══════════════════ Node Card ═══════════════════
 
-    private void renderVisibleTreeBatch(SceneCanvas canvas, Font font, List<LayoutNode> visibleNodes, float pt) {
+    private void renderVisibleTreeBatch(SceneCanvas canvas, Font font, List<LayoutNode> visibleNodes, float pt,
+                                        RenderOrigin origin) {
         if (visibleNodes.isEmpty()) {
             return;
         }
         RenderSession session = new RenderSession(canvas, pt);
         try {
             for (LayoutNode node : visibleNodes) {
-                drawNodeCard(canvas, font, node, session);
+                drawNodeCard(canvas, font, node, session, origin);
             }
         } finally {
             session.finish();
         }
     }
 
-    private void drawNodeCard(SceneCanvas canvas, Font font, LayoutNode ln, RenderSession session) {
-        int x = ln.x, y = ln.y;
+    private void drawNodeCard(SceneCanvas canvas, Font font, LayoutNode ln, RenderSession session, RenderOrigin origin) {
+        int x = origin.localX(ln.x), y = origin.localY(ln.y);
         ProcessNode node = ln.processNode;
         if (node == null) return;
 
@@ -2958,9 +3112,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         }
 
         if (recipeNode) {
-            drawStepCard(canvas, font, ln, model, layout, session);
+            drawStepCard(canvas, font, ln, model, layout, session, x, y);
         } else {
-            drawLeafCard(canvas, font, ln, model, layout, session);
+            drawLeafCard(canvas, font, ln, model, layout, session, x, y);
         }
 
         if (ln.originalChildCount > 0) {
@@ -2980,7 +3134,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     }
 
     private void drawStepCard(SceneCanvas canvas, Font font, LayoutNode ln, NodeRenderModel model,
-                              NodeCardLayout layout, RenderSession session) {
+                              NodeCardLayout layout, RenderSession session, int localX, int localY) {
         ProcessNode node = ln.processNode;
         if (node == null) return;
         int slotSize = recipePreviewSlotSize(node.inputs().size(), node.outputs().size(), layout.inputs(), layout.outputs());
@@ -2988,17 +3142,18 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         drawInputZone(canvas, font, node.inputs(), model.inputVisuals(), layout.inputs(), slotSize, session);
         drawFlowArrow(canvas, layout.arrow());
         drawOutputZone(canvas, font, node.outputs(), model.outputVisuals(), layout.outputs(), slotSize, session);
-        drawActionZone(canvas, ln, layout);
+        drawActionZone(canvas, ln, layout, localX, localY);
         if (layout.extension().h() > 0) {
             drawExtensionZone(canvas, font, node, model, false, layout.extension(), session);
         }
     }
 
     private void drawLeafCard(SceneCanvas canvas, Font font, LayoutNode ln, NodeRenderModel model,
-                              NodeCardLayout layout, RenderSession session) {
+                              NodeCardLayout layout, RenderSession session, int localX, int localY) {
         ProcessNode node = ln.processNode;
         if (node == null) return;
-        drawLeafMaterialZone(canvas, font, ln.pathId, node, model, layout.primaryOutput(), layout.candidates(), session);
+        drawLeafMaterialZone(canvas, font, ln.pathId, node, model, layout.primaryOutput(), layout.candidates(),
+                session, localX, localY);
         if (layout.extension().h() > 0) {
             drawExtensionZone(canvas, font, node, model, true, layout.extension(), session);
         }
@@ -3035,13 +3190,13 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     private void drawLeafMaterialZone(SceneCanvas canvas, Font font, String pathId, ProcessNode node,
                                       NodeRenderModel model, CardZone primaryZone, CardZone candidateZone,
-                                      RenderSession session) {
+                                      RenderSession session, int localX, int localY) {
         MaterialSlot primary = model.primaryOutput();
         if (primary == null) {
             return;
         }
         if (model.tagLikePrimary()) {
-            drawTagLeafMaterialZone(canvas, font, pathId, primary, model.primaryVisual(), session);
+            drawTagLeafMaterialZone(canvas, font, pathId, primary, model.primaryVisual(), session, localX, localY);
             return;
         }
         int accent = nodeAccentColorForSlot(primary);
@@ -3089,12 +3244,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     }
 
     private void drawTagLeafMaterialZone(SceneCanvas canvas, Font font, String pathId, MaterialSlot slot,
-                                         @Nullable SlotVisual slotVisual, RenderSession session) {
-        LayoutNode node = findLayoutNode(pathId);
-        if (node == null) {
-            return;
-        }
-        TagLeafCardLayout layout = tagLeafCardLayout(node.x, node.y);
+                                         @Nullable SlotVisual slotVisual, RenderSession session,
+                                         int localX, int localY) {
+        TagLeafCardLayout layout = tagLeafCardLayout(localX, localY);
         CardZone header = layout.header();
         CardZone candidates = layout.candidates();
         CardZone action = layout.action();
@@ -3421,16 +3573,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         canvas.texture(Icon.arrowRight, zone.x(), zone.y(), zone.w(), zone.h());
     }
 
-    private void drawActionZone(SceneCanvas canvas, LayoutNode ln, NodeCardLayout layout) {
+    private void drawActionZone(SceneCanvas canvas, LayoutNode ln, NodeCardLayout layout, int localX, int localY) {
         ProcessNode node = ln.processNode;
         if (node == null) return;
-        int[] projection = projectionButtonBounds(ln.x, ln.y);
+        int[] projection = projectionButtonBounds(localX, localY);
         if (node.recipe() != null) {
             drawActionButton(canvas, projection, Objects.equals(hoveredProjectionNodeId, ln.pathId),
                     Icon.setting, Icon.settingSelected, 10, 10);
         }
         if (ln.originalChildCount > 0) {
-            drawFocusButton(canvas, focusButtonBounds(ln.x, ln.y), isNodeHovered(ln.pathId));
+            drawFocusButton(canvas, focusButtonBounds(localX, localY), isNodeHovered(ln.pathId));
         }
     }
 
@@ -4974,7 +5126,13 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         int firstLayer = Math.max(0, (int) Math.floor((wy - nodeH) / rowH) - 1);
         int lastLayer = Math.min(maxDepth, (int) Math.floor((wy + nodeH) / rowH) + 1);
         for (int layer = firstLayer; layer <= lastLayer; layer++) {
-            for (LayoutNode ln : layerNodes.getOrDefault(layer, List.of())) {
+            List<LayoutNode> nodes = layerNodesByX.getOrDefault(layer, List.of());
+            int first = firstNodeEndingAfter(nodes, wx);
+            for (int i = first; i < nodes.size(); i++) {
+                LayoutNode ln = nodes.get(i);
+                if (ln.x > wx) {
+                    break;
+                }
                 if (wx >= ln.x && wx <= ln.x + nodeW && wy >= ln.y && wy <= ln.y + nodeH) {
                     return ln;
                 }
@@ -4989,7 +5147,14 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         int firstLayer = Math.max(0, (int) Math.floor((wy - nodeH - collapseBtnH) / rowH) - 1);
         int lastLayer = Math.min(maxDepth, (int) Math.floor(wy / rowH) + 1);
         for (int layer = firstLayer; layer <= lastLayer; layer++) {
-            for (LayoutNode ln : layerNodes.getOrDefault(layer, List.of())) {
+            List<LayoutNode> nodes = layerNodesByX.getOrDefault(layer, List.of());
+            double halfButton = collapseBtnW / 2.0;
+            int first = firstNodeCenterAfter(nodes, wx - halfButton);
+            for (int i = first; i < nodes.size(); i++) {
+                LayoutNode ln = nodes.get(i);
+                if (ln.x + nodeW / 2.0 - halfButton > wx) {
+                    break;
+                }
                 if (ln.originalChildCount <= 0) continue;
                 double btnX = ln.x + nodeW / 2.0 - collapseBtnW / 2.0;
                 double btnY = ln.y + nodeH - 1;

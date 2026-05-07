@@ -10,6 +10,7 @@ import it.unimi.dsi.fastutil.ints.IntArrayList;
 
 import java.util.BitSet;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -56,6 +57,16 @@ public record SccAnalysis(
         return sccId >= 0 && sccId < cyclicScc.length && cyclicScc[sccId];
     }
 
+    public int cyclicSccCount() {
+        int count = 0;
+        for (boolean cyclic : cyclicScc) {
+            if (cyclic) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     /**
      * Builds an SCC analysis for the subset of recipes allowed by the source policy.
      *
@@ -99,6 +110,14 @@ public record SccAnalysis(
             edges[i] = toIntList(adjacency[i]);
         }
 
+        Tarjan tarjan = new Tarjan(edges, allowedRecipes);
+        tarjan.run();
+        return new SccAnalysis(tarjan.recipeToScc, tarjan.cyclicScc);
+    }
+
+    static SccAnalysis analyzeEdgesForTesting(IntArrayList[] edges, BitSet allowedRecipes) {
+        Checks.checkNotNull(edges, "edges");
+        Checks.checkNotNull(allowedRecipes, "allowedRecipes");
         Tarjan tarjan = new Tarjan(edges, allowedRecipes);
         tarjan.run();
         return new SccAnalysis(tarjan.recipeToScc, tarjan.cyclicScc);
@@ -180,6 +199,8 @@ public record SccAnalysis(
         private final boolean[] onStack;
         private final int[] recipeToScc;
         private final IntArrayList stack = new IntArrayList();
+        private final int[] callStack;
+        private final int[] nextEdgeIndex;
         private int time;
         private int sccCount;
         private boolean[] cyclicScc = new boolean[16];
@@ -192,40 +213,69 @@ public record SccAnalysis(
             this.low = new int[n];
             this.onStack = new boolean[n];
             this.recipeToScc = new int[n];
-            java.util.Arrays.fill(index, -1);
-            java.util.Arrays.fill(recipeToScc, -1);
+            this.callStack = new int[n];
+            this.nextEdgeIndex = new int[n];
+            Arrays.fill(index, -1);
+            Arrays.fill(recipeToScc, -1);
         }
 
         private void run() {
             for (int i = 0; i < edges.length; i++) {
                 if (allowed.get(i) && index[i] < 0) {
-                    dfs(i);
+                    traverse(i);
                 }
             }
-            cyclicScc = java.util.Arrays.copyOf(cyclicScc, sccCount);
+            cyclicScc = Arrays.copyOf(cyclicScc, sccCount);
         }
 
-        private void dfs(int v) {
+        private void enter(int v) {
             index[v] = time;
             low[v] = time;
             time++;
             stack.push(v);
             onStack[v] = true;
+            nextEdgeIndex[v] = 0;
+        }
 
-            IntArrayList next = edges[v];
-            for (int i = 0; i < next.size(); i++) {
-                int to = next.getInt(i);
-                if (!allowed.get(to)) {
+        private void traverse(int root) {
+            int callSize = 0;
+            enter(root);
+            callStack[callSize++] = root;
+
+            while (callSize > 0) {
+                int v = callStack[callSize - 1];
+                IntArrayList next = edges[v];
+                boolean descended = false;
+                for (int i = nextEdgeIndex[v]; i < next.size(); i = nextEdgeIndex[v]) {
+                    int to = next.getInt(i);
+                    nextEdgeIndex[v] = i + 1;
+                    if (!allowed.get(to)) {
+                        continue;
+                    }
+                    if (index[to] < 0) {
+                        enter(to);
+                        callStack[callSize++] = to;
+                        descended = true;
+                        break;
+                    }
+                    if (onStack[to]) {
+                        low[v] = Math.min(low[v], index[to]);
+                    }
+                }
+                if (descended) {
                     continue;
                 }
-                if (index[to] < 0) {
-                    dfs(to);
-                    low[v] = Math.min(low[v], low[to]);
-                } else if (onStack[to]) {
-                    low[v] = Math.min(low[v], index[to]);
+
+                callSize--;
+                complete(v);
+                if (callSize > 0) {
+                    int parent = callStack[callSize - 1];
+                    low[parent] = Math.min(low[parent], low[v]);
                 }
             }
+        }
 
+        private void complete(int v) {
             if (low[v] != index[v]) {
                 return;
             }
@@ -257,7 +307,7 @@ public record SccAnalysis(
                 return;
             }
             int next = Math.max(required, cyclicScc.length * 2);
-            cyclicScc = java.util.Arrays.copyOf(cyclicScc, next);
+            cyclicScc = Arrays.copyOf(cyclicScc, next);
         }
     }
 }

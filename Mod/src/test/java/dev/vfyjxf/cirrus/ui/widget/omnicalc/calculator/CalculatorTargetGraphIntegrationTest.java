@@ -402,6 +402,39 @@ class CalculatorTargetGraphIntegrationTest {
         }
     }
 
+    @Test
+    void calculatorRejectsRouteGraphWithoutTargetRoot(MinecraftServer server) {
+        FakeRecipe makePlanks = new FakeRecipe(
+            "make_planks",
+            java.util.List.of(input(Items.OAK_LOG, 1)),
+            java.util.List.of(output(Items.OAK_PLANKS, 4))
+        );
+        FakeRecipe makeSticks = new FakeRecipe(
+            "make_sticks",
+            java.util.List.of(input(Items.OAK_PLANKS, 2)),
+            java.util.List.of(output(Items.STICK, 4))
+        );
+        FakeRecipeSystem system = new FakeRecipeSystem(Lists.immutable.of(makePlanks, makeSticks));
+        RecipeApiImpl previous = attachRecipeApi(system);
+        try {
+            RecipeEntry<FakeRecipe> target = RecipeEntry.of(system, makeSticks);
+            RecipeEntry<FakeRecipe> intermediate = RecipeEntry.of(system, makePlanks);
+            PlanBuilder builder = new PlanBuilder(1L, 1L, target, 1);
+            builder.addExecuteRecipe(
+                intermediate,
+                1,
+                Lists.immutable.of(new PlanAction.InputBinding(input(Items.OAK_LOG, 1), 1L)),
+                Lists.immutable.of(new PlanAction.OutputBinding(ContentStack.fromStack(new ItemStack(Items.OAK_PLANKS)), 4L))
+            );
+
+            ProcessGraph graph = CalculatorProcessGraphBuilder.fromRoutingPlan(builder.build(), CalculatorProcessGraphBuilder.RouteMode.calculator);
+
+            assertEquals("missingPreferredRoot", CalculatorProcessGraphBuilder.debugTargetGraphIssueForTests(target, graph));
+        } finally {
+            restoreRecipeApi(previous);
+        }
+    }
+
     private static InputContent input(Item item, long amount) {
         return InputContent.fromItemStack(new ItemStack(item), amount);
     }

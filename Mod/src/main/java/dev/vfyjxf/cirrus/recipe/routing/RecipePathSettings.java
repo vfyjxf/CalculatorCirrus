@@ -27,6 +27,8 @@ import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -38,6 +40,7 @@ import java.util.Map;
 import java.util.Set;
 
 public final class RecipePathSettings {
+    private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Calculator");
     private static final String databaseDirectory = "databases";
     private static final int maxCachedRoutingGraphs = 4;
     private static final int maxCachedCatalogs = 4;
@@ -344,21 +347,60 @@ public final class RecipePathSettings {
             if (cached != null) {
                 RoutingCacheEntry touched = cached.touch();
                 routingCache.put(key, touched);
+                logger.debug(
+                    "routing.graph.cacheHit database={} recipes={} graphNodes={} planner={} inventorySensitivity={} loopPolicy={}",
+                    catalog.databaseId(),
+                    catalog.recipes().size(),
+                    touched.graph().nodes().size(),
+                    plannerMode,
+                    inventorySensitivity,
+                    loopPolicy
+                );
                 return touched;
             }
         }
 
+        long totalStartNanos = System.nanoTime();
+        logger.info(
+            "routing.graph.build.start database={} recipes={} planner={} inventorySensitivity={} loopPolicy={}",
+            catalog.databaseId(),
+            catalog.recipes().size(),
+            plannerMode,
+            inventorySensitivity,
+            loopPolicy
+        );
+        long graphStartNanos = System.nanoTime();
         RecipeGraph graph = RecipeGraph.buildGraph(catalog.recipes());
-        RoutingCacheEntry entry = new RoutingCacheEntry(graph, new RoutingService(graph), System.nanoTime());
+        long graphBuiltNanos = System.nanoTime();
+        RoutingService service = new RoutingService(graph);
+        long serviceBuiltNanos = System.nanoTime();
+        RoutingCacheEntry entry = new RoutingCacheEntry(graph, service, serviceBuiltNanos);
         synchronized (routingCacheLock) {
             RoutingCacheEntry existing = routingCache.get(key);
             if (existing != null) {
                 RoutingCacheEntry touched = existing.touch();
                 routingCache.put(key, touched);
+                logger.debug(
+                    "routing.graph.cacheRace database={} recipes={} graphBuildMs={} serviceInitMs={} totalMs={}",
+                    catalog.databaseId(),
+                    catalog.recipes().size(),
+                    (graphBuiltNanos - graphStartNanos) / 1_000_000L,
+                    (serviceBuiltNanos - graphBuiltNanos) / 1_000_000L,
+                    (serviceBuiltNanos - totalStartNanos) / 1_000_000L
+                );
                 return touched;
             }
             routingCache.put(key, entry);
             trimRoutingCache();
+            logger.info(
+                "routing.graph.build.finish database={} recipes={} graphNodes={} graphBuildMs={} serviceInitMs={} totalMs={}",
+                catalog.databaseId(),
+                catalog.recipes().size(),
+                graph.nodes().size(),
+                (graphBuiltNanos - graphStartNanos) / 1_000_000L,
+                (serviceBuiltNanos - graphBuiltNanos) / 1_000_000L,
+                (serviceBuiltNanos - totalStartNanos) / 1_000_000L
+            );
             return entry;
         }
     }

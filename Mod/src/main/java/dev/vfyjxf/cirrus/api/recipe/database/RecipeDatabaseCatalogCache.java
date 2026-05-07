@@ -29,7 +29,20 @@ public final class RecipeDatabaseCatalogCache {
         Map<Namespace, List<Namespace>> systemTags,
         RecipeDatabaseIndex.BuildProgress progress
     ) {
-        CatalogKey key = CatalogKey.create(systems, systemTags);
+        return getOrBuild(systems, systemTags, progress, null);
+    }
+
+    public static RecipeDatabaseIndex getOrBuild(
+        List<? extends RecipeSystem<?>> systems,
+        Map<Namespace, List<Namespace>> systemTags,
+        RecipeDatabaseIndex.BuildProgress progress,
+        RecipeDatabaseFailureRegistry failureRegistry
+    ) {
+        CatalogKey key = CatalogKey.create(
+            systems,
+            systemTags,
+            failureRegistry == null ? -1L : failureRegistry.version()
+        );
         if (key.sources().isEmpty()) {
             return RecipeDatabaseIndex.ofRecords(List.of());
         }
@@ -46,7 +59,7 @@ public final class RecipeDatabaseCatalogCache {
                 );
                 return current.index();
             }
-            RecipeDatabaseIndex index = buildCatalog(key.sources(), systems, systemTags, progress);
+            RecipeDatabaseIndex index = buildCatalog(key.sources(), systems, systemTags, progress, failureRegistry);
             cached = new CacheEntry(key, index, System.nanoTime());
             return index;
         }
@@ -72,7 +85,8 @@ public final class RecipeDatabaseCatalogCache {
         List<Namespace> sources,
         List<? extends RecipeSystem<?>> systems,
         Map<Namespace, List<Namespace>> systemTags,
-        RecipeDatabaseIndex.BuildProgress progress
+        RecipeDatabaseIndex.BuildProgress progress,
+        RecipeDatabaseFailureRegistry failureRegistry
     ) {
         DatabaseDefinition catalog = new DatabaseDefinition(
             "system:catalog",
@@ -87,7 +101,8 @@ public final class RecipeDatabaseCatalogCache {
             Lists.immutable.ofAll(systems),
             systemTags,
             Map.<String, List<RecipeEntry<?>>>of(),
-            progress == null ? RecipeDatabaseIndex.BuildProgress.none() : progress
+            progress == null ? RecipeDatabaseIndex.BuildProgress.none() : progress,
+            failureRegistry
         );
     }
 
@@ -98,8 +113,12 @@ public final class RecipeDatabaseCatalogCache {
     private record CacheEntry(CatalogKey key, RecipeDatabaseIndex index, long createdNanos) {
     }
 
-    private record CatalogKey(List<SystemFingerprint> systems, List<TagFingerprint> tags, List<Namespace> sources) {
-        private static CatalogKey create(List<? extends RecipeSystem<?>> systems, Map<Namespace, List<Namespace>> systemTags) {
+    private record CatalogKey(List<SystemFingerprint> systems, List<TagFingerprint> tags, List<Namespace> sources, long failureVersion) {
+        private static CatalogKey create(
+            List<? extends RecipeSystem<?>> systems,
+            Map<Namespace, List<Namespace>> systemTags,
+            long failureVersion
+        ) {
             ArrayList<SystemFingerprint> systemFingerprints = new ArrayList<>();
             ArrayList<Namespace> sources = new ArrayList<>();
             if (systems != null) {
@@ -108,16 +127,9 @@ public final class RecipeDatabaseCatalogCache {
                         continue;
                     }
                     Namespace source = system.systemId();
-                    int recipeCount = 0;
-                    try {
-                        recipeCount = system.allRecipes().size();
-                    } catch (RuntimeException exception) {
-                        recipeCount = -1;
-                    }
                     systemFingerprints.add(new SystemFingerprint(
                         source,
-                        System.identityHashCode(system),
-                        recipeCount
+                        System.identityHashCode(system)
                     ));
                     if (!sources.contains(source)) {
                         sources.add(source);
@@ -126,8 +138,7 @@ public final class RecipeDatabaseCatalogCache {
             }
             systemFingerprints.sort(Comparator
                 .comparing((SystemFingerprint fingerprint) -> fingerprint.source().toString())
-                .thenComparingInt(SystemFingerprint::identity)
-                .thenComparingInt(SystemFingerprint::recipeCount));
+                .thenComparingInt(SystemFingerprint::identity));
             sources.sort(Comparator.naturalOrder());
 
             ArrayList<TagFingerprint> tagFingerprints = new ArrayList<>();
@@ -155,12 +166,13 @@ public final class RecipeDatabaseCatalogCache {
             return new CatalogKey(
                 List.copyOf(systemFingerprints),
                 List.copyOf(tagFingerprints),
-                List.copyOf(sources)
+                List.copyOf(sources),
+                failureVersion
             );
         }
     }
 
-    private record SystemFingerprint(Namespace source, int identity, int recipeCount) {
+    private record SystemFingerprint(Namespace source, int identity) {
     }
 
     private record TagFingerprint(Namespace source, List<Namespace> tags) {

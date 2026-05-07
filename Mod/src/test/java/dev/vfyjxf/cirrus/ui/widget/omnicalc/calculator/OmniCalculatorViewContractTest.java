@@ -23,10 +23,12 @@ import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -91,6 +93,30 @@ class OmniCalculatorViewContractTest {
         } finally {
             restoreRecipeApi(previous);
         }
+    }
+
+    @Test
+    void failedCalculationPublishesDiagnostics() {
+        OmniCalculatorView view = new OmniCalculatorView();
+        setPendingCalculation(view, CompletableFuture.failedFuture(new IllegalStateException("boom")));
+
+        view.debugCompletePendingCalculation();
+
+        String diagnostics = view.debugCalculationDiagnostics();
+        assertTrue(diagnostics.contains("failed requestId="));
+        assertTrue(diagnostics.contains("cause=IllegalStateException:boom"));
+    }
+
+    @Test
+    void pendingCalculationDoesNotCompleteUntilFutureFinishes() {
+        OmniCalculatorView view = new OmniCalculatorView();
+        CompletableFuture<?> future = new CompletableFuture<>();
+        setPendingCalculation(view, future);
+
+        view.tick();
+
+        assertTrue(view.debugCalculationPending());
+        assertFalse(view.isCalculated());
     }
 
     @Test
@@ -236,7 +262,7 @@ class OmniCalculatorViewContractTest {
     ) {
     }
 
-    private static final class FakeRecipeSystem implements RecipeSystem<FakeRecipe> {
+    private static class FakeRecipeSystem implements RecipeSystem<FakeRecipe> {
         private final RichIterable<FakeRecipe> recipes;
         private final Map<String, FakeRecipe> byId = new ConcurrentHashMap<>();
 
@@ -303,6 +329,16 @@ class OmniCalculatorViewContractTest {
     private static void restoreRecipeApi(@Nullable RecipeApiImpl previous) {
         if (previous != null) {
             RecipeApiImpl.attach(previous);
+        }
+    }
+
+    private static void setPendingCalculation(OmniCalculatorView view, CompletableFuture<?> future) {
+        try {
+            Field field = OmniCalculatorView.class.getDeclaredField("pendingCalculation");
+            field.setAccessible(true);
+            field.set(view, future);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Unable to inject failed calculation future", exception);
         }
     }
 

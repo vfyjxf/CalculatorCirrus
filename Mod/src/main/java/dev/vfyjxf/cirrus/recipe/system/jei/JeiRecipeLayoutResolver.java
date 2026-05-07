@@ -7,6 +7,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseFailureCapture;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveError;
@@ -23,6 +24,8 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import org.eclipse.collections.api.list.MutableList;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -31,6 +34,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class JeiRecipeLayoutResolver {
+    private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Database");
     private static final Set<LayoutIgnoreClassKey> ignoredLayoutClasses = ConcurrentHashMap.newKeySet();
     private static final Set<LayoutIgnoreRecipeKey> ignoredLayoutRecipes = ConcurrentHashMap.newKeySet();
 
@@ -81,8 +85,19 @@ public final class JeiRecipeLayoutResolver {
                 return ResolveResult.failed(ResolveError.invalidRecipe);
             }
             return ResolveResult.resolved(RecipeProjection.create(system, recipe, inputs, outputs));
-        } catch (RuntimeException | LinkageError ignored) {
-            rememberLayoutFailure(recipeType, recipe, safeRecipeId(system, recipe));
+        } catch (RuntimeException | LinkageError exception) {
+            ResourceLocation recipeId = safeRecipeId(system, recipe);
+            rememberLayoutFailure(recipeType, recipe, recipeId);
+            logger.warn(
+                "Failed to resolve JEI recipe layout for database projection: recipeType={}, recipe={}, recipeClass={}, exception={}, message={}",
+                recipeType.getUid(),
+                recipeId,
+                effectiveRecipeClassName(recipe),
+                exception.getClass().getName(),
+                exception.getMessage(),
+                exception
+            );
+            RecipeDatabaseFailureCapture.record(system, recipe, exception);
             return ResolveResult.unsupported();
         }
     }
@@ -107,8 +122,18 @@ public final class JeiRecipeLayoutResolver {
                 return true;
             }
             return false;
-        } catch (RuntimeException | LinkageError ignored) {
+        } catch (RuntimeException | LinkageError exception) {
             rememberLayoutSkip(recipeType, recipe, recipeId);
+            logger.warn(
+                "Failed to check JEI recipe handling for database projection: recipeType={}, recipe={}, recipeClass={}, exception={}, message={}",
+                recipeType.getUid(),
+                recipeId,
+                effectiveRecipeClassName(recipe),
+                exception.getClass().getName(),
+                exception.getMessage(),
+                exception
+            );
+            RecipeDatabaseFailureCapture.record(exception);
             return true;
         }
     }

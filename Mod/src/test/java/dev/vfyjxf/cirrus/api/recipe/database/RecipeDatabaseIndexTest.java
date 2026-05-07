@@ -19,11 +19,14 @@ import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -179,6 +182,30 @@ class RecipeDatabaseIndexTest {
     }
 
     @Test
+    void wideContentFieldsFallBackToDocumentScanWithoutLosingMatches() {
+        Namespace source = Namespace.of("test", "wide_content");
+        ArrayList<InputContent> inputs = new ArrayList<>();
+        for (int index = 0; index < 3_000; index++) {
+            inputs.add(input(new DisplayValueType("bulk_" + index, "bulk_" + index), 1));
+        }
+        FakeRecipe recipe = new FakeRecipe(
+            "wide_input_recipe",
+            inputs,
+            List.of(output(stick, 1))
+        );
+
+        RecipeDatabaseIndex index = RecipeDatabaseIndex.build(
+            List.of(database("primary", 0, true, source)),
+            Lists.immutable.of(new FakeRecipeSystem(source, List.of(recipe))),
+            Map.of()
+        );
+
+        assertEquals(1, index.search("in:bulk_2999").size());
+        assertEquals(1, index.search("in.id:test:bulk_2999 * >=1").size());
+        assertEquals(0, index.search("in:missing_bulk").size());
+    }
+
+    @Test
     void explicitCustomDatabaseEntriesTakePriorityOverSystemCatalogs() {
         Namespace source = Namespace.of("test", "custom_priority");
         FakeRecipe recipe = new FakeRecipe(
@@ -292,6 +319,54 @@ class RecipeDatabaseIndexTest {
     }
 
     @Test
+    void recordsFailedRecipesInMemoryAndSkipsThemOnNextBuild() {
+        Namespace source = Namespace.of("test", "persistent_failures");
+        FakeRecipe broken = new FakeRecipe(
+            "broken_recipe",
+            List.of(input(oakLog, 1)),
+            List.of(output(oakPlanks, 4))
+        );
+        FakeRecipe working = new FakeRecipe(
+            "working_recipe",
+            List.of(input(cobblestone, 8)),
+            List.of(output(furnace, 1))
+        );
+        FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(broken, working), false, Set.of(broken.id()));
+        RecipeDatabaseFailureRegistry failureRegistry = new RecipeDatabaseFailureRegistry();
+        DatabaseDefinition database = database("primary", 0, true, source);
+
+        RecipeDatabaseIndex first = RecipeDatabaseIndex.build(
+            List.of(database),
+            Lists.immutable.of(system),
+            Map.of(),
+            Map.of(),
+            RecipeDatabaseIndex.BuildProgress.none(),
+            failureRegistry
+        );
+
+        DatabaseRecipeRef brokenRef = DatabaseRecipeRef.fromEntry(RecipeEntry.of(system, broken));
+        assertNotNull(brokenRef);
+        assertEquals(1, first.records().size());
+        assertEquals("working_recipe", first.records().getFirst().recipe().id().getPath());
+        assertEquals(1, system.resolveAttempts(broken));
+        assertTrue(failureRegistry.failedRecipeRefs().contains(brokenRef));
+
+        RecipeDatabaseIndex second = RecipeDatabaseIndex.build(
+            List.of(database),
+            Lists.immutable.of(system),
+            Map.of(),
+            Map.of(),
+            RecipeDatabaseIndex.BuildProgress.none(),
+            failureRegistry
+        );
+
+        assertEquals(1, second.records().size());
+        assertEquals("working_recipe", second.records().getFirst().recipe().id().getPath());
+        assertEquals(1, system.resolveAttempts(broken));
+        assertEquals(2, system.resolveAttempts(working));
+    }
+
+    @Test
     void selectionStateNormalizesOrderAndEnabledView() {
         Namespace source = Namespace.of("test", "selection");
         DatabaseSelectionState state = new DatabaseSelectionState(List.of(
@@ -347,6 +422,8 @@ class RecipeDatabaseIndexTest {
         private final RichIterable<FakeRecipe> recipes;
         private final Map<String, FakeRecipe> byId = new ConcurrentHashMap<>();
         private final Map<String, RecipeProjection> projectionCache = new ConcurrentHashMap<>();
+        private final Map<String, AtomicInteger> resolveAttempts = new ConcurrentHashMap<>();
+        private final Set<String> failingRecipes;
         private final boolean cacheProjections;
 
         private FakeRecipeSystem(Namespace systemId, Collection<FakeRecipe> recipes) {
@@ -354,9 +431,19 @@ class RecipeDatabaseIndexTest {
         }
 
         private FakeRecipeSystem(Namespace systemId, Collection<FakeRecipe> recipes, boolean cacheProjections) {
+            this(systemId, recipes, cacheProjections, Set.of());
+        }
+
+        private FakeRecipeSystem(
+            Namespace systemId,
+            Collection<FakeRecipe> recipes,
+            boolean cacheProjections,
+            Set<String> failingRecipes
+        ) {
             this.systemId = systemId;
             this.recipes = Lists.immutable.ofAll(recipes);
             this.cacheProjections = cacheProjections;
+            this.failingRecipes = Set.copyOf(failingRecipes);
             recipes.forEach(recipe -> byId.put(recipe.id(), recipe));
         }
 
@@ -397,10 +484,21 @@ class RecipeDatabaseIndexTest {
 
         @Override
         public ResolveResult resolveFallback(ResolveContext context, FakeRecipe recipe) {
+            resolveAttempts.computeIfAbsent(recipe.id(), ignored -> new AtomicInteger()).incrementAndGet();
+            if (failingRecipes.contains(recipe.id())) {
+                UnsupportedOperationException exception = new UnsupportedOperationException("Broken test recipe " + recipe.id());
+                RecipeDatabaseFailureCapture.record(this, recipe, exception);
+                return ResolveResult.unsupported();
+            }
             if (cacheProjections) {
                 return ResolveResult.resolved(cachedProjection(recipe));
             }
             return ResolveResult.resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
+        }
+
+        private int resolveAttempts(FakeRecipe recipe) {
+            AtomicInteger attempts = resolveAttempts.get(recipe.id());
+            return attempts == null ? 0 : attempts.get();
         }
 
         private RecipeProjection cachedProjection(FakeRecipe recipe) {
