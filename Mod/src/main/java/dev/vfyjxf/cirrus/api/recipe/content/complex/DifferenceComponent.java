@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
@@ -96,5 +97,10 @@ public final class DifferenceComponent implements ComplexContent {
     @Override
     public RichIterable<? extends ContentVariant> enumerate() {
         return isEnumerable() ? required.enumerate().reject(rejected::satisfy) : Lists.immutable.empty();
+    }
+
+    @Override
+    public RecipeContentType<? extends RecipeContent> recipeType() {
+        return RecipeContentType.COMPLEX;
     }
 }

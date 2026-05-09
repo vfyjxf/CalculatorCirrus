@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.api.recipe.content;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 import org.jetbrains.annotations.Range;
@@ -76,5 +77,9 @@ public final class EmptyRecipeContent implements InputContent, OutputContent {
     @Override
     public String toString() {
         return "empty content";
+    }
+    @Override
+    public RecipeContentType<? extends RecipeContent> recipeType() {
+        return RecipeContentType.EMPTY;
     }
 }

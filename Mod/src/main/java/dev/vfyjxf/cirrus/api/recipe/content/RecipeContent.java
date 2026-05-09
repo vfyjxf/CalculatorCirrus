@@ -71,9 +71,7 @@ public sealed interface RecipeContent permits InputContent, OutputContent {
                chance() == MIN_CHANCE;
     }
 
-    default RecipeContentType<? extends RecipeContent> recipeType() {
-        return RecipeContentType.of(this);
-    }
+    RecipeContentType<? extends RecipeContent> recipeType();
 
     //endregion
 

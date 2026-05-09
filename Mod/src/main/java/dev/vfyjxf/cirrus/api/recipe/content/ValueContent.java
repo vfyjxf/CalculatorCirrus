@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.api.recipe.content;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
@@ -106,5 +107,9 @@ public final class ValueContent<T> implements InputContent, OutputContent {
                "content=" + content +
                ", chance=" + chance +
                '}';
+    }
+    @Override
+    public RecipeContentType<? extends RecipeContent> recipeType() {
+        return RecipeContentType.VALUE;
     }
 }

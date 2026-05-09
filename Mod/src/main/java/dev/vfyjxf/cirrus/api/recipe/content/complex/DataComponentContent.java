@@ -8,6 +8,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponentMap;
@@ -187,5 +188,10 @@ public final class DataComponentContent<T> implements ComplexContent {
     private static <T, S> @Nullable DataComponentMap getObjectComponents(ContentStack<T, S> stack) {
         ContentType<T> contentType = stack.contentType();
         return contentType.supportComponents() ? contentType.getComponents(stack.content()) : null;
+    }
+
+    @Override
+    public RecipeContentType<? extends RecipeContent> recipeType() {
+        return RecipeContentType.COMPLEX;
     }
 }

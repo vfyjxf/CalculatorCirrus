@@ -7,6 +7,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -158,5 +159,10 @@ public final class FluidContainerContent implements ComplexContent {
                ", amount=" + amount +
                ", chance=" + chance +
                '}';
+    }
+
+    @Override
+    public RecipeContentType<? extends RecipeContent> recipeType() {
+        return RecipeContentType.COMPLEX;
     }
 }

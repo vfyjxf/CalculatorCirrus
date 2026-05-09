@@ -9,6 +9,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.FallbackComplexContent;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
@@ -35,14 +36,14 @@ import static dev.vfyjxf.cirrus.api.CirrusTypes.IngredientResolvers;
 
 
 public sealed interface InputContent
-    extends RecipeContent
-    permits EmptyRecipeContent,
-            StackContent,
-            ValueContent,
-            StackListContent,
-            TypedStackListContent,
-            TagStackContent,
-            ComplexContent {
+        extends RecipeContent
+        permits EmptyRecipeContent,
+                StackContent,
+                ValueContent,
+                StackListContent,
+                TypedStackListContent,
+                TagStackContent,
+                ComplexContent {
 
 
     //region stack factory
@@ -245,10 +246,10 @@ public sealed interface InputContent
         TagKey<T> matchedTag = TagLookup.findTagMatchStacks(tagType, stackType, adapter);
         if (matchedTag == null) {
             return new TypedStackListContent<>(
-                stackType,
-                adapter.collect(stack -> ContentStack.fromStack(stackType, stack)),
-                amount,
-                chance
+                    stackType,
+                    adapter.collect(stack -> ContentStack.fromStack(stackType, stack)),
+                    amount,
+                    chance
             );
         } else return new TagStackContent<>(tagType, matchedTag, amount, chance);
     }
@@ -292,6 +293,8 @@ public sealed interface InputContent
             var resolver = recipeApi.findIngredientResolver(IngredientResolvers.CUSTOM, customIngredient);
             if (resolver != null) {
                 return resolver.resolve(customIngredient, amount, chance);
+            } else {
+                return FallbackComplexContent.from(customIngredient, amount, chance);
             }
         }
         return empty;

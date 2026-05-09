@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.impl.factory.Lists;
@@ -123,5 +124,9 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
                "stack=" + stack +
                ", chance=" + chance +
                '}';
+    }
+    @Override
+    public RecipeContentType<? extends RecipeContent> recipeType() {
+        return RecipeContentType.STACK;
     }
 }

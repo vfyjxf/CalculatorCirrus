@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
@@ -88,4 +89,9 @@ public final class IntersectionContent implements ComplexContent {
                        .reject(content -> !satisfy(content));
     }
 
+
+    @Override
+    public RecipeContentType<? extends RecipeContent> recipeType() {
+        return RecipeContentType.COMPLEX;
+    }
 }

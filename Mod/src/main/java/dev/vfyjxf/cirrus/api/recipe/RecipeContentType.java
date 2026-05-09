@@ -43,5 +43,4 @@ public interface RecipeContentType<C extends RecipeContent> {
     }
 }
 
-record BuiltinRecipeContentType<C extends RecipeContent>(Namespace typeId) implements RecipeContentType<C> {
-}
+record BuiltinRecipeContentType<C extends RecipeContent>(Namespace typeId) implements RecipeContentType<C> {}

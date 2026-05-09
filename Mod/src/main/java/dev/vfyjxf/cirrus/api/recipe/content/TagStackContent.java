@@ -6,6 +6,7 @@ import dev.vfyjxf.cirrus.api.content.type.TagType;
 import dev.vfyjxf.cirrus.api.content.value.ContentKind;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.tags.TagKey;
 import org.eclipse.collections.api.RichIterable;
@@ -140,5 +141,9 @@ public final class TagStackContent<T> implements InputContent {
                ", amount=" + amount +
                ", chance=" + chance +
                '}';
+    }
+    @Override
+    public RecipeContentType<? extends RecipeContent> recipeType() {
+        return RecipeContentType.TAG_STACK;
     }
 }

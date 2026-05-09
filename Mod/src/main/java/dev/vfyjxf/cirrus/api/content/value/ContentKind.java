@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.api.content.value;
 
+import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.resources.ResourceLocation;
@@ -89,6 +90,14 @@ public sealed interface ContentKind<T> extends ContentVariant permits EmptyConte
     //endregion
 
     //region util
+
+    default boolean isItem() {
+        return type() == CirrusTypes.Contents.ITEM;
+    }
+
+    default boolean isFluid() {
+        return type() == CirrusTypes.Contents.FLUID;
+    }
 
     @SuppressWarnings("unchecked")
     default <R> ContentKind<R> cast() {

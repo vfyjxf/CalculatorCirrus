@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.neoforged.neoforge.common.crafting.CompoundIngredient;
 import org.eclipse.collections.api.RichIterable;
@@ -111,5 +112,10 @@ public final class CompoundContent implements ComplexContent {
     @Override
     public RichIterable<? extends ContentVariant> enumerate() {
         return isEnumerable() ? contents.flatCollect(InputContent::enumerate).distinct() : Lists.immutable.empty();
+    }
+
+    @Override
+    public RecipeContentType<? extends RecipeContent> recipeType() {
+        return RecipeContentType.COMPLEX;
     }
 }
