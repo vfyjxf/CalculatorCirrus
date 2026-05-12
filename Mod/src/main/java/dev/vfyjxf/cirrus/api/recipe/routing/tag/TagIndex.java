@@ -29,6 +29,7 @@ public final class TagIndex {
     private final RoutingRecipeCatalog catalog;
     private final MutableMap<String, BitSet> tagToRecipes = Maps.mutable.empty();
     private long version;
+    private TagSnapshot cachedSnapshot;
 
     /**
      * Creates a new tag index backed by the given recipe catalog.
@@ -74,8 +75,13 @@ public final class TagIndex {
         if (index < 0) {
             return;
         }
-        tagToRecipes.getIfAbsentPut(tag, () -> new BitSet(catalog.size())).set(index);
+        BitSet bitSet = tagToRecipes.getIfAbsentPut(tag, () -> new BitSet(catalog.size()));
+        if (bitSet.get(index)) {
+            return;
+        }
+        bitSet.set(index);
         version++;
+        cachedSnapshot = null;
     }
 
     /**
@@ -98,6 +104,7 @@ public final class TagIndex {
         if (set != null && set.get(index)) {
             set.clear(index);
             version++;
+            cachedSnapshot = null;
         }
     }
 
@@ -110,8 +117,12 @@ public final class TagIndex {
      * @return an immutable snapshot of all tag-to-recipe mappings
      */
     public synchronized TagSnapshot snapshot() {
+        if (cachedSnapshot != null && cachedSnapshot.version() == version) {
+            return cachedSnapshot;
+        }
         MutableMap<String, BitSet> copy = Maps.mutable.empty();
         tagToRecipes.forEachKeyValue((tag, bitSet) -> copy.put(tag, (BitSet) bitSet.clone()));
-        return new TagSnapshot(version, catalog.size(), copy.toImmutable());
+        cachedSnapshot = new TagSnapshot(version, catalog.size(), copy.toImmutable());
+        return cachedSnapshot;
     }
 }

@@ -75,6 +75,17 @@ public interface RecipeSystem<R> {
         return ResolveResult.failed(ResolveError.unsupported);
     }
 
+    /**
+     * Returns a projection-free deterministic content view for routing graph construction.
+     *
+     * <p>Implementations should return {@code null} when routing requires projection clauses,
+     * schemas, context-sensitive resolution, or any registered subsystem. The graph builder will
+     * then use the regular projection pipeline.
+     */
+    default @Nullable RoutingRecipeView routingView(ResolveContext context, R recipe) {
+        return null;
+    }
+
     //endregion
 
     //region system data

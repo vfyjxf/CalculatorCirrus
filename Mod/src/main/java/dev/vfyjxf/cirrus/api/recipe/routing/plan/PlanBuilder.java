@@ -129,12 +129,26 @@ public final class PlanBuilder {
         return new Snapshot(actions.size(), nextActionId);
     }
 
+    public int actionCount() {
+        return actions.size();
+    }
+
+    public int nextActionId() {
+        return nextActionId;
+    }
+
     public void restore(Snapshot snapshot) {
         Checks.checkNotNull(snapshot, "snapshot");
-        while (actions.size() > snapshot.actionCount()) {
+        restore(snapshot.actionCount(), snapshot.nextActionId());
+    }
+
+    public void restore(int actionCount, int nextActionId) {
+        Checks.checkArgument(actionCount >= 0, "actionCount must be non-negative");
+        Checks.checkArgument(nextActionId >= 0, "nextActionId must be non-negative");
+        while (actions.size() > actionCount) {
             actions.remove(actions.size() - 1);
         }
-        nextActionId = snapshot.nextActionId();
+        this.nextActionId = nextActionId;
     }
 
     /** Returns {@code true} if at least one action has been added. */

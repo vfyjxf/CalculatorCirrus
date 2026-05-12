@@ -1521,18 +1521,30 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         }
         try {
             List<RecipeDatabaseResult> matches = sort(index.search(query), sortMode, sortDirection);
+            List<RecipeDatabaseResult> visibleMatches = limitResults(matches, ExecutionOverlayClientConfig.calculatorDatabaseLimit());
             return QueryBuildResult.results(
                 requestId,
                 query,
                 sortMode,
                 sortDirection,
-                matches.size(),
-                buildResultBuckets(matches, sortMode),
+                visibleMatches.size(),
+                buildResultBuckets(visibleMatches, sortMode),
                 scrollToRestore
             );
         } catch (SearchParseException ex) {
             return QueryBuildResult.invalid(requestId, query, sortMode, sortDirection, scrollToRestore);
         }
+    }
+
+    private static List<RecipeDatabaseResult> limitResults(List<RecipeDatabaseResult> matches, int limit) {
+        if (matches.isEmpty()) {
+            return List.of();
+        }
+        int safeLimit = Math.max(1, limit);
+        if (matches.size() <= safeLimit) {
+            return matches;
+        }
+        return List.copyOf(matches.subList(0, safeLimit));
     }
 
     private static boolean shouldWaitForMoreSearchInput(String query) {
@@ -3554,7 +3566,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                 var local = input.mouseRelative(this);
                 VirtualResultCategory category = categoryToggleAt(local.x(), local.y());
                 if (category != null) {
-                    toggleResultCategory(category);
+                    deferAfterMouseDispatch(() -> toggleResultCategory(category));
                     CirrusUiSound.playClickSound();
                     context.consume();
                     return EventDispatch.consumed;
@@ -3600,9 +3612,9 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                 }
                 ResultCard card = card(hit);
                 if (pressed.action() == null) {
-                    openRecipeDetail(card.record(), true);
+                    deferAfterMouseDispatch(() -> openRecipeDetail(card.record(), true));
                 } else {
-                    activateRecipeCard(card.record(), pressed.action(), pressed.openRecipeInCalculator(), true);
+                    deferAfterMouseDispatch(() -> activateRecipeCard(card.record(), pressed.action(), pressed.openRecipeInCalculator(), true));
                 }
                 context.consume();
                 return EventDispatch.consumed;
@@ -5118,6 +5130,21 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         results.clear();
         indexProgressStatusLabel = null;
         indexProgressStatusText = "";
+    }
+
+    private void deferAfterMouseDispatch(Runnable action) {
+        if (action == null) {
+            return;
+        }
+        if (!lifecycle().mounted()) {
+            action.run();
+            return;
+        }
+        scene().delay(1, () -> {
+            if (lifecycle().mounted()) {
+                action.run();
+            }
+        });
     }
 
     private List<RecipeDatabaseResult> sort(List<RecipeDatabaseResult> matches) {

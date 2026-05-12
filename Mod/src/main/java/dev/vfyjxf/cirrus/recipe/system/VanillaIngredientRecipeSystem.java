@@ -6,6 +6,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeLookup;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
+import dev.vfyjxf.cirrus.api.recipe.system.RoutingRecipeView;
 import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
 import dev.vfyjxf.cirrus.helper.RecipeHelper;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
@@ -40,6 +41,12 @@ public abstract class VanillaIngredientRecipeSystem<T extends Recipe<?>> extends
             projectionSchema(recipe),
             inputSchema(recipe)
         );
+    }
+
+    @Override
+    public RoutingRecipeView routingView(ResolveContext context, RecipeHolder<T> recipeHolder) {
+        T recipe = recipeHolder.value();
+        return VanillaRecipeProjectionSupport.routingView(ingredients(recipe), result(recipe));
     }
 
     protected List<Ingredient> ingredients(T recipe) {

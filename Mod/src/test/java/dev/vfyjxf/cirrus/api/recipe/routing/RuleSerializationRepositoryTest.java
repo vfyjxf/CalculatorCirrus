@@ -97,7 +97,7 @@ class RuleSerializationRepositoryTest {
         RuleDefinition preview = DefaultRuleDefinitions.calculatorPreview();
 
         assertEquals(DefaultRuleDefinitions.calculatorPreviewProfileId, preview.profile().profileId());
-        assertEquals(UnresolvedInputMode.directSupplyOnNoSourceOrSafeExhausted, preview.profile().unresolvedInputMode());
+        assertEquals(UnresolvedInputMode.directSupplyOnNoSourceOrSafeOrCycleExhausted, preview.profile().unresolvedInputMode());
         assertFalse(preview.profile().liftMultiSemanticChildShortages());
         assertTrue(DefaultRuleDefinitions.standardExecution().profile().liftMultiSemanticChildShortages());
         assertTrue(DefaultRuleDefinitions.defaultCollection().rules().stream().anyMatch(rule ->

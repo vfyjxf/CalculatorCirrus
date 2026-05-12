@@ -163,7 +163,7 @@ public interface BatchableStackRenderer<T, S> extends StackRenderer<T, S> {
             return new RendererState(context);
         }
 
-        private final class RendererState {
+        private static final class RendererState {
             private final @Nullable Object context;
             private final List<Entry<?, ?>> baseEntries = new ArrayList<>();
             private final List<Entry<?, ?>> fullEntries = new ArrayList<>();

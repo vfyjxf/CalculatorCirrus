@@ -23,6 +23,7 @@ import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.util.Collection;
 import java.util.Map;
@@ -248,6 +249,25 @@ class OmniCalculatorViewContractTest {
     }
 
     @Test
+    void releaseCalculationStateDropsGraphAndCancelsPendingFuture() {
+        OmniCalculatorView view = new OmniCalculatorView();
+        WeakReference<?> graphRef = attachGraphForReleaseTest(view);
+        CompletableFuture<?> future = new CompletableFuture<>();
+        setPendingCalculation(view, future);
+
+        assertTrue(view.debugGraphNodeCount() > 0);
+        assertTrue(view.debugCalculationPending());
+
+        view.releaseCalculationState();
+
+        assertFalse(view.isCalculated());
+        assertFalse(view.debugCalculationPending());
+        assertTrue(future.isCancelled());
+        assertEquals(0, view.debugGraphNodeCount());
+        assertCollected(graphRef);
+    }
+
+    @Test
     void viewSwitcherActionsStayCompactWhenTreeViewIsActive() {
         ViewSwitcherWidget.ViewSwitcherMetrics metrics = ViewSwitcherWidget.debugMetrics();
 
@@ -340,6 +360,27 @@ class OmniCalculatorViewContractTest {
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError("Unable to inject failed calculation future", exception);
         }
+    }
+
+    private static WeakReference<?> attachGraphForReleaseTest(OmniCalculatorView view) {
+        var graph = DebugRecipeProvider.createDebugProcessGraph();
+        WeakReference<?> ref = new WeakReference<>(graph);
+        view.setProcessGraph(graph);
+        return ref;
+    }
+
+    private static void assertCollected(WeakReference<?> ref) {
+        for (int i = 0; i < 20 && ref.get() != null; i++) {
+            System.gc();
+            System.runFinalization();
+            try {
+                Thread.sleep(10L);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        assertEquals(null, ref.get());
     }
 
 }

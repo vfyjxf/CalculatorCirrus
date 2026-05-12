@@ -1,50 +1,107 @@
 package dev.vfyjxf.cirrus.ui.process;
 
+import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Represents a single process step (recipe) in the flow chart.
  *
- * @param id              unique identifier
- * @param name            display name (e.g. "Blast Furnace Smelting")
- * @param machine         machine/device name (e.g. "Electric Blast Furnace")
- * @param inputs          input material slots
- * @param outputs         output material slots
- * @param durationTicks   processing time in game ticks
- * @param euPerTick       energy consumption per tick (EU/t)
- * @param tier            processing tier (0=ULV, 1=LV, 2=MV, ...)
- * @param machineOptions  all machines that can execute this recipe (empty = no icon data)
- * @param recipe          source recipe entry used for native preview/rendering when available
+ * @param id             unique identifier
+ * @param inputs         input material slots
+ * @param outputs        output material slots
+ * @param durationTicks  processing time in game ticks
+ * @param machineOptions all machines that can execute this recipe (empty = no icon data)
+ * @param recipe         source recipe entry used for native preview/rendering when available
  */
 public record ProcessNode(
         String id,
-        String name,
-        String machine,
+        Component displayName,
+        Component machineName,
         List<MaterialSlot> inputs,
         List<MaterialSlot> outputs,
         int durationTicks,
-        int euPerTick,
-        int tier,
         List<MachineInfo> machineOptions,
         @Nullable RecipeEntry<?> recipe
 ) {
+    public ProcessNode(
+            String id,
+            String name,
+            String machine,
+            List<MaterialSlot> inputs,
+            List<MaterialSlot> outputs,
+            int durationTicks,
+            List<MachineInfo> machineOptions,
+            @Nullable RecipeEntry<?> recipe
+    ) {
+        this(
+                id,
+                Component.literal(Objects.requireNonNullElse(name, "")),
+                Component.literal(Objects.requireNonNullElse(machine, "")),
+                inputs,
+                outputs,
+                durationTicks,
+                machineOptions,
+                recipe
+        );
+    }
+
+    public ProcessNode {
+        displayName = displayName == null ? Component.empty() : displayName;
+        machineName = machineName == null ? Component.empty() : machineName;
+        inputs = inputs == null ? List.of() : List.copyOf(inputs);
+        outputs = outputs == null ? List.of() : List.copyOf(outputs);
+        machineOptions = machineOptions == null ? List.of() : List.copyOf(machineOptions);
+    }
+
+    public String name() {
+        return displayName.getString();
+    }
+
+    public String machine() {
+        return machineName.getString();
+    }
 
     /**
      * Info about one possible machine that can run this recipe.
      *
-     * @param name      display name
-     * @param icon      optional ItemStack for rendering (may be null or empty)
+     * @param name display name
+     * @param icon optional stack content for rendering (empty = no icon)
      */
-    public record MachineInfo(String name, @Nullable ItemStack icon) {
+    public record MachineInfo(Component displayName, ContentStack<?, ?> icon) {
+        public MachineInfo {
+            displayName = displayName == null ? Component.empty() : displayName;
+            icon = icon == null ? ContentStack.empty() : icon;
+        }
+
+        public MachineInfo(Component displayName) {
+            this(displayName, ContentStack.empty());
+        }
+
+        public MachineInfo(String name, @Nullable ItemStack icon) {
+            this(Component.literal(Objects.requireNonNullElse(name, "")), contentStack(icon));
+        }
+
         public MachineInfo(String name) {
-            this(name, null);
+            this(Component.literal(Objects.requireNonNullElse(name, "")));
+        }
+
+        public String name() {
+            return displayName.getString();
+        }
+
+        public boolean hasIcon() {
+            return icon.notEmpty();
         }
     }
 
@@ -53,91 +110,165 @@ public record ProcessNode(
      *
      * @param materialName display name
      * @param amount       quantity
-     * @param type         material type for colour coding
+     * @param category     registered material category for colour coding/grouping
      * @param chance       output chance (1.0 = 100%, only meaningful for outputs)
      * @param isCatalyst   true if this material is not consumed
      * @param content      structured recipe content payload for exact / tag / alternative inputs
-     * @param itemStack    optional ItemStack for rendering the actual item icon
-     * @param fluidStack   optional FluidStack for rendering the actual fluid icon
+     * @param visualStack  optional stack content for rendering the primary icon
      */
     public record MaterialSlot(
-            String materialName,
+            Component displayName,
             int amount,
-            MaterialType type,
+            MaterialCategory category,
             double chance,
             boolean isCatalyst,
             RecipeContent content,
-            @Nullable ItemStack itemStack,
-            @Nullable FluidStack fluidStack
+            ContentStack<?, ?> visualStack
     ) {
+        public MaterialSlot {
+            displayName = displayName == null ? Component.empty() : displayName;
+            content = content == null ? RecipeContent.empty() : content;
+            visualStack = visualStack == null ? ProcessNode.visualStack(content) : visualStack;
+            category = category == null ? MaterialCategories.infer(content, visualStack, isCatalyst) : category;
+        }
+
         public MaterialSlot(
-            String materialName,
-            int amount,
-            MaterialType type,
-            double chance,
-            boolean isCatalyst,
-            @Nullable ItemStack itemStack,
-            @Nullable FluidStack fluidStack
+                Component displayName,
+                int amount,
+                MaterialCategory category,
+                double chance,
+                boolean isCatalyst,
+                RecipeContent content
+        ) {
+            this(displayName, amount, category, chance, isCatalyst, content, ProcessNode.visualStack(content));
+        }
+
+        public MaterialSlot(
+                String materialName,
+                int amount,
+                MaterialCategory category,
+                double chance,
+                boolean isCatalyst,
+                RecipeContent content
+        ) {
+            this(Component.literal(Objects.requireNonNullElse(materialName, "")), amount, category, chance, isCatalyst, content);
+        }
+
+        public MaterialSlot(
+                String materialName,
+                int amount,
+                MaterialCategory category,
+                double chance,
+                boolean isCatalyst,
+                RecipeContent content,
+                ContentStack<?, ?> visualStack
+        ) {
+            this(Component.literal(Objects.requireNonNullElse(materialName, "")), amount, category, chance, isCatalyst, content, visualStack);
+        }
+
+        public MaterialSlot(
+                String materialName,
+                int amount,
+                MaterialCategory category,
+                double chance,
+                boolean isCatalyst,
+                @Nullable ItemStack itemStack,
+                @Nullable FluidStack fluidStack
         ) {
             this(
-                materialName,
-                amount,
-                type,
-                chance,
-                isCatalyst,
-                defaultContent(amount, chance, itemStack, fluidStack),
-                itemStack,
-                fluidStack
+                    materialName,
+                    amount,
+                    category,
+                    chance,
+                    isCatalyst,
+                    defaultContent(amount, chance, itemStack, fluidStack),
+                    contentStack(itemStack, fluidStack, amount)
             );
         }
 
-        public MaterialSlot(String materialName, int amount, MaterialType type) {
-            this(materialName, amount, type, 1.0, false, RecipeContent.empty(), null, null);
+        public MaterialSlot(String materialName, int amount, MaterialCategory category) {
+            this(materialName, amount, category, 1.0, false, RecipeContent.empty(), ContentStack.empty());
         }
 
-        public MaterialSlot(String materialName, int amount, MaterialType type, boolean isCatalyst) {
-            this(materialName, amount, type, 1.0, isCatalyst, RecipeContent.empty(), null, null);
+        public MaterialSlot(String materialName, int amount, MaterialCategory category, boolean isCatalyst) {
+            this(materialName, amount, category, 1.0, isCatalyst, RecipeContent.empty(), ContentStack.empty());
         }
 
-        /** Convenience constructor with ItemStack. */
+        /**
+         * Convenience constructor with ItemStack.
+         */
         public static MaterialSlot item(ItemStack stack, int amount) {
-            return new MaterialSlot(stack.getHoverName().getString(), amount,
-                    MaterialType.ITEM, 1.0, false, OutputContent.fromItemStack(stack, Math.max(1, amount)), stack.copyWithCount(amount), null);
+            return new MaterialSlot(stack.getHoverName(), amount,
+                    MaterialCategories.ITEM, 1.0, false, OutputContent.fromItemStack(stack, Math.max(1, amount)), contentStack(stack.copyWithCount(amount)));
         }
 
-        /** Convenience constructor with ItemStack + chance. */
+        /**
+         * Convenience constructor with ItemStack + chance.
+         */
         public static MaterialSlot item(ItemStack stack, int amount, double chance) {
-            return new MaterialSlot(stack.getHoverName().getString(), amount,
-                    MaterialType.ITEM, chance, false, OutputContent.fromItemStack(stack, Math.max(1, amount)), stack.copyWithCount(amount), null);
+            return new MaterialSlot(stack.getHoverName(), amount,
+                    MaterialCategories.ITEM, chance, false, OutputContent.fromItemStack(stack, Math.max(1, amount)), contentStack(stack.copyWithCount(amount)));
         }
 
-        /** Convenience constructor for catalyst items. */
+        /**
+         * Convenience constructor for catalyst items.
+         */
         public static MaterialSlot catalyst(ItemStack stack, int amount) {
-            return new MaterialSlot(stack.getHoverName().getString(), amount,
-                    MaterialType.CATALYST, 1.0, true, OutputContent.fromItemStack(stack, Math.max(1, amount)), stack.copyWithCount(amount), null);
+            return new MaterialSlot(stack.getHoverName(), amount,
+                    MaterialCategories.CATALYST, 1.0, true, OutputContent.fromItemStack(stack, Math.max(1, amount)), contentStack(stack.copyWithCount(amount)));
         }
 
-        /** Convenience constructor with FluidStack. */
+        /**
+         * Convenience constructor with FluidStack.
+         */
         public static MaterialSlot fluid(FluidStack stack, int amount) {
-            return new MaterialSlot(stack.getHoverName().getString(), amount,
-                    MaterialType.FLUID, 1.0, false, OutputContent.fromFluidStack(stack, Math.max(1, amount)), null, stack.copyWithAmount(amount));
+            return new MaterialSlot(stack.getHoverName(), amount,
+                    MaterialCategories.FLUID, 1.0, false, OutputContent.fromFluidStack(stack, Math.max(1, amount)), contentStack(stack.copyWithAmount(amount)));
         }
 
-        /** Convenience constructor for energy. */
-        public static MaterialSlot energy(String name, int amount) {
-            return new MaterialSlot(name, amount, MaterialType.ENERGY, 1.0, false, RecipeContent.empty(), null, null);
+        /**
+         * Convenience constructor for abstract value-like materials.
+         */
+        public static MaterialSlot value(String name, int amount) {
+            return new MaterialSlot(name, amount, MaterialCategories.VALUE, 1.0, false, RecipeContent.empty(), ContentStack.empty());
         }
 
-        /** Whether this slot has a renderable visual (item or fluid). */
+        /**
+         * Whether this slot has a renderable visual (item or fluid).
+         */
         public boolean hasVisual() {
-            return (itemStack != null && !itemStack.isEmpty()) || (fluidStack != null && !fluidStack.isEmpty());
+            return visualStack.notEmpty() || content.notEmpty();
+        }
+
+        public String materialName() {
+            return displayName.getString();
+        }
+
+        public MaterialCategory type() {
+            return category;
+        }
+
+        public @Nullable ItemStack itemStack() {
+            if (visualStack.isEmpty() || !visualStack.isItem()) {
+                return null;
+            }
+            ContentStack<Item, ItemStack> item = visualStack.cast();
+            return item.value().copy();
+        }
+
+        public @Nullable FluidStack fluidStack() {
+            if (visualStack.isEmpty() || !visualStack.isFluid()) {
+                return null;
+            }
+            ContentStack<Fluid, FluidStack> fluid = visualStack.cast();
+            return fluid.value().copy();
         }
 
         private static RecipeContent defaultContent(
-            int amount,
-            double chance,
-            @Nullable ItemStack itemStack,
-            @Nullable FluidStack fluidStack
+                int amount,
+                double chance,
+                @Nullable ItemStack itemStack,
+                @Nullable FluidStack fluidStack
         ) {
             if (itemStack != null && !itemStack.isEmpty()) {
                 return OutputContent.fromItemStack(itemStack, Math.max(1, amount), (float) chance);
@@ -147,61 +278,6 @@ public record ProcessNode(
             }
             return RecipeContent.empty();
         }
-    }
-
-    /**
-     * Material classification for colour coding edges and slots.
-     */
-    public enum MaterialType {
-        ITEM(0xFFE0A030),       // amber/orange for solid items
-        FLUID(0xFF3080E0),      // blue for fluids
-        ENERGY(0xFFE03030),     // red for energy
-        GAS(0xFF30E0E0),        // cyan for gases
-        CATALYST(0xFFA030E0);   // purple for catalysts
-
-        public final int color;
-
-        MaterialType(int color) {
-            this.color = color;
-        }
-    }
-
-    /**
-     * Tier name lookup.
-     */
-    public String tierName() {
-        return switch (tier) {
-            case 0 -> "ULV";
-            case 1 -> "LV";
-            case 2 -> "MV";
-            case 3 -> "HV";
-            case 4 -> "EV";
-            case 5 -> "IV";
-            case 6 -> "LuV";
-            case 7 -> "ZPM";
-            case 8 -> "UV";
-            case 9 -> "UHV";
-            default -> "T" + tier;
-        };
-    }
-
-    /**
-     * Colour associated with this tier.
-     */
-    public int tierColor() {
-        return switch (tier) {
-            case 0 -> 0xFF888888;
-            case 1 -> 0xFFDCDCDC;
-            case 2 -> 0xFFFF6D00;
-            case 3 -> 0xFFFFFF00;
-            case 4 -> 0xFF00C6FF;
-            case 5 -> 0xFF8B00FF;
-            case 6 -> 0xFFFF69B4;
-            case 7 -> 0xFF00FFCC;
-            case 8 -> 0xFF33FF33;
-            case 9 -> 0xFFFF3333;
-            default -> 0xFFFFFFFF;
-        };
     }
 
     /**
@@ -215,12 +291,36 @@ public record ProcessNode(
         return String.format("%.1fh", minutes / 60);
     }
 
-    /**
-     * EU/t formatted with SI suffix.
-     */
-    public String euFormatted() {
-        if (euPerTick < 1000) return euPerTick + " EU/t";
-        if (euPerTick < 1_000_000) return String.format("%.1fK EU/t", euPerTick / 1000.0);
-        return String.format("%.1fM EU/t", euPerTick / 1_000_000.0);
+    private static ContentStack<?, ?> contentStack(@Nullable ItemStack itemStack) {
+        return itemStack == null || itemStack.isEmpty() ? ContentStack.empty() : ContentStack.fromStack(itemStack);
     }
+
+    private static ContentStack<?, ?> contentStack(@Nullable FluidStack fluidStack) {
+        return fluidStack == null || fluidStack.isEmpty() ? ContentStack.empty() : ContentStack.fromStack(fluidStack);
+    }
+
+    private static ContentStack<?, ?> contentStack(
+            @Nullable ItemStack itemStack,
+            @Nullable FluidStack fluidStack,
+            int amount
+    ) {
+        ContentStack<?, ?> item = contentStack(itemStack);
+        if (item.notEmpty()) {
+            return item.copyWithAmount(Math.max(1, amount));
+        }
+        ContentStack<?, ?> fluid = contentStack(fluidStack);
+        return fluid.isEmpty() ? ContentStack.empty() : fluid.copyWithAmount(Math.max(1, amount));
+    }
+
+    private static ContentStack<?, ?> visualStack(RecipeContent content) {
+        if (content instanceof dev.vfyjxf.cirrus.api.recipe.content.StackContent<?, ?> stack) {
+            return stack.content();
+        }
+        if (content instanceof dev.vfyjxf.cirrus.api.recipe.content.InputContent input && input.isEnumerable()) {
+            Object found = input.enumerate().detect(each -> each instanceof ContentStack<?, ?> stack && stack.notEmpty());
+            return found instanceof ContentStack<?, ?> stack ? stack : ContentStack.empty();
+        }
+        return ContentStack.empty();
+    }
+
 }

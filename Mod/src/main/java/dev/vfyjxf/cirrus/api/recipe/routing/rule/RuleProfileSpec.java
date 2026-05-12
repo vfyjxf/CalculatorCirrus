@@ -89,7 +89,8 @@ public record RuleProfileSpec(
             nearTieEpsilon,
             amplificationSoftThreshold,
             amplificationHardThreshold,
-            liftMultiSemanticChildShortages
+            liftMultiSemanticChildShortages,
+            clauses.isEmpty() ? base.fastScoringPreset() : null
         );
     }
 }

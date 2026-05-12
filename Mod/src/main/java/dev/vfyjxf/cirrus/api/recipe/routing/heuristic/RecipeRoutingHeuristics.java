@@ -29,6 +29,10 @@ public final class RecipeRoutingHeuristics {
         return List.copyOf(rules);
     }
 
+    public static boolean hasRules() {
+        return !rules.isEmpty();
+    }
+
     public static void clear() {
         rules.clear();
     }

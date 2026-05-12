@@ -17,13 +17,21 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
     private final ContentStack<T, S> stack;
     private final float chance;
 
-    StackContent(StackType<T, S> type, ContentStack<T, S> stack, float chance) {
+    private final MatchStrategy matchStrategy;
+
+    StackContent(StackType<T, S> type, ContentStack<T, S> stack, float chance, MatchStrategy matchStrategy) {
         Checks.checkRangeClosed(chance, 0, 1);
         Checks.checkArgument(stack.notEmpty(), "stack value cannot be empty");
         this.type = type;
         this.stack = stack;
         this.chance = chance;
+        this.matchStrategy = matchStrategy;
     }
+
+    StackContent(StackType<T, S> type, ContentStack<T, S> stack, float chance) {
+        this(type, stack, chance, MatchStrategy.identityAndComponent);
+    }
+
 
 
     public StackType<T, S> type() {
@@ -56,7 +64,7 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
 
     @Override
     public StackContent<T, S> copy() {
-        return new StackContent<>(type, stack.copy(), chance);
+        return new StackContent<>(type, stack.copy(), chance, matchStrategy);
     }
 
     @Override
@@ -69,38 +77,42 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
         return Lists.immutable.of(stack);
     }
 
+    public MatchStrategy matchStrategy() {
+        return matchStrategy;
+    }
+
     @Override
     public boolean is(ContentVariant variant) {
         return variant instanceof ContentStack<?, ?> contentStack &&
-               contentStack.matches(this.stack, MatchStrategy.identityAndComponent);
+               contentStack.matches(this.stack, matchStrategy);
     }
 
     @Override
     public StackContent<T, S> copyWithAmount(long amount) {
-        return new StackContent<>(type, stack.copyWithAmount(amount), chance);
+        return new StackContent<>(type, stack.copyWithAmount(amount), chance, matchStrategy);
     }
 
     @Override
     public StackContent<T, S> copyWithChance(float chance) {
-        return new StackContent<>(type, stack.copy(), chance);
+        return new StackContent<>(type, stack.copy(), chance, matchStrategy);
     }
 
     @Override
     public StackContent<T, S> copyWithAmountAndChance(long amount, float chance) {
-        return new StackContent<>(type, stack.copyWithAmount(amount), chance);
+        return new StackContent<>(type, stack.copyWithAmount(amount), chance, matchStrategy);
     }
 
     @Override
     public boolean mergeable(RecipeContent other) {
         if (getClass() != other.getClass()) return false;
         StackContent<?, ?> o = (StackContent<?, ?>) other;
-        return stack.matches(o.stack, MatchStrategy.identityAndComponent);
+        return stack.matches(o.stack, matchStrategy);
     }
 
     @Override
     public boolean satisfy(ContentVariant actual) {
         if (!(actual instanceof ContentStack<?, ?> other)) return false;
-        return stack.matches(other, MatchStrategy.identityAndComponent);
+        return stack.matches(other, matchStrategy);
     }
 
     //region extra utils

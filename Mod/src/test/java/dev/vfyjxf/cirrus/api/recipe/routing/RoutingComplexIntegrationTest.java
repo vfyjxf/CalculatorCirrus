@@ -22,6 +22,8 @@ import org.eclipse.collections.api.factory.Lists;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.lang.ref.WeakReference;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(EphemeralTestServerProvider.class)
@@ -186,6 +188,13 @@ class RoutingComplexIntegrationTest {
         }
     }
 
+    @Test
+    void staticPolicyAnalysisCacheDoesNotRetainRecipeGraphAfterRoute(MinecraftServer server) {
+        WeakReference<RecipeGraph> graphRef = routeWithCachedPolicyAnalysis();
+
+        assertCollected(graphRef);
+    }
+
     private static void installJunkExclusionPolicy(RoutingService service) {
         for (RecipeGraph.Node node : service.graph().nodes()) {
             if (node.recipe().id() != null && node.recipe().id().getPath().startsWith("junk_")) {
@@ -282,6 +291,43 @@ class RoutingComplexIntegrationTest {
                 fail("plan executed player-banned recipe: " + exec.recipe().id());
             }
         }
+    }
+
+    private static WeakReference<RecipeGraph> routeWithCachedPolicyAnalysis() {
+        RoutingComplexDataset.Scenario scenario = RoutingComplexDataset.generatedScenario(701, 8, 24, 6);
+        RecipeGraph graph = RoutingTestFixtures.graph(scenario.recipes());
+        WeakReference<RecipeGraph> graphRef = new WeakReference<>(graph);
+        RoutingService service = new RoutingService(graph);
+        installJunkExclusionPolicy(service);
+
+        RecipeEntry<?> targetRecipe = RoutingTestFixtures.findRecipeById(service.graph(), scenario.targetRecipeId());
+        assertNotNull(targetRecipe);
+
+        RoutingRequest request = RoutingRequest.builder()
+            .plannerMode(PlannerMode.standard)
+            .sourcePolicyId(sourceNoJunkPolicyId)
+            .stock(scenario.stock().copy())
+            .tagSnapshot(service.userWorkspace().snapshot())
+            .budget(new RoutingBudget(2_500, 20_000, 80, 8_000, 0.08, LoopBudget.assuredDefault()))
+            .targetRecipe(targetRecipe, scenario.targetTimes())
+            .build();
+
+        var outcome = service.route(request);
+        assertTrue(outcome.success() || outcome.partial());
+        return graphRef;
+    }
+
+    private static void assertCollected(WeakReference<?> ref) {
+        for (int i = 0; i < 20 && ref.get() != null; i++) {
+            System.gc();
+            try {
+                Thread.sleep(10L);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        assertNull(ref.get());
     }
 
     private static String planFingerprint(dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan plan) {

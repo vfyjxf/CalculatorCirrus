@@ -201,7 +201,6 @@ public class MatrixViewWidget extends CompositeWidget<Widget> {
 					node.machine(),
 					count,
 					node.durationFormatted(),
-					node.euFormatted(),
 					inputs,
 					catalysts,
 					outputs,
@@ -223,13 +222,7 @@ public class MatrixViewWidget extends CompositeWidget<Widget> {
 	}
 
 	private static int materialAccent(MaterialSlot slot) {
-		return switch (slot.type()) {
-			case ITEM -> 0xFFA8BAD8;
-			case FLUID -> 0xFF8EC3DC;
-			case ENERGY -> 0xFFB4A3E8;
-			case GAS -> 0xFF8CC9BF;
-			case CATALYST -> 0xFFC1B3E8;
-		};
+		return slot.category().color();
 	}
 
 	private record MatrixRowData(
@@ -238,7 +231,6 @@ public class MatrixViewWidget extends CompositeWidget<Widget> {
 			String machine,
 			int count,
 			String duration,
-			String energy,
 			List<MaterialSlot> inputs,
 			List<MaterialSlot> catalysts,
 			List<MaterialSlot> outputs,

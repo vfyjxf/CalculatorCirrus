@@ -13,19 +13,19 @@ import org.jetbrains.annotations.Nullable;
  *
  * <p>When the recipe graph contains cycles (recipes whose inputs are produced by
  * their own outputs, directly or transitively), the planner may re-enter the same
- * recipe. {@code CycleGuard} tracks the active recursion path and per-recipe/per-SCC
- * repeat counts, rejecting expansion when:
+ * recipe while it is still on the active path. {@code CycleGuard} tracks that
+ * active path and rejects expansion when:
  * <ul>
  *     <li>The {@link LoopPolicy} forbids re-entry entirely
  *         ({@link LoopPolicy#forbidAmplification}).</li>
  *     <li>The amplification risk exceeds the hard threshold.</li>
- *     <li>Per-recipe or per-SCC repeat counts exceed the {@link LoopBudget}.</li>
+ *     <li>The same recipe appears too many times on the active path.</li>
  *     <li>The global loop expansion count exceeds the budget.</li>
  * </ul>
  *
  * <p>The guard uses a stack-based approach: recipes are
- * {@linkplain #enter(int, int, double, double) entered} before expansion and
- * {@linkplain #leave(int, int) left} afterwards, maintaining correct nesting.
+ * {@linkplain #enter(int, boolean, double, double) entered} before expansion and
+ * {@linkplain #leave(int) left} afterwards, maintaining correct nesting.
  *
  * @see LoopPolicy
  * @see LoopBudget
@@ -36,8 +36,6 @@ public final class CycleGuard {
     private final LoopBudget loopBudget;
     private final IntArrayList stack = new IntArrayList();
     private final Int2IntOpenHashMap activeRecipes = new Int2IntOpenHashMap();
-    private final Int2IntOpenHashMap recipeRepeats = new Int2IntOpenHashMap();
-    private final Int2IntOpenHashMap sccRepeats = new Int2IntOpenHashMap();
     private int globalLoopExpansions;
 
     /**
@@ -56,18 +54,17 @@ public final class CycleGuard {
      *
      * <p>Returns a {@link Decision} indicating whether expansion is allowed.
      * If allowed, the recipe is pushed onto the active path and its repeat
-     * counts are incremented. The caller <b>must</b> call {@link #leave(int, int)}
+     * count is incremented. The caller <b>must</b> call {@link #leave(int)}
      * when expansion completes.
      *
      * @param recipeIndex       the integer index of the recipe
-     * @param sccId             the SCC identifier of the recipe
+     * @param cycleReentry      whether this recipe is already active on the path
      * @param amplificationRisk estimated risk of infinite amplification in [0, 1]
      * @param hardThreshold     the amplification risk threshold from the rule profile
      * @return a decision indicating whether expansion is allowed
      */
-    public Decision enter(int recipeIndex, int sccId, double amplificationRisk, double hardThreshold) {
-        if (activeRecipes.get(recipeIndex) > 0) {
-            globalLoopExpansions++;
+    public Decision enter(int recipeIndex, boolean cycleReentry, double amplificationRisk, double hardThreshold) {
+        if (cycleReentry) {
             if (loopPolicy == LoopPolicy.forbidAmplification) {
                 return Decision.reject(RoutingFailureCode.cycleAmplificationBlocked, "cycle_reentry_blocked");
             }
@@ -76,24 +73,19 @@ public final class CycleGuard {
             }
         }
 
-        if (globalLoopExpansions > loopBudget.maxLoopExpansionsGlobal()) {
+        int nextGlobalLoopExpansions = globalLoopExpansions + (cycleReentry ? 1 : 0);
+        if (nextGlobalLoopExpansions > loopBudget.maxLoopExpansionsGlobal() && loopPolicy != LoopPolicy.allowUnbounded) {
             return Decision.reject(RoutingFailureCode.cycleBudgetExhausted, "global_loop_budget");
         }
 
-        int nextRecipeRepeats = recipeRepeats.get(recipeIndex) + 1;
-        if (nextRecipeRepeats > loopBudget.maxRepeatsPerRecipe() && loopPolicy != LoopPolicy.allowUnbounded) {
+        int nextActiveRepeats = activeRecipes.get(recipeIndex) + 1;
+        if (nextActiveRepeats > loopBudget.maxActiveRepeatsPerRecipe() && loopPolicy != LoopPolicy.allowUnbounded) {
             return Decision.reject(RoutingFailureCode.cycleBudgetExhausted, "recipe_loop_budget");
         }
 
-        int nextSccRepeats = sccRepeats.get(sccId) + 1;
-        if (nextSccRepeats > loopBudget.maxRepeatsPerScc() && loopPolicy != LoopPolicy.allowUnbounded) {
-            return Decision.reject(RoutingFailureCode.cycleBudgetExhausted, "scc_loop_budget");
-        }
-
-        recipeRepeats.put(recipeIndex, nextRecipeRepeats);
-        sccRepeats.put(sccId, nextSccRepeats);
+        globalLoopExpansions = nextGlobalLoopExpansions;
         stack.push(recipeIndex);
-        activeRecipes.put(recipeIndex, activeRecipes.get(recipeIndex) + 1);
+        activeRecipes.put(recipeIndex, nextActiveRepeats);
         return Decision.accept();
     }
 
@@ -101,15 +93,12 @@ public final class CycleGuard {
      * Leaves (pops) a previously entered recipe from the active path.
      *
      * @param recipeIndex the recipe index to leave
-     * @param sccId       the SCC identifier of the recipe
      */
-    public void leave(int recipeIndex, int sccId) {
+    public void leave(int recipeIndex) {
         if (!stack.isEmpty() && stack.topInt() == recipeIndex) {
             stack.popInt();
         }
         decrement(activeRecipes, recipeIndex);
-        decrement(recipeRepeats, recipeIndex);
-        decrement(sccRepeats, sccId);
     }
 
     private static void decrement(Int2IntOpenHashMap map, int key) {

@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
+import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
@@ -77,6 +78,16 @@ public sealed interface OutputContent
     static <T, S> OutputContent fromStack(ContentStack<T, S> stack, float chance) {
         if (stack.isEmpty()) return empty;
         return new StackContent<>(stack.type(), stack.copy(), chance);
+    }
+
+    static <T, S> OutputContent fromStack(ContentStack<T, S> stack, MatchStrategy matchStrategy) {
+        if (stack.isEmpty()) return empty;
+        return new StackContent<>(stack.type(), stack.copy(), MAX_CHANCE, matchStrategy);
+    }
+
+    static <T, S> OutputContent fromStack(ContentStack<T, S> stack, float chance, MatchStrategy matchStrategy) {
+        if (stack.isEmpty()) return empty;
+        return new StackContent<>(stack.type(), stack.copy(), chance, matchStrategy);
     }
 
     static <T, S> OutputContent fromStack(ContentStack<T, S> stack) {

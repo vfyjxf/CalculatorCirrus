@@ -7,6 +7,7 @@ import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveError;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
+import dev.vfyjxf.cirrus.api.recipe.system.RoutingRecipeView;
 import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import mezz.jei.api.constants.RecipeTypes;
@@ -87,6 +88,17 @@ public final class BrewingRecipeSystem extends BasicRecipeSystem<IJeiBrewingReci
             List.of(potion, ingredient),
             List.of(output)
         ));
+    }
+
+    @Override
+    public RoutingRecipeView routingView(ResolveContext context, IJeiBrewingRecipe recipe) {
+        InputContent potion = stacksInput(recipe.getPotionInputs());
+        InputContent ingredient = stacksInput(recipe.getIngredients());
+        OutputContent output = OutputContent.fromItemStack(recipe.getPotionOutput());
+        if (potion.isEmpty() || ingredient.isEmpty() || output.isEmpty()) {
+            return null;
+        }
+        return new RoutingRecipeView(List.of(potion, ingredient), List.of(output));
     }
 
     private static InputContent stacksInput(List<ItemStack> stacks) {

@@ -43,6 +43,10 @@ public final class DefaultRuleProfiles {
     public static final Namespace assuredProvenCompatId = Namespace.of("cirrus", "routing/profile/assured_proven_compat");
 
     private static final ImmutableNoOpExplorePolicy noOpExplore = new ImmutableNoOpExplorePolicy();
+    private static final TieBreakPolicy stableTieBreak = Comparator
+        .comparing((CandidateContext context) -> context.recipe().recipe().systemId().toString())
+        .thenComparing(context -> Objects.toString(context.recipe().recipe().id(), "null"))
+        .thenComparingInt(context -> context.recipe().recipe().hashCode())::compare;
 
     private DefaultRuleProfiles() {
     }
@@ -81,7 +85,8 @@ public final class DefaultRuleProfiles {
             0.03,
             0.60,
             0.85,
-            false
+            false,
+            RuleProfile.FastScoringPreset.standard
         );
     }
 
@@ -110,7 +115,8 @@ public final class DefaultRuleProfiles {
             0.03,
             0.60,
             0.85,
-            true
+            true,
+            RuleProfile.FastScoringPreset.standard
         );
     }
 
@@ -149,7 +155,8 @@ public final class DefaultRuleProfiles {
             0.02,
             0.65,
             1.0,
-            false
+            false,
+            RuleProfile.FastScoringPreset.assuredBounded
         );
     }
 
@@ -190,17 +197,20 @@ public final class DefaultRuleProfiles {
             0.02,
             0.65,
             1.0,
-            false
+            false,
+            RuleProfile.FastScoringPreset.standard
         );
     }
 
     private static HardRuleResult rejectProbabilistic(CandidateContext context) {
-        for (InputContent input : context.recipe().current().inputs()) {
+        for (int inputIndex = 0; inputIndex < context.recipe().inputCount(); inputIndex++) {
+            InputContent input = context.recipe().inputAt(inputIndex);
             if (!input.constantly()) {
                 return HardRuleResult.reject(RoutingFailureCode.noFeasibleSource, "probabilistic_input");
             }
         }
-        for (OutputContent output : context.recipe().current().outputs()) {
+        for (int outputIndex = 0; outputIndex < context.recipe().outputCount(); outputIndex++) {
+            OutputContent output = context.recipe().outputAt(outputIndex);
             if (!output.constantly()) {
                 return HardRuleResult.reject(RoutingFailureCode.noFeasibleSource, "probabilistic_output");
             }
@@ -232,10 +242,11 @@ public final class DefaultRuleProfiles {
     }
 
     private static TieBreakPolicy stableTieBreak() {
-        return Comparator
-            .comparing((CandidateContext context) -> context.recipe().recipe().systemId().toString())
-            .thenComparing(context -> Objects.toString(context.recipe().recipe().id(), "null"))
-            .thenComparingInt(context -> context.recipe().recipe().hashCode())::compare;
+        return stableTieBreak;
+    }
+
+    public static boolean usesStableRecipeTieBreak(RuleProfile profile) {
+        return profile.tieBreakPolicy() == stableTieBreak;
     }
 
     private static final class ImmutableNoOpExplorePolicy implements ExplorePolicy {

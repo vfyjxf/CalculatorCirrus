@@ -6,6 +6,7 @@ import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
 import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemas;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
+import dev.vfyjxf.cirrus.api.recipe.system.RoutingRecipeView;
 import dev.vfyjxf.cirrus.helper.RecipeHelper;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.world.item.crafting.Ingredient;
@@ -36,6 +37,14 @@ public final class SmithingRecipeSystem extends BasicVanillaSystem<SmithingRecip
             RecipeHelper.getOutput(recipeHolder.value()),
             ProjectionSchema.empty().with(ProjectionSchemas.gridSize, new GridSize(3, 1)),
             index -> ProjectionSchema.empty().with(ProjectionSchemas.gridIndex, new GridIndex(index))
+        );
+    }
+
+    @Override
+    public RoutingRecipeView routingView(ResolveContext context, RecipeHolder<SmithingRecipe> recipeHolder) {
+        return VanillaRecipeProjectionSupport.routingView(
+            smithingIngredients(recipeHolder.value()),
+            RecipeHelper.getOutput(recipeHolder.value())
         );
     }
 

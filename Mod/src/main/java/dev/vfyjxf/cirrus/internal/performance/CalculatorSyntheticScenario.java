@@ -10,6 +10,7 @@ import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.routing.RecipeGraph;
 import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
+import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeRoutingHints;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultRuleDefinitions;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleDefinition;
@@ -21,6 +22,7 @@ import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingStatus;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
+import dev.vfyjxf.cirrus.api.recipe.system.RoutingRecipeView;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.RecipeApiRegistryBuilder;
 import dev.vfyjxf.cirrus.ui.process.CalculatorProcessGraphBuilder;
@@ -38,6 +40,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.SplittableRandom;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class CalculatorSyntheticScenario {
@@ -224,6 +227,92 @@ public final class CalculatorSyntheticScenario {
         RuleDefinition rule = DefaultRuleDefinitions.calculatorPreview();
         return new Scenario(
             "machine:" + safeFamilies + ":" + safeCompeting,
+            system,
+            entries,
+            recipeTarget,
+            outputResource(target, 1),
+            rule
+        );
+    }
+
+    public static Scenario createRandomComplexCatalog(
+        int recipeCount,
+        int pathDepth,
+        int maxInputs,
+        int noiseFanout,
+        long seed
+    ) {
+        int safeDepth = Math.max(1, pathDepth);
+        int safeMaxInputs = Math.max(1, maxInputs);
+        int safeNoiseFanout = Math.max(1, noiseFanout);
+        SplittableRandom random = new SplittableRandom(seed);
+        String prefix = "random_" + Long.toUnsignedString(seed, 36) + "_";
+
+        MutableRecipeList recipes = new MutableRecipeList();
+        List<SyntheticMaterialType> pathStages = new ArrayList<>(safeDepth + 1);
+        for (int i = 0; i <= safeDepth; i++) {
+            pathStages.add(material(prefix + "path_stage_" + i));
+        }
+        recipes.add(prefix + "path_base", List.of(), List.of(output(pathStages.getFirst(), 1)));
+
+        for (int step = 1; step <= safeDepth; step++) {
+            int inputCount = 1 + random.nextInt(safeMaxInputs);
+            List<InputContent> inputs = new ArrayList<>(inputCount);
+            inputs.add(input(pathStages.get(step - 1), 1 + random.nextInt(3)));
+            for (int inputIndex = 1; inputIndex < inputCount; inputIndex++) {
+                SyntheticMaterialType leaf = material(prefix + "path_leaf_" + step + "_" + inputIndex);
+                recipes.add(prefix + "path_leaf_recipe_" + step + "_" + inputIndex, List.of(), List.of(output(leaf, 1 + random.nextInt(4))));
+                inputs.add(input(leaf, 1 + random.nextInt(2)));
+            }
+            recipes.add(prefix + "path_step_" + step, inputs, List.of(output(pathStages.get(step), 1)));
+        }
+
+        SyntheticMaterialType target = material(prefix + "target");
+        List<InputContent> targetInputs = new ArrayList<>();
+        targetInputs.add(input(pathStages.getLast(), 1));
+        int extraTargetInputs = random.nextInt(safeMaxInputs);
+        for (int i = 0; i < extraTargetInputs; i++) {
+            SyntheticMaterialType leaf = material(prefix + "target_leaf_" + i);
+            recipes.add(prefix + "target_leaf_recipe_" + i, List.of(), List.of(output(leaf, 1 + random.nextInt(4))));
+            targetInputs.add(input(leaf, 1));
+        }
+        String targetRecipeId = prefix + "target_recipe";
+        recipes.add(targetRecipeId, targetInputs, List.of(output(target, 1)));
+
+        int targetRecipeCount = Math.max(recipeCount, recipes.size());
+        List<SyntheticMaterialType> noiseOutputs = new ArrayList<>(Math.max(0, targetRecipeCount - recipes.size()));
+        while (recipes.size() < targetRecipeCount) {
+            int noiseIndex = noiseOutputs.size();
+            int inputCount = random.nextInt(safeMaxInputs + 1);
+            List<InputContent> inputs = new ArrayList<>(inputCount);
+            for (int inputIndex = 0; inputIndex < inputCount; inputIndex++) {
+                boolean linkExisting = !noiseOutputs.isEmpty() && random.nextInt(100) < 70;
+                SyntheticMaterialType inputType;
+                if (linkExisting) {
+                    int window = Math.min(noiseOutputs.size(), safeNoiseFanout);
+                    inputType = noiseOutputs.get(noiseOutputs.size() - 1 - random.nextInt(window));
+                } else {
+                    inputType = material(prefix + "noise_raw_" + noiseIndex + "_" + inputIndex);
+                }
+                inputs.add(input(inputType, 1 + random.nextInt(4)));
+            }
+
+            int outputCount = 1 + (safeNoiseFanout > 1 && random.nextInt(8) == 0 ? 1 : 0);
+            List<OutputContent> outputs = new ArrayList<>(outputCount);
+            for (int outputIndex = 0; outputIndex < outputCount; outputIndex++) {
+                SyntheticMaterialType outputType = material(prefix + "noise_output_" + noiseIndex + "_" + outputIndex);
+                noiseOutputs.add(outputType);
+                outputs.add(output(outputType, 1 + random.nextInt(4)));
+            }
+            recipes.add(prefix + "noise_recipe_" + noiseIndex, inputs, outputs);
+        }
+
+        SyntheticRecipeSystem system = new SyntheticRecipeSystem(recipes.toImmutable());
+        ImmutableList<RecipeEntry<?>> entries = recipes.entries(system);
+        RecipeEntry<SyntheticRecipe> recipeTarget = RecipeEntry.of(system, recipes.require(targetRecipeId));
+        RuleDefinition rule = DefaultRuleDefinitions.calculatorPreview();
+        return new Scenario(
+            "random:" + entries.size() + ":" + safeDepth + ":" + safeMaxInputs + ":" + safeNoiseFanout + ":" + seed,
             system,
             entries,
             recipeTarget,
@@ -431,6 +520,30 @@ public final class CalculatorSyntheticScenario {
         }
 
         @Override
+        public RoutingRecipeView routingView(ResolveContext context, SyntheticRecipe recipe) {
+            return new RoutingRecipeView(recipe.inputs(), recipe.outputs());
+        }
+
+        @Override
+        public RecipeRoutingHints routingHints(SyntheticRecipe recipe) {
+            if (recipe.id().startsWith("deep_step_") && recipe.id().contains("_alt_")) {
+                return RecipeRoutingHints.builder()
+                    .lastResort()
+                    .penalty(100_000)
+                    .reasonKey("synthetic_noise")
+                    .build();
+            }
+            if (recipe.id().contains("_noise_recipe_")) {
+                return RecipeRoutingHints.builder()
+                    .lastResort()
+                    .penalty(100_000)
+                    .reasonKey("synthetic_noise")
+                    .build();
+            }
+            return RecipeRoutingHints.empty();
+        }
+
+        @Override
         public RichIterable<SyntheticRecipe> allRecipes() {
             return recipes;
         }
@@ -512,6 +625,10 @@ public final class CalculatorSyntheticScenario {
 
         private void add(String id, Collection<InputContent> inputs, Collection<OutputContent> outputs) {
             recipes.add(new SyntheticRecipe(id, List.copyOf(inputs), List.copyOf(outputs)));
+        }
+
+        private int size() {
+            return recipes.size();
         }
 
         private SyntheticRecipe require(String id) {

@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.ui.tooltip;
 
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialSlot;
-import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialType;
+import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
 import dev.vfyjxf.cloudlib.api.ui.texture.ImageTexture;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
@@ -51,29 +51,29 @@ public class RichTooltipComponentTest {
     @Test
     void recipeCardCatalystsWrapIncreaseHeight() {
         var oneCatalyst = new RichTooltipComponent.Entry.RecipeCard(
-                List.of(new MaterialSlot("cat", 1, MaterialType.CATALYST)),
+                List.of(new MaterialSlot("cat", 1, MaterialCategories.CATALYST)),
                 List.of(),
-                List.of(new MaterialSlot("cat", 1, MaterialType.CATALYST)),
+                List.of(new MaterialSlot("cat", 1, MaterialCategories.CATALYST)),
                 null
         );
         var manyCatalysts = new RichTooltipComponent.Entry.RecipeCard(
-                List.of(new MaterialSlot("cat", 1, MaterialType.CATALYST)),
+                List.of(new MaterialSlot("cat", 1, MaterialCategories.CATALYST)),
                 List.of(),
                 List.of(
-                        new MaterialSlot("c1", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c2", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c3", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c4", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c5", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c6", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c7", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c8", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c9", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c10", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c11", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c12", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c13", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c14", 1, MaterialType.CATALYST)
+                        new MaterialSlot("c1", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c2", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c3", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c4", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c5", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c6", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c7", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c8", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c9", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c10", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c11", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c12", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c13", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c14", 1, MaterialCategories.CATALYST)
                 ),
                 null
         );
@@ -96,17 +96,17 @@ public class RichTooltipComponentTest {
     @Test
     void recipeCardCatalystsAlignWithLayoutColumns() {
         var card = new RichTooltipComponent.Entry.RecipeCard(
-                List.of(new MaterialSlot("in", 1, MaterialType.ITEM)),
-                List.of(new MaterialSlot("out", 1, MaterialType.ITEM)),
+                List.of(new MaterialSlot("in", 1, MaterialCategories.ITEM)),
+                List.of(new MaterialSlot("out", 1, MaterialCategories.ITEM)),
                 List.of(
-                        new MaterialSlot("c1", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c2", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c3", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c4", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c5", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c6", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c7", 1, MaterialType.CATALYST),
-                        new MaterialSlot("c8", 1, MaterialType.CATALYST)
+                        new MaterialSlot("c1", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c2", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c3", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c4", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c5", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c6", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c7", 1, MaterialCategories.CATALYST),
+                        new MaterialSlot("c8", 1, MaterialCategories.CATALYST)
                 ),
                 null
         );

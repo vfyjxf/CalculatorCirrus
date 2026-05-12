@@ -14,7 +14,7 @@ public enum LoopPolicy {
     /**
      * Allows bounded cyclic expansion subject to {@link LoopBudget} limits.
      * The planner may re-enter a recipe if the amplification risk is below
-     * the hard threshold and per-recipe/per-SCC repeat counts are within budget.
+     * the hard threshold and active-path repeat counts are within budget.
      */
     allowBoundedAmplification,
     /**

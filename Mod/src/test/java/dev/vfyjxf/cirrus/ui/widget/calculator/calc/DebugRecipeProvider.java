@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.ui.widget.calculator.calc;
 
+import dev.vfyjxf.cirrus.ui.process.MaterialCategory;
+
 import dev.vfyjxf.cirrus.CirrusConstants;
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
@@ -28,7 +30,7 @@ import dev.vfyjxf.cirrus.ui.process.ProcessGraph;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MachineInfo;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialSlot;
-import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialType;
+import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
 import dev.vfyjxf.cirrus.ui.process.RecipeGraphBuilder;
 import dev.vfyjxf.cloudlib.api.annotation.NotNullByDefault;
 import dev.vfyjxf.cloudlib.api.plugin.PluginMarker;
@@ -255,20 +257,20 @@ public final class DebugRecipeProvider {
                 List<MaterialSlot> inputs = new java.util.ArrayList<>();
                 if (s == 0) {
                     inputs.add(mat("Raw " + elements[c] + " Ore", 64,
-                            MaterialType.ITEM, oreIcons[c * 2]));
+                            MaterialCategories.ITEM, oreIcons[c * 2]));
                 } else {
                     inputs.add(mat(elements[c] + " Grade " + s, 32,
-                            MaterialType.ITEM, dustIcons[(c + s) % dustIcons.length]));
+                            MaterialCategories.ITEM, dustIcons[(c + s) % dustIcons.length]));
                 }
                 // Cross-dep every 4 steps: need output from adjacent chain (earlier step)
                 if (s > 0 && s % 4 == 0) {
                     int crossC = (c + 1) % elements.length;
                     inputs.add(mat(elements[crossC] + " Grade " + (s - 2), 8,
-                            MaterialType.ITEM, dustIcons[crossC]));
+                            MaterialCategories.ITEM, dustIcons[crossC]));
                 }
                 // Some steps need fluid
                 if (s % 6 == 3) {
-                    inputs.add(new MaterialSlot("Solvent", 4000, MaterialType.FLUID, 1.0, false,
+                    inputs.add(new MaterialSlot("Solvent", 4000, MaterialCategories.FLUID, 1.0, false,
                             null, new FluidStack(Fluids.WATER, 4000)));
                 }
 
@@ -278,11 +280,11 @@ public final class DebugRecipeProvider {
                         inputs,
                         List.of(
                                 mat(elements[c] + " Grade " + (s + 1), 24,
-                                        MaterialType.ITEM, dustIcons[(c + s + 1) % dustIcons.length]),
-                                matChance(elements[c] + " Waste", 4, MaterialType.ITEM, 0.2,
+                                        MaterialCategories.ITEM, dustIcons[(c + s + 1) % dustIcons.length]),
+                                matChance(elements[c] + " Waste", 4, MaterialCategories.ITEM, 0.2,
                                         new ItemStack(Items.GRAVEL, 4))
                         ),
-                        80 + s * 15, 16 * (s / 3 + 1), s / 4,
+                        80 + s * 15,
                         List.of(new MachineInfo("Refinery T" + (s / 4 + 1),
                                 machineIcons[s % machineIcons.length])),
                         null
@@ -301,17 +303,17 @@ public final class DebugRecipeProvider {
                 List<MaterialSlot> inputs = new java.util.ArrayList<>();
                 if (s == 0) {
                     inputs.add(mat("Raw " + catalysts[c], 32,
-                            MaterialType.ITEM, oreIcons[c + 5]));
+                            MaterialCategories.ITEM, oreIcons[c + 5]));
                 } else {
                     inputs.add(mat(catalysts[c] + " Grade " + s, 16,
-                            MaterialType.ITEM, dustIcons[(c + s) % dustIcons.length]));
+                            MaterialCategories.ITEM, dustIcons[(c + s) % dustIcons.length]));
                 }
                 // Cross-ref element chain output
                 if (s % 3 == 2) {
                     int elemC = (c + s) % elements.length;
                     int elemG = Math.min(s + 2, ELEM_STEPS);
                     inputs.add(mat(elements[elemC] + " Grade " + elemG, 4,
-                            MaterialType.ITEM, dustIcons[elemC]));
+                            MaterialCategories.ITEM, dustIcons[elemC]));
                 }
 
                 builder.addNode(new ProcessNode(
@@ -319,8 +321,8 @@ public final class DebugRecipeProvider {
                         catalysts[c] + " Synthesis Step " + (s + 1), "Catalyst Plant",
                         inputs,
                         List.of(mat(catalysts[c] + " Grade " + (s + 1), 12,
-                                MaterialType.ITEM, dustIcons[(c + s + 1) % dustIcons.length])),
-                        100 + s * 20, 32 * (c + 1), s / 3,
+                                MaterialCategories.ITEM, dustIcons[(c + s + 1) % dustIcons.length])),
+                        100 + s * 20,
                         List.of(new MachineInfo("Catalyst Plant T" + (s / 3 + 1),
                                 machineIcons[(s + 6) % machineIcons.length])),
                         null
@@ -341,13 +343,13 @@ public final class DebugRecipeProvider {
                     "Compound Alloy " + (i + 1) + " Mixing", "Industrial Mixer",
                     List.of(
                             mat(elements[eA] + " Grade " + grade, 16,
-                                    MaterialType.ITEM, ingotIcons[eA % ingotIcons.length]),
+                                    MaterialCategories.ITEM, ingotIcons[eA % ingotIcons.length]),
                             mat(elements[eB] + " Grade " + grade, 16,
-                                    MaterialType.ITEM, ingotIcons[eB % ingotIcons.length])
+                                    MaterialCategories.ITEM, ingotIcons[eB % ingotIcons.length])
                     ),
                     List.of(mat("Compound Alloy " + (i + 1), 24,
-                            MaterialType.ITEM, ingotIcons[i % ingotIcons.length])),
-                    200, 96, 2,
+                            MaterialCategories.ITEM, ingotIcons[i % ingotIcons.length])),
+                    200,
                     List.of(new MachineInfo("Industrial Mixer", machineIcons[4])),
                     null
             ), "Alloys");
@@ -357,10 +359,10 @@ public final class DebugRecipeProvider {
                     "cplate_" + i,
                     "Compound Plate " + (i + 1) + " Rolling", "Plate Bender",
                     List.of(mat("Compound Alloy " + (i + 1), 8,
-                            MaterialType.ITEM, ingotIcons[i % ingotIcons.length])),
+                            MaterialCategories.ITEM, ingotIcons[i % ingotIcons.length])),
                     List.of(mat("Compound Plate " + (i + 1), 8,
-                            MaterialType.ITEM, new ItemStack(Items.HEAVY_WEIGHTED_PRESSURE_PLATE, 8))),
-                    80, 32, 2,
+                            MaterialCategories.ITEM, new ItemStack(Items.HEAVY_WEIGHTED_PRESSURE_PLATE, 8))),
+                    80,
                     List.of(new MachineInfo("Plate Bender", machineIcons[4])),
                     null
             ), "Alloys");
@@ -377,30 +379,30 @@ public final class DebugRecipeProvider {
             // Serial dependency: previous circuit
             if (s > 0) {
                 inputs.add(mat("Circuit Lv" + s, 2,
-                        MaterialType.ITEM, circuitIcons[(s - 1) % circuitIcons.length]));
+                        MaterialCategories.ITEM, circuitIcons[(s - 1) % circuitIcons.length]));
             }
             // Element input (pulls from various element chains)
             int elemC = s % elements.length;
             int elemG = Math.min(s / 5 + 1, ELEM_STEPS);
             inputs.add(mat(elements[elemC] + " Grade " + elemG, 4,
-                    MaterialType.ITEM, dustIcons[(elemC + s) % dustIcons.length]));
+                    MaterialCategories.ITEM, dustIcons[(elemC + s) % dustIcons.length]));
             // Catalyst (every 7th step)
             if (s % 7 == 3) {
                 int catC = s % catalysts.length;
                 int catG = Math.min(s / 8 + 1, CAT_STEPS);
                 inputs.add(mat(catalysts[catC] + " Grade " + catG, 2,
-                        MaterialType.ITEM, dustIcons[catC]));
+                        MaterialCategories.ITEM, dustIcons[catC]));
             }
             // Compound Plate (every 5th step, starting at step 4)
             if (s % 5 == 4) {
                 int plateIdx = s / 5 + 1; // 1..10
                 inputs.add(mat("Compound Plate " + plateIdx, 2,
-                        MaterialType.ITEM, new ItemStack(Items.HEAVY_WEIGHTED_PRESSURE_PLATE, 2)));
+                        MaterialCategories.ITEM, new ItemStack(Items.HEAVY_WEIGHTED_PRESSURE_PLATE, 2)));
             }
             // Fluid (every 10th step)
             if (s % 10 == 5) {
                 inputs.add(new MaterialSlot("Etching Acid", 2000 * (s / 10 + 1),
-                        MaterialType.FLUID, 1.0, false, null, new FluidStack(Fluids.LAVA, 2000)));
+                        MaterialCategories.FLUID, 1.0, false, null, new FluidStack(Fluids.LAVA, 2000)));
             }
 
             builder.addNode(new ProcessNode(
@@ -409,11 +411,11 @@ public final class DebugRecipeProvider {
                     inputs,
                     List.of(
                             mat("Circuit Lv" + (s + 1), 2,
-                                    MaterialType.ITEM, circuitIcons[s % circuitIcons.length]),
-                            matChance("Solder Waste", 2, MaterialType.ITEM, 0.3,
+                                    MaterialCategories.ITEM, circuitIcons[s % circuitIcons.length]),
+                            matChance("Solder Waste", 2, MaterialCategories.ITEM, 0.3,
                                     new ItemStack(Items.IRON_NUGGET, 2))
                     ),
-                    100 + s * 20, 32 + s * 8, s / 10 + 1,
+                    100 + s * 20,
                     List.of(new MachineInfo("Circuit Assembler T" + (s / 10 + 1),
                             machineIcons[(s + 8) % machineIcons.length])),
                     null
@@ -431,17 +433,17 @@ public final class DebugRecipeProvider {
                     "Superconductor Lv" + (i + 1) + " Fabrication", "Cryogenic Chamber",
                     List.of(
                             mat("Circuit Lv" + circLv, 2,
-                                    MaterialType.ITEM, circuitIcons[i % circuitIcons.length]),
+                                    MaterialCategories.ITEM, circuitIcons[i % circuitIcons.length]),
                             mat("Compound Plate " + (i + 1), 4,
-                                    MaterialType.ITEM, new ItemStack(Items.HEAVY_WEIGHTED_PRESSURE_PLATE, 4)),
+                                    MaterialCategories.ITEM, new ItemStack(Items.HEAVY_WEIGHTED_PRESSURE_PLATE, 4)),
                             mat(catalysts[i % catalysts.length] + " Grade " + CAT_STEPS, 2,
-                                    MaterialType.ITEM, dustIcons[i % dustIcons.length]),
-                            new MaterialSlot("Liquid Nitrogen", 8000, MaterialType.FLUID, 1.0, false,
+                                    MaterialCategories.ITEM, dustIcons[i % dustIcons.length]),
+                            new MaterialSlot("Liquid Nitrogen", 8000, MaterialCategories.FLUID, 1.0, false,
                                     null, new FluidStack(Fluids.WATER, 8000))
                     ),
                     List.of(mat("Superconductor Lv" + (i + 1), 2,
-                            MaterialType.ITEM, new ItemStack(Items.LIGHTNING_ROD, 2))),
-                    300 + i * 30, 128 + i * 16, 3,
+                            MaterialCategories.ITEM, new ItemStack(Items.LIGHTNING_ROD, 2))),
+                    300 + i * 30,
                     List.of(new MachineInfo("Cryogenic Chamber",
                             machineIcons[(i + 10) % machineIcons.length])),
                     null
@@ -460,29 +462,29 @@ public final class DebugRecipeProvider {
             // Serial dependency: previous machine
             if (s > 0) {
                 inputs.add(mat("Machine Lv" + s, 1,
-                        MaterialType.ITEM, machineIcons[(s - 1) % machineIcons.length]));
+                        MaterialCategories.ITEM, machineIcons[(s - 1) % machineIcons.length]));
             }
             // Circuit input (progressively higher tiers)
             int circLv = Math.min(s * 2 + 1, CIRCUIT_STEPS);
             inputs.add(mat("Circuit Lv" + circLv, 4,
-                    MaterialType.ITEM, circuitIcons[s % circuitIcons.length]));
+                    MaterialCategories.ITEM, circuitIcons[s % circuitIcons.length]));
             // Element (highest grade)
             int elemC = s % elements.length;
             inputs.add(mat(elements[elemC] + " Grade " + ELEM_STEPS, 8,
-                    MaterialType.ITEM, ingotIcons[elemC % ingotIcons.length]));
+                    MaterialCategories.ITEM, ingotIcons[elemC % ingotIcons.length]));
             // Superconductor every 3rd step
             if (s % 3 == 0) {
                 int scIdx = s / 3 + 1; // 1..10
                 if (scIdx <= 10) {
                     inputs.add(mat("Superconductor Lv" + scIdx, 2,
-                            MaterialType.ITEM, new ItemStack(Items.LIGHTNING_ROD, 2)));
+                            MaterialCategories.ITEM, new ItemStack(Items.LIGHTNING_ROD, 2)));
                 }
             }
             // Catalyst cross-dep
             if (s % 5 == 2) {
                 int catC = s % catalysts.length;
                 inputs.add(mat(catalysts[catC] + " Grade " + CAT_STEPS, 2,
-                        MaterialType.ITEM, dustIcons[catC]));
+                        MaterialCategories.ITEM, dustIcons[catC]));
             }
 
             builder.addNode(new ProcessNode(
@@ -490,8 +492,8 @@ public final class DebugRecipeProvider {
                     "Machine Assembly Lv" + (s + 1), "Assembly Line",
                     inputs,
                     List.of(mat("Machine Lv" + (s + 1), 1,
-                            MaterialType.ITEM, machineIcons[s % machineIcons.length])),
-                    200 + s * 30, 64 + s * 16, s / 6 + 2,
+                            MaterialCategories.ITEM, machineIcons[s % machineIcons.length])),
+                    200 + s * 30,
                     List.of(new MachineInfo("Assembly Line T" + (s / 6 + 1),
                             machineIcons[(s + 4) % machineIcons.length])),
                     null
@@ -509,26 +511,26 @@ public final class DebugRecipeProvider {
             // Serial dependency
             if (s > 0) {
                 inputs.add(mat("Module Lv" + s, 1,
-                        MaterialType.ITEM, machineIcons[(s - 1 + 6) % machineIcons.length]));
+                        MaterialCategories.ITEM, machineIcons[(s - 1 + 6) % machineIcons.length]));
             }
             // Machine input
             int machineLv = Math.min(s + 10, MACHINE_STEPS);
             inputs.add(mat("Machine Lv" + machineLv, 2,
-                    MaterialType.ITEM, machineIcons[s % machineIcons.length]));
+                    MaterialCategories.ITEM, machineIcons[s % machineIcons.length]));
             // Circuit input
             int circLv = Math.min(s * 3 + 10, CIRCUIT_STEPS);
             inputs.add(mat("Circuit Lv" + circLv, 8,
-                    MaterialType.ITEM, circuitIcons[s % circuitIcons.length]));
+                    MaterialCategories.ITEM, circuitIcons[s % circuitIcons.length]));
             // Element cross-dep
             int elemC = s % elements.length;
             inputs.add(mat(elements[elemC] + " Grade " + ELEM_STEPS, 16,
-                    MaterialType.ITEM, ingotIcons[elemC % ingotIcons.length]));
+                    MaterialCategories.ITEM, ingotIcons[elemC % ingotIcons.length]));
             // Compound alloy cross-dep (every 4th step)
             if (s % 4 == 2) {
                 int alloyIdx = s / 4 + 1;
                 if (alloyIdx <= 10) {
                     inputs.add(mat("Compound Alloy " + alloyIdx, 8,
-                            MaterialType.ITEM, ingotIcons[alloyIdx % ingotIcons.length]));
+                            MaterialCategories.ITEM, ingotIcons[alloyIdx % ingotIcons.length]));
                 }
             }
 
@@ -537,8 +539,8 @@ public final class DebugRecipeProvider {
                     "Module Integration Lv" + (s + 1), "Modular Factory",
                     inputs,
                     List.of(mat("Module Lv" + (s + 1), 1,
-                            MaterialType.ITEM, machineIcons[(s + 6) % machineIcons.length])),
-                    400 + s * 40, 128 + s * 32, s / 5 + 3,
+                            MaterialCategories.ITEM, machineIcons[(s + 6) % machineIcons.length])),
+                    400 + s * 40,
                     List.of(new MachineInfo("Modular Factory T" + (s / 5 + 1),
                             machineIcons[(s + 7) % machineIcons.length])),
                     null
@@ -556,31 +558,31 @@ public final class DebugRecipeProvider {
             // Serial dependency
             if (s > 0) {
                 inputs.add(mat("System Lv" + s, 1,
-                        MaterialType.ITEM, new ItemStack(Items.BEACON)));
+                        MaterialCategories.ITEM, new ItemStack(Items.BEACON)));
             }
             // Module
             int moduleLv = Math.min(s + 5, MODULE_STEPS);
             inputs.add(mat("Module Lv" + moduleLv, 2,
-                    MaterialType.ITEM, machineIcons[(s + 6) % machineIcons.length]));
+                    MaterialCategories.ITEM, machineIcons[(s + 6) % machineIcons.length]));
             // Machine (cross-dep)
             int machineLv = Math.min(s * 2 + 15, MACHINE_STEPS);
             inputs.add(mat("Machine Lv" + machineLv, 1,
-                    MaterialType.ITEM, machineIcons[s % machineIcons.length]));
+                    MaterialCategories.ITEM, machineIcons[s % machineIcons.length]));
             // Circuit
             int circLv = Math.min(s * 3 + 30, CIRCUIT_STEPS);
             inputs.add(mat("Circuit Lv" + circLv, 16,
-                    MaterialType.ITEM, circuitIcons[s % circuitIcons.length]));
+                    MaterialCategories.ITEM, circuitIcons[s % circuitIcons.length]));
             // Superconductor cross-dep (every 3rd step)
             if (s % 3 == 0) {
                 int scIdx = Math.min(s / 3 + 5, 10);
                 inputs.add(mat("Superconductor Lv" + scIdx, 4,
-                        MaterialType.ITEM, new ItemStack(Items.LIGHTNING_ROD, 4)));
+                        MaterialCategories.ITEM, new ItemStack(Items.LIGHTNING_ROD, 4)));
             }
             // Catalyst cross-dep
             if (s % 5 == 0) {
                 int catC = s % catalysts.length;
                 inputs.add(new MaterialSlot(catalysts[catC] + " Grade " + CAT_STEPS, 4,
-                        MaterialType.CATALYST, 1.0, true, dustIcons[catC], null));
+                        MaterialCategories.CATALYST, 1.0, true, dustIcons[catC], null));
             }
 
             builder.addNode(new ProcessNode(
@@ -589,12 +591,12 @@ public final class DebugRecipeProvider {
                     inputs,
                     List.of(
                             mat("System Lv" + (s + 1), 1,
-                                    MaterialType.ITEM, new ItemStack(Items.BEACON)),
+                                    MaterialCategories.ITEM, new ItemStack(Items.BEACON)),
                             new MaterialSlot("Exhaust Gas", 2000 * (s + 1),
-                                    MaterialType.FLUID, 0.8, false,
+                                    MaterialCategories.FLUID, 0.8, false,
                                     null, new FluidStack(Fluids.LAVA, 2000))
                     ),
-                    600 + s * 60, 256 + s * 64, s / 3 + 4,
+                    600 + s * 60,
                     List.of(new MachineInfo("System Factory T" + (s / 3 + 1),
                             machineIcons[(s + 9) % machineIcons.length])),
                     null
@@ -613,33 +615,33 @@ public final class DebugRecipeProvider {
             // Serial dependency: previous component
             if (s > 0) {
                 inputs.add(mat("Stargate Component " + s, 1,
-                        MaterialType.ITEM, new ItemStack(Items.NETHER_STAR)));
+                        MaterialCategories.ITEM, new ItemStack(Items.NETHER_STAR)));
             }
             // System
             int sysLv = Math.min(s + 5, SYSTEM_STEPS);
             inputs.add(mat("System Lv" + sysLv, 2,
-                    MaterialType.ITEM, new ItemStack(Items.BEACON)));
+                    MaterialCategories.ITEM, new ItemStack(Items.BEACON)));
             // Highest-tier circuit
             inputs.add(mat("Circuit Lv" + CIRCUIT_STEPS, 32 * (s + 1),
-                    MaterialType.ITEM, circuitIcons[3]));
+                    MaterialCategories.ITEM, circuitIcons[3]));
             // Multiple elements (creates fan-in from element chains)
             for (int e = 0; e < elements.length; e++) {
                 if ((e + s) % 3 == 0) {
                     inputs.add(mat(elements[e] + " Grade " + ELEM_STEPS, 32,
-                            MaterialType.ITEM, ingotIcons[e % ingotIcons.length]));
+                            MaterialCategories.ITEM, ingotIcons[e % ingotIcons.length]));
                 }
             }
             // Superconductor
             int scIdx = Math.min(s + 1, 10);
             inputs.add(mat("Superconductor Lv" + scIdx, 4,
-                    MaterialType.ITEM, new ItemStack(Items.LIGHTNING_ROD, 4)));
+                    MaterialCategories.ITEM, new ItemStack(Items.LIGHTNING_ROD, 4)));
             // Fluid
             inputs.add(new MaterialSlot("Cryo-Coolant", 16000 * (s + 1),
-                    MaterialType.FLUID, 1.0, false,
+                    MaterialCategories.FLUID, 1.0, false,
                     null, new FluidStack(Fluids.WATER, 16000)));
             // Catalyst
             inputs.add(new MaterialSlot("Nether Star Catalyst", 1,
-                    MaterialType.CATALYST, 1.0, true,
+                    MaterialCategories.CATALYST, 1.0, true,
                     new ItemStack(Items.NETHER_STAR), null));
 
             String outName = s == FINAL_STEPS - 1
@@ -652,11 +654,11 @@ public final class DebugRecipeProvider {
                     outName + " Assembly", "Mega Assembly Line",
                     inputs,
                     List.of(
-                            mat(outName, 1, MaterialType.ITEM, outIcon),
-                            matChance("Scrap", 4 * (s + 1), MaterialType.ITEM, 0.2,
+                            mat(outName, 1, MaterialCategories.ITEM, outIcon),
+                            matChance("Scrap", 4 * (s + 1), MaterialCategories.ITEM, 0.2,
                                     new ItemStack(Items.IRON_NUGGET, 4))
                     ),
-                    2000 + s * 300, 1024 + s * 128, 5,
+                    2000 + s * 300,
                     List.of(new MachineInfo("Mega Assembly Line", machineIcons[7])),
                     null
             ), "Final Assembly");
@@ -691,12 +693,12 @@ public final class DebugRecipeProvider {
     }
 
     /** Convenience: MaterialSlot with item stack. */
-    private static MaterialSlot mat(String name, int amount, MaterialType type, ItemStack icon) {
+    private static MaterialSlot mat(String name, int amount, MaterialCategory type, ItemStack icon) {
         return new MaterialSlot(name, amount, type, 1.0, false, icon, null);
     }
 
     /** Convenience: MaterialSlot with chance. */
-    private static MaterialSlot matChance(String name, int amount, MaterialType type,
+    private static MaterialSlot matChance(String name, int amount, MaterialCategory type,
                                           double chance, ItemStack icon) {
         return new MaterialSlot(name, amount, type, chance, false, icon, null);
     }

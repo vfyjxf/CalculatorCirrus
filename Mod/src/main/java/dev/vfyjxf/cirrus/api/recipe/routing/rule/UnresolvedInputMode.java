@@ -6,7 +6,8 @@ import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 public enum UnresolvedInputMode {
     strict,
     directSupplyOnNoSource,
-    directSupplyOnNoSourceOrSafeExhausted;
+    directSupplyOnNoSourceOrSafeExhausted,
+    directSupplyOnNoSourceOrSafeOrCycleExhausted;
 
     public static final Codec<UnresolvedInputMode> CODEC = dev.vfyjxf.cloudlib.api.util.Codecs.lowerCaseEnum(UnresolvedInputMode.class);
 
@@ -24,7 +25,19 @@ public enum UnresolvedInputMode {
                     ? UnresolvedInputRule.Resolution.pendingInput
                     : UnresolvedInputRule.Resolution.fail;
             };
+            case directSupplyOnNoSourceOrSafeOrCycleExhausted -> context -> {
+                if (context.phase() == UnresolvedInputContext.Phase.noSource) {
+                    return UnresolvedInputRule.Resolution.pendingInput;
+                }
+                return context.budgetLimited() || context.activeCycleCandidate() || safeOrNonCycleExhausted(context)
+                    ? UnresolvedInputRule.Resolution.pendingInput
+                    : UnresolvedInputRule.Resolution.fail;
+            };
         };
+    }
+
+    private static boolean safeOrNonCycleExhausted(UnresolvedInputContext context) {
+        return preservesOriginalInputSemantics(context.input()) || !context.activeCycleCandidate();
     }
 
     private static boolean preservesOriginalInputSemantics(InputContent input) {

@@ -7,6 +7,8 @@ import dev.vfyjxf.cirrus.ui.execution.tooltip.JeiRecipeTooltipComponent;
 import dev.vfyjxf.cloudlib.util.Checks;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
+import mezz.jei.api.ingredients.subtypes.ISubtypeManager;
+import mezz.jei.api.registration.IModIngredientRegistration;
 import mezz.jei.api.recipe.IFocusFactory;
 import mezz.jei.api.recipe.IRecipeManager;
 import mezz.jei.api.recipe.RecipeType;
@@ -30,6 +32,8 @@ public class CirrusJeiPlugin implements IModPlugin {
     private static volatile List<RecipeType<?>> knownRecipeTypes = List.of();
 
     public static IFocusFactory focusFactory;
+
+    private static ISubtypeManager subtypeManager;
 
     public static IRecipeManager recipeManager() {
         Checks.checkNotNull(recipeManager, "recipeManager");
@@ -69,6 +73,10 @@ public class CirrusJeiPlugin implements IModPlugin {
         return knownRecipeTypes;
     }
 
+    public static ISubtypeManager subtypeManager() {
+        return subtypeManager;
+    }
+
     @Override
     public ResourceLocation getPluginUid() {
         return ResourceLocation.fromNamespaceAndPath(CirrusConstants.modId, "jei_plugin");
@@ -94,6 +102,11 @@ public class CirrusJeiPlugin implements IModPlugin {
         registration.addRecipeButtonFactory(JeiTargetButtonHelper.buttonFactory());
     }
 
+    @Override
+    public void registerIngredients(IModIngredientRegistration registration) {
+        subtypeManager = registration.getSubtypeManager();
+    }
+
     private static List<RecipeType<?>> recipeTypesOrEmpty(@Nullable IJeiHelpers helpers) {
         if (helpers == null) {
             return List.of();
@@ -114,5 +127,4 @@ public class CirrusJeiPlugin implements IModPlugin {
         }
         knownRecipeTypes = List.copyOf(out.values());
     }
-
 }

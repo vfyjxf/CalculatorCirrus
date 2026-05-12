@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 
+import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
+
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
@@ -15,6 +17,7 @@ import net.minecraft.world.item.Items;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -157,9 +160,7 @@ class TreeCanvasWidgetContractTest {
                 "Side Sink",
                 "Inventory",
                 List.of(),
-                List.of(new ProcessNode.MaterialSlot("side", 1, ProcessNode.MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new ProcessNode.MaterialSlot("side", 1, MaterialCategories.ITEM)),
                 0,
                 List.of(),
                 null
@@ -169,9 +170,7 @@ class TreeCanvasWidgetContractTest {
                 "Raw",
                 "Inventory",
                 List.of(),
-                List.of(new ProcessNode.MaterialSlot("raw", 1, ProcessNode.MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new ProcessNode.MaterialSlot("raw", 1, MaterialCategories.ITEM)),
                 0,
                 List.of(),
                 null
@@ -180,10 +179,8 @@ class TreeCanvasWidgetContractTest {
                 "target/craft",
                 "Target Craft",
                 "Crafting Table",
-                List.of(new ProcessNode.MaterialSlot("raw", 1, ProcessNode.MaterialType.ITEM)),
-                List.of(new ProcessNode.MaterialSlot("target", 1, ProcessNode.MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new ProcessNode.MaterialSlot("raw", 1, MaterialCategories.ITEM)),
+                List.of(new ProcessNode.MaterialSlot("target", 1, MaterialCategories.ITEM)),
                 0,
                 List.of(),
                 null
@@ -193,7 +190,7 @@ class TreeCanvasWidgetContractTest {
                 "target/craft",
                 "raw",
                 1,
-                ProcessNode.MaterialType.ITEM
+                MaterialCategories.ITEM
         ));
         graph.preferredRootNodeId("target/craft");
 
@@ -215,9 +212,7 @@ class TreeCanvasWidgetContractTest {
                 "Large Target",
                 "Crafting Table",
                 List.of(),
-                List.of(new ProcessNode.MaterialSlot("target", 1, ProcessNode.MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new ProcessNode.MaterialSlot("target", 1, MaterialCategories.ITEM)),
                 0,
                 List.of(),
                 null
@@ -229,9 +224,7 @@ class TreeCanvasWidgetContractTest {
                     "Source " + i,
                     "Inventory",
                     List.of(),
-                    List.of(new ProcessNode.MaterialSlot("raw_" + i, 1, ProcessNode.MaterialType.ITEM)),
-                    0,
-                    0,
+                    List.of(new ProcessNode.MaterialSlot("raw_" + i, 1, MaterialCategories.ITEM)),
                     0,
                     List.of(),
                     null
@@ -241,7 +234,7 @@ class TreeCanvasWidgetContractTest {
                     "target/large",
                     "raw_" + i,
                     1,
-                    ProcessNode.MaterialType.ITEM
+                    MaterialCategories.ITEM
             ));
         }
         graph.preferredRootNodeId("target/large");
@@ -263,9 +256,7 @@ class TreeCanvasWidgetContractTest {
                 "Root",
                 "Crafting Table",
                 List.of(),
-                List.of(new ProcessNode.MaterialSlot("root", 1, ProcessNode.MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new ProcessNode.MaterialSlot("root", 1, MaterialCategories.ITEM)),
                 0,
                 List.of(),
                 null
@@ -278,9 +269,7 @@ class TreeCanvasWidgetContractTest {
                     "Step " + i,
                     "Crafting Table",
                     List.of(),
-                    List.of(new ProcessNode.MaterialSlot("mat_" + i, 1, ProcessNode.MaterialType.ITEM)),
-                    0,
-                    0,
+                    List.of(new ProcessNode.MaterialSlot("mat_" + i, 1, MaterialCategories.ITEM)),
                     0,
                     List.of(),
                     null
@@ -290,7 +279,7 @@ class TreeCanvasWidgetContractTest {
                     parent,
                     "mat_" + i,
                     1,
-                    ProcessNode.MaterialType.ITEM
+                    MaterialCategories.ITEM
             ));
             parent = child;
         }
@@ -307,16 +296,170 @@ class TreeCanvasWidgetContractTest {
     }
 
     @Test
+    void expandAllDoesNotDuplicateSharedDependencySubtrees() {
+        TreeCanvasWidget widget = new TreeCanvasWidget();
+        ProcessGraph graph = new ProcessGraph();
+        graph.addNode(new ProcessNode(
+                "target/root",
+                "Root",
+                "Crafting Table",
+                List.of(),
+                List.of(new ProcessNode.MaterialSlot("root", 1, MaterialCategories.ITEM)),
+                0,
+                List.of(),
+                null
+        ));
+        graph.addNode(new ProcessNode(
+                "branch/a",
+                "Branch A",
+                "Crafting Table",
+                List.of(),
+                List.of(new ProcessNode.MaterialSlot("a", 1, MaterialCategories.ITEM)),
+                0,
+                List.of(),
+                null
+        ));
+        graph.addNode(new ProcessNode(
+                "branch/b",
+                "Branch B",
+                "Crafting Table",
+                List.of(),
+                List.of(new ProcessNode.MaterialSlot("b", 1, MaterialCategories.ITEM)),
+                0,
+                List.of(),
+                null
+        ));
+        graph.addNode(new ProcessNode(
+                "shared/base",
+                "Shared Base",
+                "Crafting Table",
+                List.of(),
+                List.of(new ProcessNode.MaterialSlot("shared", 1, MaterialCategories.ITEM)),
+                0,
+                List.of(),
+                null
+        ));
+        String parent = "shared/base";
+        for (int i = 0; i < 8; i++) {
+            String child = "shared/deep/" + i;
+            graph.addNode(new ProcessNode(
+                    child,
+                    "Shared Deep " + i,
+                    "Crafting Table",
+                    List.of(),
+                    List.of(new ProcessNode.MaterialSlot("deep_" + i, 1, MaterialCategories.ITEM)),
+                    0,
+                    List.of(),
+                    null
+            ));
+            graph.addEdge(new dev.vfyjxf.cirrus.ui.process.ProcessEdge(
+                    child,
+                    parent,
+                    "deep_" + i,
+                    1,
+                    MaterialCategories.ITEM
+            ));
+            parent = child;
+        }
+        graph.addEdge(new dev.vfyjxf.cirrus.ui.process.ProcessEdge(
+                "branch/a",
+                "target/root",
+                "a",
+                1,
+                MaterialCategories.ITEM
+        ));
+        graph.addEdge(new dev.vfyjxf.cirrus.ui.process.ProcessEdge(
+                "branch/b",
+                "target/root",
+                "b",
+                1,
+                MaterialCategories.ITEM
+        ));
+        graph.addEdge(new dev.vfyjxf.cirrus.ui.process.ProcessEdge(
+                "shared/base",
+                "branch/a",
+                "shared",
+                1,
+                MaterialCategories.ITEM
+        ));
+        graph.addEdge(new dev.vfyjxf.cirrus.ui.process.ProcessEdge(
+                "shared/base",
+                "branch/b",
+                "shared",
+                1,
+                MaterialCategories.ITEM
+        ));
+        graph.preferredRootNodeId("target/root");
+
+        widget.setGraph(graph);
+        widget.expandAllNodes();
+
+        assertTrue(widget.isForceExpandAll());
+        assertEquals(graph.nodeCount() + 1, widget.debugLayoutNodeCount());
+        assertEquals(0, widget.getCollapsedNodePaths().size());
+    }
+
+    @Test
+    void expandAllSharedDagScalesWithDependencyEdgesNotPathTree() {
+        TreeCanvasWidget widget = new TreeCanvasWidget();
+        ProcessGraph graph = new ProcessGraph();
+        graph.addNode(processNode("target/root", "root"));
+
+        int layers = 7;
+        int width = 4;
+        for (int layer = 0; layer < layers; layer++) {
+            for (int index = 0; index < width; index++) {
+                graph.addNode(processNode("layer/" + layer + "/" + index, "mat_" + layer + "_" + index));
+            }
+        }
+        for (int index = 0; index < width; index++) {
+            graph.addEdge(edge("layer/0/" + index, "target/root", "mat_0_" + index));
+        }
+        for (int layer = 1; layer < layers; layer++) {
+            for (int parent = 0; parent < width; parent++) {
+                for (int child = 0; child < width; child++) {
+                    graph.addEdge(edge(
+                            "layer/" + layer + "/" + child,
+                            "layer/" + (layer - 1) + "/" + parent,
+                            "mat_" + layer + "_" + child
+                    ));
+                }
+            }
+        }
+        graph.preferredRootNodeId("target/root");
+
+        long started = System.nanoTime();
+        widget.setGraph(graph);
+        widget.expandAllNodes();
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
+
+        int naivePathTreeLowerBound = 1;
+        int frontier = width;
+        for (int layer = 0; layer < layers; layer++) {
+            naivePathTreeLowerBound += frontier;
+            frontier *= width;
+        }
+
+        assertTrue(widget.isForceExpandAll());
+        assertEquals(graph.edgeCount() + 1, widget.debugLayoutNodeCount(),
+                "expanded shared DAG should materialize one layout node per dependency edge plus the root");
+        assertTrue(widget.debugLayoutNodeCount() < naivePathTreeLowerBound / 10,
+                "expanded DAG layoutNodes=" + widget.debugLayoutNodeCount()
+                        + " naivePathTreeLowerBound=" + naivePathTreeLowerBound
+                        + " elapsedMs=" + elapsedMs);
+        assertEquals(0, widget.debugRenderModelCacheSize());
+        assertEquals(0, widget.getCollapsedNodePaths().size());
+    }
+
+    @Test
     void cyclicProcessGraphStopsAtCycleTerminus() {
         ProcessGraph graph = new ProcessGraph();
         graph.addNode(new ProcessNode(
                 "target/a",
                 "Target A",
                 "Crafting Table",
-                List.of(new ProcessNode.MaterialSlot("b", 1, ProcessNode.MaterialType.ITEM)),
-                List.of(new ProcessNode.MaterialSlot("a", 1, ProcessNode.MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new ProcessNode.MaterialSlot("b", 1, MaterialCategories.ITEM)),
+                List.of(new ProcessNode.MaterialSlot("a", 1, MaterialCategories.ITEM)),
                 0,
                 List.of(),
                 null
@@ -325,10 +468,8 @@ class TreeCanvasWidgetContractTest {
                 "step/b",
                 "Step B",
                 "Crafting Table",
-                List.of(new ProcessNode.MaterialSlot("a", 1, ProcessNode.MaterialType.ITEM)),
-                List.of(new ProcessNode.MaterialSlot("b", 1, ProcessNode.MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new ProcessNode.MaterialSlot("a", 1, MaterialCategories.ITEM)),
+                List.of(new ProcessNode.MaterialSlot("b", 1, MaterialCategories.ITEM)),
                 0,
                 List.of(),
                 null
@@ -338,14 +479,14 @@ class TreeCanvasWidgetContractTest {
                 "target/a",
                 "b",
                 1,
-                ProcessNode.MaterialType.ITEM
+                MaterialCategories.ITEM
         ));
         graph.addEdge(new dev.vfyjxf.cirrus.ui.process.ProcessEdge(
                 "target/a",
                 "step/b",
                 "a",
                 1,
-                ProcessNode.MaterialType.ITEM
+                MaterialCategories.ITEM
         ));
         graph.preferredRootNodeId("target/a");
 
@@ -415,6 +556,25 @@ class TreeCanvasWidgetContractTest {
     }
 
     @Test
+    void releaseGraphDropsProcessGraphAndLayoutReferences() {
+        TreeCanvasWidget widget = new TreeCanvasWidget();
+        WeakReference<ProcessGraph> graphRef = attachLargeGraph(widget);
+
+        assertTrue(widget.debugRetainsGraphForTests());
+        assertTrue(widget.debugLayoutNodeCount() > 0);
+        assertTrue(widget.debugMaterialEntryCount() > 0);
+
+        widget.releaseGraph();
+
+        assertFalse(widget.debugRetainsGraphForTests());
+        assertEquals(0, widget.debugLayoutNodeCount());
+        assertEquals(0, widget.debugMaterialEntryCount());
+        assertEquals(0, widget.debugRenderModelCacheSize());
+        assertEquals(0, widget.debugMinimapScratchLengthForTests());
+        assertCollected(graphRef);
+    }
+
+    @Test
     void treeRenderingLimitsNodesAndConnectionsToViewportWindow() {
         TreeCanvasWidget widget = new TreeCanvasWidget();
         ProcessGraph graph = new ProcessGraph();
@@ -423,9 +583,7 @@ class TreeCanvasWidgetContractTest {
                 "Root",
                 "Crafting Table",
                 List.of(),
-                List.of(new ProcessNode.MaterialSlot("root", 1, ProcessNode.MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new ProcessNode.MaterialSlot("root", 1, MaterialCategories.ITEM)),
                 0,
                 List.of(),
                 null
@@ -437,9 +595,7 @@ class TreeCanvasWidgetContractTest {
                     "Source " + i,
                     "Inventory",
                     List.of(),
-                    List.of(new ProcessNode.MaterialSlot("raw_" + i, 1, ProcessNode.MaterialType.ITEM)),
-                    0,
-                    0,
+                    List.of(new ProcessNode.MaterialSlot("raw_" + i, 1, MaterialCategories.ITEM)),
                     0,
                     List.of(),
                     null
@@ -449,7 +605,7 @@ class TreeCanvasWidgetContractTest {
                     "target/root",
                     "raw_" + i,
                     1,
-                    ProcessNode.MaterialType.ITEM
+                    MaterialCategories.ITEM
             ));
         }
         graph.preferredRootNodeId("target/root");
@@ -472,9 +628,7 @@ class TreeCanvasWidgetContractTest {
                 "Smoker",
                 "Crafting Table",
                 List.of(),
-                List.of(new ProcessNode.MaterialSlot("Smoker", 16, ProcessNode.MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new ProcessNode.MaterialSlot("Smoker", 16, MaterialCategories.ITEM)),
                 0,
                 List.of(
                         new ProcessNode.MachineInfo("Crafting Table"),
@@ -504,9 +658,7 @@ class TreeCanvasWidgetContractTest {
                 "Smoker",
                 "Crafting Table",
                 List.of(),
-                List.of(new ProcessNode.MaterialSlot("Smoker", 16, ProcessNode.MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new ProcessNode.MaterialSlot("Smoker", 16, MaterialCategories.ITEM)),
                 0,
                 List.of(
                         new ProcessNode.MachineInfo("Crafting Table", Items.CRAFTING_TABLE.getDefaultInstance()),
@@ -551,15 +703,11 @@ class TreeCanvasWidgetContractTest {
                 List.of(new ProcessNode.MaterialSlot(
                         "#minecraft:planks",
                         2,
-                        ProcessNode.MaterialType.ITEM,
+                        MaterialCategories.ITEM,
                         1.0,
                         false,
-                        alternatives,
-                        null,
-                        null
+                        alternatives
                 )),
-                0,
-                0,
                 0,
                 List.of(),
                 null
@@ -594,15 +742,11 @@ class TreeCanvasWidgetContractTest {
                 List.of(new ProcessNode.MaterialSlot(
                         "#minecraft:planks",
                         2,
-                        ProcessNode.MaterialType.ITEM,
+                        MaterialCategories.ITEM,
                         1.0,
                         false,
-                        alternatives,
-                        null,
-                        null
+                        alternatives
                 )),
-                0,
-                0,
                 0,
                 List.of(),
                 null
@@ -640,15 +784,11 @@ class TreeCanvasWidgetContractTest {
                 List.of(new ProcessNode.MaterialSlot(
                         "#minecraft:planks",
                         2,
-                        ProcessNode.MaterialType.ITEM,
+                        MaterialCategories.ITEM,
                         1.0,
                         false,
-                        alternatives,
-                        null,
-                        null
+                        alternatives
                 )),
-                0,
-                0,
                 0,
                 List.of(),
                 null
@@ -687,16 +827,12 @@ class TreeCanvasWidgetContractTest {
                 List.of(new ProcessNode.MaterialSlot(
                         "#minecraft:planks",
                         2,
-                        ProcessNode.MaterialType.ITEM,
+                        MaterialCategories.ITEM,
                         1.0,
                         false,
-                        alternatives,
-                        null,
-                        null
+                        alternatives
                 )),
                 List.of(ProcessNode.MaterialSlot.item(Items.STICK.getDefaultInstance(), 1)),
-                0,
-                0,
                 0,
                 List.of(),
                 null
@@ -748,15 +884,11 @@ class TreeCanvasWidgetContractTest {
                 List.of(new ProcessNode.MaterialSlot(
                         "#minecraft:logs",
                         1,
-                        ProcessNode.MaterialType.ITEM,
+                        MaterialCategories.ITEM,
                         1.0,
                         false,
-                        alternatives,
-                        null,
-                        null
+                        alternatives
                 )),
-                0,
-                0,
                 0,
                 List.of(),
                 null
@@ -808,15 +940,11 @@ class TreeCanvasWidgetContractTest {
                 List.of(new ProcessNode.MaterialSlot(
                         "#minecraft:logs",
                         1,
-                        ProcessNode.MaterialType.ITEM,
+                        MaterialCategories.ITEM,
                         1.0,
                         false,
-                        alternatives,
-                        null,
-                        null
+                        alternatives
                 )),
-                0,
-                0,
                 0,
                 List.of(),
                 null
@@ -876,15 +1004,11 @@ class TreeCanvasWidgetContractTest {
                 List.of(new ProcessNode.MaterialSlot(
                         "#minecraft:logs",
                         1,
-                        ProcessNode.MaterialType.ITEM,
+                        MaterialCategories.ITEM,
                         1.0,
                         false,
-                        alternatives,
-                        null,
-                        null
+                        alternatives
                 )),
-                0,
-                0,
                 0,
                 List.of(
                         new ProcessNode.MachineInfo("Crafting Table", Items.CRAFTING_TABLE.getDefaultInstance()),
@@ -921,9 +1045,7 @@ class TreeCanvasWidgetContractTest {
                 "Cobblestone Source",
                 "Inventory",
                 List.of(),
-                List.of(new ProcessNode.MaterialSlot("Cobblestone", 64, ProcessNode.MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new ProcessNode.MaterialSlot("Cobblestone", 64, MaterialCategories.ITEM)),
                 0,
                 List.of(),
                 null
@@ -933,24 +1055,20 @@ class TreeCanvasWidgetContractTest {
                 "Furnace",
                 "Crafting Table",
                 List.of(
-                        new ProcessNode.MaterialSlot("Cobblestone", 128, ProcessNode.MaterialType.ITEM),
-                        new ProcessNode.MaterialSlot("Hammer", 1, ProcessNode.MaterialType.CATALYST, true)
+                        new ProcessNode.MaterialSlot("Cobblestone", 128, MaterialCategories.ITEM),
+                        new ProcessNode.MaterialSlot("Hammer", 1, MaterialCategories.CATALYST, true)
                 ),
                 List.of(
-                        new ProcessNode.MaterialSlot("Furnace", 16, ProcessNode.MaterialType.ITEM),
+                        new ProcessNode.MaterialSlot("Furnace", 16, MaterialCategories.ITEM),
                         new ProcessNode.MaterialSlot(
                                 "Gravel",
                                 2,
-                                ProcessNode.MaterialType.ITEM,
+                                MaterialCategories.ITEM,
                                 0.5,
                                 false,
-                                RecipeContent.empty(),
-                                null,
-                                null
+                                RecipeContent.empty()
                         )
                 ),
-                0,
-                0,
                 0,
                 List.of(new ProcessNode.MachineInfo("Crafting Table")),
                 null
@@ -958,23 +1076,65 @@ class TreeCanvasWidgetContractTest {
         return RecipeGraphBuilder.build(List.of(source, craft));
     }
 
+    private static ProcessNode processNode(String id, String outputName) {
+        return new ProcessNode(
+                id,
+                outputName,
+                "Crafting Table",
+                List.of(),
+                List.of(new ProcessNode.MaterialSlot(outputName, 1, MaterialCategories.ITEM)),
+                0,
+                List.of(),
+                null
+        );
+    }
+
+    private static dev.vfyjxf.cirrus.ui.process.ProcessEdge edge(String from, String to, String material) {
+        return new dev.vfyjxf.cirrus.ui.process.ProcessEdge(
+                from,
+                to,
+                material,
+                1,
+                MaterialCategories.ITEM
+        );
+    }
+
     private static ProcessGraph largeMaterialSearchGraph(int count) {
         java.util.ArrayList<ProcessNode.MaterialSlot> inputs = new java.util.ArrayList<>(count);
         for (int i = 0; i < count; i++) {
-            inputs.add(new ProcessNode.MaterialSlot("raw_" + i, 32 + i, ProcessNode.MaterialType.ITEM));
+            inputs.add(new ProcessNode.MaterialSlot("raw_" + i, 32 + i, MaterialCategories.ITEM));
         }
         ProcessNode node = new ProcessNode(
                 "craft/large",
                 "Large Craft",
                 "Crafting Table",
                 inputs,
-                List.of(new ProcessNode.MaterialSlot("result", 1, ProcessNode.MaterialType.ITEM)),
+                List.of(new ProcessNode.MaterialSlot("result", 1, MaterialCategories.ITEM)),
                 20,
-                1,
-                0,
                 List.of(new ProcessNode.MachineInfo("Crafting Table")),
                 null
         );
         return RecipeGraphBuilder.build(List.of(node));
+    }
+
+    private static WeakReference<ProcessGraph> attachLargeGraph(TreeCanvasWidget widget) {
+        ProcessGraph graph = largeMaterialSearchGraph(256);
+        WeakReference<ProcessGraph> ref = new WeakReference<>(graph);
+        widget.setGraph(graph);
+        return ref;
+    }
+
+    private static void assertCollected(WeakReference<?> ref) {
+        for (int i = 0; i < 20 && ref.get() != null; i++) {
+            System.gc();
+            System.runFinalization();
+            try {
+                Thread.sleep(10L);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        assertEquals(null, ref.get());
     }
 }

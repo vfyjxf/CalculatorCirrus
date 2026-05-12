@@ -12,8 +12,8 @@ import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.RichIterable;
+import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
-import org.eclipse.collections.impl.collector.Collectors2;
 
 import java.util.Collection;
 
@@ -50,11 +50,27 @@ public record RecipeProjection(
 
         return new RecipeProjection(
                 entry,
-                inputs.stream().<ClausedContent<InputContent>>map(ClausedContent::from).collect(Collectors2.toImmutableList()),
-                outputs.stream().<ClausedContent<OutputContent>>map(ClausedContent::from).collect(Collectors2.toImmutableList()),
+                clausedInputs(inputs),
+                clausedOutputs(outputs),
                 ProjectionSchema.empty(),
                 ClauseSet.create()
         );
+    }
+
+    private static ImmutableList<ClausedContent<InputContent>> clausedInputs(Collection<? extends InputContent> inputs) {
+        var out = Lists.mutable.<ClausedContent<InputContent>>ofInitialCapacity(inputs.size());
+        for (InputContent input : inputs) {
+            out.add(ClausedContent.from(input));
+        }
+        return out.toImmutable();
+    }
+
+    private static ImmutableList<ClausedContent<OutputContent>> clausedOutputs(Collection<? extends OutputContent> outputs) {
+        var out = Lists.mutable.<ClausedContent<OutputContent>>ofInitialCapacity(outputs.size());
+        for (OutputContent output : outputs) {
+            out.add(ClausedContent.from(output));
+        }
+        return out.toImmutable();
     }
 
     //endregion

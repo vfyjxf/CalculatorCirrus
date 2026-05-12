@@ -54,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ExtendWith(EphemeralTestServerProvider.class)
@@ -127,8 +128,34 @@ class RecipeGraphTest {
         assertTrue(graph.producersFor(ContentStack.fromStack(consumerStack)).isEmpty());
         assertFalse(graph.producersFor(ContentStack.fromStack(producerStack)).isEmpty());
         assertTrue(graph.consumersFor(producerOutput).stream().noneMatch(ref ->
-            "consume_named_stone".equals(Objects.requireNonNull(ref.node().recipe().id()).getPath())
+            "consume_named_stone".equals(Objects.requireNonNull(ref.node(graph).recipe().id()).getPath())
         ));
+    }
+
+    @Test
+    void lookupCachesStayBoundedAndExposeReadonlyResults(MinecraftServer server) {
+        var recipe = new RoutingTestFixtures.FakeRecipe(
+            "stone_to_diamond",
+            java.util.List.of(RoutingTestFixtures.in(Items.STONE, 1)),
+            java.util.List.of(RoutingTestFixtures.out(Items.DIAMOND, 1))
+        );
+        RecipeGraph graph = RoutingTestFixtures.graph(recipe);
+
+        var producers = graph.producersFor(ContentStack.fromStack(new ItemStack(Items.DIAMOND)));
+        assertFalse(producers.isEmpty());
+        assertThrows(UnsupportedOperationException.class, producers::clear);
+
+        for (int i = 0; i < 80; i++) {
+            ItemStack stack = new ItemStack(Items.STONE);
+            stack.set(DataComponents.CUSTOM_NAME, Component.literal("input-" + i));
+            graph.producersFor(InputContent.fromItemStack(stack, 1));
+            graph.producersFor(ContentStack.fromStack(stack));
+            graph.consumersFor(OutputContent.fromItemStack(stack, 1));
+        }
+
+        assertTrue(graph.producersByInputCacheSize() <= 64);
+        assertTrue(graph.producersByOutputCacheSize() <= 64);
+        assertTrue(graph.consumersByOutputCacheSize() <= 64);
     }
 
     @Test

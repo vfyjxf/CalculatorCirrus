@@ -13,6 +13,7 @@ import dev.vfyjxf.cirrus.recipe.routing.planner.PlannerContext;
 import dev.vfyjxf.cirrus.recipe.routing.planner.RoutePlanner;
 import dev.vfyjxf.cirrus.recipe.routing.planner.StandardPlanner;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultRuleDefinitions;
+import dev.vfyjxf.cirrus.api.recipe.routing.rule.PolicyExplain;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleCollection;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleDefinition;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleProfile;
@@ -20,7 +21,6 @@ import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicy;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicyDecision;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicyRule;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.TagSourcePolicyRule;
-import dev.vfyjxf.cirrus.api.recipe.routing.state.SccAnalysis;
 import dev.vfyjxf.cirrus.api.recipe.routing.tag.TagIndex;
 import dev.vfyjxf.cirrus.api.recipe.routing.tag.TagSnapshot;
 import dev.vfyjxf.cirrus.api.recipe.routing.tag.UserTagWorkspace;
@@ -40,6 +40,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Public routing orchestration service — the single runtime entry point for
@@ -50,9 +51,6 @@ import java.util.Map;
  *     <li><b>Request validation</b> — rejects malformed requests early.</li>
  *     <li><b>Source-policy evaluation</b> — applies tag-based rules to
  *         compute the allowed-recipes bitset via {@link SourcePolicyRule}.</li>
- *     <li><b>SCC analysis</b> — runs Tarjan’s algorithm on the filtered
- *         recipe graph to identify strongly connected components for
- *         cycle-aware planning.</li>
  *     <li><b>Planner dispatch</b> — selects the appropriate
  *         {@link RoutePlanner} based on the requested {@link PlannerMode}
  *         and delegates the actual planning work.</li>
@@ -74,11 +72,15 @@ public final class RoutingService {
     private static final int maxCachedPolicyAnalyses = 16;
     private static final Object policyAnalysisCacheLock = new Object();
     private static final Map<PolicyAnalysisCacheKey, PolicyAnalysis> policyAnalysisCache = new HashMap<>();
+    private static final SourcePolicy defaultSourcePolicy = SourcePolicy.defaultPolicy();
+    private static final AtomicLong nextGraphCacheId = new AtomicLong();
 
     private final RecipeGraph graph;
     private final RoutingRecipeCatalog catalog;
+    private final long graphCacheId;
     private final TagIndex tagIndex;
     private final UserTagWorkspace userWorkspace;
+    private final PolicyAnalysis allAllowedPolicyAnalysis;
     private final SourcePolicyRule sourcePolicyRule = new TagSourcePolicyRule();
     private final MutableMap<Namespace, SourcePolicy> sourcePolicies = Maps.mutable.empty();
     private final MutableMap<Namespace, RuleProfile> ruleProfiles = Maps.mutable.empty();
@@ -100,10 +102,12 @@ public final class RoutingService {
      */
     public RoutingService(RecipeGraph graph) {
         this.graph = Checks.checkNotNull(graph, "graph");
+        this.graphCacheId = nextGraphCacheId.incrementAndGet();
         this.catalog = RoutingRecipeCatalog.fromGraph(graph);
         this.tagIndex = new TagIndex(catalog);
         this.userWorkspace = new UserTagWorkspace(tagIndex);
-        registerSourcePolicy(SourcePolicy.defaultPolicy());
+        this.allAllowedPolicyAnalysis = allAllowedPolicyAnalysis(catalog.size(), tagIndex.version());
+        registerSourcePolicy(defaultSourcePolicy);
         registerRuleCollection(DefaultRuleDefinitions.defaultCollection());
     }
 
@@ -120,17 +124,19 @@ public final class RoutingService {
     public RoutingOutcome route(RoutingRequest request) {
         Checks.checkNotNull(request, "request");
         long routeStartNanos = System.nanoTime();
-        logger.info(
-            "routing.start target={} mode={} profile={} sourcePolicy={} budgetNodes={} budgetCandidates={} heuristic={} stockEmpty={}",
-            describeTarget(request.target()),
-            request.plannerMode(),
-            request.ruleProfileId(),
-            request.sourcePolicyId(),
-            request.budget().maxExpandedNodes(),
-            request.budget().maxGeneratedCandidates(),
-            request.heuristicPolicy(),
-            request.stock().isEmpty()
-        );
+        if (logger.isDebugEnabled()) {
+            logger.debug(
+                "routing.start target={} mode={} profile={} sourcePolicy={} budgetNodes={} budgetCandidates={} heuristic={} stockEmpty={}",
+                describeTarget(request.target()),
+                request.plannerMode(),
+                request.ruleProfileId(),
+                request.sourcePolicyId(),
+                request.budget().maxExpandedNodes(),
+                request.budget().maxGeneratedCandidates(),
+                request.heuristicPolicy(),
+                request.stock().isEmpty()
+            );
+        }
         RoutingOutcome invalid = validateRequest(request);
         if (invalid != null) {
             logRouteFinish(invalid, routeStartNanos);
@@ -146,25 +152,27 @@ public final class RoutingService {
         }
 
         TagSnapshot snapshot = request.tagSnapshot() != null ? request.tagSnapshot() : userWorkspace.snapshot();
-        logger.info(
-            "routing.analysis.start target={} graphNodes={} catalog={} snapshot={} tags={} sourcePolicyHash={}",
-            describeTarget(request.target()),
-            graph.nodes().size(),
-            catalog.size(),
-            snapshot.version(),
-            snapshot.tagToRecipes().size(),
-            sourcePolicy.hashCode()
-        );
+        if (logger.isDebugEnabled()) {
+            logger.debug(
+                "routing.analysis.start target={} graphNodes={} catalog={} snapshot={} tags={} sourcePolicyHash={}",
+                describeTarget(request.target()),
+                catalog.size(),
+                catalog.size(),
+                snapshot.version(),
+                snapshot.tagToRecipes().size(),
+                sourcePolicy.hashCode()
+            );
+        }
         PolicyAnalysis policyAnalysis = cachedPolicyAnalysis(snapshot, sourcePolicy);
-        logger.info(
-            "routing.analysis.finish target={} elapsedMs={} allowed={} cyclicSccs={}",
-            describeTarget(request.target()),
-            (System.nanoTime() - routeStartNanos) / 1_000_000L,
-            policyAnalysis.sourceDecision().allowedRecipes().cardinality(),
-            policyAnalysis.sccAnalysis().cyclicSccCount()
-        );
+        if (logger.isDebugEnabled()) {
+            logger.debug(
+                "routing.analysis.finish target={} elapsedMs={} allowed={}",
+                describeTarget(request.target()),
+                (System.nanoTime() - routeStartNanos) / 1_000_000L,
+                policyAnalysis.sourceDecision().allowedRecipes().cardinality()
+            );
+        }
         SourcePolicyDecision sourceDecision = policyAnalysis.sourceDecision();
-        SccAnalysis sccAnalysis = policyAnalysis.sccAnalysis();
 
         RoutingOutcome outcome;
         if (request.target() instanceof RoutingRequest.RecipeTarget recipeTarget) {
@@ -173,8 +181,7 @@ public final class RoutingService {
                 recipeTarget,
                 profile,
                 sourceDecision,
-                snapshot,
-                sccAnalysis
+                snapshot
             );
         } else {
             RoutingRequest.OutputTarget outputTarget = (RoutingRequest.OutputTarget) request.target();
@@ -183,8 +190,7 @@ public final class RoutingService {
                 outputTarget,
                 profile,
                 sourceDecision,
-                snapshot,
-                sccAnalysis
+                snapshot
             );
         }
         logRouteFinish(outcome, routeStartNanos);
@@ -192,9 +198,12 @@ public final class RoutingService {
     }
 
     private PolicyAnalysis cachedPolicyAnalysis(TagSnapshot snapshot, SourcePolicy sourcePolicy) {
+        if (sourcePolicy.equals(defaultSourcePolicy) && snapshot.tagToRecipes().isEmpty()) {
+            return allAllowedPolicyAnalysis;
+        }
         long startNanos = System.nanoTime();
         PolicyAnalysisCacheKey key = new PolicyAnalysisCacheKey(
-            graph,
+            graphCacheId,
             catalog.size(),
             snapshot.version(),
             snapshot.tagToRecipes().hashCode(),
@@ -205,49 +214,46 @@ public final class RoutingService {
             if (cached != null) {
                 PolicyAnalysis touched = cached.touch();
                 policyAnalysisCache.put(key, touched);
-                logger.debug(
-                    "routing.analysis.cacheHit catalog={} snapshot={} allowed={} elapsedMs={}",
-                    catalog.size(),
-                    snapshot.version(),
-                    touched.sourceDecision().allowedRecipes().cardinality(),
-                    (System.nanoTime() - startNanos) / 1_000_000L
-                );
+                if (logger.isDebugEnabled()) {
+                    logger.debug(
+                        "routing.analysis.cacheHit catalog={} snapshot={} allowed={} elapsedMs={}",
+                        catalog.size(),
+                        snapshot.version(),
+                        touched.sourceDecision().allowedRecipes().cardinality(),
+                        (System.nanoTime() - startNanos) / 1_000_000L
+                    );
+                }
                 return touched;
             }
         }
 
         long policyStartNanos = System.nanoTime();
         SourcePolicyDecision sourceDecision = sourcePolicyRule.apply(snapshot, sourcePolicy);
-        long sccStartNanos = System.nanoTime();
-        logger.info(
-            "routing.analysis.policy catalog={} snapshot={} rules={} allowed={} policyMs={}",
-            catalog.size(),
-            snapshot.version(),
-            sourcePolicy.rules().size(),
-            sourceDecision.allowedRecipes().cardinality(),
-            (sccStartNanos - policyStartNanos) / 1_000_000L
-        );
-        SccAnalysis sccAnalysis = SccAnalysis.build(graph, catalog, sourceDecision.allowedRecipes());
-        logger.info(
-            "routing.analysis.scc catalog={} allowed={} cyclicSccs={} sccMs={} totalMs={}",
-            catalog.size(),
-            sourceDecision.allowedRecipes().cardinality(),
-            sccAnalysis.cyclicSccCount(),
-            (System.nanoTime() - sccStartNanos) / 1_000_000L,
-            (System.nanoTime() - startNanos) / 1_000_000L
-        );
-        PolicyAnalysis analysis = new PolicyAnalysis(sourceDecision, sccAnalysis, System.nanoTime());
+        if (logger.isDebugEnabled()) {
+            logger.debug(
+                "routing.analysis.policy catalog={} snapshot={} rules={} allowed={} policyMs={} totalMs={}",
+                catalog.size(),
+                snapshot.version(),
+                sourcePolicy.rules().size(),
+                sourceDecision.allowedRecipes().cardinality(),
+                (System.nanoTime() - policyStartNanos) / 1_000_000L,
+                (System.nanoTime() - startNanos) / 1_000_000L
+            );
+        }
+        PolicyAnalysis analysis = new PolicyAnalysis(sourceDecision, System.nanoTime());
         synchronized (policyAnalysisCacheLock) {
             PolicyAnalysis existing = policyAnalysisCache.get(key);
             if (existing != null) {
                 PolicyAnalysis touched = existing.touch();
                 policyAnalysisCache.put(key, touched);
-                logger.debug(
-                    "routing.analysis.cacheRace catalog={} snapshot={} elapsedMs={}",
-                    catalog.size(),
-                    snapshot.version(),
-                    (System.nanoTime() - startNanos) / 1_000_000L
-                );
+                if (logger.isDebugEnabled()) {
+                    logger.debug(
+                        "routing.analysis.cacheRace catalog={} snapshot={} elapsedMs={}",
+                        catalog.size(),
+                        snapshot.version(),
+                        (System.nanoTime() - startNanos) / 1_000_000L
+                    );
+                }
                 return touched;
             }
             policyAnalysisCache.put(key, analysis);
@@ -272,6 +278,18 @@ public final class RoutingService {
             }
             policyAnalysisCache.remove(oldestKey);
         }
+    }
+
+    private static PolicyAnalysis allAllowedPolicyAnalysis(int recipeCount, long snapshotVersion) {
+        BitSet allowed = new BitSet(recipeCount);
+        allowed.set(0, recipeCount);
+        PolicyExplain explain = new PolicyExplain(
+            snapshotVersion,
+            recipeCount,
+            recipeCount,
+            Lists.immutable.empty()
+        );
+        return new PolicyAnalysis(new SourcePolicyDecision(allowed, explain), System.nanoTime());
     }
 
     /**
@@ -308,6 +326,11 @@ public final class RoutingService {
         return tagIndex;
     }
 
+    /** Returns the stable recipe catalog used by this service. */
+    public RoutingRecipeCatalog catalog() {
+        return catalog;
+    }
+
     /** Returns the per-player tag workspace. */
     public UserTagWorkspace userWorkspace() {
         return userWorkspace;
@@ -323,8 +346,7 @@ public final class RoutingService {
         RoutingRequest.RecipeTarget target,
         RuleProfile profile,
         SourcePolicyDecision sourceDecision,
-        TagSnapshot snapshot,
-        SccAnalysis sccAnalysis
+        TagSnapshot snapshot
     ) {
         int targetIndex = catalog.indexOf(target.recipe());
         if (targetIndex < 0) {
@@ -342,7 +364,6 @@ public final class RoutingService {
             profile,
             sourceDecision,
             snapshot,
-            sccAnalysis,
             new PlannerContext.Counters()
         );
         RoutePlanner planner = choosePlanner(request.plannerMode());
@@ -354,8 +375,7 @@ public final class RoutingService {
         RoutingRequest.OutputTarget outputTarget,
         RuleProfile profile,
         SourcePolicyDecision sourceDecision,
-        TagSnapshot snapshot,
-        SccAnalysis sccAnalysis
+        TagSnapshot snapshot
     ) {
         List<ProducerCandidate> producers = findProducers(
             outputTarget.output(),
@@ -364,15 +384,17 @@ public final class RoutingService {
             request.stock(),
             request.heuristicPolicy()
         );
-        logger.info(
-            "producer.search output={} amount={} producers={} allowedRecipes={} maxAttempts={} heuristic={}",
-            outputTarget.output(),
-            outputTarget.amount(),
-            producers.size(),
-            sourceDecision.allowedRecipes().cardinality(),
-            request.maxProducerCandidates(),
-            request.heuristicPolicy()
-        );
+        if (logger.isDebugEnabled()) {
+            logger.debug(
+                "producer.search output={} amount={} producers={} allowedRecipes={} maxAttempts={} heuristic={}",
+                outputTarget.output(),
+                outputTarget.amount(),
+                producers.size(),
+                sourceDecision.allowedRecipes().cardinality(),
+                request.maxProducerCandidates(),
+                request.heuristicPolicy()
+            );
+        }
         if (producers.isEmpty()) {
             return invalidFailure(request, RoutingFailureCode.noFeasibleSource, "cirrus.routing.no_output_producer");
         }
@@ -392,16 +414,18 @@ public final class RoutingService {
             triedProducerIds.add(candidate.stableId());
 
             int times = (int) Math.ceil((double) outputTarget.amount() / candidate.producedPerCraft());
-            logger.info(
-                "producer.try index={} recipe={} producedPerCraft={} craftTimes={} unitCost={} depth={} stockShortage={}",
-                i,
-                candidate.stableId(),
-                candidate.producedPerCraft(),
-                times,
-                candidate.estimatedUnitCost(),
-                candidate.depthEstimate(),
-                candidate.inventoryShortage()
-            );
+            if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "producer.try index={} recipe={} producedPerCraft={} craftTimes={} unitCost={} depth={} stockShortage={}",
+                    i,
+                    candidate.stableId(),
+                    candidate.producedPerCraft(),
+                    times,
+                    candidate.estimatedUnitCost(),
+                    candidate.depthEstimate(),
+                    candidate.inventoryShortage()
+                );
+            }
             RoutingRequest subRequest = new RoutingRequest(
                 request.plannerMode(),
                 request.ruleProfileId(),
@@ -428,19 +452,21 @@ public final class RoutingService {
                 request.heuristicPolicy()
             );
 
-            RoutingOutcome outcome = routeRecipeTarget(subRequest, (RoutingRequest.RecipeTarget) subRequest.target(), profile, sourceDecision, snapshot, sccAnalysis);
-            logger.info(
-                "producer.result index={} recipe={} status={} planActions={} issues={} elapsedMs={} expanded={} generated={} accepted={}",
-                i,
-                candidate.stableId(),
-                outcome.status(),
-                outcome.plan() == null ? 0 : outcome.plan().actions().size(),
-                outcome.issues().size(),
-                outcome.metrics().elapsedMs(),
-                outcome.metrics().expandedNodes(),
-                outcome.metrics().generatedCandidates(),
-                outcome.metrics().acceptedCandidates()
-            );
+            RoutingOutcome outcome = routeRecipeTarget(subRequest, (RoutingRequest.RecipeTarget) subRequest.target(), profile, sourceDecision, snapshot);
+            if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "producer.result index={} recipe={} status={} planActions={} issues={} elapsedMs={} expanded={} generated={} accepted={}",
+                    i,
+                    candidate.stableId(),
+                    outcome.status(),
+                    outcome.plan() == null ? 0 : outcome.plan().actions().size(),
+                    outcome.issues().size(),
+                    outcome.metrics().elapsedMs(),
+                    outcome.metrics().expandedNodes(),
+                    outcome.metrics().generatedCandidates(),
+                    outcome.metrics().acceptedCandidates()
+                );
+            }
             totalElapsedMs += outcome.metrics().elapsedMs();
             totalExpanded += outcome.metrics().expandedNodes();
             totalGenerated += outcome.metrics().generatedCandidates();
@@ -530,6 +556,11 @@ public final class RoutingService {
             original.capabilityGatePassed(),
             original.missingCapabilities(),
             original.budgetStopReason(),
+            original.budgetCulpritRecipe(),
+            original.budgetCulpritInput(),
+            original.budgetCulpritDepth(),
+            original.budgetCulpritRemaining(),
+            original.budgetCulpritActiveCycle(),
             original.explorationBranchesExpanded(),
             original.explorationBudgetUsed(),
             original.effectiveExplorationSeed(),
@@ -545,37 +576,22 @@ public final class RoutingService {
         HeuristicPolicy heuristicPolicy
     ) {
         var indexedProducers = graph.producersFor(output);
-        if (!indexedProducers.isEmpty()) {
-            List<ProducerCandidate> candidates = new ArrayList<>(indexedProducers.size());
-            for (RecipeGraph.OutputRef ref : indexedProducers) {
-                int index = catalog.indexOf(ref.node().recipe());
-                if (index < 0 || !allowedRecipes.get(index) || ref.output().amount() <= 0) {
-                    continue;
-                }
-                if (!heuristicAllowsOutputProducer(ref.node(), heuristicPolicy)) {
-                    continue;
-                }
-                candidates.add(producerCandidate(ref.node(), index, ref.output().amount(), requestedAmount, stock));
-            }
-            return candidates;
+        if (indexedProducers.isEmpty()) {
+            return List.of();
         }
 
-        List<ProducerCandidate> candidates = new ArrayList<>();
-        for (int index = allowedRecipes.nextSetBit(0); index >= 0; index = allowedRecipes.nextSetBit(index + 1)) {
+        List<ProducerCandidate> candidates = new ArrayList<>(indexedProducers.size());
+        for (RecipeGraph.OutputRef ref : indexedProducers) {
+            int index = ref.recipeIndex();
             RecipeGraph.Node node = catalog.nodeAt(index);
-            long bestAmount = 0;
-            for (OutputContent candidateOutput : node.mergedOutputs()) {
-                if (candidateOutput.asResource().matchesResource(output)) {
-                    bestAmount = Math.max(bestAmount, candidateOutput.amount());
-                }
-            }
-            if (bestAmount <= 0) {
+            OutputContent producedOutput = ref.output(graph);
+            if (!allowedRecipes.get(index) || producedOutput.amount() <= 0) {
                 continue;
             }
             if (!heuristicAllowsOutputProducer(node, heuristicPolicy)) {
                 continue;
             }
-            candidates.add(producerCandidate(node, index, bestAmount, requestedAmount, stock));
+            candidates.add(producerCandidate(node, index, producedOutput.amount(), requestedAmount, stock));
         }
         return candidates;
     }
@@ -643,13 +659,14 @@ public final class RoutingService {
 
     private double estimateUnitCost(RecipeGraph.Node node) {
         // Quick deterministic estimate used only for producer ordering in adapter mode.
-        return node.mergedInputs().size() + (node.mergedOutputs().size() * 0.1);
+        return node.inputCount() + (node.outputCount() * 0.1);
     }
 
     private double estimateStockCoverage(RecipeGraph.Node node, Stock stock, int craftTimes) {
         double totalRequired = 0.0d;
         double totalCovered = 0.0d;
-        for (InputContent input : node.mergedInputs()) {
+        for (int inputIndex = 0; inputIndex < node.inputCount(); inputIndex++) {
+            InputContent input = node.inputAt(inputIndex);
             long required = input.notConsumed() ? input.amount() : input.amount() * craftTimes;
             if (required <= 0L) {
                 continue;
@@ -665,7 +682,7 @@ public final class RoutingService {
     }
 
     private int estimateDepth(RecipeGraph.Node node) {
-        return node.mergedInputs().size();
+        return node.inputCount();
     }
 
     private RoutePlanner choosePlanner(PlannerMode mode) {
@@ -721,6 +738,11 @@ public final class RoutingService {
             true,
             Lists.immutable.empty(),
             "invalidRequest",
+            "none",
+            "none",
+            -1,
+            0,
+            false,
             0,
             0,
             request.explorationSeed() == null ? 0 : request.explorationSeed(),
@@ -730,10 +752,13 @@ public final class RoutingService {
     }
 
     private static void logRouteFinish(RoutingOutcome outcome, long routeStartNanos) {
+        if (!logger.isDebugEnabled()) {
+            return;
+        }
         RoutingMetrics metrics = outcome.metrics();
         long routeElapsedMs = (System.nanoTime() - routeStartNanos) / 1_000_000L;
-        logger.info(
-            "routing.finish status={} planActions={} issues={} routeElapsedMs={} plannerElapsedMs={} analysisAndDispatchMs={} expanded={} generated={} accepted={} budgetUsed={} budgetLimit={} budgetExhausted={} budgetStop={} adapterAttempts={} adapterStatus={}",
+        logger.debug(
+            "routing.finish status={} planActions={} issues={} routeElapsedMs={} plannerElapsedMs={} analysisAndDispatchMs={} expanded={} generated={} accepted={} budgetUsed={} budgetLimit={} budgetExhausted={} budgetStop={} budgetCulprit={} budgetInput={} budgetDepth={} budgetRemaining={} budgetCycle={} adapterAttempts={} adapterStatus={}",
             outcome.status(),
             outcome.plan() == null ? 0 : outcome.plan().actions().size(),
             outcome.issues().size(),
@@ -747,6 +772,11 @@ public final class RoutingService {
             metrics.budgetLimit(),
             metrics.budgetExhausted(),
             metrics.budgetStopReason(),
+            metrics.budgetCulpritRecipe(),
+            metrics.budgetCulpritInput(),
+            metrics.budgetCulpritDepth(),
+            metrics.budgetCulpritRemaining(),
+            metrics.budgetCulpritActiveCycle(),
             metrics.adapterAttemptCount(),
             metrics.adapterBestIntermediateStatus()
         );
@@ -795,7 +825,7 @@ public final class RoutingService {
     }
 
     private record PolicyAnalysisCacheKey(
-        RecipeGraph graph,
+        long graphCacheId,
         int recipeCount,
         long tagSnapshotVersion,
         int tagSnapshotHash,
@@ -805,11 +835,10 @@ public final class RoutingService {
 
     private record PolicyAnalysis(
         SourcePolicyDecision sourceDecision,
-        SccAnalysis sccAnalysis,
         long lastAccessNanos
     ) {
         private PolicyAnalysis touch() {
-            return new PolicyAnalysis(sourceDecision, sccAnalysis, System.nanoTime());
+            return new PolicyAnalysis(sourceDecision, System.nanoTime());
         }
     }
 }

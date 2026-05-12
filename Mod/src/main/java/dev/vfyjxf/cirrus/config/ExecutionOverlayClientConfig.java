@@ -22,6 +22,9 @@ public final class ExecutionOverlayClientConfig {
     public static final ExecutionObservedStockPolicy observedStockPolicyDefault = ExecutionObservedStockPolicy.consumeObservedStock;
     public static final boolean jeiTargetButtonAutoCloseDefault = true;
     public static final boolean calculatorDatabaseAutoRefreshDefault = true;
+    public static final int calculatorDatabaseLimitMin = 10;
+    public static final int calculatorDatabaseLimitMax = 500;
+    public static final int calculatorDatabaseLimitDefault = 500;
     public static final boolean calculatorRulesReadOtherWorldsDefault = false;
     public static final boolean calculatorUseLiveStockDefault = false;
     public static final PlannerMode calculatorPlannerModeDefault = PlannerMode.standard;
@@ -37,6 +40,7 @@ public final class ExecutionOverlayClientConfig {
     private static final ModConfigSpec.EnumValue<ExecutionObservedStockPolicy> observedStockPolicyValue;
     private static final ModConfigSpec.BooleanValue jeiTargetButtonAutoCloseValue;
     private static final ModConfigSpec.BooleanValue calculatorDatabaseAutoRefreshValue;
+    private static final ModConfigSpec.IntValue calculatorDatabaseLimitValue;
     private static final ModConfigSpec.BooleanValue calculatorRulesReadOtherWorldsValue;
     private static final ModConfigSpec.BooleanValue calculatorUseLiveStockValue;
     private static final ModConfigSpec.EnumValue<PlannerMode> calculatorPlannerModeValue;
@@ -51,6 +55,7 @@ public final class ExecutionOverlayClientConfig {
     private static volatile ExecutionObservedStockPolicy observedStockPolicy = observedStockPolicyDefault;
     private static volatile boolean jeiTargetButtonAutoClose = jeiTargetButtonAutoCloseDefault;
     private static volatile boolean calculatorDatabaseAutoRefresh = calculatorDatabaseAutoRefreshDefault;
+    private static volatile int calculatorDatabaseLimit = calculatorDatabaseLimitDefault;
     private static volatile boolean calculatorRulesReadOtherWorlds = calculatorRulesReadOtherWorldsDefault;
     private static volatile boolean calculatorUseLiveStock = calculatorUseLiveStockDefault;
     private static volatile PlannerMode calculatorPlannerMode = calculatorPlannerModeDefault;
@@ -90,6 +95,9 @@ public final class ExecutionOverlayClientConfig {
         calculatorDatabaseAutoRefreshValue = builder
             .comment("Whether the calculator database page rebuilds its index from registered systems when opened.")
             .define("auto_refresh", calculatorDatabaseAutoRefreshDefault);
+        calculatorDatabaseLimitValue = builder
+            .comment("Maximum number of recipe database search results shown by the calculator page.")
+            .defineInRange("result_limit", calculatorDatabaseLimitDefault, calculatorDatabaseLimitMin, calculatorDatabaseLimitMax);
         builder.pop();
         builder.push("rules");
         calculatorRulesReadOtherWorldsValue = builder
@@ -167,6 +175,17 @@ public final class ExecutionOverlayClientConfig {
         calculatorDatabaseAutoRefresh = enabled;
         calculatorDatabaseAutoRefreshValue.set(enabled);
         calculatorDatabaseAutoRefreshValue.save();
+    }
+
+    public static int calculatorDatabaseLimit() {
+        return calculatorDatabaseLimit;
+    }
+
+    public static void setCalculatorDatabaseLimit(long value) {
+        int clamped = clampDatabaseLimit(value);
+        calculatorDatabaseLimit = clamped;
+        calculatorDatabaseLimitValue.set(clamped);
+        calculatorDatabaseLimitValue.save();
     }
 
     public static boolean calculatorRulesReadOtherWorlds() {
@@ -257,6 +276,7 @@ public final class ExecutionOverlayClientConfig {
         observedStockPolicy = observedStockPolicyValue.get();
         jeiTargetButtonAutoClose = jeiTargetButtonAutoCloseValue.get();
         calculatorDatabaseAutoRefresh = calculatorDatabaseAutoRefreshValue.get();
+        calculatorDatabaseLimit = clampDatabaseLimit(calculatorDatabaseLimitValue.get());
         calculatorRulesReadOtherWorlds = calculatorRulesReadOtherWorldsValue.get();
         calculatorUseLiveStock = calculatorUseLiveStockValue.get();
         calculatorPlannerMode = calculatorPlannerModeValue.get();
@@ -268,6 +288,10 @@ public final class ExecutionOverlayClientConfig {
 
     private static int clamp(int value) {
         return Math.max(overlayRateMin, Math.min(overlayRateMax, value));
+    }
+
+    private static int clampDatabaseLimit(long value) {
+        return (int) Math.max(calculatorDatabaseLimitMin, Math.min(calculatorDatabaseLimitMax, value));
     }
 
 }

@@ -17,7 +17,10 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.material.Fluid;
+import net.neoforged.neoforge.fluids.FluidStack;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -762,29 +765,29 @@ public final class RichTooltipComponent implements TooltipComponent {
         }
 
         private static void renderSlot(Font font, GuiGraphics graphics, MaterialSlot slot, int iconX, int iconY) {
-            // Render item icon
-            if (slot.itemStack() != null && !slot.itemStack().isEmpty()) {
-                graphics.renderItem(slot.itemStack(), iconX, iconY);
-                graphics.renderItemDecorations(font, slot.itemStack(), iconX, iconY);
-            } else if (slot.fluidStack() != null && !slot.fluidStack().isEmpty()) {
-                // Render fluid texture
+            ContentStack<?, ?> stack = slot.visualStack();
+            if (stack.notEmpty() && stack.isItem()) {
+                ContentStack<Item, ItemStack> item = stack.cast();
+                ItemStack itemStack = item.value();
+                graphics.renderItem(itemStack, iconX, iconY);
+                graphics.renderItemDecorations(font, itemStack, iconX, iconY);
+            } else if (stack.notEmpty() && stack.isFluid()) {
+                ContentStack<Fluid, FluidStack> fluid = stack.cast();
                 var pose = graphics.pose();
                 pose.pushPose();
                 pose.translate(iconX, iconY, 0);
                 FluidStackRenderer.instance.renderBase(
-                        graphics, slot.fluidStack(), ICON_SIZE, ICON_SIZE, 0);
+                        graphics, fluid.value(), ICON_SIZE, ICON_SIZE, 0);
                 pose.popPose();
-                // Amount overlay
                 String amt = shortAmount(slot.amount());
                 graphics.drawString(font, amt,
                         iconX + ICON_SIZE - font.width(amt),
                         iconY + ICON_SIZE - 8, 0xFFFFFFFF, true);
             } else {
-                // Fallback: colored rectangle with type initial
-                int typeColor = slot.type().color;
+                int typeColor = slot.category().color();
                 graphics.fill(iconX + 1, iconY + 1,
                         iconX + ICON_SIZE - 1, iconY + ICON_SIZE - 1, typeColor);
-                String initial = slot.type().name().substring(0, 1);
+                String initial = slot.category().name().substring(0, 1);
                 int tw = font.width(initial);
                 graphics.drawString(font, initial,
                         iconX + (ICON_SIZE - tw) / 2,

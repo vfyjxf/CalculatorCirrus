@@ -9,6 +9,7 @@ import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeClaim;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
+import dev.vfyjxf.cirrus.api.recipe.system.RoutingRecipeView;
 import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
@@ -139,6 +140,15 @@ public final class JeiCategoryRecipeSystem<T> implements RecipeSystem<T> {
             return ResolveResult.unsupported();
         }
         return JeiRecipeLayoutResolver.resolve(this, recipe, manager, recipeType);
+    }
+
+    @Override
+    public RoutingRecipeView routingView(ResolveContext context, T recipe) {
+        IRecipeManager manager = managerOrNull();
+        if (manager == null) {
+            return null;
+        }
+        return JeiRecipeLayoutResolver.routingView(this, recipe, manager, recipeType);
     }
 
     @Override

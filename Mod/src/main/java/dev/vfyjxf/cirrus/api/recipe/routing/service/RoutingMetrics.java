@@ -31,6 +31,11 @@ import org.jetbrains.annotations.Nullable;
  * @param capabilityGatePassed                  whether the capability gate check passed
  * @param missingCapabilities                   names of missing capability flags (if any)
  * @param budgetStopReason                      reason the budget stopped (or {@code "none"})
+ * @param budgetCulpritRecipe                   recipe associated with the first budget exhaustion
+ * @param budgetCulpritInput                    input associated with the first budget exhaustion
+ * @param budgetCulpritDepth                    search depth of the first budget exhaustion
+ * @param budgetCulpritRemaining                remaining input amount at the first budget exhaustion
+ * @param budgetCulpritActiveCycle              whether the budget culprit was on an active-path cycle
  * @param explorationBranchesExpanded           branches expanded during exploration
  * @param explorationBudgetUsed                 exploration-specific budget consumed
  * @param effectiveExplorationSeed              the effective exploration seed used
@@ -56,6 +61,11 @@ public record RoutingMetrics(
     boolean capabilityGatePassed,
     ImmutableList<String> missingCapabilities,
     String budgetStopReason,
+    String budgetCulpritRecipe,
+    String budgetCulpritInput,
+    int budgetCulpritDepth,
+    long budgetCulpritRemaining,
+    boolean budgetCulpritActiveCycle,
     int explorationBranchesExpanded,
     int explorationBudgetUsed,
     long effectiveExplorationSeed,
@@ -78,6 +88,10 @@ public record RoutingMetrics(
         Checks.checkArgument(budgetUsed >= 0, "budgetUsed must be non-negative");
         Checks.checkNotNull(missingCapabilities, "missingCapabilities");
         Checks.checkNotNull(budgetStopReason, "budgetStopReason");
+        Checks.checkNotNull(budgetCulpritRecipe, "budgetCulpritRecipe");
+        Checks.checkNotNull(budgetCulpritInput, "budgetCulpritInput");
+        Checks.checkArgument(budgetCulpritDepth >= -1, "budgetCulpritDepth must be -1 or non-negative");
+        Checks.checkArgument(budgetCulpritRemaining >= 0, "budgetCulpritRemaining must be non-negative");
         Checks.checkArgument(explorationBranchesExpanded >= 0, "explorationBranchesExpanded must be non-negative");
         Checks.checkArgument(explorationBudgetUsed >= 0, "explorationBudgetUsed must be non-negative");
         Checks.checkNotNull(effectiveLoopPolicy, "effectiveLoopPolicy");
@@ -110,6 +124,11 @@ public record RoutingMetrics(
             true,
             org.eclipse.collections.api.factory.Lists.immutable.empty(),
             "none",
+            "none",
+            "none",
+            -1,
+            0,
+            false,
             0,
             0,
             0,

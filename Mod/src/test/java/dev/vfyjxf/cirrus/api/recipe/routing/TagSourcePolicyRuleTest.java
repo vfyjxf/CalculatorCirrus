@@ -7,6 +7,7 @@ import dev.vfyjxf.cirrus.api.recipe.routing.rule.TagExpr;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.TagSourcePolicyRule;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingRecipeCatalog;
 import dev.vfyjxf.cirrus.api.recipe.routing.tag.TagIndex;
+import dev.vfyjxf.cirrus.api.recipe.routing.tag.TagSnapshot;
 import dev.vfyjxf.cirrus.api.recipe.routing.tag.UserTagWorkspace;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.server.MinecraftServer;
@@ -88,5 +89,46 @@ class TagSourcePolicyRuleTest {
         var set = snapshot.recipesForTag("cirrus:test/tag");
         assertTrue(set.get(index.recipeIndex(recipe2)));
         assertFalse(set.get(index.recipeIndex(recipe1)));
+    }
+
+    @Test
+    void indexSnapshotReusesUnchangedVersionAndRefreshesAfterMutation(MinecraftServer server) {
+        var r1 = new RoutingTestFixtures.FakeRecipe(
+            "r1",
+            java.util.List.of(RoutingTestFixtures.in(Items.OAK_LOG, 1)),
+            java.util.List.of(RoutingTestFixtures.out(Items.OAK_PLANKS, 4))
+        );
+        var r2 = new RoutingTestFixtures.FakeRecipe(
+            "r2",
+            java.util.List.of(RoutingTestFixtures.in(Items.OAK_PLANKS, 1)),
+            java.util.List.of(RoutingTestFixtures.out(Items.STICK, 4))
+        );
+        RecipeGraph graph = RoutingTestFixtures.graph(r1, r2);
+        RoutingRecipeCatalog catalog = RoutingRecipeCatalog.fromGraph(graph);
+        TagIndex index = new TagIndex(catalog);
+        var recipe1 = RoutingTestFixtures.findRecipeById(graph, "r1");
+        var recipe2 = RoutingTestFixtures.findRecipeById(graph, "r2");
+        assertNotNull(recipe1);
+        assertNotNull(recipe2);
+
+        index.add("cirrus:test/tag", recipe1);
+        TagSnapshot first = index.snapshot();
+        TagSnapshot second = index.snapshot();
+
+        assertSame(first, second);
+        assertEquals(1, first.version());
+        assertTrue(first.recipesForTag("cirrus:test/tag").get(index.recipeIndex(recipe1)));
+
+        index.add("cirrus:test/tag", recipe1);
+        assertSame(first, index.snapshot());
+        assertEquals(1, index.version());
+
+        index.add("cirrus:test/tag", recipe2);
+        TagSnapshot third = index.snapshot();
+
+        assertNotSame(first, third);
+        assertEquals(2, third.version());
+        assertTrue(third.recipesForTag("cirrus:test/tag").get(index.recipeIndex(recipe1)));
+        assertTrue(third.recipesForTag("cirrus:test/tag").get(index.recipeIndex(recipe2)));
     }
 }

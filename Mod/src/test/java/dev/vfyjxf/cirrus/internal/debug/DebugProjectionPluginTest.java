@@ -191,7 +191,6 @@ class DebugProjectionPluginTest {
             assertTrue(graph.nodeCount() >= DebugProjectionPlugin.longChainDepth);
             assertTrue(graph.edgeCount() >= DebugProjectionPlugin.longChainDepth);
             assertTrue(graph.nodes().stream().anyMatch(node -> node.durationTicks() > 0));
-            assertTrue(graph.nodes().stream().anyMatch(node -> node.euPerTick() > 0));
         } finally {
             if (previous instanceof RecipeApiImpl impl) {
                 RecipeApiImpl.attach(impl);

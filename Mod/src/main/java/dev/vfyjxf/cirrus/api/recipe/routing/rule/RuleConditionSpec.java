@@ -67,14 +67,16 @@ public record RuleConditionSpec(
             return false;
         }
         if (channel == RuleContentChannel.any || channel == RuleContentChannel.input) {
-            for (RecipeContent content : context.recipe().current().inputs()) {
+            for (int inputIndex = 0; inputIndex < context.recipe().inputCount(); inputIndex++) {
+                RecipeContent content = context.recipe().inputAt(inputIndex);
                 if (matchesAnyMaterial(content)) {
                     return true;
                 }
             }
         }
         if (channel == RuleContentChannel.any || channel == RuleContentChannel.output) {
-            for (RecipeContent content : context.recipe().current().outputs()) {
+            for (int outputIndex = 0; outputIndex < context.recipe().outputCount(); outputIndex++) {
+                RecipeContent content = context.recipe().outputAt(outputIndex);
                 if (matchesAnyMaterial(content)) {
                     return true;
                 }

@@ -45,7 +45,7 @@ public final class DefaultRuleDefinitions {
             new RuleProfileSpec(
                 calculatorPreviewProfileId,
                 RuleProfilePreset.standardExecution,
-                UnresolvedInputMode.directSupplyOnNoSourceOrSafeExhausted,
+                UnresolvedInputMode.directSupplyOnNoSourceOrSafeOrCycleExhausted,
                 8,
                 4,
                 DefaultRuleProfiles.standardExecution().nearTieEpsilon(),

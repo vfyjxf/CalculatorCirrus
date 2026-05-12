@@ -74,7 +74,7 @@ class JeiFallbackRecipeSystemPluginTest {
         assertTrue(JeiRecipeCategoryFilter.excluded(itemTags));
         assertTrue(JeiRecipeCategoryFilter.excluded(fluidTags));
         assertTrue(JeiRecipeCategoryFilter.excluded(genericTagInfo));
-        assertTrue(JeiRecipeCategoryFilter.include(normalTagRecipe));
+        assertTrue(JeiRecipeCategoryFilter.excluded(normalTagRecipe));
     }
 
     @Test

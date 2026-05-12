@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.api.recipe.routing;
 import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
@@ -230,6 +231,11 @@ class ComplexContentRoutingTest {
         }
 
         @Override
+        public RecipeContentType<? extends RecipeContent> recipeType() {
+            return RecipeContentType.COMPLEX;
+        }
+
+        @Override
         public NonEnumerableItemContent copy() {
             return this;
         }
@@ -277,6 +283,11 @@ class ComplexContentRoutingTest {
         @Override
         public boolean isEmpty() {
             return amount <= 0;
+        }
+
+        @Override
+        public RecipeContentType<? extends RecipeContent> recipeType() {
+            return RecipeContentType.COMPLEX;
         }
 
         @Override

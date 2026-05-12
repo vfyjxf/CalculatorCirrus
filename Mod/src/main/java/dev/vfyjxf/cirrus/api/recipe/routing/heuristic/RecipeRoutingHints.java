@@ -142,4 +142,11 @@ public record RecipeRoutingHints(
             return new RecipeRoutingHints(usePolicy, penalty, roles, reasonKey);
         }
     }
+
+    public static RecipeRoutingHints canonical(RecipeRoutingHints hints) {
+        if (hints == null || hints.isEmpty()) {
+            return empty;
+        }
+        return hints;
+    }
 }

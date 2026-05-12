@@ -196,7 +196,7 @@ final class RoutingComplexDataset {
             ));
         }
 
-        // SCC-rich local networks to stress cycle handling.
+        // Cycle-rich local networks to stress active-path handling.
         for (int i = 0; i < 40; i++) {
             Item a = tokenPool[i % tokenPool.length];
             Item b = tokenPool[(i + 7) % tokenPool.length];

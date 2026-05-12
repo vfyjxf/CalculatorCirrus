@@ -25,6 +25,9 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeOf;
 @EventBusSubscriber(modid = CirrusConstants.modId, value = Dist.CLIENT)
 public class CalculatorScreen extends BasicScreen {
 
+    private final TabContainer tabs;
+    private boolean released;
+
 	//region keybinds
 
 	private static final KeyMapping openCalculatorScreen = new KeyMapping(
@@ -52,12 +55,33 @@ public class CalculatorScreen extends BasicScreen {
 		container.useStyle(UIStyle.of(
 				marginAuto()
 		));
-		container.addWidget(new TabContainer());
+        tabs = new TabContainer();
+		container.addWidget(tabs);
 		mainGroup.addWidget(container);
 		mainGroup.useStyle(
 				sizeOf(TaffyDimension.percent(1), TaffyDimension.percent(1))
 		);
 	}
+
+    @Override
+    public void onClose() {
+        releaseScreenState();
+        super.onClose();
+    }
+
+    @Override
+    public void removed() {
+        releaseScreenState();
+        super.removed();
+    }
+
+    private void releaseScreenState() {
+        if (released) {
+            return;
+        }
+        released = true;
+        tabs.releaseCachedContent();
+    }
 
 
 }

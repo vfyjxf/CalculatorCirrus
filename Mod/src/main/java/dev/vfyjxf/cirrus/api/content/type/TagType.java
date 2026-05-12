@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.api.content.type;
 
 import com.mojang.datafixers.util.Pair;
 import dev.vfyjxf.cirrus.api.content.util.TagLookup;
+import dev.vfyjxf.cirrus.helper.TagHelper;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.core.Holder;
@@ -27,6 +28,7 @@ public record TagType<T>(
         ResourceKey<Registry<T>> registryKey
 ) {
     private static final Map<CacheKey, MutableSet<TagKey<?>>> allTagsCache = new ConcurrentHashMap<>();
+    private static final Map<ResourceLocation, Registry<?>> registryCache = new ConcurrentHashMap<>();
 
     public static <T> TagType<T> fromRegistry(
             String id,
@@ -56,7 +58,10 @@ public record TagType<T>(
 
     @SuppressWarnings("unchecked")
     private Registry<T> registry() {
-        return (Registry<T>) Objects.requireNonNull(BuiltInRegistries.REGISTRY).get(registryKey.location());
+        return (Registry<T>) registryCache.computeIfAbsent(
+                registryKey.location(),
+                location -> Objects.requireNonNull(BuiltInRegistries.REGISTRY).get(location)
+        );
     }
 
 
@@ -128,6 +133,8 @@ public record TagType<T>(
 
     public static void clearAllTagsCache() {
         allTagsCache.clear();
+        registryCache.clear();
+        TagHelper.clearCaches();
     }
 
     //endregion

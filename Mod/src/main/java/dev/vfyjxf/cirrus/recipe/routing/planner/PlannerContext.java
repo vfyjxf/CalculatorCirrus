@@ -6,7 +6,6 @@ import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicyDecision;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingRequest;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingService;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingRecipeCatalog;
-import dev.vfyjxf.cirrus.api.recipe.routing.state.SccAnalysis;
 import dev.vfyjxf.cirrus.api.recipe.routing.tag.TagSnapshot;
 import dev.vfyjxf.cloudlib.util.Checks;
 
@@ -15,8 +14,8 @@ import dev.vfyjxf.cloudlib.util.Checks;
  *
  * <p>A {@code PlannerContext} bundles every piece of read-only state that a
  * {@link RoutePlanner} needs to execute: the recipe graph, request parameters,
- * rule profile, source-policy decision, tag snapshot, SCC analysis, and a
- * mutable {@link Counters} instance for telemetry.
+ * rule profile, source-policy decision, tag snapshot, and a mutable
+ * {@link Counters} instance for telemetry.
  *
  * <p>All record components except {@code counters} are immutable or effectively
  * immutable during the planning run.
@@ -28,7 +27,6 @@ import dev.vfyjxf.cloudlib.util.Checks;
  * @param ruleProfile          the rule profile governing candidate evaluation
  * @param sourcePolicyDecision the pre-computed source-policy decision (allowed recipes bitset)
  * @param tagSnapshot          the frozen tag-to-recipe assignments
- * @param sccAnalysis          the SCC decomposition of the recipe graph
  * @param counters             mutable telemetry counters updated during planning
  * @see RoutePlanner
  */
@@ -40,7 +38,6 @@ public record PlannerContext(
     RuleProfile ruleProfile,
     SourcePolicyDecision sourcePolicyDecision,
     TagSnapshot tagSnapshot,
-    SccAnalysis sccAnalysis,
     Counters counters
 ) {
     public PlannerContext {
@@ -51,7 +48,6 @@ public record PlannerContext(
         Checks.checkNotNull(ruleProfile, "ruleProfile");
         Checks.checkNotNull(sourcePolicyDecision, "sourcePolicyDecision");
         Checks.checkNotNull(tagSnapshot, "tagSnapshot");
-        Checks.checkNotNull(sccAnalysis, "sccAnalysis");
         Checks.checkNotNull(counters, "counters");
     }
 
@@ -64,7 +60,6 @@ public record PlannerContext(
             ruleProfile,
             sourcePolicyDecision,
             tagSnapshot,
-            sccAnalysis,
             counters
         );
     }
@@ -94,6 +89,53 @@ public record PlannerContext(
         public String budgetStopReason = "none";
         /** Whether the budget was fully exhausted before planning completed. */
         public boolean budgetExhausted;
+        /** Recipe most directly associated with the first budget exhaustion. */
+        public String budgetCulpritRecipe = "none";
+        /** Input most directly associated with the first budget exhaustion. */
+        public String budgetCulpritInput = "none";
+        /** Search depth where the first budget exhaustion was detected. */
+        public int budgetCulpritDepth = -1;
+        /** Remaining input amount when the first budget exhaustion was detected. */
+        public long budgetCulpritRemaining;
+        /** Whether the first budget exhaustion was on an active-path cycle candidate. */
+        public boolean budgetCulpritActiveCycle;
+        /** Expanded-node counter at the start of the root input currently being resolved. */
+        public int rootInputExpandedStart;
+        /** Generated-candidate counter at the start of the root input currently being resolved. */
+        public int rootInputGeneratedStart;
+        /** Index of the root input currently being resolved; {@code -1} outside root input resolution. */
+        public int activeRootInputIndex = -1;
+        /** Description of the root input currently being resolved. */
+        public String activeRootInput = "none";
+
+        public void recordBudgetCulprit(
+            String recipe,
+            String input,
+            int depth,
+            long remaining,
+            boolean activeCycleCandidate
+        ) {
+            if (!"none".equals(budgetCulpritRecipe)) {
+                return;
+            }
+            budgetCulpritRecipe = activeRootInputIndex >= 0 ? recipe + "#rootInput" + activeRootInputIndex : recipe;
+            budgetCulpritInput = activeRootInputIndex >= 0 ? activeRootInput : input;
+            budgetCulpritDepth = depth;
+            budgetCulpritRemaining = remaining;
+            budgetCulpritActiveCycle = activeCycleCandidate;
+        }
+
+        public void beginRootInput(int inputIndex, String inputDescription) {
+            activeRootInputIndex = inputIndex;
+            activeRootInput = inputDescription;
+            rootInputExpandedStart = expandedNodes;
+            rootInputGeneratedStart = generatedCandidates;
+        }
+
+        public void clearRootInput() {
+            activeRootInputIndex = -1;
+            activeRootInput = "none";
+        }
     }
 }
 

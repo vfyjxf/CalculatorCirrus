@@ -1,16 +1,20 @@
 package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 
+import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
 import dev.vfyjxf.cirrus.content.renderer.FluidStackRenderer;
 import dev.vfyjxf.cirrus.ui.CirrusTextures.Background;
 import dev.vfyjxf.cirrus.ui.CirrusTextures.Sign;
+import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MachineInfo;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialSlot;
 import dev.vfyjxf.cirrus.ui.widget.common.CirrusSlotGroupRenderer;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import net.minecraft.client.gui.Font;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.jetbrains.annotations.Nullable;
 
@@ -57,10 +61,8 @@ final class OmniCalcSlotRenderer {
         if (slot.content().notEmpty() && visualCount(slot.content()) > 0) {
             renderContent(canvas, slot.content(), currentVisualIndex(slot.content()),
                     contentX, contentY, contentSize, partialTicks);
-        } else if (slot.itemStack() != null && !slot.itemStack().isEmpty()) {
-            renderItem(canvas, slot.itemStack(), x, y, size);
-        } else if (slot.fluidStack() != null && !slot.fluidStack().isEmpty()) {
-            renderFluid(canvas, slot.fluidStack(), contentX, contentY, contentSize, partialTicks);
+        } else if (slot.visualStack().notEmpty()) {
+            renderStack(canvas, slot.visualStack(), x, y, size, partialTicks);
         } else {
             renderTypePlaceholder(canvas, slot, x, y, size);
         }
@@ -80,10 +82,22 @@ final class OmniCalcSlotRenderer {
             int size,
             int fallbackColor
     ) {
-        ItemStack icon = machine == null ? ItemStack.EMPTY : machine.icon();
-        if (icon != null && !icon.isEmpty()) {
+        ContentStack<?, ?> icon = machine == null ? ContentStack.empty() : machine.icon();
+        if (icon.notEmpty()) {
             CirrusSlotGroupRenderer.renderSingle(canvas, x, y, size);
-            renderItem(canvas, icon, x, y, size);
+            renderStack(canvas, icon, x, y, size, 0.0f);
+        }
+    }
+
+    private static void renderStack(SceneCanvas canvas, ContentStack<?, ?> stack, int x, int y, int size, float partialTicks) {
+        if (stack.isItem()) {
+            ContentStack<Item, ItemStack> item = stack.cast();
+            renderItem(canvas, item.value(), x, y, size);
+            return;
+        }
+        if (stack.isFluid()) {
+            ContentStack<Fluid, FluidStack> fluid = stack.cast();
+            renderFluid(canvas, fluid.value(), x + 1, y + 1, Math.max(1, size - 2), partialTicks);
         }
     }
 
@@ -107,7 +121,7 @@ final class OmniCalcSlotRenderer {
     private static void renderTypePlaceholder(SceneCanvas canvas, @Nullable MaterialSlot slot, int x, int y, int size) {
         var icon = slot != null && slot.isCatalyst()
                 ? Sign.Group.catalyst
-                : slot != null && slot.type() == dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialType.FLUID
+                : slot != null && slot.category().equals(MaterialCategories.FLUID)
                 ? Sign.Group.fluid
                 : Sign.Group.item;
         int iconSize = Math.min(10, Math.max(6, size - 8));

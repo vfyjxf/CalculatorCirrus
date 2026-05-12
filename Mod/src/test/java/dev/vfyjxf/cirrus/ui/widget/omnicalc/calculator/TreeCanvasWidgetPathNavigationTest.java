@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 
+import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
+
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.widget.calculator.calc.DebugRecipeProvider;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode;
@@ -72,10 +74,8 @@ class TreeCanvasWidgetPathNavigationTest {
                 "Arc Furnace Smelting",
                 "Arc Furnace",
                 List.of(),
-                List.of(new ProcessNode.MaterialSlot("Steel Ingot", 4, ProcessNode.MaterialType.ITEM)),
+                List.of(new ProcessNode.MaterialSlot("Steel Ingot", 4, MaterialCategories.ITEM)),
                 120,
-                480,
-                3,
                 List.of(
                         new ProcessNode.MachineInfo("Arc Furnace", ItemStack.EMPTY),
                         new ProcessNode.MachineInfo("Large Arc Furnace", ItemStack.EMPTY)

@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.routing;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
+import dev.vfyjxf.cirrus.api.recipe.routing.state.ResourceLedger;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.tags.ItemTags;
@@ -38,5 +39,39 @@ class StockTest {
         assertEquals(64L, consumed);
         assertEquals(0L, stock.countMatching(ContentStack.fromStack(new ItemStack(Items.OAK_LOG))));
         assertEquals(0L, stock.countMatching(ContentStack.fromStack(new ItemStack(Items.BIRCH_LOG))));
+    }
+
+    @Test
+    void rollbackRestoresStockAmountsAndNewStackEntries(MinecraftServer server) {
+        Stock stock = Stock.empty();
+        var oakLog = ContentStack.fromStack(new ItemStack(Items.OAK_LOG, 1));
+        var birchLog = ContentStack.fromStack(new ItemStack(Items.BIRCH_LOG, 1));
+        stock.add(ContentStack.fromStack(new ItemStack(Items.OAK_LOG, 64)));
+
+        Stock.Mark mark = stock.mark();
+        stock.consume(oakLog, 12);
+        stock.add(ContentStack.fromStack(new ItemStack(Items.BIRCH_LOG, 7)));
+
+        stock.rollback(mark);
+
+        assertEquals(64L, stock.countMatching(oakLog));
+        assertEquals(0L, stock.countMatching(birchLog));
+    }
+
+    @Test
+    void ledgerRollbackRestoresByproductAddsAndConsumption(MinecraftServer server) {
+        ResourceLedger ledger = new ResourceLedger(Stock.empty());
+        var stick = ContentStack.fromStack(new ItemStack(Items.STICK, 1));
+        var plank = ContentStack.fromStack(new ItemStack(Items.OAK_PLANKS, 1));
+        ledger.addByproduct(stick, 5);
+
+        ResourceLedger.Mark mark = ledger.mark();
+        ledger.consumeDemand(InputContent.fromItemStack(new ItemStack(Items.STICK), 3), 3, null);
+        ledger.addByproduct(plank, 9);
+
+        ledger.rollback(mark);
+
+        assertEquals(5L, ledger.peekByproductAvailable(stick));
+        assertEquals(0L, ledger.peekByproductAvailable(plank));
     }
 }

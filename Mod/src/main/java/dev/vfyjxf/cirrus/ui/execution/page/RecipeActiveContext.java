@@ -345,9 +345,7 @@ public record RecipeActiveContext(
             slot.type(),
             slot.chance(),
             slot.isCatalyst(),
-            content,
-            null,
-            null
+            content
         );
     }
 

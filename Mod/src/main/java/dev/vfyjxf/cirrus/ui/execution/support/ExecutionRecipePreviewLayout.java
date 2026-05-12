@@ -2,8 +2,9 @@ package dev.vfyjxf.cirrus.ui.execution.support;
 
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
+import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
+import dev.vfyjxf.cirrus.ui.process.MaterialCategory;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialSlot;
-import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialType;
 import dev.vfyjxf.cirrus.ui.widget.common.CirrusSlotGroupRenderer;
 import org.jetbrains.annotations.Nullable;
 
@@ -87,7 +88,7 @@ public final class ExecutionRecipePreviewLayout {
         }
             return new Section(
                 Side.INPUT,
-                MaterialType.ITEM,
+                MaterialCategories.ITEM,
                 false,
                 0,
                 0,
@@ -110,7 +111,7 @@ public final class ExecutionRecipePreviewLayout {
         ArrayList<Section> sections = new ArrayList<>(grouped.size());
         for (Map.Entry<SectionKey, ArrayList<MaterialSlot>> entry : grouped.entrySet()) {
             SectionKey key = entry.getKey();
-            sections.add(gridSection(key.side(), key.type(), key.catalyst(), entry.getValue(), columnsFor(key.side(), entry.getValue().size())));
+            sections.add(gridSection(key.side(), key.category(), key.catalyst(), entry.getValue(), columnsFor(key.side(), entry.getValue().size())));
         }
         return List.copyOf(sections);
     }
@@ -125,7 +126,7 @@ public final class ExecutionRecipePreviewLayout {
         return 3;
     }
 
-    private static Section gridSection(Side side, MaterialType type, boolean catalyst, List<MaterialSlot> slots, int columns) {
+    private static Section gridSection(Side side, MaterialCategory category, boolean catalyst, List<MaterialSlot> slots, int columns) {
         int safeColumns = Math.max(1, columns);
         ArrayList<SlotEntry> entries = new ArrayList<>(slots.size());
         for (int index = 0; index < slots.size(); index++) {
@@ -138,7 +139,7 @@ public final class ExecutionRecipePreviewLayout {
         int rows = (int) Math.ceil((double) slots.size() / (double) safeColumns);
         return new Section(
             side,
-            type,
+            category,
             catalyst,
             0,
             0,
@@ -192,12 +193,12 @@ public final class ExecutionRecipePreviewLayout {
         OUTPUT
     }
 
-    private record SectionKey(Side side, MaterialType type, boolean catalyst) {
+    private record SectionKey(Side side, MaterialCategory category, boolean catalyst) {
         private static SectionKey of(Side side, MaterialSlot slot) {
             boolean catalyst = side == Side.INPUT && slot.isCatalyst();
             return new SectionKey(
                 side,
-                catalyst ? MaterialType.CATALYST : slot.type(),
+                catalyst ? MaterialCategories.CATALYST : slot.category(),
                 catalyst
             );
         }
@@ -205,7 +206,7 @@ public final class ExecutionRecipePreviewLayout {
 
     public record Section(
         Side side,
-        MaterialType type,
+        MaterialCategory category,
         boolean catalyst,
         int x,
         int y,
@@ -227,7 +228,7 @@ public final class ExecutionRecipePreviewLayout {
             for (SlotEntry entry : entries) {
                 out.add(new SlotEntry(entry.slot(), entry.x() + x, entry.y() + y));
             }
-            return new Section(side, type, catalyst, this.x + x, this.y + y, width, height, cells, List.copyOf(out));
+            return new Section(side, category, catalyst, this.x + x, this.y + y, width, height, cells, List.copyOf(out));
         }
     }
 
@@ -266,7 +267,7 @@ public final class ExecutionRecipePreviewLayout {
         public boolean hasTypedSections() {
             return sectionCount() > 2
                 || inputSections.stream().anyMatch(Section::catalyst)
-                || outputSections.stream().map(Section::type).distinct().count() > 1;
+                || outputSections.stream().map(Section::category).distinct().count() > 1;
         }
 
         public boolean hasSlots() {

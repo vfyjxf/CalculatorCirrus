@@ -79,6 +79,15 @@ public class TabContainer extends CompositeWidget<Widget> {
 		selectTab(calculatorTab);
 	}
 
+    public void releaseCachedContent() {
+        calculatorTab.releaseContent();
+        databaseTab.releaseContent();
+        rulesTab.releaseContent();
+        settingsTab.releaseContent();
+        selectedTab = null;
+        content.clear();
+    }
+
 	void selectTab(Tab tab) {
         if (selectedTab == tab && (content.children().isEmpty() || content.children().getFirst() == tab.cachedContent)) {
             return;
@@ -160,6 +169,14 @@ public class TabContainer extends CompositeWidget<Widget> {
 			}
 			return cachedContent;
 		}
+
+        private void releaseContent() {
+            Widget content = cachedContent;
+            if (content instanceof OmniCalculatorView calculatorView) {
+                calculatorView.releaseCalculationState();
+            }
+            cachedContent = null;
+        }
 
 	}
 

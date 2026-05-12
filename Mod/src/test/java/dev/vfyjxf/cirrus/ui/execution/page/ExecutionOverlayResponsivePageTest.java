@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.ui.execution.page;
 
+import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
+
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
@@ -217,8 +219,8 @@ class ExecutionOverlayResponsivePageTest {
 
     @Test
     void leftAlignedFallbackRecipePreviewUsesTextInset() {
-        var input = new ProcessNode.MaterialSlot("input", 64, ProcessNode.MaterialType.ITEM);
-        var output = new ProcessNode.MaterialSlot("output", 1, ProcessNode.MaterialType.ITEM);
+        var input = new ProcessNode.MaterialSlot("input", 64, MaterialCategories.ITEM);
+        var output = new ProcessNode.MaterialSlot("output", 1, MaterialCategories.ITEM);
 
         var component = ExecutionRecipeLayoutTooltipComponent.leftAligned(List.of(input), List.of(output));
 

@@ -10,7 +10,6 @@ import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseWorkspace;
 import dev.vfyjxf.cirrus.api.recipe.routing.RecipeGraph;
 import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.ActiveRoutingRule;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultRuleDefinitions;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleDefinition;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.InventorySensitivityProfile;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.LoopPolicy;
@@ -140,9 +139,6 @@ public final class RecipePathSettings {
     }
 
     public static LoopPolicy calculatorLoopPolicy(RuleDefinition rule) {
-        if (DefaultRuleDefinitions.calculatorPreviewProfileId.equals(rule.profile().profileId())) {
-            return LoopPolicy.allowBoundedAmplification;
-        }
         return LoopPolicy.forbidAmplification;
     }
 

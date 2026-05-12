@@ -511,6 +511,27 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
 		rebuildLayerNav(graph);
 	}
 
+	void releaseGraph() {
+		this.graph = null;
+		this.activeLayer = 0;
+		this.maxLayers = 0;
+		this.pathScrollX = 0;
+		this.pathScrollTargetX = 0;
+		this.traceScrollX = 0;
+		this.traceScrollTargetX = 0;
+		this.pathContentW = 0;
+		this.traceContentW = 0;
+		this.pathHitAreas.clear();
+		this.traceHitAreas.clear();
+		this.hoveredCrumbId = null;
+		this.selectedCrumbId = null;
+		this.activeScrollDrag = null;
+		this.dragThumbOffsetX = 0;
+		this.pendingCanvasFocus = false;
+		this.layerButtonsContainer.clear();
+		this.stepsWidget.releaseGraph();
+	}
+
 	void setCraftCount(long count) {
 		stepsWidget.setCraftCount(count);
 	}

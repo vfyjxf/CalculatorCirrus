@@ -6,7 +6,6 @@ import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -25,7 +24,6 @@ public record RecipeHeuristicContext(
     @Nullable ResourceLocation recipeId,
     Namespace systemId,
     MachineEntry machineEntry,
-    ProjectedRecipe projectedRecipe,
     ImmutableList<InputContent> mergedInputs,
     ImmutableList<OutputContent> mergedOutputs
 ) {
@@ -33,7 +31,6 @@ public record RecipeHeuristicContext(
         Checks.checkNotNull(recipe, "recipe");
         Checks.checkNotNull(systemId, "systemId");
         Checks.checkNotNull(machineEntry, "machineEntry");
-        Checks.checkNotNull(projectedRecipe, "projectedRecipe");
         Checks.checkNotNull(mergedInputs, "mergedInputs");
         Checks.checkNotNull(mergedOutputs, "mergedOutputs");
     }

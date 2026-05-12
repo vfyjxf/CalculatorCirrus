@@ -2,35 +2,14 @@ package dev.vfyjxf.cirrus.api.recipe.database.search;
 
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseRecord;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseResult;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchExpression;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchField;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchMatch;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchOperator;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchParseException;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchTerm;
-import dev.vfyjxf.cirrus.api.recipe.search.UnitParser;
+import dev.vfyjxf.cirrus.api.recipe.search.*;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Comparator;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadFactory;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
@@ -178,12 +157,12 @@ public final class RecipeDatabaseSearchEngine {
     }
 
     private static void buildScanOnlyFieldsParallel(
-        RecipeDatabaseSearchDocument[] documents,
-        SearchField[] searchFields,
-        SearchField[] scanFields,
-        FieldIndex[] built,
-        ExecutorService executor,
-        int workers
+            RecipeDatabaseSearchDocument[] documents,
+            SearchField[] searchFields,
+            SearchField[] scanFields,
+            FieldIndex[] built,
+            ExecutorService executor,
+            int workers
     ) {
         int total = documents.length;
         int chunkSize = Math.max(1024, Math.min(8192, (total + workers * 8 - 1) / (workers * 8)));
@@ -403,7 +382,7 @@ public final class RecipeDatabaseSearchEngine {
         return List.copyOf(results);
     }
 
-    private @Nullable int[] candidates(SearchExpression expression) {
+    private int @Nullable [] candidates(SearchExpression expression) {
         return switch (expression) {
             case null -> allRecipeIds;
             case SearchExpression.All ignored -> allRecipeIds;
@@ -414,7 +393,7 @@ public final class RecipeDatabaseSearchEngine {
         };
     }
 
-    private @Nullable int[] andCandidates(SearchExpression.And and) {
+    private int @Nullable [] andCandidates(SearchExpression.And and) {
         ArrayList<int[]> positive = new ArrayList<>();
         ArrayList<int[]> negative = new ArrayList<>();
         for (SearchExpression child : and.terms()) {
@@ -448,7 +427,7 @@ public final class RecipeDatabaseSearchEngine {
         return current;
     }
 
-    private @Nullable int[] orCandidates(SearchExpression.Or or) {
+    private int @Nullable [] orCandidates(SearchExpression.Or or) {
         int[] current = emptyPosting;
         for (SearchExpression child : or.terms()) {
             int[] posting = candidates(child);
@@ -460,7 +439,7 @@ public final class RecipeDatabaseSearchEngine {
         return current;
     }
 
-    private @Nullable int[] termCandidates(SearchTerm term) {
+    private int @Nullable [] termCandidates(SearchTerm term) {
         if (term.field() == SearchField.contains) {
             return containsTermCandidates(term);
         }
@@ -492,7 +471,7 @@ public final class RecipeDatabaseSearchEngine {
         };
     }
 
-    private @Nullable int[] containsTermCandidates(SearchTerm term) {
+    private int @Nullable [] containsTermCandidates(SearchTerm term) {
         SearchOperator operator = term.operator();
         if (operator == SearchOperator.exists || "*".equals(term.value())) {
             PostingUnion postings = new PostingUnion();
@@ -505,14 +484,14 @@ public final class RecipeDatabaseSearchEngine {
         PostingUnion postings = new PostingUnion();
         for (SearchField sourceField : containsSourceFields()) {
             FieldIndex field = field(sourceField);
-            @Nullable int[] posting = switch (operator) {
+            int @Nullable [] posting = switch (operator) {
                 case contains -> withScanFallback(field, field.contains(needle));
                 case exact -> withScanFallback(field, field.exact(needle));
                 case wildcard -> {
                     String literal = longestWildcardLiteral(term.value());
                     yield literal.isBlank()
-                        ? field.fieldRecords()
-                        : field.indexed() ? withScanFallback(field, field.contains(normalize(literal))) : null;
+                            ? field.fieldRecords()
+                            : field.indexed() ? withScanFallback(field, field.contains(normalize(literal))) : null;
                 }
                 default -> emptyPosting;
             };
@@ -524,7 +503,7 @@ public final class RecipeDatabaseSearchEngine {
         return postings.toArray();
     }
 
-    private @Nullable int[] contentTextCandidates(FieldIndex field, SearchTerm term) {
+    private int @Nullable [] contentTextCandidates(FieldIndex field, SearchTerm term) {
         if (term.operator() == SearchOperator.exists || "*".equals(term.value())) {
             return field.fieldRecords();
         }
@@ -537,14 +516,14 @@ public final class RecipeDatabaseSearchEngine {
             case wildcard -> {
                 String literal = longestWildcardLiteral(term.value());
                 yield literal.isBlank()
-                    ? field.fieldRecords()
-                    : field.indexed() ? withScanFallback(field, field.contains(normalize(literal))) : null;
+                        ? field.fieldRecords()
+                        : field.indexed() ? withScanFallback(field, field.contains(normalize(literal))) : null;
             }
             default -> emptyPosting;
         };
     }
 
-    private @Nullable int[] contentTermCandidates(FieldIndex field, SearchTerm term) {
+    private int @Nullable [] contentTermCandidates(FieldIndex field, SearchTerm term) {
         if (term.operator() == SearchOperator.exists || "*".equals(term.value())) {
             return field.fieldRecords();
         }
@@ -557,8 +536,8 @@ public final class RecipeDatabaseSearchEngine {
             case wildcard -> {
                 String literal = longestWildcardLiteral(term.value());
                 yield literal.isBlank()
-                    ? field.fieldRecords()
-                    : field.indexed() ? withScanFallback(field, field.contains(normalize(literal))) : null;
+                        ? field.fieldRecords()
+                        : field.indexed() ? withScanFallback(field, field.contains(normalize(literal))) : null;
             }
             default -> emptyPosting;
         };
@@ -569,8 +548,8 @@ public final class RecipeDatabaseSearchEngine {
             return null;
         }
         return field.scanFallbackRecords().length == 0
-            ? indexedPosting
-            : union(indexedPosting, field.scanFallbackRecords());
+                ? indexedPosting
+                : union(indexedPosting, field.scanFallbackRecords());
     }
 
     private SearchMatch matches(SearchExpression expression, int recipeId) {
@@ -658,8 +637,8 @@ public final class RecipeDatabaseSearchEngine {
             SearchMatch match = sourceTerm.hasAmount()
                     ? matchContentAmount(document, sourceTerm)
                     : isContentField(field)
-                    ? matchContentText(document, sourceTerm)
-                    : matchText(document, field, term.value(), term.strict(), TextMode.contains);
+                      ? matchContentText(document, sourceTerm)
+                      : matchText(document, field, term.value(), term.strict(), TextMode.contains);
             if (match.matched()) {
                 best = Math.max(best, match.score());
             }
@@ -890,17 +869,17 @@ public final class RecipeDatabaseSearchEngine {
             }
         }
         logger.info(
-            "Built recipe database search index: records={}, indexedFields={}, scanOnlyFields={}, terms={}, postings={}, fieldRecords={}, scanFallbackRecords={}, postingExpansion={}, termExpansion={}, fieldRecordExpansion={}, documentsMs={}, fieldsMs={}, totalMs={}",
-            records,
-            indexedFields,
-            scanOnlyFields,
-            termCount,
-            postingCount,
-            fieldRecordCount,
-            scanFallbackRecordCount,
-            ratio(postingCount, records),
-            ratio(termCount, records),
-            ratio(fieldRecordCount, records),
+                "Built recipe database search index: records={}, indexedFields={}, scanOnlyFields={}, terms={}, postings={}, fieldRecords={}, scanFallbackRecords={}, postingExpansion={}, termExpansion={}, fieldRecordExpansion={}, documentsMs={}, fieldsMs={}, totalMs={}",
+                records,
+                indexedFields,
+                scanOnlyFields,
+                termCount,
+                postingCount,
+                fieldRecordCount,
+                scanFallbackRecordCount,
+                ratio(postingCount, records),
+                ratio(termCount, records),
+                ratio(fieldRecordCount, records),
                 nanosToMillis(documentsNanos),
                 nanosToMillis(fieldsNanos),
                 nanosToMillis(totalNanos)
@@ -913,22 +892,21 @@ public final class RecipeDatabaseSearchEngine {
                 if (field == null || field.fieldRecords().length == 0 && field.termCount() == 0 && field.postingCount() == 0) {
                     continue;
                 }
-                detail
-                        .append(' ')
-                        .append(searchField)
-                        .append('[')
-                        .append(field.indexed() ? "idx" : "scan")
-                        .append(" records=")
-                        .append(field.fieldRecords().length)
-                        .append(" terms=")
-                        .append(field.termCount())
-                    .append(" postings=")
-                    .append(field.postingCount())
-                    .append(" fallback=")
-                    .append(field.scanFallbackRecords().length)
-                    .append(" exp=")
-                    .append(ratio(field.postingCount(), Math.max(1, field.fieldRecords().length)))
-                    .append(']');
+                detail.append(' ')
+                      .append(searchField)
+                      .append('[')
+                      .append(field.indexed() ? "idx" : "scan")
+                      .append(" records=")
+                      .append(field.fieldRecords().length)
+                      .append(" terms=")
+                      .append(field.termCount())
+                      .append(" postings=")
+                      .append(field.postingCount())
+                      .append(" fallback=")
+                      .append(field.scanFallbackRecords().length)
+                      .append(" exp=")
+                      .append(ratio(field.postingCount(), Math.max(1, field.fieldRecords().length)))
+                      .append(']');
             }
             logger.info("{}", detail);
         }
@@ -940,17 +918,17 @@ public final class RecipeDatabaseSearchEngine {
         }
         Runtime runtime = Runtime.getRuntime();
         logger.debug(
-            "Recipe database search field built: field={}, records={}, indexed={}, fieldRecords={}, terms={}, postings={}, scanFallbackRecords={}, elapsedMs={}, heapUsedMiB={}, heapCommittedMiB={}",
-            searchField,
-            records,
-            field.indexed(),
-            field.fieldRecords().length,
-            field.termCount(),
-            field.postingCount(),
-            field.scanFallbackRecords().length,
-            nanosToMillis(System.nanoTime() - startNanos),
-            (runtime.totalMemory() - runtime.freeMemory()) >> 20,
-            runtime.totalMemory() >> 20
+                "Recipe database search field built: field={}, records={}, indexed={}, fieldRecords={}, terms={}, postings={}, scanFallbackRecords={}, elapsedMs={}, heapUsedMiB={}, heapCommittedMiB={}",
+                searchField,
+                records,
+                field.indexed(),
+                field.fieldRecords().length,
+                field.termCount(),
+                field.postingCount(),
+                field.scanFallbackRecords().length,
+                nanosToMillis(System.nanoTime() - startNanos),
+                (runtime.totalMemory() - runtime.freeMemory()) >> 20,
+                runtime.totalMemory() >> 20
         );
     }
 
@@ -1130,11 +1108,11 @@ public final class RecipeDatabaseSearchEngine {
         private final int postingCount;
 
         private FieldIndex(
-            int[] fieldRecords,
-            int[] scanFallbackRecords,
-            String[] terms,
-            Map<String, Integer> termIds,
-            EncodedPostings postings,
+                int[] fieldRecords,
+                int[] scanFallbackRecords,
+                String[] terms,
+                Map<String, Integer> termIds,
+                EncodedPostings postings,
                 List<String> textCandidates,
                 boolean indexed,
                 int postingCount
@@ -1158,10 +1136,10 @@ public final class RecipeDatabaseSearchEngine {
         }
 
         private static FieldIndex build(
-            RecipeDatabaseSearchDocument[] documents,
-            SearchField field,
-            @Nullable ExecutorService sharedExecutor,
-            int sharedWorkers
+                RecipeDatabaseSearchDocument[] documents,
+                SearchField field,
+                @Nullable ExecutorService sharedExecutor,
+                int sharedWorkers
         ) {
             if (field == SearchField.contains) {
                 return empty();
@@ -1182,16 +1160,16 @@ public final class RecipeDatabaseSearchEngine {
         }
 
         private static FieldIndex buildParallel(
-            RecipeDatabaseSearchDocument[] documents,
-            SearchField field,
-            int documentPostingBudget,
-            @Nullable ExecutorService sharedExecutor,
-            int sharedWorkers
+                RecipeDatabaseSearchDocument[] documents,
+                SearchField field,
+                int documentPostingBudget,
+                @Nullable ExecutorService sharedExecutor,
+                int sharedWorkers
         ) {
             int total = documents.length;
             int workers = sharedExecutor == null
-                ? Math.min(total, Math.max(1, Runtime.getRuntime().availableProcessors() - 1))
-                : Math.max(1, Math.min(total, sharedWorkers));
+                    ? Math.min(total, Math.max(1, Runtime.getRuntime().availableProcessors() - 1))
+                    : Math.max(1, Math.min(total, sharedWorkers));
             if (workers <= 1 || total < workers * 2) {
                 FieldAccumulator accumulator = new FieldAccumulator(documentPostingBudget);
                 for (int recipeId = 0; recipeId < documents.length; recipeId++) {
@@ -1205,8 +1183,8 @@ public final class RecipeDatabaseSearchEngine {
             LocalFieldAccumulator[] locals = new LocalFieldAccumulator[chunkCount];
             AtomicInteger nextChunk = new AtomicInteger();
             ExecutorService executor = sharedExecutor == null
-                ? Executors.newFixedThreadPool(workers, daemonThreadFactory("cirrus-db-search-" + field + "-"))
-                : sharedExecutor;
+                    ? Executors.newFixedThreadPool(workers, daemonThreadFactory("cirrus-db-search-" + field + "-"))
+                    : sharedExecutor;
             try {
                 ArrayList<Future<?>> futures = new ArrayList<>(workers);
                 for (int worker = 0; worker < workers; worker++) {
@@ -1285,14 +1263,14 @@ public final class RecipeDatabaseSearchEngine {
             }
 
             return new FieldIndex(
-                fieldRecords.toArray(),
-                scanFallbackRecords.toArray(),
-                dictionary.terms(),
-                dictionary.idMap(),
-                postings.freeze(),
-                List.copyOf(textCandidates),
-                true,
-                postings.postingCount()
+                    fieldRecords.toArray(),
+                    scanFallbackRecords.toArray(),
+                    dictionary.terms(),
+                    dictionary.idMap(),
+                    postings.freeze(),
+                    List.copyOf(textCandidates),
+                    true,
+                    postings.postingCount()
             );
         }
 
@@ -1355,7 +1333,7 @@ public final class RecipeDatabaseSearchEngine {
             return textCandidates;
         }
 
-        private @Nullable int[] exact(String value) {
+        private int @Nullable [] exact(String value) {
             if (!indexed) {
                 return null;
             }
@@ -1363,7 +1341,7 @@ public final class RecipeDatabaseSearchEngine {
             return termId == null ? emptyPosting : postings.slice(termId);
         }
 
-        private @Nullable int[] contains(String needle) {
+        private int @Nullable [] contains(String needle) {
             if (!indexed) {
                 return null;
             }
@@ -1440,11 +1418,11 @@ public final class RecipeDatabaseSearchEngine {
                 addPostingData(recipeId, documents[recipeId], field);
             }
             return new FieldIndex(
-                fieldRecords.toArray(),
-                scanFallbackRecords.toArray(),
-                dictionary.terms(),
-                dictionary.idMap(),
-                postings.freeze(),
+                    fieldRecords.toArray(),
+                    scanFallbackRecords.toArray(),
+                    dictionary.terms(),
+                    dictionary.idMap(),
+                    postings.freeze(),
                     List.copyOf(textCandidates),
                     true,
                     postings.postingCount()
@@ -1691,8 +1669,8 @@ public final class RecipeDatabaseSearchEngine {
 
         private EncodedPostings freeze() {
             return data == null
-                ? EncodedPostings.empty
-                : new EncodedPostings(offsets, Arrays.copyOf(data, data.length));
+                    ? EncodedPostings.empty
+                    : new EncodedPostings(offsets, Arrays.copyOf(data, data.length));
         }
 
         private int postingCount() {

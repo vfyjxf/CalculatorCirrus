@@ -5,6 +5,7 @@ import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
@@ -590,6 +591,11 @@ class ExecutionTargetRecipeStateTest {
         @Override
         public float chance() {
             return RecipeContent.MAX_CHANCE;
+        }
+
+        @Override
+        public RecipeContentType<? extends RecipeContent> recipeType() {
+            return RecipeContentType.COMPLEX;
         }
 
         @Override

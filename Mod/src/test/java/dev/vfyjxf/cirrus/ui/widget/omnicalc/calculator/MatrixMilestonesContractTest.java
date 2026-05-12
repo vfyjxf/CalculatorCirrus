@@ -3,7 +3,7 @@ package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 import dev.vfyjxf.cirrus.ui.process.ProcessGraph;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialSlot;
-import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialType;
+import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
 import dev.vfyjxf.cirrus.ui.widget.calculator.calc.DebugRecipeProvider;
 import dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors;
 import net.minecraft.world.item.Items;
@@ -111,8 +111,6 @@ class MatrixMilestonesContractTest {
                 List.of(),
                 List.of(MaterialSlot.item(Items.COBBLESTONE.getDefaultInstance(), 128)),
                 0,
-                0,
-                0,
                 List.of(),
                 null
         ));
@@ -120,10 +118,8 @@ class MatrixMilestonesContractTest {
                 "craft/smoker",
                 "Smoker",
                 "Crafting Table",
-                List.of(new MaterialSlot("Cobblestone", 8, MaterialType.ITEM)),
-                List.of(new MaterialSlot("Smoker", 16, MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new MaterialSlot("Cobblestone", 8, MaterialCategories.ITEM)),
+                List.of(new MaterialSlot("Smoker", 16, MaterialCategories.ITEM)),
                 0,
                 List.of(),
                 null
@@ -181,9 +177,7 @@ class MatrixMilestonesContractTest {
                 "Cobblestone",
                 "Material",
                 List.of(),
-                List.of(new MaterialSlot("Cobblestone", 128, MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new MaterialSlot("Cobblestone", 128, MaterialCategories.ITEM)),
                 0,
                 List.of(),
                 null
@@ -262,10 +256,8 @@ class MatrixMilestonesContractTest {
                 "single",
                 "Single",
                 "Crafting Table",
-                List.of(new MaterialSlot("Cobblestone", 1, MaterialType.ITEM)),
-                List.of(new MaterialSlot("Stone", 1, MaterialType.ITEM)),
-                0,
-                0,
+                List.of(new MaterialSlot("Cobblestone", 1, MaterialCategories.ITEM)),
+                List.of(new MaterialSlot("Stone", 1, MaterialCategories.ITEM)),
                 0,
                 List.of(),
                 null

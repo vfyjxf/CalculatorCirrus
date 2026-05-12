@@ -2,7 +2,7 @@ package dev.vfyjxf.cirrus.ui.execution;
 
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionRecipePreviewLayout;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialSlot;
-import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialType;
+import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
@@ -18,7 +18,7 @@ class ExecutionRecipePreviewLayoutTest {
         List<MaterialSlot> inputs = Collections.nCopies(9, null);
         ExecutionRecipePreviewLayout.Layout layout = ExecutionRecipePreviewLayout.build(
             inputs,
-            List.of(new MaterialSlot("Output", 1, MaterialType.ITEM))
+            List.of(new MaterialSlot("Output", 1, MaterialCategories.ITEM))
         );
 
         assertEquals(1, layout.inputSections().size());
@@ -31,13 +31,13 @@ class ExecutionRecipePreviewLayoutTest {
     void fallbackPreviewPartitionsInputsCatalystsAndOutputsByRole() {
         ExecutionRecipePreviewLayout.Layout layout = ExecutionRecipePreviewLayout.build(
             List.of(
-                new MaterialSlot("Iron", 1, MaterialType.ITEM),
-                new MaterialSlot("Water", 1000, MaterialType.FLUID),
-                new MaterialSlot("Mold", 1, MaterialType.CATALYST, true)
+                new MaterialSlot("Iron", 1, MaterialCategories.ITEM),
+                new MaterialSlot("Water", 1000, MaterialCategories.FLUID),
+                new MaterialSlot("Mold", 1, MaterialCategories.CATALYST, true)
             ),
             List.of(
-                new MaterialSlot("Plate", 1, MaterialType.ITEM),
-                new MaterialSlot("Steam", 1000, MaterialType.FLUID)
+                new MaterialSlot("Plate", 1, MaterialCategories.ITEM),
+                new MaterialSlot("Steam", 1000, MaterialCategories.FLUID)
             )
         );
 

@@ -50,6 +50,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.jetbrains.annotations.Nullable;
@@ -164,6 +165,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         int x, y;        // top-left corner in world space
         boolean collapsed;
         boolean autoCollapsed;
+        boolean referenceOnly;
         int originalChildCount;
         @Nullable NodeRenderModel renderModel;
 
@@ -626,7 +628,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     //region State
 
-    private ProcessGraph graph;
+    private @Nullable ProcessGraph graph;
     private @Nullable ProcessNode targetNode;
     private long craftCount = 1;
 
@@ -691,7 +693,6 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private int materialFilteredEntryCount = 0;
     private int materialFilterEvaluationCount = 0;
     private long totalTimeTicks = 0;
-    private long totalEU = 0;
     private @Nullable String hoveredMatName = null;
     // Search / filter
     private String matFilterText = "";
@@ -741,14 +742,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private final Map<String, List<LayoutNode>> pathChildrenCache = new HashMap<>();
     private final Map<String, List<ProcessEdge>> incomingEdgesByNodeId = new HashMap<>();
     private final Map<String, List<MachineInfo>> machineCandidatesByNodeId = new HashMap<>();
+    private final Map<String, NodeRenderModel> renderModelByNodeId = new HashMap<>();
     private final ArrayDeque<String> layoutBuildStack = new ArrayDeque<>();
     private final HashSet<String> layoutBuildStackIds = new HashSet<>();
+    private final HashSet<String> layoutExpandedProcessNodeIds = new HashSet<>();
     //endregion
 
     //region Constructor
     public TreeCanvasWidget() {
         setFocusable(true);
-        onDestroy(self -> releaseMinimapTexture());
+        onDestroy(self -> releaseGraph());
         onMouseClicked((input, ctx) -> {
             FloatPos local = input.mouseRelative(TreeCanvasWidget.this);
             double mx = local.x(), my = local.y();
@@ -1168,6 +1171,18 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     int debugLayoutNodeCount() {
         return flatNodes.size();
+    }
+
+    int debugRenderModelCacheSize() {
+        return renderModelByNodeId.size();
+    }
+
+    boolean debugRetainsGraphForTests() {
+        return graph != null;
+    }
+
+    int debugMinimapScratchLengthForTests() {
+        return minimapPixelScratch.length;
     }
 
     int debugRootChildCount() {
@@ -1597,10 +1612,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     private @Nullable LayoutNode findInTree(@Nullable LayoutNode node, String pathId) {
         if (node == null) return null;
-        if (node.pathId.equals(pathId)) return node;
-        for (LayoutNode child : node.children) {
-            LayoutNode found = findInTree(child, pathId);
-            if (found != null) return found;
+        ArrayDeque<LayoutNode> stack = new ArrayDeque<>();
+        stack.push(node);
+        while (!stack.isEmpty()) {
+            LayoutNode current = stack.pop();
+            if (current.pathId.equals(pathId)) {
+                return current;
+            }
+            for (int i = current.children.size() - 1; i >= 0; i--) {
+                stack.push(current.children.get(i));
+            }
         }
         return null;
     }
@@ -1658,6 +1679,98 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         resetView();
         computeMaterialSummary();
         return this;
+    }
+
+    void releaseGraph() {
+        this.graph = null;
+        this.targetNode = null;
+        this.rootLayout = null;
+        this.fullRootLayout = null;
+        this.flatNodes = List.of();
+        this.flatLinks = List.of();
+        this.layoutNodeByPath = Map.of();
+        this.layerNodes = Map.of();
+        this.layerNodesByX = Map.of();
+        this.maxDepth = 0;
+        this.layoutWidth = 500;
+        this.layoutHeight = 500;
+        this.mmWorldMinX = 0;
+        this.mmWorldMinY = 0;
+        this.mmWorldW = 1;
+        this.mmWorldH = 1;
+        this.collapsedPaths.clear();
+        this.userExpandedPaths.clear();
+        this.forceExpandAll = false;
+        this.trackedNodeId = null;
+        this.trackedPathIds = Set.of();
+        this.highlightedLayer = -1;
+        this.currentRootPathId = "root";
+        this.onSubtreeChanged = null;
+        this.onProjectionEdit = ignored -> {};
+        this.onContentCandidateSelected = ignored -> {};
+        this.panX = 0;
+        this.panY = 0;
+        this.zoom = 1.0f;
+        this.targetZoom = 1.0f;
+        this.dragging = false;
+        this.pendingAutoFit = false;
+        this.hoveredNodeId = null;
+        this.hoveredCollapseNodeId = null;
+        this.hoveredMachineNodeId = null;
+        this.hoveredProjectionNodeId = null;
+        this.machineCandidatePanelNodeId = null;
+        this.contentCandidatePanelNodeId = null;
+        this.selectedMachineByPath.clear();
+        this.selectedContentCandidateByPath.clear();
+        this.contentVariantPreferences = Map.of();
+        this.contentCandidateScrollRowsByPath.clear();
+        this.contentCandidateDisplayScrollRowsByPath.clear();
+        this.externalHoveredNodeId = null;
+        this.externalSelectedNodeId = null;
+        this.minimapDragging = false;
+        this.showMaterialPanel = false;
+        this.matScrollY = 0;
+        this.matScrollTargetY = 0;
+        this.scrollbarDragging = false;
+        this.materialByCategory = new LinkedHashMap<>();
+        this.materialFilteredByCategory = new LinkedHashMap<>();
+        this.materialEntryByName = Map.of();
+        this.materialPanelContentH = 0;
+        this.materialFilteredEntryCount = 0;
+        this.materialFilterEvaluationCount = 0;
+        this.totalTimeTicks = 0;
+        this.hoveredMatName = null;
+        this.matFilterText = "";
+        this.matSearchActive = false;
+        this.matFilteredContentH = 0;
+        this.stickyHeaderCat = null;
+        this.stickyHeaderCount = 0;
+        this.stickyHeaderOffsetY = 0;
+        this.visibleNodesScratch.clear();
+        this.visibleLinksScratch.clear();
+        this.visibleTrackedNodesScratch.clear();
+        this.visibleTrackedLinksScratch.clear();
+        this.minimapPixelScratch = new int[0];
+        this.minimapRunsDirty = true;
+        this.minimapCacheContentW = -1;
+        this.minimapCacheContentH = -1;
+        this.minimapCacheWorldMinX = 0;
+        this.minimapCacheWorldMinY = 0;
+        this.minimapCacheWorldW = 0;
+        this.minimapCacheWorldH = 0;
+        this.minimapCacheNodeCount = -1;
+        this.minimapCacheLinkCount = -1;
+        this.minimapCacheScale = -1.0;
+        this.minimapCacheDrawX = 0.0;
+        this.minimapCacheDrawY = 0.0;
+        this.minimapTextureW = -1;
+        this.minimapTextureH = -1;
+        Arrays.fill(this.layerLabelCache, null);
+        clearRenderCaches();
+        this.layoutBuildStack.clear();
+        this.layoutBuildStackIds.clear();
+        this.layoutExpandedProcessNodeIds.clear();
+        releaseMinimapTexture();
     }
 
     private @Nullable ProcessNode selectTargetNode(ProcessGraph graph) {
@@ -1770,21 +1883,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
         // Auto-track the deepest main trunk node
         if (trackedNodeId == null) {
-            LayoutNode trunk = effectiveRoot;
-            while (!trunk.children.isEmpty()) {
-                LayoutNode deepest = trunk.children.get(0);
-                int deepestDepth = subtreeDepth(deepest);
-                for (int i = 1; i < trunk.children.size(); i++) {
-                    LayoutNode candidate = trunk.children.get(i);
-                    int candidateDepth = subtreeDepth(candidate);
-                    if (candidateDepth > deepestDepth) {
-                        deepest = candidate;
-                        deepestDepth = candidateDepth;
-                    }
-                }
-                trunk = deepest;
-            }
-            setTrackedNodeId(trunk.pathId);
+            setTrackedNodeId(deepestDescendant(effectiveRoot).pathId);
         }
     }
 
@@ -1861,6 +1960,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         pathChildrenCache.clear();
         incomingEdgesByNodeId.clear();
         machineCandidatesByNodeId.clear();
+        renderModelByNodeId.clear();
         visualCache.clear();
         itemStackVisualCache.clear();
         fluidStackVisualCache.clear();
@@ -2050,53 +2150,115 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private LayoutNode buildLayoutTreeRoot(ProcessNode pn) {
         layoutBuildStack.clear();
         layoutBuildStackIds.clear();
+        layoutExpandedProcessNodeIds.clear();
         return buildLayoutTree(pn, 0, "root");
     }
 
     private LayoutNode buildLayoutTree(ProcessNode pn, int depth, String pathId) {
+        ProcessGraph currentGraph = graph;
+        if (currentGraph == null) {
+            return new LayoutNode(pn, pathId, depth);
+        }
         LayoutNode node = new LayoutNode(pn, pathId, depth);
-
-        // Get child nodes (inputs to this step)
-        List<ProcessEdge> incoming = incomingEdgesByNodeId.computeIfAbsent(pn.id(), ignored -> List.copyOf(graph.incomingEdges(pn.id())));
-        node.incomingEdges = incoming;
-        node.originalChildCount = incoming.size();
-        node.renderModel = createRenderModel(node, pn);
-
-        boolean cycleTerminus = layoutBuildStackIds.contains(pn.id());
-        if (cycleTerminus) {
-            node.originalChildCount = 0;
-            node.collapsed = true;
-            node.autoCollapsed = true;
+        initializeLayoutNode(node, pn);
+        if (!shouldBuildChildren(node)) {
             return node;
         }
 
-        // Auto-collapse heuristic — aggressiveness increases with collapseLevel
+        enterLayoutNode(node);
+        ArrayDeque<LayoutBuildFrame> stack = new ArrayDeque<>();
+        stack.push(new LayoutBuildFrame(node));
+        while (!stack.isEmpty()) {
+            LayoutBuildFrame frame = stack.peek();
+            List<ProcessEdge> incoming = frame.node.incomingEdges == null
+                    ? List.of()
+                    : frame.node.incomingEdges;
+            if (frame.nextChildIndex >= incoming.size()) {
+                stack.pop();
+                leaveLayoutNode(frame.node);
+                continue;
+            }
+
+            int childIndex = frame.nextChildIndex++;
+            ProcessEdge edge = incoming.get(childIndex);
+            ProcessNode child = currentGraph.node(edge.fromNodeId());
+            if (child == null) {
+                continue;
+            }
+            LayoutNode childNode = new LayoutNode(child, frame.node.pathId + "-" + childIndex, frame.node.depth + 1);
+            initializeLayoutNode(childNode, child);
+            frame.node.children.add(childNode);
+            if (shouldBuildChildren(childNode)) {
+                enterLayoutNode(childNode);
+                stack.push(new LayoutBuildFrame(childNode));
+            }
+        }
+        return node;
+    }
+
+    private void initializeLayoutNode(LayoutNode node, ProcessNode pn) {
+        ProcessGraph currentGraph = graph;
+        List<ProcessEdge> incoming = currentGraph == null
+                ? List.of()
+                : incomingEdgesByNodeId.computeIfAbsent(pn.id(), ignored -> List.copyOf(currentGraph.incomingEdges(pn.id())));
+        node.incomingEdges = incoming;
+        node.originalChildCount = incoming.size();
+
+        boolean activeCycleTerminus = layoutBuildStackIds.contains(pn.id());
+        boolean repeatedReference = forceExpandAll
+                && !activeCycleTerminus
+                && !layoutExpandedProcessNodeIds.add(pn.id());
+        if (activeCycleTerminus || repeatedReference) {
+            node.originalChildCount = 0;
+            node.collapsed = false;
+            node.autoCollapsed = true;
+            node.referenceOnly = true;
+            return;
+        }
+
         boolean shouldAutoCollapse = false;
         int inputCount = incoming.size();
         int cl = collapseLevel;
-        if (depth == 0) shouldAutoCollapse = inputCount > Math.max(3, 20 - cl * 4);
-        else if (depth == 1) shouldAutoCollapse = inputCount > Math.max(2, 12 - cl * 3);
-        else if (depth <= 3) shouldAutoCollapse = inputCount > Math.max(2, 6 - cl * 2);
-        else if (depth <= 6) shouldAutoCollapse = inputCount >= Math.max(2, 4 - cl);
-        else if (depth <= 10) shouldAutoCollapse = inputCount >= Math.max(1, 3 - cl);
+        if (node.depth == 0) shouldAutoCollapse = inputCount > Math.max(3, 20 - cl * 4);
+        else if (node.depth == 1) shouldAutoCollapse = inputCount > Math.max(2, 12 - cl * 3);
+        else if (node.depth <= 3) shouldAutoCollapse = inputCount > Math.max(2, 6 - cl * 2);
+        else if (node.depth <= 6) shouldAutoCollapse = inputCount >= Math.max(2, 4 - cl);
+        else if (node.depth <= 10) shouldAutoCollapse = inputCount >= Math.max(1, 3 - cl);
         else shouldAutoCollapse = true;
 
-        boolean isCollapsed = !forceExpandAll && (collapsedPaths.contains(pathId)
-                || (shouldAutoCollapse && !userExpandedPaths.contains(pathId)));
+        boolean isCollapsed = !forceExpandAll && (collapsedPaths.contains(node.pathId)
+                || (shouldAutoCollapse && !userExpandedPaths.contains(node.pathId)));
         node.collapsed = isCollapsed;
-        node.autoCollapsed = shouldAutoCollapse && !userExpandedPaths.contains(pathId) && !collapsedPaths.contains(pathId);
+        node.autoCollapsed = shouldAutoCollapse && !userExpandedPaths.contains(node.pathId) && !collapsedPaths.contains(node.pathId);
+    }
 
-        layoutBuildStack.addLast(pn.id());
-        layoutBuildStackIds.add(pn.id());
-        try {
-            if (!isCollapsed) {
-                ensureChildrenBuilt(node);
-            }
-        } finally {
+    private boolean shouldBuildChildren(LayoutNode node) {
+        return !node.collapsed && node.originalChildCount > 0 && node.processNode != null;
+    }
+
+    private void enterLayoutNode(LayoutNode node) {
+        String id = node.processNode.id();
+        layoutBuildStack.addLast(id);
+        layoutBuildStackIds.add(id);
+    }
+
+    private void leaveLayoutNode(LayoutNode node) {
+        String id = node.processNode.id();
+        if (!layoutBuildStack.isEmpty() && Objects.equals(layoutBuildStack.peekLast(), id)) {
             layoutBuildStack.removeLast();
-            layoutBuildStackIds.remove(pn.id());
+        } else {
+            layoutBuildStack.remove(id);
         }
-        return node;
+        layoutBuildStackIds.remove(id);
+    }
+
+    private static final class LayoutBuildFrame {
+        private final LayoutNode node;
+        private int nextChildIndex;
+
+        private LayoutBuildFrame(LayoutNode node) {
+            this.node = node;
+        }
     }
 
     private void ensureChildrenBuilt(LayoutNode node) {
@@ -2124,6 +2286,10 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     }
 
     private void ensureChildrenBuiltWithActiveStack(LayoutNode node) {
+        ProcessGraph currentGraph = graph;
+        if (currentGraph == null) {
+            return;
+        }
         String cacheKey = childCacheKey(node);
         List<LayoutNode> cached = pathChildrenCache.get(cacheKey);
         if (cached != null) {
@@ -2132,12 +2298,12 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         }
         List<ProcessEdge> incoming = node.incomingEdges != null
                 ? node.incomingEdges
-                : incomingEdgesByNodeId.computeIfAbsent(node.processNode.id(), ignored -> List.copyOf(graph.incomingEdges(node.processNode.id())));
+                : incomingEdgesByNodeId.computeIfAbsent(node.processNode.id(), ignored -> List.copyOf(currentGraph.incomingEdges(node.processNode.id())));
         node.incomingEdges = incoming;
         ArrayList<LayoutNode> built = new ArrayList<>(incoming.size());
         int idx = 0;
         for (ProcessEdge edge : incoming) {
-            ProcessNode child = graph.node(edge.fromNodeId());
+            ProcessNode child = currentGraph.node(edge.fromNodeId());
             if (child != null) {
                 built.add(buildLayoutTree(child, node.depth + 1, node.pathId + "-" + idx));
             }
@@ -2153,57 +2319,94 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     }
 
     private void computeWidths(LayoutNode n) {
-        if (n.children.isEmpty() || n.collapsed) {
-            n.treeWidth = nodeW;
-        } else {
+        ArrayDeque<WidthFrame> stack = new ArrayDeque<>();
+        stack.push(new WidthFrame(n, false));
+        while (!stack.isEmpty()) {
+            WidthFrame frame = stack.pop();
+            LayoutNode node = frame.node;
+            if (!frame.childrenVisited) {
+                stack.push(new WidthFrame(node, true));
+                if (!node.collapsed) {
+                    for (int i = node.children.size() - 1; i >= 0; i--) {
+                        stack.push(new WidthFrame(node.children.get(i), false));
+                    }
+                }
+                continue;
+            }
+            if (node.children.isEmpty() || node.collapsed) {
+                node.treeWidth = nodeW;
+                continue;
+            }
             long w = 0;
-            for (int i = 0; i < n.children.size(); i++) {
-                computeWidths(n.children.get(i));
-                w += n.children.get(i).treeWidth;
+            for (int i = 0; i < node.children.size(); i++) {
+                w += node.children.get(i).treeWidth;
                 if (i > 0) w += gapX;
                 if (w >= maxLayoutCoordinate) {
                     w = maxLayoutCoordinate;
                     break;
                 }
             }
-            n.treeWidth = Math.max(nodeW, clampLayoutCoordinate(w));
+            node.treeWidth = Math.max(nodeW, clampLayoutCoordinate(w));
         }
     }
 
     private void assignPositions(LayoutNode n, int startX) {
-        n.x = clampLayoutCoordinate((long) startX + n.treeWidth / 2L - nodeW / 2L);
-        n.y = clampLayoutCoordinate((long) n.depth * rowH + (rowH / 2 - nodeH / 2));
+        ArrayDeque<PositionFrame> stack = new ArrayDeque<>();
+        stack.push(new PositionFrame(n, startX));
+        while (!stack.isEmpty()) {
+            PositionFrame frame = stack.pop();
+            LayoutNode node = frame.node;
+            node.x = clampLayoutCoordinate((long) frame.startX + node.treeWidth / 2L - nodeW / 2L);
+            node.y = clampLayoutCoordinate((long) node.depth * rowH + (rowH / 2 - nodeH / 2));
 
-        if (!n.collapsed && !n.children.isEmpty()) {
-            long childrenSum = (long) Math.max(0, n.children.size() - 1) * gapX;
-            for (LayoutNode child : n.children) {
+            if (node.collapsed || node.children.isEmpty()) {
+                continue;
+            }
+            long childrenSum = (long) Math.max(0, node.children.size() - 1) * gapX;
+            for (LayoutNode child : node.children) {
                 childrenSum += child.treeWidth;
                 if (childrenSum >= maxLayoutCoordinate) {
                     childrenSum = maxLayoutCoordinate;
                     break;
                 }
             }
-            int offset = clampLayoutCoordinate((long) startX + (n.treeWidth - childrenSum) / 2L);
-            for (LayoutNode c : n.children) {
-                assignPositions(c, offset);
-                offset = saturatingAdd(offset, saturatingAdd(c.treeWidth, gapX));
+            int offset = clampLayoutCoordinate((long) frame.startX + (node.treeWidth - childrenSum) / 2L);
+            int[] childOffsets = new int[node.children.size()];
+            for (int i = 0; i < node.children.size(); i++) {
+                LayoutNode child = node.children.get(i);
+                childOffsets[i] = offset;
+                offset = saturatingAdd(offset, saturatingAdd(child.treeWidth, gapX));
+            }
+            for (int i = node.children.size() - 1; i >= 0; i--) {
+                stack.push(new PositionFrame(node.children.get(i), childOffsets[i]));
             }
         }
     }
 
     private void flatten(LayoutNode n, List<LayoutNode> nodes, List<LayoutLink> links,
                           Map<Integer, List<LayoutNode>> byLayer) {
-        nodes.add(n);
-        byLayer.computeIfAbsent(n.depth, k -> new ArrayList<>()).add(n);
-        if (!n.collapsed) {
-            for (LayoutNode c : n.children) {
-                LayoutLink link = new LayoutLink(n, c, n.pathId + "->" + c.pathId);
-                c.incomingLink = link;
+        ArrayDeque<LayoutNode> stack = new ArrayDeque<>();
+        stack.push(n);
+        while (!stack.isEmpty()) {
+            LayoutNode node = stack.pop();
+            nodes.add(node);
+            byLayer.computeIfAbsent(node.depth, k -> new ArrayList<>()).add(node);
+            if (node.collapsed) {
+                continue;
+            }
+            for (LayoutNode child : node.children) {
+                LayoutLink link = new LayoutLink(node, child, node.pathId + "->" + child.pathId);
+                child.incomingLink = link;
                 links.add(link);
-                flatten(c, nodes, links, byLayer);
+            }
+            for (int i = node.children.size() - 1; i >= 0; i--) {
+                stack.push(node.children.get(i));
             }
         }
     }
+
+    private record WidthFrame(LayoutNode node, boolean childrenVisited) {}
+    private record PositionFrame(LayoutNode node, int startX) {}
 
     private static Map<String, LayoutNode> indexLayoutNodes(List<LayoutNode> nodes) {
         if (nodes.isEmpty()) {
@@ -2240,11 +2443,35 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     private int subtreeDepth(LayoutNode n) {
         int max = 0;
-        for (LayoutNode child : n.children) {
-            max = Math.max(max, 1 + subtreeDepth(child));
+        ArrayDeque<DepthFrame> stack = new ArrayDeque<>();
+        stack.push(new DepthFrame(n, 0));
+        while (!stack.isEmpty()) {
+            DepthFrame frame = stack.pop();
+            max = Math.max(max, frame.relativeDepth);
+            for (int i = frame.node.children.size() - 1; i >= 0; i--) {
+                stack.push(new DepthFrame(frame.node.children.get(i), frame.relativeDepth + 1));
+            }
         }
         return max;
     }
+
+    private LayoutNode deepestDescendant(LayoutNode root) {
+        LayoutNode deepest = root;
+        ArrayDeque<LayoutNode> stack = new ArrayDeque<>();
+        stack.push(root);
+        while (!stack.isEmpty()) {
+            LayoutNode node = stack.pop();
+            if (node.depth > deepest.depth) {
+                deepest = node;
+            }
+            for (int i = node.children.size() - 1; i >= 0; i--) {
+                stack.push(node.children.get(i));
+            }
+        }
+        return deepest;
+    }
+
+    private record DepthFrame(LayoutNode node, int relativeDepth) {}
 
     private void toggleCollapse(String pathId) {
         LayoutNode target = fullRootLayout != null ? findInTree(fullRootLayout, pathId) : findLayoutNode(pathId);
@@ -2282,14 +2509,17 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     }
 
     private void expandSubtree(LayoutNode node) {
-        if (node == null) {
-            return;
-        }
-        node.collapsed = false;
-        node.autoCollapsed = false;
-        ensureChildrenBuilt(node);
-        for (LayoutNode child : node.children) {
-            expandSubtree(child);
+        if (node == null) return;
+        ArrayDeque<LayoutNode> stack = new ArrayDeque<>();
+        stack.push(node);
+        while (!stack.isEmpty()) {
+            LayoutNode current = stack.pop();
+            current.collapsed = false;
+            current.autoCollapsed = false;
+            ensureChildrenBuilt(current);
+            for (int i = current.children.size() - 1; i >= 0; i--) {
+                stack.push(current.children.get(i));
+            }
         }
     }
 
@@ -2345,13 +2575,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         collapsedPaths.clear();
         userExpandedPaths.clear();
         currentRootPathId = "root";
-        if (fullRootLayout != null) {
-            expandSubtree(fullRootLayout);
-            rootLayout = fullRootLayout;
-            refreshVisibleLayoutFromFullRoot();
-        } else {
-            rebuildTree(false);
-        }
+        rebuildTree(false);
         computeMaterialSummary();
         notifyTreeStructureChanged();
         resetView();
@@ -2401,7 +2625,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             materialByCategory = new LinkedHashMap<>();
             materialFilteredByCategory = new LinkedHashMap<>();
             materialEntryByName = Map.of();
-            materialPanelContentH = 0; totalTimeTicks = 0; totalEU = 0;
+            materialPanelContentH = 0; totalTimeTicks = 0;
             materialFilteredEntryCount = 0;
             materialFilterEvaluationCount = 0;
             return;
@@ -2413,14 +2637,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         Map<String, Double> chanceAccum = new HashMap<>();
         Map<String, Integer> chanceCount = new HashMap<>();
         Map<String, MaterialEntry> byName = new HashMap<>();
-        long totalTime = 0, totalEnergy = 0;
+        long totalTime = 0;
         int stepNum = 0;
         for (LayoutNode ln : flatNodes) {
+            if (ln.referenceOnly) {
+                continue;
+            }
             stepNum++;
             ProcessNode node = ln.processNode;
             if (node == null) continue;
             totalTime += node.durationTicks();
-            totalEnergy += (long) node.euPerTick() * node.durationTicks();
             for (MaterialSlot input : node.inputs()) {
                 amounts.computeIfAbsent(input.materialName(), k -> new long[2])[0] += input.amount();
                 slotRef.putIfAbsent(input.materialName(), input);
@@ -2436,7 +2662,6 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             }
         }
         this.totalTimeTicks = totalTime;
-        this.totalEU = totalEnergy;
         Map<MatCategory, List<MaterialEntry>> byCategory = new LinkedHashMap<>();
         for (MatCategory cat : MatCategory.values()) byCategory.put(cat, new ArrayList<>());
         for (var e : amounts.entrySet()) {
@@ -2935,13 +3160,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (pn == null) return dotClr;
         if (hasCatalystInput(pn)) return 0xFF95AED4;
         if (!pn.outputs().isEmpty()) {
-            return switch (pn.outputs().get(0).type()) {
-                case ITEM -> 0xFFA8BAD8;
-                case FLUID -> 0xFF8EC3DC;
-                case ENERGY -> 0xFFB4A3E8;
-                case GAS -> 0xFF8CC9BF;
-                case CATALYST -> 0xFFC1B3E8;
-            };
+            return pn.outputs().get(0).category().color();
         }
         return dotClr;
     }
@@ -3391,7 +3610,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (model != null) {
             return model;
         }
-        model = createRenderModel(node, node.processNode);
+        model = renderModelByNodeId.computeIfAbsent(node.processNode.id(), ignored -> createRenderModel(node, node.processNode));
         node.renderModel = model;
         return model;
     }
@@ -3609,9 +3828,6 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (node.durationTicks() > 0) {
             x = drawMetricPill(canvas, font, x, zone.y(), right, Icon.Sign.Energy.time, node.durationFormatted(), cardMetaText);
         }
-        if (node.euPerTick() > 0) {
-            x = drawMetricPill(canvas, font, x, zone.y(), right, Icon.Sign.Energy.eu, energyCostText(node), cardMetaText);
-        }
         int machineCount = model.machines().size();
         if (machineCount > 1) {
             drawMachineOptionIndicator(canvas, Math.min(x + 2, right - 14), zone.y() + 5, machineCount - 1);
@@ -3646,14 +3862,6 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (count > visible) {
             canvas.fill(x + visible * 4, y, 4, 2, withAlpha(cardMetaText, 0xA0));
         }
-    }
-
-    private static String energyCostText(ProcessNode node) {
-        long total = (long) node.euPerTick() * Math.max(0, node.durationTicks());
-        if (total > 0) {
-            return fmtNum(total) + " EU";
-        }
-        return node.euFormatted();
     }
 
     private void drawMoreDots(SceneCanvas canvas, int x, int y, int count, int color) {
@@ -3732,7 +3940,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (leaf) {
             return primary != null && !isTagLikeMaterial(primary) && (primary.amount() > 1 || primary.chance() < 1.0);
         }
-        return node.durationTicks() > 0 || node.euPerTick() > 0;
+        return node.durationTicks() > 0;
     }
 
     private static String primaryAmountText(@Nullable MaterialSlot slot) {
@@ -3851,11 +4059,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             drawContentSlot(session, visual, currentVisualIndex(visual), ix, iy, Math.round(16 * scale));
             return;
         }
-        ItemStack stack = slot.itemStack();
-        if (stack != null && !stack.isEmpty()) {
-            submitItemStack(stack, ix, iy, scale, session);
-        } else if (slot.fluidStack() != null && !slot.fluidStack().isEmpty()) {
-            submitFluidStack(slot.fluidStack(), ix, iy, scale, session);
+        ContentStack<?, ?> stack = slot.visualStack();
+        if (stack.notEmpty()) {
+            submitContentStack(stack, ix, iy, scale, session);
         } else {
             int sz = (int)(16 * scale);
             if (sz > 0) {
@@ -3936,11 +4142,11 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     private boolean drawMachineIcon(SceneCanvas canvas, @Nullable MachineInfo machine, int x, int y, int size,
                                     RenderSession session) {
-        ItemStack icon = machine == null ? ItemStack.EMPTY : machine.icon();
-        if (icon != null && !icon.isEmpty()) {
+        ContentStack<?, ?> icon = machine == null ? ContentStack.empty() : machine.icon();
+        if (icon.notEmpty()) {
             CirrusSlotGroupRenderer.renderSingle(canvas, x, y, size);
             float scale = Math.max(0.5f, Math.min(1.25f, (size - 4) / 16.0f));
-            submitItemStack(icon, x + 2, y + 2, scale, session);
+            submitContentStack(icon, x + 2, y + 2, scale, session);
             return true;
         }
         return false;
@@ -4049,7 +4255,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
                     && localMouseY >= displayedCellY && localMouseY <= displayedCellY + contentCandidateCell;
             if (visualIndex != selectedIndex && hovered) {
                 canvas.fill(cellX + 1, cellY + 1, Math.max(1, cellSize - 2), Math.max(1, cellSize - 2),
-                        withAlpha(slot.type().color, 0x24));
+                        withAlpha(slot.category().color(), 0x24));
             }
             int contentInset = 2;
             drawContentSlot(session, slotVisual, visualIndex,
@@ -4057,7 +4263,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
                     cellY + contentInset,
                     Math.max(1, cellSize - contentInset * 2));
             if (visualIndex == selectedIndex) {
-                session.addSelectionOverlay(cellX, cellY, cellSize, slot.type().color);
+                session.addSelectionOverlay(cellX, cellY, cellSize, slot.category().color());
             }
         }
     }
@@ -4450,10 +4656,10 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (current || hovered) {
             session.addMachineCandidateOverlay(x, y, nodeAccentColor(node), current, hovered);
         }
-        ItemStack icon = machine.icon();
-        if (icon != null && !icon.isEmpty()) {
+        ContentStack<?, ?> icon = machine.icon();
+        if (icon.notEmpty()) {
             float itemScale = Math.max(0.5f, Math.min(1.25f, (machineCandidateCell - 4) / 16.0f));
-            submitItemStack(icon, x + 2, y + 2, itemScale, session);
+            submitContentStack(icon, x + 2, y + 2, itemScale, session);
         }
     }
 
@@ -4572,15 +4778,16 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (candidatePreferred != existingPreferred) {
             return candidatePreferred;
         }
-        ItemStack existingIcon = existing.icon();
-        ItemStack candidateIcon = candidate.icon();
-        return (existingIcon == null || existingIcon.isEmpty()) && candidateIcon != null && !candidateIcon.isEmpty();
+        ContentStack<?, ?> existingIcon = existing.icon();
+        ContentStack<?, ?> candidateIcon = candidate.icon();
+        return existingIcon.isEmpty() && candidateIcon.notEmpty();
     }
 
     private static String machineKey(MachineInfo machine) {
-        ItemStack icon = machine.icon();
-        if (icon != null && !icon.isEmpty()) {
-            return icon.getItemHolder().unwrapKey()
+        ContentStack<?, ?> icon = machine.icon();
+        if (icon.notEmpty() && icon.isItem()) {
+            ContentStack<Item, ItemStack> item = icon.cast();
+            return item.value().getItemHolder().unwrapKey()
                     .map(key -> key.location().toString())
                     .orElseGet(() -> machine.name().strip().toLowerCase(Locale.ROOT));
         }
@@ -4709,6 +4916,14 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             return;
         }
         session.deferFluid(fluidStack, x, y, scale, session.pt);
+    }
+
+    private void submitContentStack(ContentStack<?, ?> stack, int x, int y, float scale, RenderSession session) {
+        if (stack == null || stack.isEmpty()) {
+            return;
+        }
+        int size = Math.max(1, Math.round(16 * scale));
+        session.addBaseStack(stack, x, y, size);
     }
 
     // ═══════════════════ Material Panel ═══════════════════
@@ -4949,10 +5164,6 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             canvas.drawString(CirrusLangs.Calc.Tree.totalTime.string(), txL + 12, r0, textWeak, false);
             String timeStr = formatDuration(totalTimeTicks);
             canvas.drawString(timeStr, txR - font.width(timeStr), r0, textPrimary, false);
-            canvas.texture(Icon.Sign.Energy.eu, txL, r1, 9, 9);
-            canvas.drawString(CirrusLangs.Calc.Tree.totalEnergy.string(), txL + 12, r1, textWeak, false);
-            String euStr = fmtNum(totalEU) + " EU";
-            canvas.drawString(euStr, txR - font.width(euStr), r1, orange, false);
             canvas.texture(Icon.Sign.Amount.available, txL + 1, r2 + 3, 5, 5);
             canvas.drawString(CirrusLangs.Calc.Tree.stepCount.string(), txL + 10, r2, textWeak, false);
             String stepStr = String.valueOf(flatNodes.size());
@@ -5071,15 +5282,13 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     private void drawPanelSlotIcon(SceneCanvas canvas, MaterialSlot slot, int ix, int iy,
                                    RenderSession session) {
         float iconScale = panelIconSz / 16.0f;
-        ItemStack stack = slot.itemStack();
-        if (stack != null && !stack.isEmpty()) {
-            submitItemStack(stack, ix, iy, iconScale, session);
-        } else if (slot.fluidStack() != null && !slot.fluidStack().isEmpty()) {
-            submitFluidStack(slot.fluidStack(), ix, iy, iconScale, session);
+        ContentStack<?, ?> stack = slot.visualStack();
+        if (stack.notEmpty()) {
+            submitContentStack(stack, ix, iy, iconScale, session);
         } else {
-            int c = slot.type().color;
+            int c = slot.category().color();
             CirrusSlotGroupRenderer.renderSingle(canvas, ix, iy, panelIconSz);
-            canvas.drawCenteredString(slot.type().name().substring(0, 1),
+            canvas.drawCenteredString(slot.category().name().substring(0, 1),
                     ix + panelIconSz / 2, iy + (panelIconSz - 9) / 2, c);
         }
     }
@@ -5304,7 +5513,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         MaterialEntry materialEntry = materialEntryAt(mouseX, mouseY);
         if (materialEntry != null) {
             var b = RichTooltipComponent.builder();
-            b.section(materialEntry.name(), materialEntry.refSlot().type().color, materialEntry.category().color);
+            b.section(materialEntry.name(), materialEntry.refSlot().category().color(), materialEntry.category().color);
             b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.category), 0xFF888888,
                     materialEntry.category().label.string(), materialEntry.category().color);
             b.divider();
@@ -5439,7 +5648,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     }
 
     private static int nodeAccentColorForSlot(MaterialSlot slot) {
-        return slot == null ? cardMetaText : slot.type().color;
+        return slot == null ? cardMetaText : slot.category().color();
     }
 
     private Tooltip buildMachineTooltip(LayoutNode layoutNode) {
@@ -5494,9 +5703,10 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         MachineInfo machine = machines.get(index);
         Tooltip tip = Tooltip.create();
         RichTooltipComponent.Builder b = RichTooltipComponent.builder();
-        ItemStack icon = machine.icon();
-        if (icon != null && !icon.isEmpty()) {
-            tip.setStack(TooltipStack.of(icon.copy()));
+        ContentStack<?, ?> icon = machine.icon();
+        if (icon.notEmpty() && icon.isItem()) {
+            ContentStack<Item, ItemStack> item = icon.cast();
+            tip.setStack(TooltipStack.of(item.value().copy()));
         }
         b.section(machine.name(), nodeAccentColor(layoutNode.processNode));
         b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.clickSet), 0xFF888888,
@@ -5528,9 +5738,9 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         Tooltip tip = Tooltip.create();
         RichTooltipComponent.Builder b = RichTooltipComponent.builder();
         SlotVisual visual = slotVisual(slot);
-        b.section(slot.materialName(), slot.type().color);
+        b.section(slot.materialName(), slot.category().color());
         b.kv(ExecutionOverlayUi.tr(CirrusLangs.Calc.Tree.candidates), textSecondary,
-                String.valueOf(visual == null ? 0 : visual.count()), slot.type().color);
+                String.valueOf(visual == null ? 0 : visual.count()), slot.category().color());
         tip.add(b.build());
         return tip;
     }
@@ -5539,13 +5749,7 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         if (node == null || node.outputs().isEmpty()) {
             return cardMetaText;
         }
-        return switch (node.outputs().getFirst().type()) {
-            case ITEM -> 0xFFA8BAD8;
-            case FLUID -> 0xFF8EC3DC;
-            case ENERGY -> 0xFFB4A3E8;
-            case GAS -> 0xFF8CC9BF;
-            case CATALYST -> 0xFFC1B3E8;
-        };
+        return node.outputs().getFirst().category().color();
     }
 
     private @Nullable LayoutNode findLayoutNode(String pathId) {

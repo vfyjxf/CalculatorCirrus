@@ -15,7 +15,8 @@ import org.jetbrains.annotations.Nullable;
 public sealed interface RoutingIssuePayload permits
     RoutingIssuePayload.Empty,
     RoutingIssuePayload.InputShortage,
-    RoutingIssuePayload.CapabilityGate {
+    RoutingIssuePayload.CapabilityGate,
+    RoutingIssuePayload.BudgetExhaustion {
 
     ImmutableMap<String, String> messageArgs();
 
@@ -105,6 +106,47 @@ public sealed interface RoutingIssuePayload permits
         @Override
         public ImmutableMap<String, String> details() {
             return Maps.immutable.of("context.missing_capabilities", missingCapabilities);
+        }
+    }
+
+    record BudgetExhaustion(
+        String stopReason,
+        String recipe,
+        String input,
+        int depth,
+        long remaining,
+        boolean activeCycleCandidate
+    ) implements RoutingIssuePayload {
+        public BudgetExhaustion {
+            Checks.checkNotNull(stopReason, "stopReason");
+            Checks.checkNotNull(recipe, "recipe");
+            Checks.checkNotNull(input, "input");
+        }
+
+        @Override
+        public ImmutableMap<String, String> messageArgs() {
+            return Maps.immutable.of(
+                "reason", stopReason,
+                "recipe", recipe,
+                "input", input
+            );
+        }
+
+        @Override
+        public Object[] translationArgs() {
+            return new Object[]{stopReason, recipe, input};
+        }
+
+        @Override
+        public ImmutableMap<String, String> details() {
+            var details = Maps.mutable.<String, String>ofInitialCapacity(6);
+            details.put("context.budget_stop", stopReason);
+            details.put("context.recipe", recipe);
+            details.put("context.input", input);
+            details.put("context.depth", Integer.toString(depth));
+            details.put("context.remaining", Long.toString(remaining));
+            details.put("context.active_cycle_candidate", Boolean.toString(activeCycleCandidate));
+            return details.toImmutable();
         }
     }
 }

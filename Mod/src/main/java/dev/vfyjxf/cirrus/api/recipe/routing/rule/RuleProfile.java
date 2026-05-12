@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.api.recipe.routing.rule;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.list.ImmutableList;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -62,6 +63,7 @@ public final class RuleProfile {
     private final double amplificationSoftThreshold;
     private final double amplificationHardThreshold;
     private final boolean liftMultiSemanticChildShortages;
+    private final @Nullable FastScoringPreset fastScoringPreset;
 
     /**
      * Creates a new rule profile with all components and tuning parameters.
@@ -99,6 +101,44 @@ public final class RuleProfile {
         double amplificationHardThreshold,
         boolean liftMultiSemanticChildShortages
     ) {
+        this(
+            profileId,
+            scoreKeys,
+            hardRules,
+            scoreRules,
+            rankPolicy,
+            tieBreakPolicy,
+            explorePolicy,
+            unresolvedInputRule,
+            capabilities,
+            shortlistK,
+            rollbackWidth,
+            nearTieEpsilon,
+            amplificationSoftThreshold,
+            amplificationHardThreshold,
+            liftMultiSemanticChildShortages,
+            null
+        );
+    }
+
+    public RuleProfile(
+        Namespace profileId,
+        ImmutableList<String> scoreKeys,
+        ImmutableList<HardRule> hardRules,
+        ImmutableList<ScoreRule> scoreRules,
+        RankPolicy rankPolicy,
+        TieBreakPolicy tieBreakPolicy,
+        ExplorePolicy explorePolicy,
+        UnresolvedInputRule unresolvedInputRule,
+        RuleCapabilities capabilities,
+        int shortlistK,
+        int rollbackWidth,
+        double nearTieEpsilon,
+        double amplificationSoftThreshold,
+        double amplificationHardThreshold,
+        boolean liftMultiSemanticChildShortages,
+        @Nullable FastScoringPreset fastScoringPreset
+    ) {
         this.profileId = Checks.checkNotNull(profileId, "profileId");
         this.scoreKeys = Checks.checkNotNull(scoreKeys, "scoreKeys");
         this.hardRules = Checks.checkNotNull(hardRules, "hardRules");
@@ -119,6 +159,7 @@ public final class RuleProfile {
         this.amplificationSoftThreshold = amplificationSoftThreshold;
         this.amplificationHardThreshold = amplificationHardThreshold;
         this.liftMultiSemanticChildShortages = liftMultiSemanticChildShortages;
+        this.fastScoringPreset = fastScoringPreset;
 
         Map<String, Integer> map = new HashMap<>();
         for (int i = 0; i < scoreKeys.size(); i++) {
@@ -201,6 +242,10 @@ public final class RuleProfile {
         return liftMultiSemanticChildShortages;
     }
 
+    public @Nullable FastScoringPreset fastScoringPreset() {
+        return fastScoringPreset;
+    }
+
     /**
      * Allocates a fresh zero-initialized score vector with the correct dimension count.
      *
@@ -218,5 +263,10 @@ public final class RuleProfile {
      */
     public ScoreAccumulator newAccumulator(double[] scoreVector) {
         return new ScoreAccumulator(scoreVector, scoreKeyToIndex);
+    }
+
+    public enum FastScoringPreset {
+        standard,
+        assuredBounded
     }
 }

@@ -13,6 +13,8 @@ import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
+import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
+import dev.vfyjxf.cirrus.ui.process.MaterialCategory;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipContext;
@@ -229,12 +231,11 @@ public final class ExecutionOverlayContentHelper {
         return new ProcessNode.MaterialSlot(
             label(content),
             amount,
-            catalyst ? ProcessNode.MaterialType.CATALYST : materialType(content),
+            catalyst ? MaterialCategories.CATALYST : materialCategory(content),
             1.0,
             catalyst,
             content,
-            exactItemStack(content),
-            exactFluidStack(content)
+            visualStack(content)
         );
     }
 
@@ -251,26 +252,26 @@ public final class ExecutionOverlayContentHelper {
         return new ProcessNode.MaterialSlot(
             label(content),
             amount,
-            materialType(content),
+            materialCategory(content),
             chance,
             false,
             content,
-            exactItemStack(content),
-            exactFluidStack(content)
+            visualStack(content)
         );
     }
 
-    private static ProcessNode.MaterialType materialType(@Nullable RecipeContent content) {
+    private static MaterialCategory materialCategory(@Nullable RecipeContent content) {
         if (content == null || content.isEmpty()) {
-            return ProcessNode.MaterialType.ITEM;
+            return MaterialCategories.UNKNOWN;
         }
         if (content instanceof StackContent<?, ?> stackContent) {
             ContentStack<?, ?> stack = stackContent.content();
             if (stack.notEmpty() && stack.isFluid()) {
-                return ProcessNode.MaterialType.FLUID;
+                return MaterialCategories.FLUID;
             }
+            return MaterialCategories.ITEM;
         }
-        return ProcessNode.MaterialType.ITEM;
+        return MaterialCategories.VALUE;
     }
 
     public static boolean supportsItemMatching(@Nullable RecipeContent content) {
@@ -414,6 +415,14 @@ public final class ExecutionOverlayContentHelper {
         FluidStack copy = stack.<Fluid, FluidStack>cast().value().copy();
         copy.setAmount(Math.max(1, copy.getAmount()));
         return copy;
+    }
+
+    private static ContentStack<?, ?> visualStack(@Nullable RecipeContent content) {
+        if (!(content instanceof StackContent<?, ?> stackContent)) {
+            return ContentStack.empty();
+        }
+        ContentStack<?, ?> stack = stackContent.content();
+        return stack == null ? ContentStack.empty() : stack.copy();
     }
 
     @SuppressWarnings("unchecked")

@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.content;
 
 import dev.vfyjxf.cirrus.api.content.type.StackType;
+import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.type.TagType;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.util.TagLookup;
@@ -51,6 +52,16 @@ public sealed interface InputContent
     static <T, S> InputContent fromStack(ContentStack<T, S> stack, float chance) {
         if (stack.isEmpty()) return empty;
         return new StackContent<>(stack.type(), stack.copy(), chance);
+    }
+
+    static <T, S> InputContent fromStack(ContentStack<T, S> stack, MatchStrategy matchStrategy) {
+        if (stack.isEmpty()) return empty;
+        return new StackContent<>(stack.type(), stack.copy(), MAX_CHANCE, matchStrategy);
+    }
+
+    static <T, S> InputContent fromStack(ContentStack<T, S> stack, float chance, MatchStrategy matchStrategy) {
+        if (stack.isEmpty()) return empty;
+        return new StackContent<>(stack.type(), stack.copy(), chance, matchStrategy);
     }
 
     static <T, S> InputContent fromStack(ContentStack<T, S> stack) {

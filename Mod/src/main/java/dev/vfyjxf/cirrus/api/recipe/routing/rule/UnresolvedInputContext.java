@@ -13,13 +13,15 @@ import dev.vfyjxf.cloudlib.util.Checks;
  * @param amount the remaining unresolved amount
  * @param phase where the planner got stuck
  * @param activeCycleCandidate whether the exhausted candidate set included a recipe already on the active path
+ * @param budgetLimited        whether the input was cut because a routing budget was reached
  */
 public record UnresolvedInputContext(
     RecipeEntry<?> recipe,
     InputContent input,
     long amount,
     Phase phase,
-    boolean activeCycleCandidate
+    boolean activeCycleCandidate,
+    boolean budgetLimited
 ) {
     public UnresolvedInputContext {
         Checks.checkNotNull(recipe, "recipe");

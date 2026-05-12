@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingStatus;
@@ -103,6 +104,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 	//region Init
 	public OmniCalculatorView() {
 		setFocusable(true);
+        onDestroy(self -> releaseCalculationState());
 		useEffect(UIEffects.autoFocus());
 		useStyle(
 				flexColumn(),
@@ -390,13 +392,38 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
         ExecutionTargetRecipeState.setPath(currentPlan.targetRecipe(), currentPlan.targetTimes(), currentPlan);
     }
 
-    public void setProcessGraph(ProcessGraph graph) {
+	public void setProcessGraph(ProcessGraph graph) {
         this.graph = Objects.requireNonNull(graph, "graph");
         applyCalculatorTarget(CalculatorTargetRecipeState.current());
 		if (calculated) {
 			showCalculationResult("externalSetProcessGraph");
 		}
 	}
+
+    public void releaseCalculationState() {
+        cancelPendingCalculation();
+        graph = new ProcessGraph();
+        routingPlan = null;
+        contentVariantPreferences = Map.of();
+        milestoneManualCompletions.clear();
+        calculationDebugText = "";
+        calculationDebugTrace = List.of();
+        calculated = false;
+        settingsPanelOpen = false;
+        calculatingStateVisible = false;
+        if (treeView != null) {
+            treeView.releaseGraph();
+        }
+        treeView = null;
+        matrixView = null;
+        milestonesView = null;
+        viewSwitcher = null;
+        processViewArea = null;
+        suspendedProjectionReturnContent = null;
+        projectionDetailPage = null;
+        settingsPage = null;
+        bodyArea.clear();
+    }
 	//endregion
 
 	//region View Factory
@@ -449,7 +476,11 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 		var sink = graph.sinks().getFirst();
 		if (sink.outputs().isEmpty()) return ItemStack.EMPTY;
 		var output = sink.outputs().getFirst();
-		return output.itemStack() == null ? ItemStack.EMPTY : output.itemStack();
+		ContentStack<?, ?> stack = output.visualStack();
+		if (stack.notEmpty() && stack.isItem()) {
+			return stack.<net.minecraft.world.item.Item, ItemStack>cast().value().copy();
+		}
+		return ItemStack.EMPTY;
 	}
 
 	private void applyCalculatorTarget(@Nullable CalculatorTargetRecipeState.Selection selection) {
@@ -475,6 +506,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 		long requestId = ++calculationRequestId;
 		long requestedAmount = amount;
 		RecipeEntry<?> recipe = selection.recipe();
+        CalculatorProcessGraphBuilder.RouteMode requestedRouteMode = graphRouteMode;
         calculationDebugText = "queued target=" + describeRecipe(recipe) + " times=" + times + " mode=" + graphRouteMode;
         calculationDebugTrace = List.of(calculationDebugText);
 		Stock stock = RecipePathSettings.calculatorStock();
@@ -507,7 +539,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
                     times,
                     stock,
                     preferences,
-                    graphRouteMode
+                    requestedRouteMode
                 );
                 logger.info(
                     "calculator.ui.worker.finish requestId={} target={} elapsedMs={} graphNodes={} planActions={} debug={}",
@@ -590,8 +622,8 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
         boolean failed = result.debugInfo().routingStatus() == RoutingStatus.failed
             || result.debugInfo().exception() != null
             || graphIssue != null;
-        if (failed) {
-            logger.debug(
+        if (failed || result.debugInfo().budgetExhausted()) {
+            logger.warn(
                 "calculator.ui.finish requestId={} target={} mode={} graphNodes={} graphIssue={} planActions={} debug={}",
                 result.requestId(),
                 describeRecipe(result.recipe()),

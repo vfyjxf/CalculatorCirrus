@@ -503,11 +503,9 @@ public class MilestonesViewWidget extends CompositeWidget<Widget> {
 				return StorageTransferRequest.forResource(resource, slot.amount());
 			}
 		}
-		if (slot.itemStack() != null && !slot.itemStack().isEmpty()) {
-			return StorageTransferRequest.forResource(ContentStack.fromStack(slot.itemStack(), slot.amount()), slot.amount());
-		}
-		if (slot.fluidStack() != null && !slot.fluidStack().isEmpty()) {
-			return StorageTransferRequest.forResource(ContentStack.fromStack(slot.fluidStack(), slot.amount()), slot.amount());
+		ContentStack<?, ?> visualStack = slot.visualStack();
+		if (visualStack.notEmpty()) {
+			return StorageTransferRequest.forResource(visualStack.copyWithAmount(slot.amount()), slot.amount());
 		}
 		ItemStack inferredItem = inferItemStack(slot.materialName(), slot.amount());
 		if (!inferredItem.isEmpty()) {
@@ -589,9 +587,9 @@ public class MilestonesViewWidget extends CompositeWidget<Widget> {
 
 	private static ItemStack machineIcon(ProcessNode node) {
 		if (!node.machineOptions().isEmpty()) {
-			ItemStack machine = node.machineOptions().getFirst().icon();
-			if (machine != null && !machine.isEmpty()) {
-				return machine.copy();
+			ContentStack<?, ?> machine = node.machineOptions().getFirst().icon();
+			if (machine.notEmpty() && machine.isItem()) {
+				return machine.<net.minecraft.world.item.Item, ItemStack>cast().value().copy();
 			}
 		}
 		return ItemStack.EMPTY;

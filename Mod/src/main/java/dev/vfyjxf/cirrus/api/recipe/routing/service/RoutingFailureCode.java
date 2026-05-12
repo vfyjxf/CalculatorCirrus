@@ -15,7 +15,7 @@ public enum RoutingFailureCode {
     cycleBlocked,
     /** Cyclic re-entry would exceed the amplification risk threshold. */
     cycleAmplificationBlocked,
-    /** The per-recipe, per-SCC, or global loop budget was exhausted. */
+    /** The per-recipe active-path or global loop budget was exhausted. */
     cycleBudgetExhausted,
     /** The rule profile lacks required capability flags for the requested planner mode. */
     capabilityGateRejected,

@@ -24,10 +24,12 @@ import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanBuilder;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.CandidateContext;
+import dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultRuleProfiles;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.ExplorePolicy;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.HardRule;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.HardRuleResult;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleProfile;
+import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleProfile.FastScoringPreset;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.UnresolvedInputContext;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.UnresolvedInputRule;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.DiagnosticLevel;
@@ -39,15 +41,17 @@ import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingIssuePayload;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingMetrics;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingOutcome;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingRequest;
+import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingRecipeCatalog;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingStatus;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.TagResolvePolicy;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingTrace;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingVariantKeys;
 import dev.vfyjxf.cirrus.api.recipe.routing.state.CycleGuard;
 import dev.vfyjxf.cirrus.api.recipe.routing.state.ResourceLedger;
+import it.unimi.dsi.fastutil.ints.Int2ByteOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
-import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
-import it.unimi.dsi.fastutil.objects.ObjectSet;
+import it.unimi.dsi.fastutil.longs.LongIterator;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
@@ -64,12 +68,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 /**
  * Responsiveness-first planner.
@@ -105,6 +113,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class StandardPlanner implements RoutePlanner {
     private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Calculator");
     private static final int detailLogLimit = 256;
+    private static final int activeDemandDependencyNodeLimit = 128;
+    private static final int activeDemandDependencyProducerLimit = 512;
+    private static final double indirectActiveDemandCyclePenalty = 1_000_000.0d;
 
     @Override
     public RoutingOutcome plan(PlannerContext context) {
@@ -115,18 +126,20 @@ public final class StandardPlanner implements RoutePlanner {
         if (!(request.target() instanceof RoutingRequest.RecipeTarget(RecipeEntry<?> recipe, int times))) {
             return invalidRequestOutcome(context, startNanos, "target_mode_mismatch");
         }
-        logger.info(
-            "planner.start mode={} target={} times={} catalog={} allowed={} budgetNodes={} budgetCandidates={} loop={} heuristic={}",
-            request.plannerMode(),
-            describeRecipe(recipe),
-            times,
-            context.catalog().size(),
-            context.sourcePolicyDecision().allowedRecipes().cardinality(),
-            request.budget().maxExpandedNodes(),
-            request.budget().maxGeneratedCandidates(),
-            request.loopPolicy(),
-            request.heuristicPolicy()
-        );
+        if (logger.isDebugEnabled()) {
+            logger.debug(
+                "planner.start mode={} target={} times={} catalog={} allowed={} budgetNodes={} budgetCandidates={} loop={} heuristic={}",
+                request.plannerMode(),
+                describeRecipe(recipe),
+                times,
+                context.catalog().size(),
+                context.sourcePolicyDecision().allowedRecipes().cardinality(),
+                request.budget().maxExpandedNodes(),
+                request.budget().maxGeneratedCandidates(),
+                request.loopPolicy(),
+                request.heuristicPolicy()
+            );
+        }
 
         int targetIndex = context.catalog().indexOf(recipe);
         if (targetIndex < 0) {
@@ -212,6 +225,11 @@ public final class StandardPlanner implements RoutePlanner {
             true,
             Lists.immutable.empty(),
             counters.budgetStopReason,
+            counters.budgetCulpritRecipe,
+            counters.budgetCulpritInput,
+            counters.budgetCulpritDepth,
+            counters.budgetCulpritRemaining,
+            counters.budgetCulpritActiveCycle,
             counters.explorationBranchesExpanded,
             counters.explorationBudgetUsed,
             request.explorationSeed() == null ? 0 : request.explorationSeed(),
@@ -222,20 +240,27 @@ public final class StandardPlanner implements RoutePlanner {
         if (context.request().diagnosticLevel() != DiagnosticLevel.none) {
             trace = new RoutingTrace(1, buildRequestFingerprint(context), traceStages.toImmutable());
         }
-        logger.info(
-            "planner.finish status={} target={} planActions={} issues={} elapsedMs={} expanded={} generated={} accepted={} budgetUsed={} budgetExhausted={} budgetStop={}",
-            status,
-            describeRecipe(recipe),
-            plan == null ? 0 : plan.actions().size(),
-            issues.size(),
-            elapsedMs,
-            counters.expandedNodes,
-            counters.generatedCandidates,
-            counters.acceptedCandidates,
-            counters.budgetUsed,
-            counters.budgetExhausted,
-            counters.budgetStopReason
-        );
+        if (logger.isDebugEnabled()) {
+            logger.debug(
+                "planner.finish status={} target={} planActions={} issues={} elapsedMs={} expanded={} generated={} accepted={} budgetUsed={} budgetExhausted={} budgetStop={} budgetCulprit={} budgetInput={} budgetDepth={} budgetRemaining={} budgetCycle={}",
+                status,
+                describeRecipe(recipe),
+                plan == null ? 0 : plan.actions().size(),
+                issues.size(),
+                elapsedMs,
+                counters.expandedNodes,
+                counters.generatedCandidates,
+                counters.acceptedCandidates,
+                counters.budgetUsed,
+                counters.budgetExhausted,
+                counters.budgetStopReason,
+                counters.budgetCulpritRecipe,
+                counters.budgetCulpritInput,
+                counters.budgetCulpritDepth,
+                counters.budgetCulpritRemaining,
+                counters.budgetCulpritActiveCycle
+            );
+        }
         return new RoutingOutcome(status, plan, issues.toImmutable(), metrics, trace);
     }
 
@@ -257,29 +282,38 @@ public final class StandardPlanner implements RoutePlanner {
         PlannerDebugLog debugLog = new PlannerDebugLog();
         ArrayList<PlanningFrame> stack = new ArrayList<>();
         stack.add(new PlanningFrame(recipeNode, recipeIndex, times, depth));
+        ArrayDeque<InputContent> activeDemands = new ArrayDeque<>();
 
         while (!stack.isEmpty()) {
             PlanningFrame frame = stack.get(stack.size() - 1);
             switch (frame.state) {
                 case entering -> {
                     if (isBudgetExceeded(context, counters)) {
-                        debugLog.info(
-                            "planner.budget recipe={} depth={} expanded={} budgetUsed={} budgetLimit={} generated={} reason={}",
-                            describeRecipe(frame.recipeNode.recipe()),
-                            frame.depth,
-                            counters.expandedNodes,
-                            counters.budgetUsed,
-                            context.request().budget().maxExpandedNodes(),
-                            counters.generatedCandidates,
-                            counters.budgetStopReason
-                        );
+                        recordBudgetCulprit(context, stack, frame, activePath);
+                        if (debugLog.enabled()) {
+                            debugLog.debug(
+                                "planner.budget recipe={} depth={} expanded={} budgetUsed={} budgetLimit={} generated={} reason={} culpritRecipe={} culpritInput={} culpritRemaining={} culpritCycle={}",
+                                () -> describeRecipe(frame.recipeNode.recipe()),
+                                () -> frame.depth,
+                                () -> counters.expandedNodes,
+                                () -> counters.budgetUsed,
+                                () -> context.request().budget().maxExpandedNodes(),
+                                () -> counters.generatedCandidates,
+                                () -> counters.budgetStopReason,
+                                () -> counters.budgetCulpritRecipe,
+                                () -> counters.budgetCulpritInput,
+                                () -> counters.budgetCulpritRemaining,
+                                () -> counters.budgetCulpritActiveCycle
+                            );
+                        }
                         addIssue(
                             issues,
                             issueSeq,
                             RoutingFailureCode.budgetExhausted,
                             RoutingIssue.Severity.error,
                             true,
-                            "cirrus.routing.budget.exhausted"
+                            "cirrus.routing.budget.exhausted",
+                            budgetIssuePayload(counters)
                         );
                         Boolean completed = completeFrame(stack, false, activePath, cycleGuard);
                         if (completed != null) {
@@ -288,23 +322,25 @@ public final class StandardPlanner implements RoutePlanner {
                         continue;
                     }
 
-                    int sccId = context.sccAnalysis().sccOf(frame.recipeIndex);
-                    double amplificationRisk = estimateAmplificationRisk(context, isActive(activePath, frame.recipeIndex), sccId, frame.depth);
+                    boolean cycleReentry = isActive(activePath, frame.recipeIndex);
+                    double amplificationRisk = estimateAmplificationRisk(cycleReentry, frame.depth);
                     CycleGuard.Decision decision = cycleGuard.enter(
                         frame.recipeIndex,
-                        sccId,
+                        cycleReentry,
                         amplificationRisk,
                         context.ruleProfile().amplificationHardThreshold()
                     );
                     if (!decision.allowed()) {
-                        debugLog.info(
-                            "planner.cycle.reject recipe={} depth={} scc={} risk={} reason={}",
-                            describeRecipe(frame.recipeNode.recipe()),
-                            frame.depth,
-                            sccId,
-                            amplificationRisk,
-                            decision.reason()
-                        );
+                        if (debugLog.enabled()) {
+                            debugLog.debug(
+                                "planner.cycle.reject recipe={} depth={} reentry={} risk={} reason={}",
+                                () -> describeRecipe(frame.recipeNode.recipe()),
+                                () -> frame.depth,
+                                () -> cycleReentry,
+                                () -> amplificationRisk,
+                                decision::reason
+                            );
+                        }
                         addIssue(
                             issues,
                             issueSeq,
@@ -322,49 +358,58 @@ public final class StandardPlanner implements RoutePlanner {
 
                     enterActive(activePath, frame.recipeIndex);
                     counters.expandedNodes++;
-                    debugLog.info(
-                        "planner.expand recipe={} index={} times={} depth={} inputs={} outputs={} scc={} risk={} pathDepth={}",
-                        describeRecipe(frame.recipeNode.recipe()),
-                        frame.recipeIndex,
-                        frame.times,
-                        frame.depth,
-                        frame.mergedInputs.size(),
-                        frame.recipeNode.mergedOutputs().size(),
-                        sccId,
-                        amplificationRisk,
-                        activePath.size()
-                    );
+                    if (debugLog.enabled()) {
+                        debugLog.debug(
+                            "planner.expand recipe={} index={} times={} depth={} inputs={} outputs={} reentry={} risk={} pathDepth={}",
+                            () -> describeRecipe(frame.recipeNode.recipe()),
+                            () -> frame.recipeIndex,
+                            () -> frame.times,
+                            () -> frame.depth,
+                            () -> frame.recipeNode.inputCount(),
+                            () -> frame.recipeNode.outputCount(),
+                            () -> cycleReentry,
+                            () -> amplificationRisk,
+                            activePath::size
+                        );
+                    }
                     frame.entered = true;
-                    frame.activeSccId = sccId;
                     frame.state = FrameState.processingInputs;
                 }
                 case processingInputs -> {
-                    if (frame.inputIndex >= frame.mergedInputs.size()) {
+                    if (frame.inputIndex >= frame.recipeNode.inputCount()) {
                         frame.state = FrameState.finalizing;
                         continue;
                     }
 
-                    InputContent input = frame.mergedInputs.get(frame.inputIndex);
+                    InputContent input = frame.recipeNode.inputAt(frame.inputIndex);
                     int inputIndex = frame.inputIndex;
                     frame.inputIndex++;
+                    boolean rootInput = frame.depth == 0;
 
                     long required = input.amount() * frame.times;
                     if (required <= 0) {
                         continue;
                     }
-                    debugLog.info(
-                        "planner.input parent={} input={} required={} depth={} inputIndex={} notConsumed={}",
-                        describeRecipe(frame.recipeNode.recipe()),
-                        describeInput(input),
-                        required,
-                        frame.depth,
-                        inputIndex,
-                        input.notConsumed()
-                    );
+                    if (rootInput) {
+                        counters.beginRootInput(inputIndex, describeInput(input));
+                    }
+                    if (debugLog.enabled()) {
+                        debugLog.debug(
+                            "planner.input parent={} input={} required={} depth={} inputIndex={} notConsumed={}",
+                            () -> describeRecipe(frame.recipeNode.recipe()),
+                            () -> describeInput(input),
+                            () -> required,
+                            () -> frame.depth,
+                            () -> inputIndex,
+                            input::notConsumed
+                        );
+                    }
 
-                    frame.inputBindings.add(new PlanAction.InputBinding(input, required));
                     if (input.notConsumed()) {
                         planBuilder.addReserveCatalyst(input, input.amount(), frame.recipeNode.recipe());
+                        if (rootInput) {
+                            counters.clearRootInput();
+                        }
                         continue;
                     }
 
@@ -378,35 +423,47 @@ public final class StandardPlanner implements RoutePlanner {
                         inputIndex
                     );
                     if (remaining <= 0) {
-                        debugLog.info(
-                            "planner.input.covered parent={} input={} required={} remaining=0",
-                            describeRecipe(frame.recipeNode.recipe()),
-                            describeInput(input),
-                            required
-                        );
+                        if (debugLog.enabled()) {
+                            debugLog.debug(
+                                "planner.input.covered parent={} input={} required={} remaining=0",
+                                () -> describeRecipe(frame.recipeNode.recipe()),
+                                () -> describeInput(input),
+                                () -> required
+                            );
+                        }
+                        if (rootInput) {
+                            counters.clearRootInput();
+                        }
                         continue;
                     }
 
-                    List<CandidateScore> candidates = evaluateCandidates(
+                    activeDemands.addLast(input);
+                    CandidateEvaluation evaluation = evaluateCandidates(
                         context,
+                        frame.recipeNode,
                         input,
                         remaining,
                         frame.depth + 1,
                         activePath,
-                        ledger
+                        activeDemands,
+                        ledger,
+                        rootInput
                     );
+                    List<CandidateScore> candidates = evaluation.candidates();
                     if (candidates.isEmpty()) {
-                        debugLog.info(
-                            "planner.unresolved.noCandidates parent={} input={} remaining={} depth={} generated={} accepted={} budgetExhausted={} budgetStop={}",
-                            describeRecipe(frame.recipeNode.recipe()),
-                            describeInput(input),
-                            remaining,
-                            frame.depth,
-                            counters.generatedCandidates,
-                            counters.acceptedCandidates,
-                            counters.budgetExhausted,
-                            counters.budgetStopReason
-                        );
+                        if (debugLog.enabled()) {
+                            debugLog.debug(
+                                "planner.unresolved.noCandidates parent={} input={} remaining={} depth={} generated={} accepted={} budgetExhausted={} budgetStop={}",
+                                () -> describeRecipe(frame.recipeNode.recipe()),
+                                () -> describeInput(input),
+                                () -> remaining,
+                                () -> frame.depth,
+                                () -> counters.generatedCandidates,
+                                () -> counters.acceptedCandidates,
+                                () -> counters.budgetExhausted,
+                                () -> counters.budgetStopReason
+                            );
+                        }
                         if (resolveUnresolvedInput(
                             context,
                             frame.recipeNode.recipe(),
@@ -414,12 +471,41 @@ public final class StandardPlanner implements RoutePlanner {
                             remaining,
                             UnresolvedInputContext.Phase.noSource,
                             false,
+                            counters.budgetExhausted,
                             ledger,
                             planBuilder,
                             issues,
                             issueSeq
                         )) {
+                            if (evaluation.hasActiveCycleCandidate()
+                                && context.request().loopPolicy() == LoopPolicy.forbidAmplification) {
+                                addIssue(
+                                    issues,
+                                    issueSeq,
+                                    RoutingFailureCode.cycleAmplificationBlocked,
+                                    RoutingIssue.Severity.warning,
+                                    false,
+                                    "cirrus.routing.cycle_amplification_blocked",
+                                    inputIssuePayload(context, frame.recipeNode.recipe(), input, remaining)
+                                );
+                            }
+                            if (rootInput) {
+                                counters.clearRootInput();
+                            }
+                            activeDemands.removeLast();
                             continue;
+                        }
+                        if (evaluation.hasActiveCycleCandidate()
+                            && context.request().loopPolicy() == LoopPolicy.forbidAmplification) {
+                            addIssue(
+                                issues,
+                                issueSeq,
+                                RoutingFailureCode.cycleAmplificationBlocked,
+                                RoutingIssue.Severity.error,
+                                true,
+                                "cirrus.routing.cycle_amplification_blocked",
+                                inputIssuePayload(context, frame.recipeNode.recipe(), input, remaining)
+                            );
                         }
                         addIssue(
                             issues,
@@ -430,6 +516,10 @@ public final class StandardPlanner implements RoutePlanner {
                             "cirrus.routing.no_source",
                             inputIssuePayload(context, frame.recipeNode.recipe(), input, required)
                         );
+                        if (rootInput) {
+                            counters.clearRootInput();
+                        }
+                        activeDemands.removeLast();
                         Boolean completed = completeFrame(stack, false, activePath, cycleGuard);
                         if (completed != null) {
                             return completed;
@@ -449,30 +539,55 @@ public final class StandardPlanner implements RoutePlanner {
                         );
                     }
 
-                    frame.beginCandidateResolution(input, inputIndex, remaining, candidates, candidateAttemptLimit(context, candidates.size()));
-                    debugLog.info(
-                        "planner.candidates parent={} input={} remaining={} candidates={} attemptLimit={} best={}",
-                        describeRecipe(frame.recipeNode.recipe()),
-                        describeInput(input),
+                    int attemptLimit = candidateAttemptLimit(context, candidates.size());
+                    if (candidates.size() > attemptLimit) {
+                        candidates = new ArrayList<>(candidates.subList(0, attemptLimit));
+                    }
+                    frame.beginCandidateResolution(
+                        input,
+                        inputIndex,
                         remaining,
-                        candidates.size(),
-                        frame.candidateAttemptLimit,
-                        candidates.isEmpty() ? "<none>" : describeRecipe(candidates.getFirst().node().recipe())
+                        candidates,
+                        attemptLimit,
+                        evaluation.hasActiveCycleCandidate(),
+                        rootInput
                     );
+                    List<CandidateScore> loggedCandidates = candidates;
+                    if (debugLog.enabled()) {
+                        debugLog.debug(
+                            "planner.candidates parent={} input={} remaining={} candidates={} attemptLimit={} best={}",
+                            () -> describeRecipe(frame.recipeNode.recipe()),
+                            () -> describeInput(input),
+                            () -> remaining,
+                            loggedCandidates::size,
+                            () -> frame.candidateAttemptLimit,
+                            () -> loggedCandidates.isEmpty() ? "<none>" : describeRecipe(loggedCandidates.getFirst().node().recipe())
+                        );
+                    }
                     frame.state = FrameState.tryingCandidates;
                 }
                 case tryingCandidates -> {
                     InputContent input = frame.activeInput();
+                    if (frame.rootInput && rootInputBudgetExceeded(context, counters)) {
+                        recordBudgetCulprit(context, frame.recipeNode, input, frame.remaining, frame.depth + 1, frame.candidateSetHasActiveCycleCandidate);
+                        counters.budgetExhausted = true;
+                        counters.budgetStopReason = "maxRootInputBudget";
+                        frame.rootInputBudgetCut = true;
+                        frame.candidateAttemptIndex = frame.candidateAttemptLimit;
+                        continue;
+                    }
                     if (frame.candidateAttemptIndex >= frame.candidateAttemptLimit) {
-                        debugLog.info(
-                            "planner.unresolved.exhausted parent={} input={} remaining={} attempted={} candidates={} candidateIssues={}",
-                            describeRecipe(frame.recipeNode.recipe()),
-                            describeInput(input),
-                            frame.remaining,
-                            frame.candidateAttemptIndex,
-                            frame.candidates().size(),
-                            frame.candidateIssues.size()
-                        );
+                        if (debugLog.enabled()) {
+                            debugLog.debug(
+                                "planner.unresolved.exhausted parent={} input={} remaining={} attempted={} candidates={} candidateIssues={}",
+                                () -> describeRecipe(frame.recipeNode.recipe()),
+                                () -> describeInput(input),
+                                () -> frame.remaining,
+                                () -> frame.candidateAttemptIndex,
+                                () -> frame.candidates().size(),
+                                () -> frame.candidateIssues.size()
+                            );
+                        }
                         if (resolveUnresolvedInput(
                             context,
                             frame.recipeNode.recipe(),
@@ -480,17 +595,46 @@ public final class StandardPlanner implements RoutePlanner {
                             frame.remaining,
                             UnresolvedInputContext.Phase.candidateExhausted,
                             frame.candidateSetHasActiveCycleCandidate,
+                            counters.budgetExhausted || frame.rootInputBudgetCut,
                             ledger,
                             planBuilder,
                             issues,
                             issueSeq
                         )) {
+                            if (frame.rootInputBudgetCut) {
+                                addIssue(
+                                    issues,
+                                    issueSeq,
+                                    RoutingFailureCode.budgetExhausted,
+                                    RoutingIssue.Severity.warning,
+                                    false,
+                                    "cirrus.routing.budget.exhausted",
+                                    budgetIssuePayload(counters)
+                                );
+                            }
+                            if (frame.candidateSetHasActiveCycleCandidate
+                                && context.request().loopPolicy() == LoopPolicy.forbidAmplification) {
+                                addIssue(
+                                    issues,
+                                    issueSeq,
+                                    RoutingFailureCode.cycleAmplificationBlocked,
+                                    RoutingIssue.Severity.warning,
+                                    false,
+                                    "cirrus.routing.cycle_amplification_blocked",
+                                    inputIssuePayload(context, frame.recipeNode.recipe(), input, frame.remaining)
+                                );
+                            }
                             frame.clearCandidateResolution();
+                            if (frame.rootInput) {
+                                counters.clearRootInput();
+                            }
+                            activeDemands.removeLast();
                             frame.state = FrameState.processingInputs;
                             continue;
                         }
                         if (frame.candidateIssues.notEmpty() && shouldPropagateCandidateIssues(input)) {
                             issues.addAllIterable(frame.candidateIssues);
+                            activeDemands.removeLast();
                             Boolean completed = completeFrame(stack, false, activePath, cycleGuard);
                             if (completed != null) {
                                 return completed;
@@ -506,6 +650,10 @@ public final class StandardPlanner implements RoutePlanner {
                             "cirrus.routing.unsatisfied_input",
                             inputIssuePayload(context, frame.recipeNode.recipe(), input, frame.remaining)
                         );
+                        if (frame.rootInput) {
+                            counters.clearRootInput();
+                        }
+                        activeDemands.removeLast();
                         Boolean completed = completeFrame(stack, false, activePath, cycleGuard);
                         if (completed != null) {
                             return completed;
@@ -514,31 +662,35 @@ public final class StandardPlanner implements RoutePlanner {
                     }
 
                     CandidateScore candidate = frame.candidates().get(frame.candidateAttemptIndex);
-                    debugLog.info(
-                        "planner.candidate.try parent={} input={} candidate={} attempt={} craftTimes={} score={} risk={} variant={}",
-                        describeRecipe(frame.recipeNode.recipe()),
-                        describeInput(input),
-                        describeRecipe(candidate.node().recipe()),
-                        frame.candidateAttemptIndex,
-                        candidate.craftTimes(),
-                        java.util.Arrays.toString(candidate.score()),
-                        candidate.amplificationRisk(),
-                        candidate.matchedVariantIndex()
-                    );
+                    if (debugLog.enabled()) {
+                        debugLog.debug(
+                            "planner.candidate.try parent={} input={} candidate={} attempt={} craftTimes={} score={} risk={} variant={}",
+                            () -> describeRecipe(frame.recipeNode.recipe()),
+                            () -> describeInput(input),
+                            () -> describeRecipe(candidate.node().recipe()),
+                            () -> frame.candidateAttemptIndex,
+                            candidate::craftTimes,
+                            () -> java.util.Arrays.toString(candidate.score()),
+                            candidate::amplificationRisk,
+                            candidate::matchedVariantIndex
+                        );
+                    }
                     if (frame.candidateAttemptIndex > 0) {
                         counters.explorationBranchesExpanded++;
                         counters.explorationBudgetUsed++;
                     }
                     frame.candidateAttemptIndex++;
 
-                    if (candidate.amplificationRisk >= context.ruleProfile().amplificationHardThreshold()
+                    if (candidate.cycleCandidate()
                         && context.request().loopPolicy() == LoopPolicy.forbidAmplification) {
-                        debugLog.info(
-                            "planner.candidate.reject candidate={} reason=cycleAmplification risk={} threshold={}",
-                            describeRecipe(candidate.node().recipe()),
-                            candidate.amplificationRisk,
-                            context.ruleProfile().amplificationHardThreshold()
-                        );
+                        if (debugLog.enabled()) {
+                            debugLog.debug(
+                                "planner.candidate.reject candidate={} reason=cycleAmplification risk={} threshold={}",
+                                () -> describeRecipe(candidate.node().recipe()),
+                                () -> candidate.amplificationRisk,
+                                () -> context.ruleProfile().amplificationHardThreshold()
+                            );
+                        }
                         addIssue(
                             frame.candidateIssues,
                             issueSeq,
@@ -551,8 +703,9 @@ public final class StandardPlanner implements RoutePlanner {
                     }
 
                     CandidateRollbackState rollback = new CandidateRollbackState(
-                        ledger.copy(),
-                        planBuilder.snapshot(),
+                        ledger.mark(),
+                        planBuilder.actionCount(),
+                        planBuilder.nextActionId(),
                         issues.size(),
                         traceStages.size()
                     );
@@ -564,13 +717,15 @@ public final class StandardPlanner implements RoutePlanner {
                     InputContent input = frame.activeInput();
                     CandidateRollbackState rollback = frame.rollback();
                     if (!frame.lastChildSucceeded) {
-                        debugLog.info(
-                            "planner.candidate.rollback parent={} input={} remaining={} candidateIssues={}",
-                            describeRecipe(frame.recipeNode.recipe()),
-                            describeInput(input),
-                            frame.remaining,
-                            frame.candidateIssues.size()
-                        );
+                        if (debugLog.enabled()) {
+                            debugLog.debug(
+                                "planner.candidate.rollback parent={} input={} remaining={} candidateIssues={}",
+                                () -> describeRecipe(frame.recipeNode.recipe()),
+                                () -> describeInput(input),
+                                () -> frame.remaining,
+                                () -> frame.candidateIssues.size()
+                            );
+                        }
                         captureIssuesSince(issues, rollback.issueCount(), frame.candidateIssues, visibleIssueRecipe(context, frame.recipeNode.recipe()));
                         rollback.restore(ledger, planBuilder, issues, traceStages);
                         frame.rollback = null;
@@ -581,16 +736,19 @@ public final class StandardPlanner implements RoutePlanner {
                     frame.rollback = null;
                     int childIssueStart = rollback.issueCount();
                     boolean liftedToParentFallback = false;
+                    boolean rollbackRestoredForParentFallback = false;
                     if (context.ruleProfile().liftMultiSemanticChildShortages()
                         && preservesOriginalInputShortage(input)
                         && hasOnlyNonBlockingShortages(issues, childIssueStart)) {
                         rollback.restore(ledger, planBuilder, issues, traceStages);
+                        rollbackRestoredForParentFallback = true;
                         if (resolveUnresolvedInput(
                             context,
                             frame.recipeNode.recipe(),
                             input,
                             frame.remaining,
                             UnresolvedInputContext.Phase.noSource,
+                            false,
                             false,
                             ledger,
                             planBuilder,
@@ -602,6 +760,9 @@ public final class StandardPlanner implements RoutePlanner {
                         }
                     }
                     if (!liftedToParentFallback) {
+                        if (!rollbackRestoredForParentFallback) {
+                            rollback.commit(ledger);
+                        }
                         long previousRemaining = frame.remaining;
                         frame.remaining = consumeDemandWithPolicy(
                             context,
@@ -623,42 +784,44 @@ public final class StandardPlanner implements RoutePlanner {
                         );
                     }
                     if (frame.remaining <= 0) {
-                        debugLog.info(
-                            "planner.input.resolved parent={} input={} remaining=0",
-                            describeRecipe(frame.recipeNode.recipe()),
-                            describeInput(input)
-                        );
+                        if (debugLog.enabled()) {
+                            debugLog.debug(
+                                "planner.input.resolved parent={} input={} remaining=0",
+                                () -> describeRecipe(frame.recipeNode.recipe()),
+                                () -> describeInput(input)
+                            );
+                        }
                         frame.clearCandidateResolution();
+                        if (frame.rootInput) {
+                            counters.clearRootInput();
+                        }
+                        activeDemands.removeLast();
                         frame.state = FrameState.processingInputs;
                         continue;
                     }
                     frame.state = FrameState.tryingCandidates;
                 }
                 case finalizing -> {
-                    for (OutputContent output : frame.recipeNode.mergedOutputs()) {
-                        long produced = output.amount() * frame.times;
-                        if (produced <= 0) {
-                            continue;
-                        }
-                        frame.outputBindings.add(new PlanAction.OutputBinding(output.asResource(), produced));
-                    }
-
+                    ImmutableList<PlanAction.InputBinding> inputBindings = frame.buildInputBindings();
+                    ImmutableList<PlanAction.OutputBinding> outputBindings = frame.buildOutputBindings();
                     planBuilder.addExecuteRecipe(
                         frame.recipeNode.recipe(),
                         frame.times,
-                        Lists.immutable.ofAll(frame.inputBindings),
-                        Lists.immutable.ofAll(frame.outputBindings)
+                        inputBindings,
+                        outputBindings
                     );
-                    for (PlanAction.OutputBinding binding : frame.outputBindings) {
+                    for (PlanAction.OutputBinding binding : outputBindings) {
                         ledger.addByproduct(binding.resource(), binding.amount());
                     }
-                    debugLog.info(
-                        "planner.finalize recipe={} times={} inputs={} outputs={}",
-                        describeRecipe(frame.recipeNode.recipe()),
-                        frame.times,
-                        frame.inputBindings.size(),
-                        frame.outputBindings.size()
-                    );
+                    if (debugLog.enabled()) {
+                        debugLog.debug(
+                            "planner.finalize recipe={} times={} inputs={} outputs={}",
+                            () -> describeRecipe(frame.recipeNode.recipe()),
+                            () -> frame.times,
+                            inputBindings::size,
+                            outputBindings::size
+                        );
+                    }
 
                     Boolean completed = completeFrame(stack, true, activePath, cycleGuard);
                     if (completed != null) {
@@ -671,45 +834,57 @@ public final class StandardPlanner implements RoutePlanner {
         return false;
     }
 
-    private List<CandidateScore> evaluateCandidates(
+    private CandidateEvaluation evaluateCandidates(
         PlannerContext context,
+        RecipeGraph.Node parentNode,
         InputContent input,
         long remaining,
         int depth,
         Int2IntOpenHashMap activePath,
-        ResourceLedger ledger
+        ArrayDeque<InputContent> activeDemands,
+        ResourceLedger ledger,
+        boolean rootInput
     ) {
         BitSet allowed = context.sourcePolicyDecision().allowedRecipes();
+        CandidateShortlist candidates = new CandidateShortlist(
+            candidateShortlistLimit(context),
+            candidateComparator(context.ruleProfile()),
+            enumerableVariantCount(input)
+        );
+        ScoringScratch scoringScratch = new ScoringScratch(context.ruleProfile());
+        ActiveDemandDependencyScratch dependencyScratch = new ActiveDemandDependencyScratch();
         if (!requiresCandidateScanFallback(input)) {
-            ObjectSet<RecipeGraph.OutputRef> producerRefs = indexedProducerRefs(context.graph(), input);
-            List<CandidateScore> candidates = new ArrayList<>(producerRefs.size());
-            for (RecipeGraph.OutputRef producer : producerRefs) {
-                if (candidateBudgetReached(context)) {
+            ProducerRefIterator producerRefs = indexedProducerRefs(context.graph(), input);
+            while (producerRefs.next()) {
+                if (candidateBudgetReached(context, parentNode, input, remaining, depth, rootInput)) {
                     break;
                 }
-                int recipeIndex = context.catalog().indexOf(producer.node().recipe());
-                if (recipeIndex < 0 || !allowed.get(recipeIndex)) {
+                int recipeIndex = producerRefs.recipeIndex();
+                if (!allowed.get(recipeIndex)) {
                     continue;
                 }
+                RecipeGraph.Node node = context.catalog().nodeAt(recipeIndex);
                 addCandidateIfAccepted(
                     context,
                     input,
                     remaining,
                     depth,
                     activePath,
+                    activeDemands,
                     ledger,
-                    producer.node(),
+                    node,
                     recipeIndex,
-                    producer.output(),
-                    candidates
+                    node.outputAt(producerRefs.outputIndex()),
+                    candidates,
+                    scoringScratch,
+                    dependencyScratch
                 );
             }
-            return candidates;
+            return candidates.toEvaluation();
         }
 
-        List<CandidateScore> candidates = new ArrayList<>();
         for (int recipeIndex = allowed.nextSetBit(0); recipeIndex >= 0; recipeIndex = allowed.nextSetBit(recipeIndex + 1)) {
-            if (candidateBudgetReached(context)) {
+            if (candidateBudgetReached(context, parentNode, input, remaining, depth, rootInput)) {
                 break;
             }
             RecipeGraph.Node node = context.catalog().nodeAt(recipeIndex);
@@ -720,24 +895,52 @@ public final class StandardPlanner implements RoutePlanner {
                 remaining,
                 depth,
                 activePath,
+                activeDemands,
                 ledger,
                 node,
                 recipeIndex,
                 matchedOutput,
-                candidates
+                candidates,
+                scoringScratch,
+                dependencyScratch
             );
         }
-        return candidates;
+        return candidates.toEvaluation();
     }
 
-    private boolean candidateBudgetReached(PlannerContext context) {
+    private boolean candidateBudgetReached(
+        PlannerContext context,
+        RecipeGraph.Node parentNode,
+        InputContent input,
+        long remaining,
+        int depth
+    ) {
         PlannerContext.Counters counters = context.counters();
         if (counters.generatedCandidates < context.request().budget().maxGeneratedCandidates()) {
             return false;
         }
         counters.budgetExhausted = true;
         counters.budgetStopReason = "maxGeneratedCandidates";
+        recordBudgetCulprit(context, parentNode, input, remaining, depth, false);
         return true;
+    }
+
+    private boolean candidateBudgetReached(
+        PlannerContext context,
+        RecipeGraph.Node parentNode,
+        InputContent input,
+        long remaining,
+        int depth,
+        boolean rootInput
+    ) {
+        if (rootInputBudgetExceeded(context, context.counters())) {
+            PlannerContext.Counters counters = context.counters();
+            counters.budgetExhausted = true;
+            counters.budgetStopReason = "maxRootInputBudget";
+            recordBudgetCulprit(context, parentNode, input, remaining, depth, false);
+            return true;
+        }
+        return candidateBudgetReached(context, parentNode, input, remaining, depth);
     }
 
     private void addCandidateIfAccepted(
@@ -746,11 +949,14 @@ public final class StandardPlanner implements RoutePlanner {
         long remaining,
         int depth,
         Int2IntOpenHashMap activePath,
+        ArrayDeque<InputContent> activeDemands,
         ResourceLedger ledger,
         RecipeGraph.Node node,
         int recipeIndex,
         @Nullable OutputContent matchedOutput,
-        List<CandidateScore> candidates
+        CandidateShortlist candidates,
+        ScoringScratch scoringScratch,
+        ActiveDemandDependencyScratch dependencyScratch
     ) {
         if (matchedOutput == null || matchedOutput.amount() <= 0) {
             return;
@@ -779,49 +985,171 @@ public final class StandardPlanner implements RoutePlanner {
             }
             return;
         }
-        context.counters().generatedCandidates++;
-        markCandidateBudgetIfReached(context);
-
-        RuleProfile profile = context.ruleProfile();
         int craftTimes = (int) Math.ceil((double) remaining / matchedOutput.amount());
-        boolean cycleCandidate = isActive(activePath, recipeIndex);
-        int sccId = context.sccAnalysis().sccOf(recipeIndex);
-        double amplificationRisk = estimateAmplificationRisk(context, cycleCandidate, sccId, depth);
-        double availableCoverage = estimateCandidateAvailableCoverage(node, craftTimes, ledger);
-        CandidateContext candidateContext = new CandidateContext(
-            node,
-            input,
-            remaining,
-            craftTimes,
-            depth,
-            cycleCandidate,
-            amplificationRisk,
-            availableCoverage
-        );
-
-        HardRuleResult hardResult = evaluateHardRules(profile.hardRules(), candidateContext);
-        if (!hardResult.accepted()) {
+        if (context.request().loopPolicy() == LoopPolicy.forbidAmplification
+            && candidateRequiresActiveDemand(node, activeDemands)) {
+            candidates.markActiveCycleCandidate();
             if (logger.isDebugEnabled()) {
                 logger.debug(
-                    "planner.candidate.filtered reason=hardRule recipe={} input={} remaining={} depth={} risk={} coverage={}",
+                    "planner.candidate.filtered reason=activeDemandCycle recipe={} input={} depth={}",
                     describeRecipe(node.recipe()),
                     describeInput(input),
-                    remaining,
-                    depth,
-                    amplificationRisk,
-                    availableCoverage
+                    depth
                 );
             }
             return;
         }
-        context.counters().acceptedCandidates++;
-        double[] score = profile.newScoreVector();
-        var accumulator = profile.newAccumulator(score);
-        for (var rule : profile.scoreRules()) {
-            rule.contribute(candidateContext, accumulator);
+        boolean indirectActiveDemandCycle = context.request().loopPolicy() == LoopPolicy.forbidAmplification
+            && candidateHasUncoveredActiveDemandDependency(
+                context,
+                node,
+                craftTimes,
+                activeDemands,
+                ledger,
+                dependencyScratch
+            );
+        if (indirectActiveDemandCycle) {
+            candidates.markActiveCycleCandidate();
+            if (logger.isDebugEnabled()) {
+                logger.debug(
+                    "planner.candidate.penalized reason=indirectActiveDemandCycle recipe={} input={} depth={}",
+                    describeRecipe(node.recipe()),
+                    describeInput(input),
+                    depth
+                );
+            }
         }
-        applyHeuristicScore(node.routingHints(), accumulator);
-        candidates.add(new CandidateScore(recipeIndex, node, craftTimes, score, candidateContext, amplificationRisk, matchedVariantIndex));
+        context.counters().generatedCandidates++;
+
+        RuleProfile profile = context.ruleProfile();
+        boolean cycleCandidate = isActive(activePath, recipeIndex);
+        markCandidateBudgetIfReached(context, node, input, remaining, depth, cycleCandidate, context.counters().activeRootInputIndex >= 0);
+        double amplificationRisk = estimateAmplificationRisk(cycleCandidate, depth);
+        double availableCoverage = estimateCandidateAvailableCoverage(node, craftTimes, ledger);
+        boolean fastScoring = useFastScoring(context, profile);
+        double[] score = scoringScratch.clear();
+        CandidateContext candidateContext = null;
+        if (fastScoring) {
+            if (!fastHardRulesAccept(node)) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug(
+                        "planner.candidate.filtered reason=hardRule recipe={} input={} remaining={} depth={} risk={} coverage={}",
+                        describeRecipe(node.recipe()),
+                        describeInput(input),
+                        remaining,
+                        depth,
+                        amplificationRisk,
+                        availableCoverage
+                    );
+                }
+                return;
+            }
+            applyFastScore(profile.fastScoringPreset(), node, craftTimes, depth, amplificationRisk, availableCoverage, score);
+            applyIndirectActiveDemandCyclePenalty(indirectActiveDemandCycle, score);
+        } else {
+            candidateContext = new CandidateContext(
+                node,
+                input,
+                remaining,
+                craftTimes,
+                depth,
+                cycleCandidate,
+                amplificationRisk,
+                availableCoverage
+            );
+            HardRuleResult hardResult = evaluateHardRules(profile.hardRules(), candidateContext);
+            if (!hardResult.accepted()) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug(
+                        "planner.candidate.filtered reason=hardRule recipe={} input={} remaining={} depth={} risk={} coverage={}",
+                        describeRecipe(node.recipe()),
+                        describeInput(input),
+                        remaining,
+                        depth,
+                        amplificationRisk,
+                        availableCoverage
+                    );
+                }
+                return;
+            }
+            var accumulator = scoringScratch.accumulator();
+            for (var rule : profile.scoreRules()) {
+                rule.contribute(candidateContext, accumulator);
+            }
+            applyHeuristicScore(node.routingHints(), accumulator);
+            applyIndirectActiveDemandCyclePenalty(indirectActiveDemandCycle, accumulator);
+        }
+        context.counters().acceptedCandidates++;
+        candidates.add(
+            recipeIndex,
+            node,
+            craftTimes,
+            score,
+            candidateContext,
+            cycleCandidate,
+            amplificationRisk,
+            matchedVariantIndex,
+            context.catalog().stableRecipeKey(recipeIndex)
+        );
+    }
+
+    private boolean useFastScoring(PlannerContext context, RuleProfile profile) {
+        return profile.fastScoringPreset() != null
+            && DefaultRuleProfiles.usesStableRecipeTieBreak(profile)
+            && !context.request().explorationEnabled();
+    }
+
+    private boolean fastHardRulesAccept(RecipeGraph.Node node) {
+        for (int inputIndex = 0; inputIndex < node.inputCount(); inputIndex++) {
+            if (!node.inputAt(inputIndex).constantly()) {
+                return false;
+            }
+        }
+        for (int outputIndex = 0; outputIndex < node.outputCount(); outputIndex++) {
+            if (!node.outputAt(outputIndex).constantly()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void applyFastScore(
+        @Nullable FastScoringPreset preset,
+        RecipeGraph.Node node,
+        int craftTimes,
+        int depth,
+        double amplificationRisk,
+        double availableCoverage,
+        double[] score
+    ) {
+        if (score.length < 4) {
+            return;
+        }
+        double craftScore = craftTimes + heuristicCraftPenalty(node.routingHints());
+        score[0] = craftScore;
+        score[1] = 1.0d - availableCoverage;
+        if (preset == FastScoringPreset.assuredBounded) {
+            score[2] = depth * 0.8d;
+            score[3] = amplificationRisk * 1.2d;
+            return;
+        }
+        score[2] = depth;
+        score[3] = amplificationRisk;
+    }
+
+    private void applyIndirectActiveDemandCyclePenalty(boolean indirectActiveDemandCycle, double[] score) {
+        if (indirectActiveDemandCycle && score.length > 0) {
+            score[0] += indirectActiveDemandCyclePenalty;
+        }
+    }
+
+    private void applyIndirectActiveDemandCyclePenalty(
+        boolean indirectActiveDemandCycle,
+        dev.vfyjxf.cirrus.api.recipe.routing.rule.ScoreAccumulator accumulator
+    ) {
+        if (indirectActiveDemandCycle) {
+            accumulator.add("craft", indirectActiveDemandCyclePenalty);
+        }
     }
 
     private boolean heuristicAllowsCandidate(RoutingRequest request, RecipeGraph.Node node) {
@@ -843,39 +1171,61 @@ public final class StandardPlanner implements RoutePlanner {
         RecipeRoutingHints hints,
         dev.vfyjxf.cirrus.api.recipe.routing.rule.ScoreAccumulator accumulator
     ) {
+        int penalty = heuristicCraftPenalty(hints);
+        if (penalty > 0) {
+            accumulator.add("craft", penalty);
+        }
+    }
+
+    private int heuristicCraftPenalty(RecipeRoutingHints hints) {
         int penalty = hints.penalty();
         if (hints.usePolicy() == RecipeUsePolicy.discouraged) {
             penalty += 1_000;
         } else if (hints.usePolicy() == RecipeUsePolicy.lastResort) {
             penalty += 50_000;
         }
-        if (penalty > 0) {
-            accumulator.add("craft", penalty);
-        }
+        return penalty;
     }
 
-    private void markCandidateBudgetIfReached(PlannerContext context) {
+    private void markCandidateBudgetIfReached(
+        PlannerContext context,
+        RecipeGraph.Node node,
+        InputContent input,
+        long remaining,
+        int depth,
+        boolean cycleCandidate,
+        boolean rootInput
+    ) {
         PlannerContext.Counters counters = context.counters();
         if (counters.generatedCandidates >= context.request().budget().maxGeneratedCandidates()) {
             counters.budgetExhausted = true;
             counters.budgetStopReason = "maxGeneratedCandidates";
+            recordBudgetCulprit(context, node, input, remaining, depth, cycleCandidate);
+        }
+        if (rootInput && rootInputBudgetExceeded(context, counters)) {
+            counters.budgetExhausted = true;
+            counters.budgetStopReason = "maxRootInputBudget";
+            recordBudgetCulprit(context, node, input, remaining, depth, cycleCandidate);
         }
     }
 
-    private ObjectSet<RecipeGraph.OutputRef> indexedProducerRefs(RecipeGraph graph, InputContent input) {
+    private ProducerRefIterator indexedProducerRefs(RecipeGraph graph, InputContent input) {
         ContentResource direct = directInputResource(input);
         if (direct != null) {
-            return graph.producersFor(direct);
+            return new CursorProducerRefIterator(graph.producerCursorFor(direct));
         }
         if (!input.isEnumerable()) {
-            return it.unimi.dsi.fastutil.objects.ObjectSets.emptySet();
+            return EmptyProducerRefIterator.instance;
         }
 
-        ObjectOpenHashSet<RecipeGraph.OutputRef> refs = new ObjectOpenHashSet<>();
+        LongOpenHashSet refs = new LongOpenHashSet();
         for (ContentVariant variant : input.enumerate()) {
-            refs.addAll(graph.producersFor(variant));
+            RecipeGraph.OutputRefCursor cursor = graph.producerCursorFor(variant);
+            while (cursor.next()) {
+                refs.add(packProducerRef(cursor.recipeIndex(), cursor.outputIndex()));
+            }
         }
-        return refs;
+        return refs.isEmpty() ? EmptyProducerRefIterator.instance : new SetProducerRefIterator(refs);
     }
 
     private @Nullable ContentResource directInputResource(InputContent input) {
@@ -892,10 +1242,23 @@ public final class StandardPlanner implements RoutePlanner {
         return input instanceof ComplexContent && !input.isEnumerable();
     }
 
+    private static long packProducerRef(int recipeIndex, int outputIndex) {
+        return ((long) recipeIndex << 32) | (outputIndex & 0xFFFF_FFFFL);
+    }
+
+    private static int producerRecipeIndex(long ref) {
+        return (int) (ref >>> 32);
+    }
+
+    private static int producerOutputIndex(long ref) {
+        return (int) ref;
+    }
+
     private double estimateCandidateAvailableCoverage(RecipeGraph.Node node, int craftTimes, ResourceLedger ledger) {
         double totalRequired = 0.0d;
         double totalCovered = 0.0d;
-        for (InputContent input : node.mergedInputs()) {
+        for (int inputIndex = 0; inputIndex < node.inputCount(); inputIndex++) {
+            InputContent input = node.inputAt(inputIndex);
             long required = requiredCandidateInputAmount(input, craftTimes);
             if (required <= 0L) {
                 continue;
@@ -919,10 +1282,14 @@ public final class StandardPlanner implements RoutePlanner {
     }
 
     private Comparator<CandidateScore> candidateComparator(RuleProfile profile) {
+        boolean defaultStableTieBreak = DefaultRuleProfiles.usesStableRecipeTieBreak(profile);
         return (left, right) -> {
             int cmp = profile.rankPolicy().compare(left.score, right.score);
             if (cmp != 0) {
                 return cmp;
+            }
+            if (defaultStableTieBreak) {
+                return left.stableKey.compareTo(right.stableKey);
             }
             return profile.tieBreakPolicy().compare(left.context, right.context);
         };
@@ -1037,13 +1404,14 @@ public final class StandardPlanner implements RoutePlanner {
         long amount,
         UnresolvedInputContext.Phase phase,
         boolean activeCycleCandidate,
+        boolean budgetLimited,
         ResourceLedger ledger,
         PlanBuilder planBuilder,
         MutableList<RoutingIssue> issues,
         AtomicInteger issueSeq
     ) {
         UnresolvedInputRule.Resolution resolution = context.ruleProfile().unresolvedInputRule().resolve(
-            new UnresolvedInputContext(recipe, input, amount, phase, activeCycleCandidate)
+            new UnresolvedInputContext(recipe, input, amount, phase, activeCycleCandidate, budgetLimited)
         );
         if (resolution != UnresolvedInputRule.Resolution.pendingInput) {
             return false;
@@ -1091,6 +1459,27 @@ public final class StandardPlanner implements RoutePlanner {
             case assuredBounded, assuredProven -> boundedWindow;
         };
         return Math.min(candidateCount, Math.max(1, modeWindow));
+    }
+
+    private int candidateShortlistLimit(PlannerContext context) {
+        RuleProfile profile = context.ruleProfile();
+        int shortlist = Math.max(1, profile.shortlistK());
+        int rollbackWindow = Math.max(1, profile.rollbackWidth() + 1);
+        return switch (context.request().plannerMode()) {
+            case standard -> Math.min(shortlist, rollbackWindow);
+            case assuredBounded, assuredProven -> Math.max(shortlist, rollbackWindow);
+        };
+    }
+
+    private int enumerableVariantCount(InputContent input) {
+        if (!input.isEnumerable()) {
+            return 0;
+        }
+        int count = 0;
+        for (ContentVariant ignored : input.enumerate()) {
+            count++;
+        }
+        return count;
     }
 
     /**
@@ -1199,6 +1588,9 @@ public final class StandardPlanner implements RoutePlanner {
     ) {
         if (!input.isEnumerable()) {
             return ledger.consumeDemand(input, required, planBuilder);
+        }
+        if (input instanceof ValueContent<?> value) {
+            return required - ledger.consumeValueDemand(input, value.type(), required, planBuilder);
         }
 
         List<VariantCoverage> ordered = collectOrderedVariantCoverage(
@@ -1420,6 +1812,232 @@ public final class StandardPlanner implements RoutePlanner {
         };
     }
 
+    private boolean candidateRequiresActiveDemand(RecipeGraph.Node node, ArrayDeque<InputContent> activeDemands) {
+        if (activeDemands.isEmpty()) {
+            return false;
+        }
+        for (InputContent demand : activeDemands) {
+            for (int inputIndex = 0; inputIndex < node.inputCount(); inputIndex++) {
+                InputContent candidateInput = node.inputAt(inputIndex);
+                if (inputOverlapsDemand(candidateInput, demand)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean candidateHasUncoveredActiveDemandDependency(
+        PlannerContext context,
+        RecipeGraph.Node node,
+        int craftTimes,
+        ArrayDeque<InputContent> activeDemands,
+        ResourceLedger ledger,
+        ActiveDemandDependencyScratch scratch
+    ) {
+        if (activeDemands.isEmpty()) {
+            return false;
+        }
+        for (int inputIndex = 0; inputIndex < node.inputCount(); inputIndex++) {
+            InputContent candidateInput = node.inputAt(inputIndex);
+            if (candidateInput.isEmpty() || candidateInput.notConsumed()) {
+                continue;
+            }
+            long required = requiredCandidateInputAmount(candidateInput, craftTimes);
+            if (required <= 0L || ledger.peekAvailable(candidateInput) >= required) {
+                continue;
+            }
+            if (inputCanReachActiveDemand(context, candidateInput, activeDemands, scratch)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean inputCanReachActiveDemand(
+        PlannerContext context,
+        InputContent rootInput,
+        ArrayDeque<InputContent> activeDemands,
+        ActiveDemandDependencyScratch scratch
+    ) {
+        scratch.reset();
+        if (inputOverlapsAnyActiveDemand(rootInput, activeDemands)) {
+            return true;
+        }
+        pushProducerRefs(context, rootInput, scratch);
+        while (!scratch.isEmpty()
+            && scratch.visitedNodes < activeDemandDependencyNodeLimit
+            && scratch.producerRefsVisited < activeDemandDependencyProducerLimit) {
+            int recipeIndex = scratch.pop();
+            if (!scratch.markVisited(recipeIndex)) {
+                continue;
+            }
+            RecipeGraph.Node node = context.catalog().nodeAt(recipeIndex);
+            scratch.visitedNodes++;
+            for (int inputIndex = 0; inputIndex < node.inputCount(); inputIndex++) {
+                InputContent input = node.inputAt(inputIndex);
+                if (input.isEmpty() || input.notConsumed()) {
+                    continue;
+                }
+                if (inputOverlapsAnyActiveDemand(input, activeDemands)) {
+                    return true;
+                }
+                pushProducerRefs(context, input, scratch);
+            }
+        }
+        return false;
+    }
+
+    private void pushProducerRefs(
+        PlannerContext context,
+        InputContent input,
+        ActiveDemandDependencyScratch scratch
+    ) {
+        ProducerRefIterator producerRefs = indexedProducerRefs(context.graph(), input);
+        while (producerRefs.next() && scratch.producerRefsVisited < activeDemandDependencyProducerLimit) {
+            scratch.producerRefsVisited++;
+            int recipeIndex = producerRefs.recipeIndex();
+            if (!context.sourcePolicyDecision().allowedRecipes().get(recipeIndex)) {
+                continue;
+            }
+            if (scratch.isUnseen(recipeIndex)) {
+                scratch.push(recipeIndex);
+            }
+        }
+    }
+
+    private boolean inputOverlapsAnyActiveDemand(InputContent input, ArrayDeque<InputContent> activeDemands) {
+        for (InputContent demand : activeDemands) {
+            if (inputOverlapsDemand(input, demand)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean inputOverlapsDemand(InputContent input, InputContent demand) {
+        if (input.isEmpty() || input.notConsumed()) {
+            return false;
+        }
+        if (input.mergeable(demand)) {
+            return true;
+        }
+        if (input.isEnumerable()) {
+            if (!demand.isEnumerable()) {
+                ContentResource demandResource = directInputResource(demand);
+                return demandResource != null && input.satisfy(demandResource);
+            }
+            for (ContentVariant demandVariant : demand.enumerate()) {
+                if (variantSatisfiesInput(input, demandVariant)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (demand.isEnumerable()) {
+            for (ContentVariant demandVariant : demand.enumerate()) {
+                if (variantSatisfiesInput(input, demandVariant)) {
+                    return true;
+                }
+                if (demandVariant instanceof ContentResource resource && input.satisfy(resource)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        ContentResource demandResource = directInputResource(demand);
+        return demandResource != null && input.satisfy(demandResource);
+    }
+
+    private boolean variantSatisfiesInput(InputContent input, ContentVariant variant) {
+        if (variant instanceof ContentResource resource) {
+            ContentResource direct = directInputResource(input);
+            if (direct != null) {
+                return direct.matches(resource, MatchStrategy.identityAndComponent)
+                    || resource.matches(direct, MatchStrategy.identityAndComponent);
+            }
+            return input.satisfy(resource);
+        }
+        if (!input.isEnumerable()) {
+            return false;
+        }
+        for (ContentVariant inputVariant : input.enumerate()) {
+            if (variantsOverlap(inputVariant, variant)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static final class ActiveDemandDependencyScratch {
+        private static final byte stateUnknown = 0;
+        private static final byte stateSeen = 1;
+
+        private final Int2ByteOpenHashMap stateByRecipe = new Int2ByteOpenHashMap();
+        private int[] stack = new int[32];
+        private int stackSize;
+        private int visitedNodes;
+        private int producerRefsVisited;
+
+        private ActiveDemandDependencyScratch() {
+            stateByRecipe.defaultReturnValue(stateUnknown);
+        }
+
+        private void reset() {
+            stateByRecipe.clear();
+            stackSize = 0;
+            visitedNodes = 0;
+            producerRefsVisited = 0;
+        }
+
+        private void push(int recipeIndex) {
+            if (stackSize == stack.length) {
+                stack = Arrays.copyOf(stack, stack.length * 2);
+            }
+            stack[stackSize++] = recipeIndex;
+        }
+
+        private boolean isUnseen(int recipeIndex) {
+            return stateByRecipe.get(recipeIndex) == stateUnknown;
+        }
+
+        private boolean markVisited(int recipeIndex) {
+            if (stateByRecipe.get(recipeIndex) == stateSeen) {
+                return false;
+            }
+            stateByRecipe.put(recipeIndex, stateSeen);
+            return true;
+        }
+
+        private int pop() {
+            return stack[--stackSize];
+        }
+
+        private boolean isEmpty() {
+            return stackSize == 0;
+        }
+    }
+
+    private boolean variantsOverlap(ContentVariant left, ContentVariant right) {
+        if (left instanceof ContentResource leftResource && right instanceof ContentResource rightResource) {
+            return leftResource.matches(rightResource, MatchStrategy.identityAndComponent)
+                || rightResource.matches(leftResource, MatchStrategy.identityAndComponent);
+        }
+        if (left instanceof ContentKind<?> leftKind && right instanceof ContentKind<?> rightKind) {
+            return leftKind.matches(rightKind);
+        }
+        if (left instanceof ContentKind<?> leftKind && right instanceof ContentStack<?, ?> rightStack) {
+            return rightStack.matchesContent(leftKind);
+        }
+        if (right instanceof ContentKind<?> rightKind && left instanceof ContentStack<?, ?> leftStack) {
+            return leftStack.matchesContent(rightKind);
+        }
+        if (left instanceof ContentValue<?> leftValue && right instanceof ContentValue<?> rightValue) {
+            return leftValue.matches(rightValue);
+        }
+        return Objects.equals(RoutingVariantKeys.variantKey(left), RoutingVariantKeys.variantKey(right));
+    }
+
     private String variantStableKey(ContentVariant variant) {
         return RoutingVariantKeys.variantKey(variant);
     }
@@ -1435,7 +2053,8 @@ public final class StandardPlanner implements RoutePlanner {
     }
 
     private OutputContent findMatchedOutput(RecipeGraph.Node node, InputContent input) {
-        for (OutputContent output : node.mergedOutputs()) {
+        for (int outputIndex = 0; outputIndex < node.outputCount(); outputIndex++) {
+            OutputContent output = node.outputAt(outputIndex);
             if (input.satisfy(output.asResource())) {
                 return output;
             }
@@ -1450,7 +2069,78 @@ public final class StandardPlanner implements RoutePlanner {
             counters.budgetStopReason = "maxExpandedNodes";
             return true;
         }
+        if (rootInputBudgetExceeded(context, counters)) {
+            counters.budgetExhausted = true;
+            counters.budgetStopReason = "maxRootInputBudget";
+            return true;
+        }
         return false;
+    }
+
+    private boolean rootInputBudgetExceeded(PlannerContext context, PlannerContext.Counters counters) {
+        if (counters.activeRootInputIndex < 0) {
+            return false;
+        }
+        int maxExpanded = context.request().budget().maxRootInputExpandedNodes();
+        if (maxExpanded > 0 && counters.expandedNodes - counters.rootInputExpandedStart >= maxExpanded) {
+            return true;
+        }
+        int maxGenerated = context.request().budget().maxRootInputGeneratedCandidates();
+        return maxGenerated > 0 && counters.generatedCandidates - counters.rootInputGeneratedStart >= maxGenerated;
+    }
+
+    private void recordBudgetCulprit(
+        PlannerContext context,
+        ArrayList<PlanningFrame> stack,
+        PlanningFrame frame,
+        Int2IntOpenHashMap activePath
+    ) {
+        PlannerContext.Counters counters = context.counters();
+        if (!"none".equals(counters.budgetCulpritRecipe)) {
+            return;
+        }
+        PlanningFrame parent = stack.size() >= 2 ? stack.get(stack.size() - 2) : null;
+        InputContent input = parent == null ? frame.activeInput : parent.activeInput;
+        long remaining = parent == null ? frame.remaining : parent.remaining;
+        counters.recordBudgetCulprit(
+            describeRecipe(frame.recipeNode.recipe()),
+            input == null ? "none" : describeInput(input),
+            frame.depth,
+            Math.max(0L, remaining),
+            isActive(activePath, frame.recipeIndex)
+        );
+    }
+
+    private void recordBudgetCulprit(
+        PlannerContext context,
+        RecipeGraph.Node recipeNode,
+        InputContent input,
+        long remaining,
+        int depth,
+        boolean activeCycleCandidate
+    ) {
+        PlannerContext.Counters counters = context.counters();
+        if (!"none".equals(counters.budgetCulpritRecipe)) {
+            return;
+        }
+        counters.recordBudgetCulprit(
+            describeRecipe(recipeNode.recipe()),
+            describeInput(input),
+            depth,
+            Math.max(0L, remaining),
+            activeCycleCandidate
+        );
+    }
+
+    private RoutingIssuePayload budgetIssuePayload(PlannerContext.Counters counters) {
+        return new RoutingIssuePayload.BudgetExhaustion(
+            counters.budgetStopReason,
+            counters.budgetCulpritRecipe,
+            counters.budgetCulpritInput,
+            counters.budgetCulpritDepth,
+            counters.budgetCulpritRemaining,
+            counters.budgetCulpritActiveCycle
+        );
     }
 
     private String visibleIssueRecipe(PlannerContext context, RecipeEntry<?> fallbackRecipe) {
@@ -1474,15 +2164,6 @@ public final class StandardPlanner implements RoutePlanner {
         }
     }
 
-    private static boolean hasActiveCycleCandidate(List<CandidateScore> candidates) {
-        for (CandidateScore candidate : candidates) {
-            if (candidate.context().cycleCandidate()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private @Nullable Boolean completeFrame(
         ArrayList<PlanningFrame> stack,
         boolean success,
@@ -1499,13 +2180,10 @@ public final class StandardPlanner implements RoutePlanner {
         return null;
     }
 
-    private double estimateAmplificationRisk(PlannerContext context, boolean cycleCandidate, int sccId, int depth) {
+    private double estimateAmplificationRisk(boolean cycleCandidate, int depth) {
         double risk = 0.05 + Math.min(depth, 20) * 0.02;
         if (cycleCandidate) {
             risk += 0.45;
-        }
-        if (context.sccAnalysis().isCyclicScc(sccId)) {
-            risk += 0.25;
         }
         return Math.min(1.0, risk);
     }
@@ -1562,6 +2240,11 @@ public final class StandardPlanner implements RoutePlanner {
             true,
             Lists.immutable.empty(),
             context.counters().budgetStopReason,
+            context.counters().budgetCulpritRecipe,
+            context.counters().budgetCulpritInput,
+            context.counters().budgetCulpritDepth,
+            context.counters().budgetCulpritRemaining,
+            context.counters().budgetCulpritActiveCycle,
             context.counters().explorationBranchesExpanded,
             context.counters().explorationBudgetUsed,
             context.request().explorationSeed() == null ? 0 : context.request().explorationSeed(),
@@ -1646,24 +2329,302 @@ public final class StandardPlanner implements RoutePlanner {
         RecipeGraph.Node node,
         int craftTimes,
         double[] score,
-        CandidateContext context,
+        @Nullable CandidateContext context,
+        boolean cycleCandidate,
         double amplificationRisk,
-        int matchedVariantIndex
+        int matchedVariantIndex,
+        RoutingRecipeCatalog.StableRecipeKey stableKey
     ) {
+    }
+
+    private record CandidateEvaluation(
+        List<CandidateScore> candidates,
+        boolean hasActiveCycleCandidate
+    ) {
+    }
+
+    private static final class ScoringScratch {
+        private final double[] score;
+        private final dev.vfyjxf.cirrus.api.recipe.routing.rule.ScoreAccumulator accumulator;
+
+        private ScoringScratch(RuleProfile profile) {
+            this.score = profile.newScoreVector();
+            this.accumulator = profile.newAccumulator(score);
+        }
+
+        private double[] clear() {
+            Arrays.fill(score, 0.0d);
+            return score;
+        }
+
+        private dev.vfyjxf.cirrus.api.recipe.routing.rule.ScoreAccumulator accumulator() {
+            return accumulator;
+        }
+    }
+
+    private interface ProducerRefIterator {
+        boolean next();
+
+        int recipeIndex();
+
+        int outputIndex();
+    }
+
+    private enum EmptyProducerRefIterator implements ProducerRefIterator {
+        instance;
+
+        @Override
+        public boolean next() {
+            return false;
+        }
+
+        @Override
+        public int recipeIndex() {
+            throw new NoSuchElementException();
+        }
+
+        @Override
+        public int outputIndex() {
+            throw new NoSuchElementException();
+        }
+    }
+
+    private static final class CursorProducerRefIterator implements ProducerRefIterator {
+        private final RecipeGraph.OutputRefCursor cursor;
+
+        private CursorProducerRefIterator(RecipeGraph.OutputRefCursor cursor) {
+            this.cursor = cursor;
+        }
+
+        @Override
+        public boolean next() {
+            return cursor.next();
+        }
+
+        @Override
+        public int recipeIndex() {
+            return cursor.recipeIndex();
+        }
+
+        @Override
+        public int outputIndex() {
+            return cursor.outputIndex();
+        }
+    }
+
+    private static final class SetProducerRefIterator implements ProducerRefIterator {
+        private final LongIterator iterator;
+        private long current;
+
+        private SetProducerRefIterator(LongOpenHashSet refs) {
+            this.iterator = refs.iterator();
+        }
+
+        @Override
+        public boolean next() {
+            if (!iterator.hasNext()) {
+                return false;
+            }
+            current = iterator.nextLong();
+            return true;
+        }
+
+        @Override
+        public int recipeIndex() {
+            return producerRecipeIndex(current);
+        }
+
+        @Override
+        public int outputIndex() {
+            return producerOutputIndex(current);
+        }
+    }
+
+    private static final class CandidateShortlist {
+        private final int limit;
+        private final Comparator<CandidateScore> comparator;
+        private final ArrayList<CandidateScore> candidates;
+        private final @Nullable ArrayList<CandidateScore> bestByVariant;
+        private boolean hasActiveCycleCandidate;
+
+        private CandidateShortlist(int limit, Comparator<CandidateScore> comparator, int variantCount) {
+            this.limit = Math.max(1, limit);
+            this.comparator = comparator;
+            this.candidates = new ArrayList<>(this.limit);
+            this.bestByVariant = variantCount > 0 ? new ArrayList<>(variantCount) : null;
+            if (this.bestByVariant != null) {
+                for (int i = 0; i < variantCount; i++) {
+                    this.bestByVariant.add(null);
+                }
+            }
+        }
+
+        private void add(
+            int recipeIndex,
+            RecipeGraph.Node node,
+            int craftTimes,
+            double[] scratchScore,
+            @Nullable CandidateContext context,
+            boolean cycleCandidate,
+            double amplificationRisk,
+            int matchedVariantIndex,
+            RoutingRecipeCatalog.StableRecipeKey stableKey
+        ) {
+            if (cycleCandidate) {
+                hasActiveCycleCandidate = true;
+            }
+            CandidateScore candidate = null;
+            boolean retained = candidates.size() < limit;
+            int replaceIndex = -1;
+            if (!retained && limit > 0) {
+                int worstIndex = 0;
+                CandidateScore worst = candidates.getFirst();
+                for (int i = 1; i < candidates.size(); i++) {
+                    CandidateScore current = candidates.get(i);
+                    if (comparator.compare(current, worst) > 0) {
+                        worst = current;
+                        worstIndex = i;
+                    }
+                }
+                CandidateScore scratchCandidate = new CandidateScore(
+                    recipeIndex,
+                    node,
+                    craftTimes,
+                    scratchScore,
+                    context,
+                    cycleCandidate,
+                    amplificationRisk,
+                    matchedVariantIndex,
+                    stableKey
+                );
+                if (comparator.compare(scratchCandidate, worst) < 0) {
+                    retained = true;
+                    replaceIndex = worstIndex;
+                }
+            }
+            boolean retainedByVariant = false;
+            if (bestByVariant != null && matchedVariantIndex >= 0 && matchedVariantIndex < bestByVariant.size()) {
+                CandidateScore existing = bestByVariant.get(matchedVariantIndex);
+                if (existing == null) {
+                    retainedByVariant = true;
+                } else {
+                    CandidateScore scratchCandidate = new CandidateScore(
+                        recipeIndex,
+                        node,
+                        craftTimes,
+                        scratchScore,
+                        context,
+                        cycleCandidate,
+                        amplificationRisk,
+                        matchedVariantIndex,
+                        stableKey
+                    );
+                    retainedByVariant = comparator.compare(scratchCandidate, existing) < 0;
+                }
+            }
+            if (retained || retainedByVariant) {
+                candidate = new CandidateScore(
+                    recipeIndex,
+                    node,
+                    craftTimes,
+                    Arrays.copyOf(scratchScore, scratchScore.length),
+                    context,
+                    cycleCandidate,
+                    amplificationRisk,
+                    matchedVariantIndex,
+                    stableKey
+                );
+            }
+            if (candidate == null) {
+                return;
+            }
+            if (bestByVariant != null && candidate.matchedVariantIndex() >= 0) {
+                int variantIndex = candidate.matchedVariantIndex();
+                if (variantIndex < bestByVariant.size()) {
+                    CandidateScore existing = bestByVariant.get(variantIndex);
+                    if (existing == null || comparator.compare(candidate, existing) < 0) {
+                        bestByVariant.set(variantIndex, candidate);
+                    }
+                }
+            }
+            if (!retained) {
+                return;
+            }
+            if (replaceIndex >= 0) {
+                candidates.set(replaceIndex, candidate);
+                return;
+            }
+            if (candidates.size() < limit) {
+                candidates.add(candidate);
+            }
+        }
+
+        private void markActiveCycleCandidate() {
+            hasActiveCycleCandidate = true;
+        }
+
+        private CandidateEvaluation toEvaluation() {
+            if (bestByVariant != null) {
+                for (CandidateScore candidate : bestByVariant) {
+                    if (candidate != null) {
+                        addRetainedVariantCandidate(candidate);
+                    }
+                }
+            }
+            if (candidates.size() <= 1) {
+                return new CandidateEvaluation(candidates, hasActiveCycleCandidate);
+            }
+            candidates.sort(comparator);
+            return new CandidateEvaluation(candidates, hasActiveCycleCandidate);
+        }
+
+        private void addRetainedVariantCandidate(CandidateScore candidate) {
+            for (CandidateScore existing : candidates) {
+                if (existing == candidate) {
+                    return;
+                }
+            }
+            candidates.add(candidate);
+        }
     }
 
     private static final class PlannerDebugLog {
         private int count;
         private boolean omitted;
 
-        private void info(String format, Object... arguments) {
+        private boolean enabled() {
+            return logger.isDebugEnabled();
+        }
+
+        private void debug(String format, Supplier<?>... arguments) {
+            if (!enabled()) {
+                return;
+            }
+            if (!reserveSlot()) {
+                return;
+            }
+            logger.debug(format, evaluate(arguments));
+        }
+
+        private boolean reserveSlot() {
             if (count < detailLogLimit) {
-                logger.info(format, arguments);
-            } else if (!omitted) {
-                logger.info("planner.detail.omitted after={} reason=detailLogLimit", detailLogLimit);
+                count++;
+                return true;
+            }
+            if (!omitted) {
+                logger.debug("planner.detail.omitted after={} reason=detailLogLimit", detailLogLimit);
                 omitted = true;
             }
             count++;
+            return false;
+        }
+
+        private Object[] evaluate(Supplier<?>[] arguments) {
+            Object[] values = new Object[arguments.length];
+            for (int i = 0; i < arguments.length; i++) {
+                values[i] = arguments[i].get();
+            }
+            return values;
         }
     }
 
@@ -1694,11 +2655,7 @@ public final class StandardPlanner implements RoutePlanner {
         private final int recipeIndex;
         private final int times;
         private final int depth;
-        private final ImmutableList<InputContent> mergedInputs;
-        private final List<PlanAction.InputBinding> inputBindings = new ArrayList<>();
-        private final List<PlanAction.OutputBinding> outputBindings = new ArrayList<>();
         private boolean entered;
-        private int activeSccId = -1;
         private int inputIndex;
         private FrameState state = FrameState.entering;
         private @Nullable InputContent activeInput;
@@ -1708,6 +2665,8 @@ public final class StandardPlanner implements RoutePlanner {
         private int candidateAttemptLimit;
         private int candidateAttemptIndex;
         private boolean candidateSetHasActiveCycleCandidate;
+        private boolean rootInput;
+        private boolean rootInputBudgetCut;
         private MutableList<RoutingIssue> candidateIssues = Lists.mutable.empty();
         private @Nullable CandidateRollbackState rollback;
         private boolean lastChildSucceeded;
@@ -1717,7 +2676,6 @@ public final class StandardPlanner implements RoutePlanner {
             this.recipeIndex = recipeIndex;
             this.times = times;
             this.depth = depth;
-            this.mergedInputs = recipeNode.mergedInputs();
         }
 
         private void beginCandidateResolution(
@@ -1725,7 +2683,9 @@ public final class StandardPlanner implements RoutePlanner {
             int inputIndex,
             long remaining,
             List<CandidateScore> candidates,
-            int candidateAttemptLimit
+            int candidateAttemptLimit,
+            boolean candidateSetHasActiveCycleCandidate,
+            boolean rootInput
         ) {
             this.activeInput = input;
             this.activeInputIndex = inputIndex;
@@ -1733,7 +2693,9 @@ public final class StandardPlanner implements RoutePlanner {
             this.candidates = candidates;
             this.candidateAttemptLimit = Math.min(candidates.size(), Math.max(1, candidateAttemptLimit));
             this.candidateAttemptIndex = 0;
-            this.candidateSetHasActiveCycleCandidate = hasActiveCycleCandidate(candidates);
+            this.candidateSetHasActiveCycleCandidate = candidateSetHasActiveCycleCandidate;
+            this.rootInput = rootInput;
+            this.rootInputBudgetCut = false;
             this.candidateIssues = Lists.mutable.empty();
             this.rollback = null;
             this.lastChildSucceeded = false;
@@ -1747,6 +2709,8 @@ public final class StandardPlanner implements RoutePlanner {
             candidateAttemptLimit = 0;
             candidateAttemptIndex = 0;
             candidateSetHasActiveCycleCandidate = false;
+            rootInput = false;
+            rootInputBudgetCut = false;
             candidateIssues = Lists.mutable.empty();
             rollback = null;
             lastChildSucceeded = false;
@@ -1764,18 +2728,51 @@ public final class StandardPlanner implements RoutePlanner {
             return Objects.requireNonNull(rollback, "rollback");
         }
 
+        private ImmutableList<PlanAction.InputBinding> buildInputBindings() {
+            int inputCount = recipeNode.inputCount();
+            if (inputCount == 0) {
+                return Lists.immutable.empty();
+            }
+            var bindings = Lists.mutable.<PlanAction.InputBinding>ofInitialCapacity(inputCount);
+            for (int inputIndex = 0; inputIndex < inputCount; inputIndex++) {
+                InputContent input = recipeNode.inputAt(inputIndex);
+                long required = input.amount() * times;
+                if (required > 0L) {
+                    bindings.add(new PlanAction.InputBinding(input, required));
+                }
+            }
+            return bindings.toImmutable();
+        }
+
+        private ImmutableList<PlanAction.OutputBinding> buildOutputBindings() {
+            int outputCount = recipeNode.outputCount();
+            if (outputCount == 0) {
+                return Lists.immutable.empty();
+            }
+            var bindings = Lists.mutable.<PlanAction.OutputBinding>ofInitialCapacity(outputCount);
+            for (int outputIndex = 0; outputIndex < outputCount; outputIndex++) {
+                OutputContent output = recipeNode.outputAt(outputIndex);
+                long produced = output.amount() * times;
+                if (produced > 0L) {
+                    bindings.add(new PlanAction.OutputBinding(output.asResource(), produced));
+                }
+            }
+            return bindings.toImmutable();
+        }
+
         private void close(Int2IntOpenHashMap activePath, CycleGuard cycleGuard) {
             if (!entered) {
                 return;
             }
             leaveActive(activePath, recipeIndex);
-            cycleGuard.leave(recipeIndex, activeSccId);
+            cycleGuard.leave(recipeIndex);
         }
     }
 
     private record CandidateRollbackState(
-        ResourceLedger ledger,
-        PlanBuilder.Snapshot plan,
+        ResourceLedger.Mark ledgerMark,
+        int planActionCount,
+        int planNextActionId,
         int issueCount,
         int traceCount
     ) {
@@ -1785,10 +2782,14 @@ public final class StandardPlanner implements RoutePlanner {
             MutableList<RoutingIssue> currentIssues,
             MutableList<RoutingTrace.TraceStage> currentTraceStages
         ) {
-            currentLedger.restoreFrom(ledger);
-            currentPlan.restore(plan);
+            currentLedger.rollback(ledgerMark);
+            currentPlan.restore(planActionCount, planNextActionId);
             trimToSize(currentIssues, issueCount);
             trimToSize(currentTraceStages, traceCount);
+        }
+
+        private void commit(ResourceLedger currentLedger) {
+            currentLedger.commit(ledgerMark);
         }
     }
 

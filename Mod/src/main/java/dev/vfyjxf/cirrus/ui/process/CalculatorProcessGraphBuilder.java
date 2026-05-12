@@ -41,7 +41,6 @@ import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MachineInfo;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialSlot;
-import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialType;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
@@ -115,6 +114,11 @@ public final class CalculatorProcessGraphBuilder {
         int acceptedCandidates,
         boolean budgetExhausted,
         String budgetStopReason,
+        String budgetCulpritRecipe,
+        String budgetCulpritInput,
+        int budgetCulpritDepth,
+        long budgetCulpritRemaining,
+        boolean budgetCulpritActiveCycle,
         int graphNodes,
         int graphEdges,
         @Nullable String exception
@@ -136,6 +140,11 @@ public final class CalculatorProcessGraphBuilder {
                 0,
                 false,
                 "none",
+                "none",
+                "none",
+                -1,
+                0,
+                false,
                 0,
                 0,
                 null
@@ -157,6 +166,13 @@ public final class CalculatorProcessGraphBuilder {
                 + " accepted=" + acceptedCandidates
                 + " budgetExhausted=" + budgetExhausted
                 + " budgetStop=" + budgetStopReason
+                + (budgetExhausted
+                ? " budgetCulprit=" + budgetCulpritRecipe
+                    + " input=" + budgetCulpritInput
+                    + " depth=" + budgetCulpritDepth
+                    + " remaining=" + budgetCulpritRemaining
+                    + " activeCycle=" + budgetCulpritActiveCycle
+                : "")
                 + " graph=" + graphNodes + "/" + graphEdges
                 + (routingIssueKeys.isBlank() ? "" : " issues=" + routingIssueKeys)
                 + (exception == null ? "" : " exception=" + exception);
@@ -179,6 +195,11 @@ public final class CalculatorProcessGraphBuilder {
                 acceptedCandidates,
                 budgetExhausted,
                 budgetStopReason,
+                budgetCulpritRecipe,
+                budgetCulpritInput,
+                budgetCulpritDepth,
+                budgetCulpritRemaining,
+                budgetCulpritActiveCycle,
                 graph.nodeCount(),
                 graph.edgeCount(),
                 exception
@@ -368,8 +389,6 @@ public final class CalculatorProcessGraphBuilder {
                 inputs,
                 outputs,
                 durationTicks(outputs),
-                euPerTick(outputs),
-                0,
                 machine.options(),
                 execute.recipe()
             );
@@ -417,9 +436,16 @@ public final class CalculatorProcessGraphBuilder {
             RoutingService service = routingContext.service();
             RuleDefinition calculatorRule = routingContext.rule();
             service.registerRuleDefinition(calculatorRule);
-            RoutingBudget budget = routingBudget(target, times, routingContext.catalog(), routingContext.plannerMode(), routeMode);
+            RoutingBudget budget = routingBudget(
+                target,
+                times,
+                routingContext.catalog(),
+                service,
+                routingContext.plannerMode(),
+                routeMode
+            );
             logger.info(
-                "calculator.route.request target={} times={} mode={} catalog={} planner={} rule={} sourcePolicy={} budgetNodes={} budgetCandidates={} stockEmpty={} preferredVariants={}",
+                "calculator.route.request target={} times={} mode={} catalog={} planner={} rule={} sourcePolicy={} budgetNodes={} budgetCandidates={} rootBudgetNodes={} rootBudgetCandidates={} stockEmpty={} preferredVariants={}",
                 describeRecipe(target),
                 times,
                 routeMode,
@@ -429,6 +455,8 @@ public final class CalculatorProcessGraphBuilder {
                 calculatorRule.sourcePolicy().policyId(),
                 budget.maxExpandedNodes(),
                 budget.maxGeneratedCandidates(),
+                budget.maxRootInputExpandedNodes(),
+                budget.maxRootInputGeneratedCandidates(),
                 stock == null || stock.isEmpty(),
                 preferredVariants == null ? 0 : preferredVariants.size()
             );
@@ -447,7 +475,7 @@ public final class CalculatorProcessGraphBuilder {
                     .build()
             );
             logger.info(
-                "calculator.route.result target={} status={} planActions={} issues={} elapsedMs={} expanded={} generated={} accepted={} budgetExhausted={} budgetStop={}",
+                "calculator.route.result target={} status={} planActions={} issues={} elapsedMs={} expanded={} generated={} accepted={} budgetExhausted={} budgetStop={} budgetCulprit={} budgetInput={} budgetDepth={} budgetRemaining={} budgetCycle={}",
                 describeRecipe(target),
                 outcome.status(),
                 outcome.plan() == null ? 0 : outcome.plan().actions().size(),
@@ -457,7 +485,12 @@ public final class CalculatorProcessGraphBuilder {
                 outcome.metrics().generatedCandidates(),
                 outcome.metrics().acceptedCandidates(),
                 outcome.metrics().budgetExhausted(),
-                outcome.metrics().budgetStopReason()
+                outcome.metrics().budgetStopReason(),
+                outcome.metrics().budgetCulpritRecipe(),
+                outcome.metrics().budgetCulpritInput(),
+                outcome.metrics().budgetCulpritDepth(),
+                outcome.metrics().budgetCulpritRemaining(),
+                outcome.metrics().budgetCulpritActiveCycle()
             );
             return new RouteResult(outcome.plan(), outcome, debugInfo(target, times, routeMode, catalog.recipes().size(), outcome, null));
         } catch (RuntimeException exception) {
@@ -495,6 +528,11 @@ public final class CalculatorProcessGraphBuilder {
             0,
             false,
             "none",
+            "none",
+            "none",
+            -1,
+            0,
+            false,
             0,
             0,
             null
@@ -527,6 +565,11 @@ public final class CalculatorProcessGraphBuilder {
             metrics == null ? 0 : metrics.acceptedCandidates(),
             metrics != null && metrics.budgetExhausted(),
             metrics == null ? "none" : metrics.budgetStopReason(),
+            metrics == null ? "none" : metrics.budgetCulpritRecipe(),
+            metrics == null ? "none" : metrics.budgetCulpritInput(),
+            metrics == null ? -1 : metrics.budgetCulpritDepth(),
+            metrics == null ? 0 : metrics.budgetCulpritRemaining(),
+            metrics != null && metrics.budgetCulpritActiveCycle(),
             0,
             0,
             exception == null ? null : exception.getClass().getSimpleName() + ":" + exception.getMessage()
@@ -698,7 +741,10 @@ public final class CalculatorProcessGraphBuilder {
     }
 
     private static void logSuspiciousBuild(CalculatorBuildDebugInfo debugInfo, @Nullable RoutingOutcome outcome) {
-        if (debugInfo.graphNodes() <= 1 || debugInfo.fallbackUsed() || debugInfo.routingStatus() == RoutingStatus.failed) {
+        if (debugInfo.graphNodes() <= 1
+            || debugInfo.fallbackUsed()
+            || debugInfo.routingStatus() == RoutingStatus.failed
+            || debugInfo.budgetExhausted()) {
             logger.warn("Calculator build diagnostics: {}", debugInfo.toDebugText());
         } else {
             logger.info("Calculator build diagnostics: {}", debugInfo.toDebugText());
@@ -748,6 +794,11 @@ public final class CalculatorProcessGraphBuilder {
                     debugInfo.acceptedCandidates(),
                     debugInfo.budgetExhausted(),
                     debugInfo.budgetStopReason(),
+                    debugInfo.budgetCulpritRecipe(),
+                    debugInfo.budgetCulpritInput(),
+                    debugInfo.budgetCulpritDepth(),
+                    debugInfo.budgetCulpritRemaining(),
+                    debugInfo.budgetCulpritActiveCycle(),
                     debugInfo.graphNodes(),
                     debugInfo.graphEdges(),
                     exception.getClass().getSimpleName() + ":" + exception.getMessage()
@@ -760,6 +811,7 @@ public final class CalculatorProcessGraphBuilder {
         RecipeEntry<?> target,
         int times,
         RecipePathSettings.Catalog catalog,
+        RoutingService service,
         PlannerMode plannerMode,
         RouteMode routeMode
     ) {
@@ -767,7 +819,7 @@ public final class CalculatorProcessGraphBuilder {
             return plannerMode == PlannerMode.standard ? RoutingBudget.standardDefault() : RoutingBudget.assuredDefault();
         }
 
-        ProjectionComplexity targetShape = projectionComplexity(target);
+        ProjectionComplexity targetShape = projectionComplexity(target, service);
         int catalogSize = catalog.recipes().size();
         int catalogScore = catalogSize <= 256
             ? 0
@@ -786,14 +838,16 @@ public final class CalculatorProcessGraphBuilder {
         int score = targetShape.score() + catalogScore + timesScore;
         int expanded = clampInt(1_200 + score * 320 + Math.min(2_000, catalogSize / 3), 1_200, 8_000);
         int generated = clampInt(6_000 + score * 2_400 + Math.min(24_000, catalogSize * 3), 6_000, 80_000);
+        int rootInputExpanded = clampInt(Math.max(256, expanded / Math.max(4, targetShape.inputCount())), 256, 1_200);
+        int rootInputGenerated = clampInt(Math.max(2_000, generated / Math.max(3, targetShape.inputCount())), 2_000, 12_000);
         int wall = clampInt(30 + score * 6 + Math.min(24, catalogSize / 500), 30, 120);
         int memory = clampInt(2_000 + score * 650 + Math.min(6_000, catalogSize), 2_000, 20_000);
         LoopBudget loopBudget = score >= 14
-            ? new LoopBudget(6, 8, 160)
+            ? new LoopBudget(8, 160)
             : score >= 8
-                ? new LoopBudget(4, 6, 80)
+                ? new LoopBudget(6, 80)
                 : LoopBudget.standardDefault();
-        return new RoutingBudget(expanded, generated, wall, memory, 0.08, loopBudget);
+        return new RoutingBudget(expanded, generated, wall, memory, rootInputExpanded, rootInputGenerated, 0.08, loopBudget);
     }
 
     private static int maxProducerCandidates(RoutingBudget budget, PlannerMode plannerMode) {
@@ -809,7 +863,7 @@ public final class CalculatorProcessGraphBuilder {
         return 8;
     }
 
-    private static ProjectionComplexity projectionComplexity(RecipeEntry<?> target) {
+    private static ProjectionComplexity projectionComplexity(RecipeEntry<?> target, RoutingService service) {
         RecipeProjection projection;
         try {
             projection = target.resolveResult().projection();
@@ -820,16 +874,16 @@ public final class CalculatorProcessGraphBuilder {
                 exception.toString(),
                 exception
             );
-            return new ProjectionComplexity(8);
+            return new ProjectionComplexity(8, 4);
         }
         if (projection == null) {
-            return new ProjectionComplexity(6);
+            return new ProjectionComplexity(6, 4);
         }
         ProjectedRecipe projected;
         try {
             projected = new ProjectionEngine().project(calculatorProjectionContext(target, 1), projection);
         } catch (RuntimeException | LinkageError ignored) {
-            return new ProjectionComplexity(8);
+            return new ProjectionComplexity(8, 4);
         }
 
         int inputCount = 0;
@@ -849,8 +903,28 @@ public final class CalculatorProcessGraphBuilder {
                 outputCount++;
             }
         }
-        int score = inputCount * 2 + semanticInputs * 4 + Math.max(0, inputCount - 4) * 3 + Math.max(0, outputCount - 2);
-        return new ProjectionComplexity(score);
+        int mergedInputCount = mergedInputCount(target, service);
+        int effectiveInputCount = mergedInputCount > 0 ? mergedInputCount : Math.max(1, inputCount);
+        int score = inputCount * 2 + semanticInputs * 4 + Math.max(0, effectiveInputCount - 4) * 3 + Math.max(0, outputCount - 2);
+        return new ProjectionComplexity(score, effectiveInputCount);
+    }
+
+    private static int mergedInputCount(RecipeEntry<?> target, RoutingService service) {
+        try {
+            int index = service.catalog().indexOf(target);
+            if (index < 0) {
+                return -1;
+            }
+            return service.catalog().nodeAt(index).inputCount();
+        } catch (RuntimeException | LinkageError exception) {
+            logger.debug(
+                "calculator.projectionComplexity.mergedInputUnavailable target={} cause={}",
+                describeRecipe(target),
+                exception.toString(),
+                exception
+            );
+            return -1;
+        }
     }
 
     private static ProcessGraph fromProjectedRecipe(RecipeEntry<?> target, int times) {
@@ -1037,8 +1111,6 @@ public final class CalculatorProcessGraphBuilder {
             inputs,
             outputs,
             durationTicks(outputs),
-            euPerTick(outputs),
-            0,
             machine.options(),
             target
         ));
@@ -1119,8 +1191,6 @@ public final class CalculatorProcessGraphBuilder {
             inputs,
             outputs,
             durationTicks(outputs),
-            euPerTick(outputs),
-            0,
             machine.options(),
             target
         ));
@@ -1192,8 +1262,6 @@ public final class CalculatorProcessGraphBuilder {
             List.of(),
             List.of(sourceSlot),
             0,
-            0,
-            0,
             List.of(),
             null
         );
@@ -1214,24 +1282,21 @@ public final class CalculatorProcessGraphBuilder {
 
     private static MaterialSlot materialSlot(RecipeContent content, long amount, boolean catalyst) {
         ContentStack<?, ?> stack = stackContent(content);
-        ItemStack itemStack = itemStack(stack, amount);
-        FluidStack fluidStack = fluidStack(stack, amount);
-        MaterialType type = catalyst
-            ? MaterialType.CATALYST
+        MaterialCategory category = catalyst
+            ? MaterialCategories.CATALYST
             : stack.notEmpty() && stack.isFluid()
-                ? MaterialType.FLUID
+                ? MaterialCategories.FLUID
                 : content instanceof ValueContent<?>
-                    ? MaterialType.ENERGY
-                    : MaterialType.ITEM;
+                    ? MaterialCategories.VALUE
+                    : MaterialCategories.ITEM;
         return new MaterialSlot(
             contentName(content, stack),
             clampedPositiveInt(amount),
-            type,
+            category,
             content.chance(),
             catalyst,
             content,
-            itemStack,
-            fluidStack
+            stack.notEmpty() ? stack.copyWithAmount(Math.max(1, amount)) : ContentStack.empty()
         );
     }
 
@@ -1362,16 +1427,16 @@ public final class CalculatorProcessGraphBuilder {
     }
 
     private static boolean preferMachineOption(MachineInfo candidate, MachineInfo existing) {
-        ItemStack candidateIcon = candidate.icon();
-        ItemStack existingIcon = existing.icon();
-        return candidateIcon != null && !candidateIcon.isEmpty()
-            && (existingIcon == null || existingIcon.isEmpty());
+        ContentStack<?, ?> candidateIcon = candidate.icon();
+        ContentStack<?, ?> existingIcon = existing.icon();
+        return candidateIcon.notEmpty() && existingIcon.isEmpty();
     }
 
     private static String machineOptionKey(MachineInfo machine) {
-        ItemStack icon = machine.icon();
-        if (icon != null && !icon.isEmpty()) {
-            return icon.getItemHolder().unwrapKey()
+        ContentStack<?, ?> icon = machine.icon();
+        if (icon.notEmpty() && icon.isItem()) {
+            ContentStack<Item, ItemStack> item = icon.cast();
+            return item.value().getItemHolder().unwrapKey()
                 .map(key -> key.location().toString())
                 .orElseGet(() -> machine.name().strip().toLowerCase(Locale.ROOT));
         }
@@ -1385,21 +1450,6 @@ public final class CalculatorProcessGraphBuilder {
             }
         }
         return 0;
-    }
-
-    private static int euPerTick(List<MaterialSlot> outputs) {
-        int duration = durationTicks(outputs);
-        if (duration <= 0) {
-            return 0;
-        }
-        long energy = 0;
-        for (MaterialSlot slot : outputs) {
-            if (slot.content() instanceof ValueContent<?> value && value.type().typeId().equals(energyValueTypeId)) {
-                energy = slot.amount();
-                break;
-            }
-        }
-        return clampedNonNegativeInt(energy / duration);
     }
 
     private static int clampedPositiveInt(long amount) {
@@ -1450,14 +1500,14 @@ public final class CalculatorProcessGraphBuilder {
         private final ContentResource resource;
         private long remaining;
         private final String materialName;
-        private final MaterialType type;
+        private final MaterialCategory category;
 
-        private ProducedSlot(String nodeId, ContentResource resource, long amount, String materialName, MaterialType type) {
+        private ProducedSlot(String nodeId, ContentResource resource, long amount, String materialName, MaterialCategory category) {
             this.nodeId = nodeId;
             this.resource = resource;
             this.remaining = amount;
             this.materialName = materialName;
-            this.type = type;
+            this.category = category;
         }
     }
 
@@ -1510,7 +1560,7 @@ public final class CalculatorProcessGraphBuilder {
                     targetNodeId,
                     candidate.materialName,
                     clampedPositiveInt(amount),
-                    candidate.type
+                    candidate.category
                 ));
                 candidate.remaining -= amount;
                 remaining -= amount;
@@ -1576,7 +1626,8 @@ public final class CalculatorProcessGraphBuilder {
     ) {}
 
     private record ProjectionComplexity(
-        int score
+        int score,
+        int inputCount
     ) {
     }
 

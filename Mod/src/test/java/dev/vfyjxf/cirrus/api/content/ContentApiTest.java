@@ -60,7 +60,7 @@ class ContentApiTest {
         Assertions.assertFalse(itemType.matches(c, d));
         Assertions.assertFalse(itemType.matches(d, e));
         Assertions.assertFalse(itemType.matches(e, d));
-        Assertions.assertTrue(itemType.matches(a, f));
+        Assertions.assertFalse(itemType.matches(a, f));
         Assertions.assertFalse(itemType.matches(e, f));
     }
 

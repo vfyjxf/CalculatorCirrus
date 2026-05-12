@@ -1093,6 +1093,7 @@ public final class RulesPage extends CirrusScrollablePageWidget {
             .option(UnresolvedInputMode.strict, Component.literal("strict"))
             .option(UnresolvedInputMode.directSupplyOnNoSource, Component.literal("direct"))
             .option(UnresolvedInputMode.directSupplyOnNoSourceOrSafeExhausted, Component.literal("safe"))
+            .option(UnresolvedInputMode.directSupplyOnNoSourceOrSafeOrCycleExhausted, Component.literal("cycle"))
             .value(rule.profile().unresolvedInputMode())
             .onChanged(value -> updateSelectedProfile(profile -> profileWithUnresolved(profile, value)));
         return formRow(CirrusLangs.Calculator.Rules.fieldUnresolved, choice);
