@@ -611,6 +611,8 @@
   "cirrus.ui.calculator.settings.jei_target_auto_close.desc": "Close the JEI recipe screen after sending a recipe into the calculator.",
   "cirrus.ui.calculator.settings.database_auto_refresh": "Refresh database on open",
   "cirrus.ui.calculator.settings.database_auto_refresh.desc": "Refresh the active recipe database when the calculator screen opens.",
+  "cirrus.ui.calculator.settings.projection_uses_global_database": "Use global database for projections",
+  "cirrus.ui.calculator.settings.projection_uses_global_database.desc": "Projection details opened from the calculator use the active saved database context. Off keeps them local to the current recipe.",
   "cirrus.ui.calculator.settings.read_other_worlds": "Read other save rules",
   "cirrus.ui.calculator.settings.read_other_worlds.desc": "Allow rule selection to include rule files saved by other worlds.",
   "cirrus.ui.calculator.settings.database_limit": "Database result limit",

@@ -242,6 +242,30 @@ class RecipePathSettingsTest {
         }
     }
 
+    @Test
+    void calculatorRoutingGraphPrewarmPopulatesSharedCache(MinecraftServer server) {
+        FakeRecipe makePlanks = recipe("make_planks", input(Items.OAK_LOG, 1), output(Items.OAK_PLANKS, 4));
+        FakeRecipe makeSticks = recipe("make_sticks", input(Items.OAK_PLANKS, 2), output(Items.STICK, 4));
+        FakeRecipeSystem system = new FakeRecipeSystem(Namespace.of("test", "prewarm_graph_cache_path"), makePlanks, makeSticks);
+        RecipeApiImpl previous = attachApi(system);
+        try {
+            RecipePathSettings.clearCachesForTests();
+
+            RecipePathSettings.prewarmCalculatorRoutingGraph("test").join();
+            RecipePathSettings.calculatorRoutingContext(RecipeEntry.of(system, makeSticks));
+
+            assertEquals(1, RecipePathSettings.cachedCatalogCountForTests());
+            assertEquals(1, RecipePathSettings.cachedRoutingGraphCountForTests());
+
+            RecipePathSettings.clearRuntimeCaches("test");
+
+            assertEquals(0, RecipePathSettings.cachedCatalogCountForTests());
+            assertEquals(0, RecipePathSettings.cachedRoutingGraphCountForTests());
+        } finally {
+            restoreApi(previous);
+        }
+    }
+
     private static RecipeApiImpl api(RecipeSystem<?>... systems) {
         RecipeApiRegistryBuilder builder = new RecipeApiRegistryBuilder();
         for (RecipeSystem<?> system : systems) {

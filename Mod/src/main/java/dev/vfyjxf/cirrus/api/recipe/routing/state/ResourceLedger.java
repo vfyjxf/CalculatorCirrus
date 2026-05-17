@@ -48,6 +48,8 @@ public final class ResourceLedger {
     private final Object2LongMap<ContentResource> byproducts;
     private final Object2LongMap<ValueType<?>> valueByproducts;
     private final ArrayList<TransactionScope> transactionScopes = new ArrayList<>();
+    private @Nullable Object2LongMap<ContentKind<?>> byproductKindAmounts;
+    private boolean byproductKindAmountsDirty = true;
 
     public ResourceLedger(Stock stock) {
         this(stock, new Object2LongOpenHashMap<>(), new Object2LongOpenHashMap<>());
@@ -79,6 +81,13 @@ public final class ResourceLedger {
     }
 
     /**
+     * Peeks at the available stock amount for a normalized stack without consuming.
+     */
+    public long peekStockAvailableNormalized(ContentStack<?, ?> normalized) {
+        return stock.countMatchingNormalized(normalized);
+    }
+
+    /**
      * Peeks at the available byproduct amount for the given variant without consuming.
      *
      * @param variant the variant to query
@@ -86,6 +95,13 @@ public final class ResourceLedger {
      */
     public long peekByproductAvailable(ContentVariant variant) {
         return countByproductVariant(variant);
+    }
+
+    /**
+     * Peeks at the available byproduct amount for a normalized stack without consuming.
+     */
+    public long peekByproductAvailableNormalized(ContentStack<?, ?> normalized) {
+        return countByproductResourceNormalized(normalized);
     }
 
     /**
@@ -115,6 +131,27 @@ public final class ResourceLedger {
             if (available > 0L && input.satisfy(valueResource(entry.getKey(), available))) {
                 total = safeAdd(total, available);
             }
+        }
+        return total;
+    }
+
+    /**
+     * Estimates immediately available amount for an enumerable input using a caller-owned
+     * variant snapshot. The caller is responsible for passing variants from the same input.
+     */
+    public long peekAvailable(InputContent input, ContentVariant[] variants) {
+        if (variants == null || !input.isEnumerable()) {
+            return peekAvailable(input);
+        }
+        long total = 0L;
+        for (ContentVariant variant : variants) {
+            if (variant instanceof ContentStack<?, ?> stack) {
+                total = safeAdd(total, stock.countMatchingNormalized(stack));
+                total = safeAdd(total, countByproductResourceNormalized(stack));
+                continue;
+            }
+            total = safeAdd(total, stock.countMatchingVariant(variant));
+            total = safeAdd(total, countByproductVariant(variant));
         }
         return total;
     }
@@ -191,6 +228,7 @@ public final class ResourceLedger {
         byproducts.putAll(snapshot.byproducts);
         valueByproducts.clear();
         valueByproducts.putAll(snapshot.valueByproducts);
+        invalidateByproductKindAmounts();
     }
 
     /**
@@ -241,6 +279,7 @@ public final class ResourceLedger {
         }
         recordByproduct(normalized);
         byproducts.put(normalized, byproducts.getOrDefault(normalized, 0L) + amount);
+        invalidateByproductKindAmounts();
     }
 
     /**
@@ -276,6 +315,7 @@ public final class ResourceLedger {
                 long consumed = Math.min(available, remaining);
                 recordByproduct(entry.getKey());
                 entry.setValue(available - consumed);
+                invalidateByproductKindAmounts();
                 remaining -= consumed;
             }
         }
@@ -328,6 +368,7 @@ public final class ResourceLedger {
             long consumed = Math.min(available, amount);
             recordByproduct(normalized);
             byproducts.put(normalized, available - consumed);
+            invalidateByproductKindAmounts();
             return consumed;
         }
         return 0;
@@ -338,6 +379,10 @@ public final class ResourceLedger {
             return countByproductValue(value);
         }
         ContentResource normalized = normalize(resource);
+        return byproducts.getLong(normalized);
+    }
+
+    private long countByproductResourceNormalized(ContentStack<?, ?> normalized) {
         return byproducts.getLong(normalized);
     }
 
@@ -362,6 +407,9 @@ public final class ResourceLedger {
     }
 
     private long consumeByproductKind(ContentKind<?> kind, long amount) {
+        if (countByproductKind(kind) <= 0L) {
+            return 0L;
+        }
         long remaining = amount;
         var iterator = Object2LongMaps.fastIterator(byproducts);
         while (iterator.hasNext()) {
@@ -374,6 +422,7 @@ public final class ResourceLedger {
                 long consumed = Math.min(available, remaining);
                 recordByproduct(entry.getKey());
                 entry.setValue(available - consumed);
+                invalidateByproductKindAmounts();
                 remaining -= consumed;
             }
         }
@@ -381,15 +430,41 @@ public final class ResourceLedger {
     }
 
     private long countByproductKind(ContentKind<?> kind) {
-        long total = 0;
+        if (kind.isEmpty()) {
+            return 0L;
+        }
+        return byproductKindAmounts().getLong(kind);
+    }
+
+    private Object2LongMap<ContentKind<?>> byproductKindAmounts() {
+        Object2LongMap<ContentKind<?>> cached = byproductKindAmounts;
+        if (cached == null) {
+            cached = new Object2LongOpenHashMap<>();
+            byproductKindAmounts = cached;
+            byproductKindAmountsDirty = true;
+        }
+        if (byproductKindAmountsDirty) {
+            rebuildByproductKindAmounts(cached);
+        }
+        return cached;
+    }
+
+    private void rebuildByproductKindAmounts(Object2LongMap<ContentKind<?>> cached) {
+        cached.clear();
         var iterator = Object2LongMaps.fastIterator(byproducts);
         while (iterator.hasNext()) {
             Object2LongMap.Entry<ContentResource> entry = iterator.next();
-            if (entry.getKey() instanceof ContentStack<?, ?> stack && stack.matchesContent(kind)) {
-                total += entry.getLongValue();
+            long amount = entry.getLongValue();
+            if (amount != 0L && entry.getKey() instanceof ContentStack<?, ?> stack) {
+                ContentKind<?> kind = stack.kind();
+                cached.put(kind, safeAdd(cached.getLong(kind), amount));
             }
         }
-        return total;
+        byproductKindAmountsDirty = false;
+    }
+
+    private void invalidateByproductKindAmounts() {
+        byproductKindAmountsDirty = true;
     }
 
     private ContentResource normalize(ContentResource resource) {
@@ -591,6 +666,7 @@ public final class ResourceLedger {
             } else {
                 ledger.byproducts.removeLong(key);
             }
+            ledger.invalidateByproductKindAmounts();
         }
     }
 

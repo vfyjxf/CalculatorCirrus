@@ -352,11 +352,10 @@ public final class JeiRecipeLayoutResolver {
         return ContentStack.empty();
     }
 
-    @SuppressWarnings("unchecked")
     private static <I> ContentStack<?, I> resolveIngredient(ContentApi contentApi, ResolvedIngredient<I> ingredient) {
         StackType<?, I> stackType = contentApi.findStackTypeForIngredientType(ingredient.ingredient().getType());
         if (stackType != null) {
-            return (ContentStack<?, I>) ContentStack.fromStack(stackType, ingredient.value());
+            return ContentStack.fromStack(stackType, ingredient.value());
         }
         return ContentStack.empty();
     }

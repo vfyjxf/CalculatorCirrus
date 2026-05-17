@@ -41,7 +41,7 @@ public final class RecipeGraphBuilder {
      * @return a fully connected ProcessGraph
      */
     public static ProcessGraph build(List<ProcessNode> nodes, List<ProcessGroup> groups) {
-        ProcessGraph graph = new ProcessGraph();
+        ProcessGraph graph = new ProcessGraph(nodes.size(), estimateEdgeCount(nodes), groups.size());
 
         for (ProcessNode node : nodes) graph.addNode(node);
         for (ProcessGroup group : groups) graph.addGroup(group);
@@ -73,6 +73,14 @@ public final class RecipeGraphBuilder {
         }
 
         return graph;
+    }
+
+    private static int estimateEdgeCount(List<ProcessNode> nodes) {
+        int edges = 0;
+        for (ProcessNode node : nodes) {
+            edges += node.inputs().size();
+        }
+        return edges;
     }
 
     /**

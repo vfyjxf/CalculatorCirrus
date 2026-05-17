@@ -22,6 +22,7 @@ public final class ExecutionOverlayClientConfig {
     public static final ExecutionObservedStockPolicy observedStockPolicyDefault = ExecutionObservedStockPolicy.consumeObservedStock;
     public static final boolean jeiTargetButtonAutoCloseDefault = true;
     public static final boolean calculatorDatabaseAutoRefreshDefault = true;
+    public static final boolean calculatorProjectionUsesGlobalDatabaseDefault = false;
     public static final int calculatorDatabaseLimitMin = 10;
     public static final int calculatorDatabaseLimitMax = 500;
     public static final int calculatorDatabaseLimitDefault = 500;
@@ -40,6 +41,7 @@ public final class ExecutionOverlayClientConfig {
     private static final ModConfigSpec.EnumValue<ExecutionObservedStockPolicy> observedStockPolicyValue;
     private static final ModConfigSpec.BooleanValue jeiTargetButtonAutoCloseValue;
     private static final ModConfigSpec.BooleanValue calculatorDatabaseAutoRefreshValue;
+    private static final ModConfigSpec.BooleanValue calculatorProjectionUsesGlobalDatabaseValue;
     private static final ModConfigSpec.IntValue calculatorDatabaseLimitValue;
     private static final ModConfigSpec.BooleanValue calculatorRulesReadOtherWorldsValue;
     private static final ModConfigSpec.BooleanValue calculatorUseLiveStockValue;
@@ -55,6 +57,7 @@ public final class ExecutionOverlayClientConfig {
     private static volatile ExecutionObservedStockPolicy observedStockPolicy = observedStockPolicyDefault;
     private static volatile boolean jeiTargetButtonAutoClose = jeiTargetButtonAutoCloseDefault;
     private static volatile boolean calculatorDatabaseAutoRefresh = calculatorDatabaseAutoRefreshDefault;
+    private static volatile boolean calculatorProjectionUsesGlobalDatabase = calculatorProjectionUsesGlobalDatabaseDefault;
     private static volatile int calculatorDatabaseLimit = calculatorDatabaseLimitDefault;
     private static volatile boolean calculatorRulesReadOtherWorlds = calculatorRulesReadOtherWorldsDefault;
     private static volatile boolean calculatorUseLiveStock = calculatorUseLiveStockDefault;
@@ -95,6 +98,9 @@ public final class ExecutionOverlayClientConfig {
         calculatorDatabaseAutoRefreshValue = builder
             .comment("Whether the calculator database page rebuilds its index from registered systems when opened.")
             .define("auto_refresh", calculatorDatabaseAutoRefreshDefault);
+        calculatorProjectionUsesGlobalDatabaseValue = builder
+            .comment("Whether projection details opened from the calculator use the saved global recipe database context. Disabled keeps projection details local to the current calculator recipe.")
+            .define("projection_uses_global_database", calculatorProjectionUsesGlobalDatabaseDefault);
         calculatorDatabaseLimitValue = builder
             .comment("Maximum number of recipe database search results shown by the calculator page.")
             .defineInRange("result_limit", calculatorDatabaseLimitDefault, calculatorDatabaseLimitMin, calculatorDatabaseLimitMax);
@@ -175,6 +181,16 @@ public final class ExecutionOverlayClientConfig {
         calculatorDatabaseAutoRefresh = enabled;
         calculatorDatabaseAutoRefreshValue.set(enabled);
         calculatorDatabaseAutoRefreshValue.save();
+    }
+
+    public static boolean calculatorProjectionUsesGlobalDatabase() {
+        return calculatorProjectionUsesGlobalDatabase;
+    }
+
+    public static void setCalculatorProjectionUsesGlobalDatabase(boolean enabled) {
+        calculatorProjectionUsesGlobalDatabase = enabled;
+        calculatorProjectionUsesGlobalDatabaseValue.set(enabled);
+        calculatorProjectionUsesGlobalDatabaseValue.save();
     }
 
     public static int calculatorDatabaseLimit() {
@@ -276,6 +292,7 @@ public final class ExecutionOverlayClientConfig {
         observedStockPolicy = observedStockPolicyValue.get();
         jeiTargetButtonAutoClose = jeiTargetButtonAutoCloseValue.get();
         calculatorDatabaseAutoRefresh = calculatorDatabaseAutoRefreshValue.get();
+        calculatorProjectionUsesGlobalDatabase = calculatorProjectionUsesGlobalDatabaseValue.get();
         calculatorDatabaseLimit = clampDatabaseLimit(calculatorDatabaseLimitValue.get());
         calculatorRulesReadOtherWorlds = calculatorRulesReadOtherWorldsValue.get();
         calculatorUseLiveStock = calculatorUseLiveStockValue.get();

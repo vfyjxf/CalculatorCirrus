@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
@@ -397,6 +398,111 @@ class CalculatorTargetGraphIntegrationTest {
                 "Pending".equals(node.machine())
                     && node.name().contains("minecraft:planks")
             ));
+        } finally {
+            restoreRecipeApi(previous);
+        }
+    }
+
+    @Test
+    void routeGraphConnectsPendingSourcesThroughDirectResourceIndex(MinecraftServer server) {
+        FakeRecipe makeSticks = new FakeRecipe(
+            "make_sticks",
+            java.util.List.of(input(Items.OAK_PLANKS, 2)),
+            java.util.List.of(output(Items.STICK, 4))
+        );
+        FakeRecipeSystem system = new FakeRecipeSystem(Lists.immutable.of(makeSticks));
+        RecipeApiImpl previous = attachRecipeApi(system);
+        try {
+            RecipeEntry<FakeRecipe> target = RecipeEntry.of(system, makeSticks);
+            PlanBuilder builder = new PlanBuilder(1L, 1L, target, 1);
+            builder.addPendingInput(input(Items.OAK_PLANKS, 2), 2L);
+            builder.addExecuteRecipe(
+                target,
+                1,
+                Lists.immutable.of(new PlanAction.InputBinding(input(Items.OAK_PLANKS, 2), 2L)),
+                Lists.immutable.of(new PlanAction.OutputBinding(ContentStack.fromStack(new ItemStack(Items.STICK)), 4L))
+            );
+
+            ProcessGraph graph = CalculatorProcessGraphBuilder.fromRoutingPlan(builder.build(), CalculatorProcessGraphBuilder.RouteMode.execution);
+
+            assertEquals(2, graph.nodeCount());
+            assertEquals(1, graph.edgeCount());
+        } finally {
+            restoreRecipeApi(previous);
+        }
+    }
+
+    @Test
+    void routeGraphFallsBackForNonExactPendingInputMatchStrategy(MinecraftServer server) {
+        ItemStack recipeStack = new ItemStack(Items.OAK_PLANKS);
+        recipeStack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, net.minecraft.network.chat.Component.literal("recipe"));
+        InputContent recipeInput = InputContent.fromStack(ContentStack.fromStack(recipeStack), MatchStrategy.identity);
+        InputContent pendingInput = input(Items.OAK_PLANKS, 2);
+        FakeRecipe makeSticks = new FakeRecipe(
+            "make_sticks",
+            java.util.List.of(recipeInput),
+            java.util.List.of(output(Items.STICK, 4))
+        );
+        FakeRecipeSystem system = new FakeRecipeSystem(Lists.immutable.of(makeSticks));
+        RecipeApiImpl previous = attachRecipeApi(system);
+        try {
+            RecipeEntry<FakeRecipe> target = RecipeEntry.of(system, makeSticks);
+            PlanBuilder builder = new PlanBuilder(1L, 1L, target, 1);
+            builder.addPendingInput(pendingInput, 2L);
+            builder.addExecuteRecipe(
+                target,
+                1,
+                Lists.immutable.of(new PlanAction.InputBinding(recipeInput, 2L)),
+                Lists.immutable.of(new PlanAction.OutputBinding(ContentStack.fromStack(new ItemStack(Items.STICK)), 4L))
+            );
+
+            ProcessGraph graph = CalculatorProcessGraphBuilder.fromRoutingPlan(builder.build(), CalculatorProcessGraphBuilder.RouteMode.execution);
+
+            assertEquals(2, graph.nodeCount());
+            assertEquals(1, graph.edgeCount(), "non-exact pending input should still connect through fallback scan");
+        } finally {
+            restoreRecipeApi(previous);
+        }
+    }
+
+    @Test
+    void routeGraphFallsBackForNonExactProducedInputMatchStrategy(MinecraftServer server) {
+        FakeRecipe makePlanks = new FakeRecipe(
+            "make_planks",
+            java.util.List.of(),
+            java.util.List.of(output(Items.OAK_PLANKS, 4))
+        );
+        ItemStack recipeStack = new ItemStack(Items.OAK_PLANKS);
+        recipeStack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, net.minecraft.network.chat.Component.literal("recipe"));
+        InputContent recipeInput = InputContent.fromStack(ContentStack.fromStack(recipeStack), MatchStrategy.identity);
+        FakeRecipe makeSticks = new FakeRecipe(
+            "make_sticks",
+            java.util.List.of(recipeInput),
+            java.util.List.of(output(Items.STICK, 4))
+        );
+        FakeRecipeSystem system = new FakeRecipeSystem(Lists.immutable.of(makePlanks, makeSticks));
+        RecipeApiImpl previous = attachRecipeApi(system);
+        try {
+            RecipeEntry<FakeRecipe> producer = RecipeEntry.of(system, makePlanks);
+            RecipeEntry<FakeRecipe> target = RecipeEntry.of(system, makeSticks);
+            PlanBuilder builder = new PlanBuilder(1L, 1L, target, 1);
+            builder.addExecuteRecipe(
+                producer,
+                1,
+                Lists.immutable.empty(),
+                Lists.immutable.of(new PlanAction.OutputBinding(ContentStack.fromStack(new ItemStack(Items.OAK_PLANKS)), 4L))
+            );
+            builder.addExecuteRecipe(
+                target,
+                1,
+                Lists.immutable.of(new PlanAction.InputBinding(recipeInput, 2L)),
+                Lists.immutable.of(new PlanAction.OutputBinding(ContentStack.fromStack(new ItemStack(Items.STICK)), 4L))
+            );
+
+            ProcessGraph graph = CalculatorProcessGraphBuilder.fromRoutingPlan(builder.build(), CalculatorProcessGraphBuilder.RouteMode.calculator);
+
+            assertEquals(2, graph.nodeCount());
+            assertEquals(1, graph.edgeCount(), "non-exact produced input should still connect through fallback scan");
         } finally {
             restoreRecipeApi(previous);
         }

@@ -41,6 +41,8 @@ public class Stock {
     private final Object2LongMap<ContentValue<?>> valueAmounts = new Object2LongOpenHashMap<>();
     private final Object2LongMap<ValueType<?>> valueTypeAmounts = new Object2LongOpenHashMap<>();
     private final ArrayList<TransactionScope> transactionScopes = new ArrayList<>();
+    private @Nullable Object2LongMap<ContentKind<?>> kindAmounts;
+    private boolean kindAmountsDirty = true;
 
     /** Creates an empty stock with no resources. */
     public static Stock empty() {
@@ -78,6 +80,7 @@ public class Stock {
                 long current = stackAmounts.getOrDefault(existing, 0L);
                 recordStackAmount(existing);
                 stackAmounts.put(existing, current + stack.amount());
+                invalidateKindAmounts();
                 return;
             }
         }
@@ -86,6 +89,7 @@ public class Stock {
         recordStackAmount(normalized);
         stacks.add(normalized);
         stackAmounts.put(normalized, stack.amount());
+        invalidateKindAmounts();
     }
 
     /**
@@ -132,6 +136,7 @@ public class Stock {
                 if (consumed > 0) {
                     recordStackAmount(existing);
                     stackAmounts.put(existing, available - consumed);
+                    invalidateKindAmounts();
                 }
                 return consumed;
             }
@@ -231,6 +236,11 @@ public class Stock {
         return 0;
     }
 
+    public long countMatchingNormalized(ContentStack<?, ?> normalized) {
+        if (normalized.isEmpty()) return 0;
+        return stackAmounts.getOrDefault(normalized, 0L);
+    }
+
     /**
      * Returns the available amount of a matching value in this stock.
      *
@@ -272,14 +282,36 @@ public class Stock {
      */
     public long countMatchingKind(ContentKind<?> kind) {
         if (kind.isEmpty()) return 0;
+        return kindAmounts().getLong(kind);
+    }
 
-        long total = 0;
+    private Object2LongMap<ContentKind<?>> kindAmounts() {
+        Object2LongMap<ContentKind<?>> cached = kindAmounts;
+        if (cached == null) {
+            cached = new Object2LongOpenHashMap<>();
+            kindAmounts = cached;
+            kindAmountsDirty = true;
+        }
+        if (kindAmountsDirty) {
+            rebuildKindAmounts(cached);
+        }
+        return cached;
+    }
+
+    private void rebuildKindAmounts(Object2LongMap<ContentKind<?>> cached) {
+        cached.clear();
         for (ContentStack<?, ?> existing : stacks) {
-            if (existing.matchesContent(kind)) {
-                total += stackAmounts.getOrDefault(existing, 0L);
+            long amount = stackAmounts.getOrDefault(existing, 0L);
+            if (amount != 0L) {
+                ContentKind<?> kind = existing.kind();
+                cached.put(kind, safeAdd(cached.getLong(kind), amount));
             }
         }
-        return total;
+        kindAmountsDirty = false;
+    }
+
+    private void invalidateKindAmounts() {
+        kindAmountsDirty = true;
     }
 
     /**
@@ -353,6 +385,7 @@ public class Stock {
                 if (consumed > 0) {
                     recordStackAmount(existing);
                     stackAmounts.put(existing, available - consumed);
+                    invalidateKindAmounts();
                     remaining -= consumed;
                 }
             }
@@ -421,6 +454,7 @@ public class Stock {
                     }
                     recordStackAmount(existing);
                     stackAmounts.put(existing, available - taken);
+                    invalidateKindAmounts();
                     consumed.add(new ConsumedResource(existing.normalize(), taken));
                     remaining -= taken;
                 }
@@ -461,6 +495,7 @@ public class Stock {
             long taken = Math.min(available, remaining);
             recordStackAmount(existing);
             stackAmounts.put(existing, available - taken);
+            invalidateKindAmounts();
             consumed.add(new ConsumedResource(existing.normalize(), taken));
             remaining -= taken;
         }
@@ -605,6 +640,7 @@ public class Stock {
         stackAmounts.putAll(snapshot.stackAmounts);
         valueAmounts.putAll(snapshot.valueAmounts);
         valueTypeAmounts.putAll(snapshot.valueTypeAmounts);
+        invalidateKindAmounts();
     }
 
     /** Removes all resources from this stock. */
@@ -616,6 +652,7 @@ public class Stock {
         stackAmounts.clear();
         valueAmounts.clear();
         valueTypeAmounts.clear();
+        invalidateKindAmounts();
     }
 
     /** Returns {@code true} if this stock contains no resources of any kind. */
@@ -804,6 +841,7 @@ public class Stock {
             } else {
                 stock.stackAmounts.removeLong(key);
             }
+            stock.invalidateKindAmounts();
         }
     }
 
@@ -833,6 +871,7 @@ public class Stock {
         public void rollback(Stock stock) {
             stock.stacks.clear();
             stock.stacks.addAll(oldStacks);
+            stock.invalidateKindAmounts();
         }
     }
 

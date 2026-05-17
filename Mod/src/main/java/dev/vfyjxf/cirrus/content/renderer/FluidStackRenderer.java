@@ -27,15 +27,13 @@ import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
 import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
 import net.neoforged.neoforge.fluids.FluidStack;
-import org.joml.Matrix4f;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix4f;
 
 import java.util.List;
 import java.util.function.LongFunction;
 
 public class FluidStackRenderer implements BatchableStackRenderer<Fluid, FluidStack> {
-
-    private static final int TEXTURE_SIZE = 16;
 
     public static final FluidStackRenderer instance = new FluidStackRenderer();
 
@@ -112,18 +110,18 @@ public class FluidStackRenderer implements BatchableStackRenderer<Fluid, FluidSt
         }
         var extension = IClientFluidTypeExtensions.of(stack.getFluid());
         TextureAtlasSprite sprite = Minecraft.getInstance()
-            .getTextureAtlas(InventoryMenu.BLOCK_ATLAS)
-            .apply(extension.getStillTexture());
+                                             .getTextureAtlas(InventoryMenu.BLOCK_ATLAS)
+                                             .apply(extension.getStillTexture());
         if (sprite.atlasLocation() == MissingTextureAtlasSprite.getLocation()) {
             return null;
         }
         int color = extension.getTintColor();
         return new FluidVisual(
-            sprite,
-            (color >> 16 & 0xFF) / 255.0F,
-            (color >> 8 & 0xFF) / 255.0F,
-            (color & 0xFF) / 255.0F,
-            ((color >> 24) & 0xFF) / 255F
+                sprite,
+                (color >> 16 & 0xFF) / 255.0F,
+                (color >> 8 & 0xFF) / 255.0F,
+                (color & 0xFF) / 255.0F,
+                ((color >> 24) & 0xFF) / 255F
         );
     }
 
@@ -140,11 +138,11 @@ public class FluidStackRenderer implements BatchableStackRenderer<Fluid, FluidSt
     }
 
     private record FluidVisual(
-        TextureAtlasSprite sprite,
-        float red,
-        float green,
-        float blue,
-        float alpha
+            TextureAtlasSprite sprite,
+            float red,
+            float green,
+            float blue,
+            float alpha
     ) {
     }
 

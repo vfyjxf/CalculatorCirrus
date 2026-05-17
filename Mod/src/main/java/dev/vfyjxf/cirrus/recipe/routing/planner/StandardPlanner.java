@@ -50,7 +50,7 @@ import dev.vfyjxf.cirrus.api.recipe.routing.state.CycleGuard;
 import dev.vfyjxf.cirrus.api.recipe.routing.state.ResourceLedger;
 import it.unimi.dsi.fastutil.ints.Int2ByteOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
-import it.unimi.dsi.fastutil.longs.LongIterator;
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -72,6 +72,9 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -115,7 +118,13 @@ public final class StandardPlanner implements RoutePlanner {
     private static final int detailLogLimit = 256;
     private static final int activeDemandDependencyNodeLimit = 128;
     private static final int activeDemandDependencyProducerLimit = 512;
+    private static final int candidatePreShortlistMinimum = 64;
+    private static final int candidatePreShortlistMultiplier = 64;
+    private static final int candidatePreShortlistVariantRetentionLimit = 512;
     private static final double indirectActiveDemandCyclePenalty = 1_000_000.0d;
+    private static final ContentVariant[] emptyVariants = new ContentVariant[0];
+    private static final ActiveDemandSnapshot emptyActiveDemandSnapshot =
+        new ActiveDemandSnapshot(new InputContent[0], 1);
 
     @Override
     public RoutingOutcome plan(PlannerContext context) {
@@ -163,6 +172,7 @@ public final class StandardPlanner implements RoutePlanner {
         ResourceLedger ledger = new ResourceLedger(request.stock().copy());
         CycleGuard cycleGuard = new CycleGuard(request.loopPolicy(), request.loopBudget());
         Int2IntOpenHashMap activePath = new Int2IntOpenHashMap();
+        InputVariantCache variantCache = new InputVariantCache();
         MutableList<RoutingIssue> issues = Lists.mutable.empty();
         AtomicInteger issueSeq = new AtomicInteger();
         MutableList<RoutingTrace.TraceStage> traceStages = Lists.mutable.empty();
@@ -179,7 +189,8 @@ public final class StandardPlanner implements RoutePlanner {
             planBuilder,
             traceStages,
             issues,
-            issueSeq
+            issueSeq,
+            variantCache
         );
 
         long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000L;
@@ -276,7 +287,8 @@ public final class StandardPlanner implements RoutePlanner {
         PlanBuilder planBuilder,
         MutableList<RoutingTrace.TraceStage> traceStages,
         MutableList<RoutingIssue> issues,
-        AtomicInteger issueSeq
+        AtomicInteger issueSeq,
+        InputVariantCache variantCache
     ) {
         PlannerContext.Counters counters = context.counters();
         PlannerDebugLog debugLog = new PlannerDebugLog();
@@ -420,7 +432,8 @@ public final class StandardPlanner implements RoutePlanner {
                         ledger,
                         planBuilder,
                         traceStages,
-                        inputIndex
+                        inputIndex,
+                        variantCache
                     );
                     if (remaining <= 0) {
                         if (debugLog.enabled()) {
@@ -444,10 +457,12 @@ public final class StandardPlanner implements RoutePlanner {
                         input,
                         remaining,
                         frame.depth + 1,
+                        debugLog,
                         activePath,
                         activeDemands,
                         ledger,
-                        rootInput
+                        rootInput,
+                        variantCache
                     );
                     List<CandidateScore> candidates = evaluation.candidates();
                     if (candidates.isEmpty()) {
@@ -529,7 +544,7 @@ public final class StandardPlanner implements RoutePlanner {
 
                     if (candidates.size() > 1) {
                         candidates.sort(candidateComparator(context.ruleProfile()));
-                        reorderCandidatesByTagPolicy(context, input, remaining, ledger, candidates);
+                        reorderCandidatesByTagPolicy(context, input, remaining, ledger, candidates, variantCache);
                     }
                     if (context.request().explorationEnabled()) {
                         context.ruleProfile().explorePolicy().reorderNearTies(
@@ -632,7 +647,7 @@ public final class StandardPlanner implements RoutePlanner {
                             frame.state = FrameState.processingInputs;
                             continue;
                         }
-                        if (frame.candidateIssues.notEmpty() && shouldPropagateCandidateIssues(input)) {
+                        if (frame.candidateIssues.notEmpty() && shouldPropagateCandidateIssues(input, variantCache)) {
                             issues.addAllIterable(frame.candidateIssues);
                             activeDemands.removeLast();
                             Boolean completed = completeFrame(stack, false, activePath, cycleGuard);
@@ -738,7 +753,7 @@ public final class StandardPlanner implements RoutePlanner {
                     boolean liftedToParentFallback = false;
                     boolean rollbackRestoredForParentFallback = false;
                     if (context.ruleProfile().liftMultiSemanticChildShortages()
-                        && preservesOriginalInputShortage(input)
+                        && preservesOriginalInputShortage(input, variantCache)
                         && hasOnlyNonBlockingShortages(issues, childIssueStart)) {
                         rollback.restore(ledger, planBuilder, issues, traceStages);
                         rollbackRestoredForParentFallback = true;
@@ -771,7 +786,8 @@ public final class StandardPlanner implements RoutePlanner {
                             ledger,
                             planBuilder,
                             traceStages,
-                            frame.activeInputIndex
+                            frame.activeInputIndex,
+                            variantCache
                         );
                         liftSuccessfulChildIssuesToParentInput(
                             context,
@@ -780,7 +796,8 @@ public final class StandardPlanner implements RoutePlanner {
                             previousRemaining - frame.remaining,
                             childIssueStart,
                             issues,
-                            issueSeq
+                            issueSeq,
+                            variantCache
                         );
                     }
                     if (frame.remaining <= 0) {
@@ -840,21 +857,110 @@ public final class StandardPlanner implements RoutePlanner {
         InputContent input,
         long remaining,
         int depth,
+        PlannerDebugLog debugLog,
         Int2IntOpenHashMap activePath,
         ArrayDeque<InputContent> activeDemands,
         ResourceLedger ledger,
-        boolean rootInput
+        boolean rootInput,
+        InputVariantCache variantCache
     ) {
+        int variantCount = enumerableVariantCount(input, variantCache);
         BitSet allowed = context.sourcePolicyDecision().allowedRecipes();
         CandidateShortlist candidates = new CandidateShortlist(
             candidateShortlistLimit(context),
             candidateComparator(context.ruleProfile()),
-            enumerableVariantCount(input)
+            variantCount
         );
         ScoringScratch scoringScratch = new ScoringScratch(context.ruleProfile());
-        ActiveDemandDependencyScratch dependencyScratch = new ActiveDemandDependencyScratch();
+        ActiveDemandDependencyScratch dependencyScratch = new ActiveDemandDependencyScratch(variantCache);
+        ActiveDemandSnapshot activeDemandSnapshot = dependencyScratch.snapshot(activeDemands);
+        CandidateAvailabilityScratch availabilityScratch = new CandidateAvailabilityScratch(ledger, variantCache);
+        if (useCandidatePreShortlist(context)) {
+            CandidatePreShortlist preCandidates = new CandidatePreShortlist(
+                candidatePreShortlistLimit(context, variantCount),
+                context.ruleProfile(),
+                variantCount
+            );
+            ScoringScratch preScoringScratch = new ScoringScratch(context.ruleProfile());
+            if (!requiresCandidateScanFallback(input)) {
+                ProducerRefIterator producerRefs = indexedProducerRefs(context.graph(), input, variantCache);
+                while (producerRefs.next()) {
+                    if (candidateBudgetReached(context, parentNode, input, remaining, depth, rootInput)) {
+                        break;
+                    }
+                    int recipeIndex = producerRefs.recipeIndex();
+                    if (!allowed.get(recipeIndex)) {
+                        continue;
+                    }
+                    RecipeGraph.Node node = context.catalog().nodeAt(recipeIndex);
+                    addCandidateSeedIfAccepted(
+                        context,
+                        input,
+                        remaining,
+                        depth,
+                        activePath,
+                        ledger,
+                        node,
+                        recipeIndex,
+                        node.outputAt(producerRefs.outputIndex()),
+                        producerRefs.matchedVariantIndex(),
+                        preCandidates,
+                        preScoringScratch,
+                        availabilityScratch,
+                        variantCache
+                    );
+                }
+            } else {
+                for (int recipeIndex = allowed.nextSetBit(0); recipeIndex >= 0; recipeIndex = allowed.nextSetBit(recipeIndex + 1)) {
+                    if (candidateBudgetReached(context, parentNode, input, remaining, depth, rootInput)) {
+                        break;
+                    }
+                    RecipeGraph.Node node = context.catalog().nodeAt(recipeIndex);
+                    addCandidateSeedIfAccepted(
+                        context,
+                        input,
+                        remaining,
+                        depth,
+                        activePath,
+                        ledger,
+                        node,
+                        recipeIndex,
+                        findMatchedOutput(node, input),
+                        -1,
+                        preCandidates,
+                        preScoringScratch,
+                        availabilityScratch,
+                        variantCache
+                    );
+                }
+            }
+
+            for (CandidateSeed seed : preCandidates.toCandidates()) {
+                addCandidateIfAccepted(
+                    context,
+                    input,
+                    remaining,
+                    depth,
+                    debugLog,
+                    activePath,
+                    seed.node(),
+                    seed.recipeIndex(),
+                    seed.matchedOutput(),
+                    seed.matchedVariantIndex(),
+                    candidates,
+                    scoringScratch,
+                    dependencyScratch,
+                    activeDemandSnapshot,
+                    availabilityScratch,
+                    variantCache,
+                    false
+                );
+            }
+            return candidates.toEvaluation();
+        }
+
         if (!requiresCandidateScanFallback(input)) {
-            ProducerRefIterator producerRefs = indexedProducerRefs(context.graph(), input);
+            ProducerRefIterator producerRefs = indexedProducerRefs(context.graph(), input, variantCache);
             while (producerRefs.next()) {
                 if (candidateBudgetReached(context, parentNode, input, remaining, depth, rootInput)) {
                     break;
@@ -869,15 +975,19 @@ public final class StandardPlanner implements RoutePlanner {
                     input,
                     remaining,
                     depth,
+                    debugLog,
                     activePath,
-                    activeDemands,
-                    ledger,
                     node,
                     recipeIndex,
                     node.outputAt(producerRefs.outputIndex()),
+                    producerRefs.matchedVariantIndex(),
                     candidates,
                     scoringScratch,
-                    dependencyScratch
+                    dependencyScratch,
+                    activeDemandSnapshot,
+                    availabilityScratch,
+                    variantCache,
+                    true
                 );
             }
             return candidates.toEvaluation();
@@ -894,15 +1004,19 @@ public final class StandardPlanner implements RoutePlanner {
                 input,
                 remaining,
                 depth,
+                debugLog,
                 activePath,
-                activeDemands,
-                ledger,
                 node,
                 recipeIndex,
                 matchedOutput,
+                -1,
                 candidates,
                 scoringScratch,
-                dependencyScratch
+                dependencyScratch,
+                activeDemandSnapshot,
+                availabilityScratch,
+                variantCache,
+                true
             );
         }
         return candidates.toEvaluation();
@@ -943,58 +1057,139 @@ public final class StandardPlanner implements RoutePlanner {
         return candidateBudgetReached(context, parentNode, input, remaining, depth);
     }
 
-    private void addCandidateIfAccepted(
+    private void addCandidateSeedIfAccepted(
         PlannerContext context,
         InputContent input,
         long remaining,
         int depth,
         Int2IntOpenHashMap activePath,
-        ArrayDeque<InputContent> activeDemands,
         ResourceLedger ledger,
         RecipeGraph.Node node,
         int recipeIndex,
         @Nullable OutputContent matchedOutput,
-        CandidateShortlist candidates,
+        int knownMatchedVariantIndex,
+        CandidatePreShortlist candidates,
         ScoringScratch scoringScratch,
-        ActiveDemandDependencyScratch dependencyScratch
+        CandidateAvailabilityScratch availabilityScratch,
+        InputVariantCache variantCache
     ) {
         if (matchedOutput == null || matchedOutput.amount() <= 0) {
             return;
         }
         if (!heuristicAllowsCandidate(context.request(), node)) {
-            if (logger.isDebugEnabled()) {
-                logger.debug(
+            return;
+        }
+        int matchedVariantIndex = knownMatchedVariantIndex >= 0
+            ? knownMatchedVariantIndex
+            : resolveMatchedVariantIndex(input, matchedOutput, variantCache);
+        if (matchedVariantIndex < 0) {
+            return;
+        }
+        int craftTimes = (int) Math.ceil((double) remaining / matchedOutput.amount());
+        context.counters().generatedCandidates++;
+
+        RuleProfile profile = context.ruleProfile();
+        boolean cycleCandidate = isActive(activePath, recipeIndex);
+        markCandidateBudgetIfReached(context, node, input, remaining, depth, cycleCandidate, context.counters().activeRootInputIndex >= 0);
+        double amplificationRisk = estimateAmplificationRisk(cycleCandidate, depth);
+        double availableCoverage = estimateCandidateAvailableCoverage(node, craftTimes, availabilityScratch);
+        boolean fastScoring = useFastScoring(context, profile);
+        double[] score = scoringScratch.clear();
+        if (fastScoring) {
+            if (!fastHardRulesAccept(node)) {
+                return;
+            }
+            applyFastScore(profile.fastScoringPreset(), node, craftTimes, depth, amplificationRisk, availableCoverage, score);
+        } else {
+            CandidateContext candidateContext = new CandidateContext(
+                node,
+                input,
+                remaining,
+                craftTimes,
+                depth,
+                cycleCandidate,
+                amplificationRisk,
+                availableCoverage
+            );
+            HardRuleResult hardResult = evaluateHardRules(profile.hardRules(), candidateContext);
+            if (!hardResult.accepted()) {
+                return;
+            }
+            var accumulator = scoringScratch.accumulator();
+            for (var rule : profile.scoreRules()) {
+                rule.contribute(candidateContext, accumulator);
+            }
+            applyHeuristicScore(node.routingHints(), accumulator);
+        }
+        candidates.add(
+            recipeIndex,
+            node,
+            matchedOutput,
+            craftTimes,
+            matchedVariantIndex,
+            score,
+            context.catalog().stableRecipeKey(recipeIndex)
+        );
+    }
+
+    private void addCandidateIfAccepted(
+        PlannerContext context,
+        InputContent input,
+        long remaining,
+        int depth,
+        PlannerDebugLog debugLog,
+        Int2IntOpenHashMap activePath,
+        RecipeGraph.Node node,
+        int recipeIndex,
+        @Nullable OutputContent matchedOutput,
+        int knownMatchedVariantIndex,
+        CandidateShortlist candidates,
+        ScoringScratch scoringScratch,
+        ActiveDemandDependencyScratch dependencyScratch,
+        ActiveDemandSnapshot activeDemandSnapshot,
+        CandidateAvailabilityScratch availabilityScratch,
+        InputVariantCache variantCache,
+        boolean countGenerated
+    ) {
+        if (matchedOutput == null || matchedOutput.amount() <= 0) {
+            return;
+        }
+        if (!heuristicAllowsCandidate(context.request(), node)) {
+            if (debugLog.enabled()) {
+                debugLog.debug(
                     "planner.candidate.filtered reason=heuristic recipe={} policy={} hintPolicy={} penalty={}",
-                    describeRecipe(node.recipe()),
-                    context.request().heuristicPolicy(),
-                    node.routingHints().usePolicy(),
-                    node.routingHints().penalty()
+                    () -> describeRecipe(node.recipe()),
+                    () -> context.request().heuristicPolicy(),
+                    () -> node.routingHints().usePolicy(),
+                    () -> node.routingHints().penalty()
                 );
             }
             return;
         }
-        int matchedVariantIndex = resolveMatchedVariantIndex(input, matchedOutput);
+        int matchedVariantIndex = knownMatchedVariantIndex >= 0
+            ? knownMatchedVariantIndex
+            : resolveMatchedVariantIndex(input, matchedOutput, variantCache);
         if (matchedVariantIndex < 0) {
-            if (logger.isDebugEnabled()) {
-                logger.debug(
+            if (debugLog.enabled()) {
+                debugLog.debug(
                     "planner.candidate.filtered reason=variantMismatch recipe={} input={} outputAmount={}",
-                    describeRecipe(node.recipe()),
-                    describeInput(input),
-                    matchedOutput.amount()
+                    () -> describeRecipe(node.recipe()),
+                    () -> describeInput(input),
+                    matchedOutput::amount
                 );
             }
             return;
         }
         int craftTimes = (int) Math.ceil((double) remaining / matchedOutput.amount());
         if (context.request().loopPolicy() == LoopPolicy.forbidAmplification
-            && candidateRequiresActiveDemand(node, activeDemands)) {
+            && candidateRequiresActiveDemand(node, activeDemandSnapshot, dependencyScratch)) {
             candidates.markActiveCycleCandidate();
-            if (logger.isDebugEnabled()) {
-                logger.debug(
+            if (debugLog.enabled()) {
+                debugLog.debug(
                     "planner.candidate.filtered reason=activeDemandCycle recipe={} input={} depth={}",
-                    describeRecipe(node.recipe()),
-                    describeInput(input),
-                    depth
+                    () -> describeRecipe(node.recipe()),
+                    () -> describeInput(input),
+                    () -> depth
                 );
             }
             return;
@@ -1004,42 +1199,44 @@ public final class StandardPlanner implements RoutePlanner {
                 context,
                 node,
                 craftTimes,
-                activeDemands,
-                ledger,
-                dependencyScratch
+                activeDemandSnapshot,
+                dependencyScratch,
+                availabilityScratch
             );
         if (indirectActiveDemandCycle) {
             candidates.markActiveCycleCandidate();
-            if (logger.isDebugEnabled()) {
-                logger.debug(
+            if (debugLog.enabled()) {
+                debugLog.debug(
                     "planner.candidate.penalized reason=indirectActiveDemandCycle recipe={} input={} depth={}",
-                    describeRecipe(node.recipe()),
-                    describeInput(input),
-                    depth
+                    () -> describeRecipe(node.recipe()),
+                    () -> describeInput(input),
+                    () -> depth
                 );
             }
         }
-        context.counters().generatedCandidates++;
 
         RuleProfile profile = context.ruleProfile();
         boolean cycleCandidate = isActive(activePath, recipeIndex);
-        markCandidateBudgetIfReached(context, node, input, remaining, depth, cycleCandidate, context.counters().activeRootInputIndex >= 0);
+        if (countGenerated) {
+            context.counters().generatedCandidates++;
+            markCandidateBudgetIfReached(context, node, input, remaining, depth, cycleCandidate, context.counters().activeRootInputIndex >= 0);
+        }
         double amplificationRisk = estimateAmplificationRisk(cycleCandidate, depth);
-        double availableCoverage = estimateCandidateAvailableCoverage(node, craftTimes, ledger);
+        double availableCoverage = estimateCandidateAvailableCoverage(node, craftTimes, availabilityScratch);
         boolean fastScoring = useFastScoring(context, profile);
         double[] score = scoringScratch.clear();
         CandidateContext candidateContext = null;
         if (fastScoring) {
             if (!fastHardRulesAccept(node)) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug(
+                if (debugLog.enabled()) {
+                    debugLog.debug(
                         "planner.candidate.filtered reason=hardRule recipe={} input={} remaining={} depth={} risk={} coverage={}",
-                        describeRecipe(node.recipe()),
-                        describeInput(input),
-                        remaining,
-                        depth,
-                        amplificationRisk,
-                        availableCoverage
+                        () -> describeRecipe(node.recipe()),
+                        () -> describeInput(input),
+                        () -> remaining,
+                        () -> depth,
+                        () -> amplificationRisk,
+                        () -> availableCoverage
                     );
                 }
                 return;
@@ -1059,15 +1256,15 @@ public final class StandardPlanner implements RoutePlanner {
             );
             HardRuleResult hardResult = evaluateHardRules(profile.hardRules(), candidateContext);
             if (!hardResult.accepted()) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug(
+                if (debugLog.enabled()) {
+                    debugLog.debug(
                         "planner.candidate.filtered reason=hardRule recipe={} input={} remaining={} depth={} risk={} coverage={}",
-                        describeRecipe(node.recipe()),
-                        describeInput(input),
-                        remaining,
-                        depth,
-                        amplificationRisk,
-                        availableCoverage
+                        () -> describeRecipe(node.recipe()),
+                        () -> describeInput(input),
+                        () -> remaining,
+                        () -> depth,
+                        () -> amplificationRisk,
+                        () -> availableCoverage
                     );
                 }
                 return;
@@ -1209,23 +1406,43 @@ public final class StandardPlanner implements RoutePlanner {
         }
     }
 
-    private ProducerRefIterator indexedProducerRefs(RecipeGraph graph, InputContent input) {
+    private ProducerRefIterator indexedProducerRefs(RecipeGraph graph, InputContent input, InputVariantCache variantCache) {
         ContentResource direct = directInputResource(input);
         if (direct != null) {
-            return new CursorProducerRefIterator(graph.producerCursorFor(direct));
+            return new CursorProducerRefIterator(graph.producerCursorFor(direct), 0);
         }
         if (!input.isEnumerable()) {
             return EmptyProducerRefIterator.instance;
         }
 
+        return variantCache.producerRefs(graph, input).iterator();
+    }
+
+    private static ProducerRefSnapshot copyProducerRefs(RecipeGraph graph, InputContent input, InputVariantCache variantCache) {
         LongOpenHashSet refs = new LongOpenHashSet();
-        for (ContentVariant variant : input.enumerate()) {
+        Long2IntOpenHashMap matchedVariantIndices = new Long2IntOpenHashMap();
+        matchedVariantIndices.defaultReturnValue(-1);
+        ContentVariant[] variants = variantCache.variants(input);
+        for (int variantIndex = 0; variantIndex < variants.length; variantIndex++) {
+            ContentVariant variant = variants[variantIndex];
             RecipeGraph.OutputRefCursor cursor = graph.producerCursorFor(variant);
             while (cursor.next()) {
-                refs.add(packProducerRef(cursor.recipeIndex(), cursor.outputIndex()));
+                long ref = packProducerRef(cursor.recipeIndex(), cursor.outputIndex());
+                if (refs.add(ref)) {
+                    matchedVariantIndices.put(ref, variantIndex);
+                }
             }
         }
-        return refs.isEmpty() ? EmptyProducerRefIterator.instance : new SetProducerRefIterator(refs);
+        if (refs.isEmpty()) {
+            return ProducerRefSnapshot.empty;
+        }
+        long[] snapshotRefs = refs.toLongArray();
+        Arrays.sort(snapshotRefs);
+        int[] snapshotVariantIndices = new int[snapshotRefs.length];
+        for (int i = 0; i < snapshotRefs.length; i++) {
+            snapshotVariantIndices[i] = matchedVariantIndices.get(snapshotRefs[i]);
+        }
+        return new ProducerRefSnapshot(snapshotRefs, snapshotVariantIndices);
     }
 
     private @Nullable ContentResource directInputResource(InputContent input) {
@@ -1254,7 +1471,11 @@ public final class StandardPlanner implements RoutePlanner {
         return (int) ref;
     }
 
-    private double estimateCandidateAvailableCoverage(RecipeGraph.Node node, int craftTimes, ResourceLedger ledger) {
+    private double estimateCandidateAvailableCoverage(
+        RecipeGraph.Node node,
+        int craftTimes,
+        CandidateAvailabilityScratch availabilityScratch
+    ) {
         double totalRequired = 0.0d;
         double totalCovered = 0.0d;
         for (int inputIndex = 0; inputIndex < node.inputCount(); inputIndex++) {
@@ -1264,7 +1485,7 @@ public final class StandardPlanner implements RoutePlanner {
                 continue;
             }
 
-            long available = Math.min(required, ledger.peekAvailable(input));
+            long available = Math.min(required, availabilityScratch.peekAvailable(input));
             totalRequired += required;
             totalCovered += available;
         }
@@ -1471,15 +1692,19 @@ public final class StandardPlanner implements RoutePlanner {
         };
     }
 
-    private int enumerableVariantCount(InputContent input) {
-        if (!input.isEnumerable()) {
-            return 0;
-        }
-        int count = 0;
-        for (ContentVariant ignored : input.enumerate()) {
-            count++;
-        }
-        return count;
+    private boolean useCandidatePreShortlist(PlannerContext context) {
+        return useFastScoring(context, context.ruleProfile())
+            && context.sourcePolicyDecision().allowedRecipes().cardinality() > candidatePreShortlistMinimum;
+    }
+
+    private int candidatePreShortlistLimit(PlannerContext context, int variantCount) {
+        int shortlistLimit = candidateShortlistLimit(context);
+        int variantRetention = Math.min(Math.max(0, variantCount), candidatePreShortlistVariantRetentionLimit);
+        return Math.max(candidatePreShortlistMinimum, shortlistLimit * candidatePreShortlistMultiplier + variantRetention);
+    }
+
+    private int enumerableVariantCount(InputContent input, InputVariantCache variantCache) {
+        return input.isEnumerable() ? variantCache.count(input) : 0;
     }
 
     /**
@@ -1490,8 +1715,8 @@ public final class StandardPlanner implements RoutePlanner {
      * expanded candidate happened to be tried, which loses fidelity and misrepresents the
      * real unresolved demand. In those cases the planner must report the original input.
      */
-    private boolean shouldPropagateCandidateIssues(InputContent input) {
-        return !preservesOriginalInputShortage(input);
+    private boolean shouldPropagateCandidateIssues(InputContent input, InputVariantCache variantCache) {
+        return !preservesOriginalInputShortage(input, variantCache);
     }
 
     private boolean hasOnlyNonBlockingShortages(MutableList<RoutingIssue> issues, int issueStart) {
@@ -1524,11 +1749,12 @@ public final class StandardPlanner implements RoutePlanner {
         long resolvedAmount,
         int issueStart,
         MutableList<RoutingIssue> issues,
-        AtomicInteger issueSeq
+        AtomicInteger issueSeq,
+        InputVariantCache variantCache
     ) {
         if (resolvedAmount <= 0
             || !context.ruleProfile().liftMultiSemanticChildShortages()
-            || !preservesOriginalInputShortage(parentInput)
+            || !preservesOriginalInputShortage(parentInput, variantCache)
             || issueStart >= issues.size()) {
             return;
         }
@@ -1559,22 +1785,12 @@ public final class StandardPlanner implements RoutePlanner {
         );
     }
 
-    private boolean preservesOriginalInputShortage(InputContent input) {
-        return input.preserveOriginalShortageSemantics() || hasMultipleSemanticAlternatives(input);
+    private boolean preservesOriginalInputShortage(InputContent input, InputVariantCache variantCache) {
+        return input.preserveOriginalShortageSemantics() || hasMultipleSemanticAlternatives(input, variantCache);
     }
 
-    private boolean hasMultipleSemanticAlternatives(InputContent input) {
-        if (!input.isEnumerable()) {
-            return false;
-        }
-        int count = 0;
-        for (ContentVariant ignored : input.enumerate()) {
-            count++;
-            if (count > 1) {
-                return true;
-            }
-        }
-        return false;
+    private boolean hasMultipleSemanticAlternatives(InputContent input, InputVariantCache variantCache) {
+        return input.isEnumerable() && variantCache.count(input) > 1;
     }
 
     private long consumeDemandWithPolicy(
@@ -1584,7 +1800,8 @@ public final class StandardPlanner implements RoutePlanner {
         ResourceLedger ledger,
         PlanBuilder planBuilder,
         MutableList<RoutingTrace.TraceStage> traceStages,
-        int inputIndex
+        int inputIndex,
+        InputVariantCache variantCache
     ) {
         if (!input.isEnumerable()) {
             return ledger.consumeDemand(input, required, planBuilder);
@@ -1599,7 +1816,8 @@ public final class StandardPlanner implements RoutePlanner {
             input,
             required,
             ledger,
-            null
+            null,
+            variantCache
         );
         long remaining = required;
         for (VariantCoverage coverage : ordered) {
@@ -1632,7 +1850,8 @@ public final class StandardPlanner implements RoutePlanner {
         InputContent input,
         long required,
         ResourceLedger ledger,
-        List<CandidateScore> candidates
+        List<CandidateScore> candidates,
+        InputVariantCache variantCache
     ) {
         if (!input.isEnumerable() || candidates.size() <= 1) {
             return;
@@ -1643,7 +1862,8 @@ public final class StandardPlanner implements RoutePlanner {
             input,
             required,
             ledger,
-            candidates
+            candidates,
+            variantCache
         );
         if (ordered.size() <= 1) {
             return;
@@ -1688,14 +1908,22 @@ public final class StandardPlanner implements RoutePlanner {
         InputContent input,
         long required,
         ResourceLedger ledger,
-        List<CandidateScore> candidates
+        List<CandidateScore> candidates,
+        InputVariantCache variantCache
     ) {
-        int[] bestCandidateRanks = candidates == null ? null : bestCandidateRanksByVariant(input, candidates);
+        int[] bestCandidateRanks = candidates == null ? null : bestCandidateRanksByVariant(input, candidates, variantCache);
         List<VariantCoverage> variants = new ArrayList<>();
         int index = 0;
-        for (ContentVariant variant : input.enumerate()) {
-            long stockAvail = ledger.peekStockAvailable(variant);
-            long byproductAvail = ledger.peekByproductAvailable(variant);
+        for (ContentVariant variant : variantCache.variants(input)) {
+            long stockAvail;
+            long byproductAvail;
+            if (variant instanceof ContentStack<?, ?> stack) {
+                stockAvail = ledger.peekStockAvailableNormalized(stack);
+                byproductAvail = ledger.peekByproductAvailableNormalized(stack);
+            } else {
+                stockAvail = ledger.peekStockAvailable(variant);
+                byproductAvail = ledger.peekByproductAvailable(variant);
+            }
             long totalAvail = stockAvail + byproductAvail;
             double coverage = required <= 0 ? 0 : Math.min(required, totalAvail) / (double) required;
             int bestCandidateRank = bestCandidateRanks == null || index >= bestCandidateRanks.length
@@ -1716,11 +1944,8 @@ public final class StandardPlanner implements RoutePlanner {
         return variants;
     }
 
-    private int[] bestCandidateRanksByVariant(InputContent input, List<CandidateScore> candidates) {
-        int variantCount = 0;
-        for (ContentVariant ignored : input.enumerate()) {
-            variantCount++;
-        }
+    private int[] bestCandidateRanksByVariant(InputContent input, List<CandidateScore> candidates, InputVariantCache variantCache) {
+        int variantCount = variantCache.count(input);
         int[] ranks = new int[variantCount];
         java.util.Arrays.fill(ranks, Integer.MAX_VALUE);
         for (int i = 0; i < candidates.size(); i++) {
@@ -1784,12 +2009,12 @@ public final class StandardPlanner implements RoutePlanner {
         return Integer.compare(left.variantIndex(), right.variantIndex());
     }
 
-    private int resolveMatchedVariantIndex(InputContent input, OutputContent output) {
+    private int resolveMatchedVariantIndex(InputContent input, OutputContent output, InputVariantCache variantCache) {
         if (!input.isEnumerable()) {
             return input.satisfy(output.asResource()) ? 0 : -1;
         }
         int index = 0;
-        for (ContentVariant variant : input.enumerate()) {
+        for (ContentVariant variant : variantCache.variants(input)) {
             if (variantMatchesOutput(variant, output)) {
                 return index;
             }
@@ -1812,14 +2037,18 @@ public final class StandardPlanner implements RoutePlanner {
         };
     }
 
-    private boolean candidateRequiresActiveDemand(RecipeGraph.Node node, ArrayDeque<InputContent> activeDemands) {
-        if (activeDemands.isEmpty()) {
+    private boolean candidateRequiresActiveDemand(
+        RecipeGraph.Node node,
+        ActiveDemandSnapshot activeDemandSnapshot,
+        ActiveDemandDependencyScratch scratch
+    ) {
+        if (activeDemandSnapshot.demands().length == 0) {
             return false;
         }
-        for (InputContent demand : activeDemands) {
+        for (InputContent demand : activeDemandSnapshot.demands()) {
             for (int inputIndex = 0; inputIndex < node.inputCount(); inputIndex++) {
                 InputContent candidateInput = node.inputAt(inputIndex);
-                if (inputOverlapsDemand(candidateInput, demand)) {
+                if (scratch.inputOverlapsDemand(this, candidateInput, demand)) {
                     return true;
                 }
             }
@@ -1831,11 +2060,11 @@ public final class StandardPlanner implements RoutePlanner {
         PlannerContext context,
         RecipeGraph.Node node,
         int craftTimes,
-        ArrayDeque<InputContent> activeDemands,
-        ResourceLedger ledger,
-        ActiveDemandDependencyScratch scratch
+        ActiveDemandSnapshot activeDemandSnapshot,
+        ActiveDemandDependencyScratch scratch,
+        CandidateAvailabilityScratch availabilityScratch
     ) {
-        if (activeDemands.isEmpty()) {
+        if (activeDemandSnapshot.demands().length == 0) {
             return false;
         }
         for (int inputIndex = 0; inputIndex < node.inputCount(); inputIndex++) {
@@ -1844,10 +2073,10 @@ public final class StandardPlanner implements RoutePlanner {
                 continue;
             }
             long required = requiredCandidateInputAmount(candidateInput, craftTimes);
-            if (required <= 0L || ledger.peekAvailable(candidateInput) >= required) {
+            if (required <= 0L || availabilityScratch.peekAvailable(candidateInput) >= required) {
                 continue;
             }
-            if (inputCanReachActiveDemand(context, candidateInput, activeDemands, scratch)) {
+            if (scratch.inputCanReachActiveDemand(this, context, candidateInput, activeDemandSnapshot)) {
                 return true;
             }
         }
@@ -1857,11 +2086,11 @@ public final class StandardPlanner implements RoutePlanner {
     private boolean inputCanReachActiveDemand(
         PlannerContext context,
         InputContent rootInput,
-        ArrayDeque<InputContent> activeDemands,
+        ActiveDemandSnapshot activeDemandSnapshot,
         ActiveDemandDependencyScratch scratch
     ) {
         scratch.reset();
-        if (inputOverlapsAnyActiveDemand(rootInput, activeDemands)) {
+        if (inputOverlapsAnyActiveDemand(rootInput, activeDemandSnapshot, scratch)) {
             return true;
         }
         pushProducerRefs(context, rootInput, scratch);
@@ -1879,7 +2108,7 @@ public final class StandardPlanner implements RoutePlanner {
                 if (input.isEmpty() || input.notConsumed()) {
                     continue;
                 }
-                if (inputOverlapsAnyActiveDemand(input, activeDemands)) {
+                if (inputOverlapsAnyActiveDemand(input, activeDemandSnapshot, scratch)) {
                     return true;
                 }
                 pushProducerRefs(context, input, scratch);
@@ -1893,7 +2122,7 @@ public final class StandardPlanner implements RoutePlanner {
         InputContent input,
         ActiveDemandDependencyScratch scratch
     ) {
-        ProducerRefIterator producerRefs = indexedProducerRefs(context.graph(), input);
+        ProducerRefIterator producerRefs = indexedProducerRefs(context.graph(), input, scratch.variantCache);
         while (producerRefs.next() && scratch.producerRefsVisited < activeDemandDependencyProducerLimit) {
             scratch.producerRefsVisited++;
             int recipeIndex = producerRefs.recipeIndex();
@@ -1906,9 +2135,13 @@ public final class StandardPlanner implements RoutePlanner {
         }
     }
 
-    private boolean inputOverlapsAnyActiveDemand(InputContent input, ArrayDeque<InputContent> activeDemands) {
-        for (InputContent demand : activeDemands) {
-            if (inputOverlapsDemand(input, demand)) {
+    private boolean inputOverlapsAnyActiveDemand(
+        InputContent input,
+        ActiveDemandSnapshot activeDemandSnapshot,
+        ActiveDemandDependencyScratch scratch
+    ) {
+        for (InputContent demand : activeDemandSnapshot.demands()) {
+            if (scratch.inputOverlapsDemand(this, input, demand)) {
                 return true;
             }
         }
@@ -1916,6 +2149,10 @@ public final class StandardPlanner implements RoutePlanner {
     }
 
     private boolean inputOverlapsDemand(InputContent input, InputContent demand) {
+        return inputOverlapsDemand(input, demand, null);
+    }
+
+    private boolean inputOverlapsDemand(InputContent input, InputContent demand, @Nullable InputVariantCache variantCache) {
         if (input.isEmpty() || input.notConsumed()) {
             return false;
         }
@@ -1928,7 +2165,7 @@ public final class StandardPlanner implements RoutePlanner {
                 return demandResource != null && input.satisfy(demandResource);
             }
             for (ContentVariant demandVariant : demand.enumerate()) {
-                if (variantSatisfiesInput(input, demandVariant)) {
+                if (variantSatisfiesInput(input, demandVariant, variantCache)) {
                     return true;
                 }
             }
@@ -1936,7 +2173,7 @@ public final class StandardPlanner implements RoutePlanner {
         }
         if (demand.isEnumerable()) {
             for (ContentVariant demandVariant : demand.enumerate()) {
-                if (variantSatisfiesInput(input, demandVariant)) {
+                if (variantSatisfiesInput(input, demandVariant, variantCache)) {
                     return true;
                 }
                 if (demandVariant instanceof ContentResource resource && input.satisfy(resource)) {
@@ -1949,7 +2186,7 @@ public final class StandardPlanner implements RoutePlanner {
         return demandResource != null && input.satisfy(demandResource);
     }
 
-    private boolean variantSatisfiesInput(InputContent input, ContentVariant variant) {
+    private boolean variantSatisfiesInput(InputContent input, ContentVariant variant, @Nullable InputVariantCache variantCache) {
         if (variant instanceof ContentResource resource) {
             ContentResource direct = directInputResource(input);
             if (direct != null) {
@@ -1961,9 +2198,17 @@ public final class StandardPlanner implements RoutePlanner {
         if (!input.isEnumerable()) {
             return false;
         }
-        for (ContentVariant inputVariant : input.enumerate()) {
-            if (variantsOverlap(inputVariant, variant)) {
-                return true;
+        if (variantCache == null) {
+            for (ContentVariant inputVariant : input.enumerate()) {
+                if (variantsOverlap(inputVariant, variant)) {
+                    return true;
+                }
+            }
+        } else {
+            for (ContentVariant inputVariant : variantCache.variants(input)) {
+                if (variantsOverlap(inputVariant, variant)) {
+                    return true;
+                }
             }
         }
         return false;
@@ -1973,14 +2218,51 @@ public final class StandardPlanner implements RoutePlanner {
         private static final byte stateUnknown = 0;
         private static final byte stateSeen = 1;
 
+        private final InputVariantCache variantCache;
+        private final OverlapMemo overlapMemo;
+        private final HashMap<ActiveReachKey, Boolean> reachesActiveDemand = new HashMap<>();
         private final Int2ByteOpenHashMap stateByRecipe = new Int2ByteOpenHashMap();
         private int[] stack = new int[32];
         private int stackSize;
         private int visitedNodes;
         private int producerRefsVisited;
 
-        private ActiveDemandDependencyScratch() {
+        private ActiveDemandDependencyScratch(InputVariantCache variantCache) {
+            this.variantCache = variantCache;
+            this.overlapMemo = new OverlapMemo(variantCache);
             stateByRecipe.defaultReturnValue(stateUnknown);
+        }
+
+        private boolean inputOverlapsDemand(StandardPlanner planner, InputContent input, InputContent demand) {
+            return overlapMemo.inputOverlapsDemand(planner, input, demand);
+        }
+
+        private ActiveDemandSnapshot snapshot(ArrayDeque<InputContent> activeDemands) {
+            if (activeDemands.isEmpty()) {
+                return emptyActiveDemandSnapshot;
+            }
+            InputContent[] demands = activeDemands.toArray(new InputContent[0]);
+            int hash = 1;
+            for (InputContent demand : demands) {
+                hash = 31 * hash + System.identityHashCode(demand);
+            }
+            return new ActiveDemandSnapshot(demands, hash);
+        }
+
+        private boolean inputCanReachActiveDemand(
+            StandardPlanner planner,
+            PlannerContext context,
+            InputContent input,
+            ActiveDemandSnapshot activeDemandSnapshot
+        ) {
+            ActiveReachKey key = new ActiveReachKey(input, activeDemandSnapshot);
+            Boolean cached = reachesActiveDemand.get(key);
+            if (cached != null) {
+                return cached;
+            }
+            boolean result = planner.inputCanReachActiveDemand(context, input, activeDemandSnapshot, this);
+            reachesActiveDemand.put(key, result);
+            return result;
         }
 
         private void reset() {
@@ -2015,6 +2297,80 @@ public final class StandardPlanner implements RoutePlanner {
 
         private boolean isEmpty() {
             return stackSize == 0;
+        }
+    }
+
+    private record ActiveDemandSnapshot(
+        InputContent[] demands,
+        int identityHash
+    ) {
+    }
+
+    private static final class ActiveReachKey {
+        private final InputContent input;
+        private final ActiveDemandSnapshot activeDemandSnapshot;
+        private final int hash;
+
+        private ActiveReachKey(InputContent input, ActiveDemandSnapshot activeDemandSnapshot) {
+            this.input = input;
+            this.activeDemandSnapshot = activeDemandSnapshot;
+            this.hash = 31 * System.identityHashCode(input) + activeDemandSnapshot.identityHash();
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            return obj instanceof ActiveReachKey other
+                && input == other.input
+                && activeDemandSnapshot == other.activeDemandSnapshot;
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+    }
+
+    private static final class OverlapMemo {
+        private final InputVariantCache variantCache;
+        private final HashMap<OverlapKey, Boolean> overlaps = new HashMap<>();
+
+        private OverlapMemo(InputVariantCache variantCache) {
+            this.variantCache = variantCache;
+        }
+
+        private boolean inputOverlapsDemand(StandardPlanner planner, InputContent input, InputContent demand) {
+            OverlapKey key = new OverlapKey(input, demand);
+            Boolean cached = overlaps.get(key);
+            if (cached != null) {
+                return cached;
+            }
+            boolean result = planner.inputOverlapsDemand(input, demand, variantCache);
+            overlaps.put(key, result);
+            return result;
+        }
+    }
+
+    private static final class OverlapKey {
+        private final InputContent input;
+        private final InputContent demand;
+        private final int hash;
+
+        private OverlapKey(InputContent input, InputContent demand) {
+            this.input = input;
+            this.demand = demand;
+            this.hash = 31 * System.identityHashCode(input) + System.identityHashCode(demand);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            return obj instanceof OverlapKey other
+                && input == other.input
+                && demand == other.demand;
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
         }
     }
 
@@ -2337,6 +2693,17 @@ public final class StandardPlanner implements RoutePlanner {
     ) {
     }
 
+    private record CandidateSeed(
+        int recipeIndex,
+        RecipeGraph.Node node,
+        OutputContent matchedOutput,
+        int craftTimes,
+        int matchedVariantIndex,
+        double[] score,
+        RoutingRecipeCatalog.StableRecipeKey stableKey
+    ) {
+    }
+
     private record CandidateEvaluation(
         List<CandidateScore> candidates,
         boolean hasActiveCycleCandidate
@@ -2368,6 +2735,8 @@ public final class StandardPlanner implements RoutePlanner {
         int recipeIndex();
 
         int outputIndex();
+
+        int matchedVariantIndex();
     }
 
     private enum EmptyProducerRefIterator implements ProducerRefIterator {
@@ -2387,13 +2756,20 @@ public final class StandardPlanner implements RoutePlanner {
         public int outputIndex() {
             throw new NoSuchElementException();
         }
+
+        @Override
+        public int matchedVariantIndex() {
+            return -1;
+        }
     }
 
     private static final class CursorProducerRefIterator implements ProducerRefIterator {
         private final RecipeGraph.OutputRefCursor cursor;
+        private final int matchedVariantIndex;
 
-        private CursorProducerRefIterator(RecipeGraph.OutputRefCursor cursor) {
+        private CursorProducerRefIterator(RecipeGraph.OutputRefCursor cursor, int matchedVariantIndex) {
             this.cursor = cursor;
+            this.matchedVariantIndex = matchedVariantIndex;
         }
 
         @Override
@@ -2410,33 +2786,144 @@ public final class StandardPlanner implements RoutePlanner {
         public int outputIndex() {
             return cursor.outputIndex();
         }
+
+        @Override
+        public int matchedVariantIndex() {
+            return matchedVariantIndex;
+        }
     }
 
-    private static final class SetProducerRefIterator implements ProducerRefIterator {
-        private final LongIterator iterator;
-        private long current;
+    private record ProducerRefSnapshot(
+        long[] refs,
+        int[] matchedVariantIndices
+    ) {
+        private static final ProducerRefSnapshot empty = new ProducerRefSnapshot(new long[0], new int[0]);
 
-        private SetProducerRefIterator(LongOpenHashSet refs) {
-            this.iterator = refs.iterator();
+        private ProducerRefIterator iterator() {
+            return refs.length == 0 ? EmptyProducerRefIterator.instance : new SnapshotProducerRefIterator(this);
+        }
+    }
+
+    private static final class SnapshotProducerRefIterator implements ProducerRefIterator {
+        private final ProducerRefSnapshot snapshot;
+        private int index = -1;
+
+        private SnapshotProducerRefIterator(ProducerRefSnapshot snapshot) {
+            this.snapshot = snapshot;
         }
 
         @Override
         public boolean next() {
-            if (!iterator.hasNext()) {
+            if (index + 1 >= snapshot.refs.length) {
                 return false;
             }
-            current = iterator.nextLong();
+            index++;
             return true;
         }
 
         @Override
         public int recipeIndex() {
-            return producerRecipeIndex(current);
+            if (index < 0 || index >= snapshot.refs.length) {
+                throw new NoSuchElementException();
+            }
+            return producerRecipeIndex(snapshot.refs[index]);
         }
 
         @Override
         public int outputIndex() {
-            return producerOutputIndex(current);
+            if (index < 0 || index >= snapshot.refs.length) {
+                throw new NoSuchElementException();
+            }
+            return producerOutputIndex(snapshot.refs[index]);
+        }
+
+        @Override
+        public int matchedVariantIndex() {
+            if (index < 0 || index >= snapshot.matchedVariantIndices.length) {
+                return -1;
+            }
+            return snapshot.matchedVariantIndices[index];
+        }
+    }
+
+    private static final class InputVariantCache {
+        private final IdentityHashMap<InputContent, ContentVariant[]> variantsByInput = new IdentityHashMap<>();
+        private final IdentityHashMap<InputContent, ProducerRefSnapshot> producerRefsByInput = new IdentityHashMap<>();
+
+        private ContentVariant[] variants(InputContent input) {
+            if (!input.isEnumerable()) {
+                return emptyVariants;
+            }
+            return variantsByInput.computeIfAbsent(input, this::copyVariants);
+        }
+
+        private int count(InputContent input) {
+            return variants(input).length;
+        }
+
+        private ContentVariant[] copyVariants(InputContent input) {
+            ArrayList<ContentVariant> variants = new ArrayList<>();
+            for (ContentVariant variant : input.enumerate()) {
+                if (variant instanceof ContentStack<?, ?> stack) {
+                    variants.add(stack.normalize());
+                } else {
+                    variants.add(variant);
+                }
+            }
+            return variants.isEmpty() ? emptyVariants : variants.toArray(new ContentVariant[0]);
+        }
+
+        private ProducerRefSnapshot producerRefs(RecipeGraph graph, InputContent input) {
+            return producerRefsByInput.computeIfAbsent(input, key -> copyProducerRefs(graph, key, this));
+        }
+    }
+
+    private static final class CandidateAvailabilityScratch {
+        private final ResourceLedger ledger;
+        private final InputVariantCache variantCache;
+        private final IdentityHashMap<InputContent, Long> availableByInput = new IdentityHashMap<>();
+        private final HashMap<ContentStack<?, ?>, Long> availableByDirectStack = new HashMap<>();
+        private final IdentityHashMap<Object, Long> availableByValueType = new IdentityHashMap<>();
+
+        private CandidateAvailabilityScratch(ResourceLedger ledger, InputVariantCache variantCache) {
+            this.ledger = ledger;
+            this.variantCache = variantCache;
+        }
+
+        private long peekAvailable(InputContent input) {
+            Long cached = availableByInput.get(input);
+            if (cached != null) {
+                return cached;
+            }
+            Long semanticCached = semanticDirectAvailable(input);
+            if (semanticCached != null) {
+                availableByInput.put(input, semanticCached);
+                return semanticCached;
+            }
+            long available = input.isEnumerable()
+                ? ledger.peekAvailable(input, variantCache.variants(input))
+                : ledger.peekAvailable(input);
+            availableByInput.put(input, available);
+            rememberSemanticDirectAvailable(input, available);
+            return available;
+        }
+
+        private @Nullable Long semanticDirectAvailable(InputContent input) {
+            if (input instanceof ValueContent<?> value) {
+                return availableByValueType.get(value.type());
+            }
+            if (input instanceof StackContent<?, ?> stack) {
+                return availableByDirectStack.get(stack.content().normalize());
+            }
+            return null;
+        }
+
+        private void rememberSemanticDirectAvailable(InputContent input, long available) {
+            if (input instanceof ValueContent<?> value) {
+                availableByValueType.put(value.type(), available);
+            } else if (input instanceof StackContent<?, ?> stack) {
+                availableByDirectStack.put(stack.content().normalize(), available);
+            }
         }
     }
 
@@ -2445,6 +2932,8 @@ public final class StandardPlanner implements RoutePlanner {
         private final Comparator<CandidateScore> comparator;
         private final ArrayList<CandidateScore> candidates;
         private final @Nullable ArrayList<CandidateScore> bestByVariant;
+        private int worstCandidateIndex = -1;
+        private boolean worstCandidateDirty;
         private boolean hasActiveCycleCandidate;
 
         private CandidateShortlist(int limit, Comparator<CandidateScore> comparator, int variantCount) {
@@ -2476,17 +2965,11 @@ public final class StandardPlanner implements RoutePlanner {
             CandidateScore candidate = null;
             boolean retained = candidates.size() < limit;
             int replaceIndex = -1;
+            CandidateScore scratchCandidate = null;
             if (!retained && limit > 0) {
-                int worstIndex = 0;
-                CandidateScore worst = candidates.getFirst();
-                for (int i = 1; i < candidates.size(); i++) {
-                    CandidateScore current = candidates.get(i);
-                    if (comparator.compare(current, worst) > 0) {
-                        worst = current;
-                        worstIndex = i;
-                    }
-                }
-                CandidateScore scratchCandidate = new CandidateScore(
+                int worstIndex = worstCandidateIndex();
+                CandidateScore worst = candidates.get(worstIndex);
+                scratchCandidate = new CandidateScore(
                     recipeIndex,
                     node,
                     craftTimes,
@@ -2508,17 +2991,19 @@ public final class StandardPlanner implements RoutePlanner {
                 if (existing == null) {
                     retainedByVariant = true;
                 } else {
-                    CandidateScore scratchCandidate = new CandidateScore(
-                        recipeIndex,
-                        node,
-                        craftTimes,
-                        scratchScore,
-                        context,
-                        cycleCandidate,
-                        amplificationRisk,
-                        matchedVariantIndex,
-                        stableKey
-                    );
+                    if (scratchCandidate == null) {
+                        scratchCandidate = new CandidateScore(
+                            recipeIndex,
+                            node,
+                            craftTimes,
+                            scratchScore,
+                            context,
+                            cycleCandidate,
+                            amplificationRisk,
+                            matchedVariantIndex,
+                            stableKey
+                        );
+                    }
                     retainedByVariant = comparator.compare(scratchCandidate, existing) < 0;
                 }
             }
@@ -2552,10 +3037,12 @@ public final class StandardPlanner implements RoutePlanner {
             }
             if (replaceIndex >= 0) {
                 candidates.set(replaceIndex, candidate);
+                worstCandidateDirty = true;
                 return;
             }
             if (candidates.size() < limit) {
                 candidates.add(candidate);
+                worstCandidateDirty = true;
             }
         }
 
@@ -2585,6 +3072,181 @@ public final class StandardPlanner implements RoutePlanner {
                 }
             }
             candidates.add(candidate);
+        }
+
+        private int worstCandidateIndex() {
+            if (!worstCandidateDirty && worstCandidateIndex >= 0 && worstCandidateIndex < candidates.size()) {
+                return worstCandidateIndex;
+            }
+            int worstIndex = 0;
+            CandidateScore worst = candidates.getFirst();
+            for (int i = 1; i < candidates.size(); i++) {
+                CandidateScore current = candidates.get(i);
+                if (comparator.compare(current, worst) > 0) {
+                    worst = current;
+                    worstIndex = i;
+                }
+            }
+            worstCandidateIndex = worstIndex;
+            worstCandidateDirty = false;
+            return worstIndex;
+        }
+    }
+
+    private static final class CandidatePreShortlist {
+        private final int limit;
+        private final RuleProfile profile;
+        private final boolean defaultStableTieBreak;
+        private final ArrayList<CandidateSeed> candidates;
+        private final @Nullable ArrayList<CandidateSeed> bestByVariant;
+        private int worstCandidateIndex = -1;
+        private boolean worstCandidateDirty;
+
+        private CandidatePreShortlist(int limit, RuleProfile profile, int variantCount) {
+            this.limit = Math.max(1, limit);
+            this.profile = profile;
+            this.defaultStableTieBreak = DefaultRuleProfiles.usesStableRecipeTieBreak(profile);
+            this.candidates = new ArrayList<>(this.limit);
+            this.bestByVariant = variantCount > 0 && variantCount <= candidatePreShortlistVariantRetentionLimit
+                ? new ArrayList<>(variantCount)
+                : null;
+            if (this.bestByVariant != null) {
+                for (int i = 0; i < variantCount; i++) {
+                    this.bestByVariant.add(null);
+                }
+            }
+        }
+
+        private void add(
+            int recipeIndex,
+            RecipeGraph.Node node,
+            OutputContent matchedOutput,
+            int craftTimes,
+            int matchedVariantIndex,
+            double[] scratchScore,
+            RoutingRecipeCatalog.StableRecipeKey stableKey
+        ) {
+            CandidateSeed candidate = null;
+            boolean retained = candidates.size() < limit;
+            int replaceIndex = -1;
+            if (!retained) {
+                int worstIndex = worstCandidateIndex();
+                CandidateSeed worst = candidates.get(worstIndex);
+                if (compareScratchTo(recipeIndex, scratchScore, stableKey, worst) < 0) {
+                    retained = true;
+                    replaceIndex = worstIndex;
+                }
+            }
+
+            boolean retainedByVariant = false;
+            if (bestByVariant != null && matchedVariantIndex >= 0 && matchedVariantIndex < bestByVariant.size()) {
+                CandidateSeed existing = bestByVariant.get(matchedVariantIndex);
+                if (existing == null) {
+                    retainedByVariant = true;
+                } else {
+                    retainedByVariant = compareScratchTo(recipeIndex, scratchScore, stableKey, existing) < 0;
+                }
+            }
+
+            if (retained || retainedByVariant) {
+                candidate = new CandidateSeed(
+                    recipeIndex,
+                    node,
+                    matchedOutput,
+                    craftTimes,
+                    matchedVariantIndex,
+                    Arrays.copyOf(scratchScore, scratchScore.length),
+                    stableKey
+                );
+            }
+            if (candidate == null) {
+                return;
+            }
+
+            if (bestByVariant != null && matchedVariantIndex >= 0 && matchedVariantIndex < bestByVariant.size()) {
+                CandidateSeed existing = bestByVariant.get(matchedVariantIndex);
+                if (existing == null || compareCandidateTo(candidate, existing) < 0) {
+                    bestByVariant.set(matchedVariantIndex, candidate);
+                }
+            }
+            if (!retained) {
+                return;
+            }
+            if (replaceIndex >= 0) {
+                candidates.set(replaceIndex, candidate);
+                worstCandidateDirty = true;
+                return;
+            }
+            if (candidates.size() < limit) {
+                candidates.add(candidate);
+                worstCandidateDirty = true;
+            }
+        }
+
+        private List<CandidateSeed> toCandidates() {
+            if (bestByVariant != null) {
+                for (CandidateSeed candidate : bestByVariant) {
+                    if (candidate != null) {
+                        addRetainedVariantCandidate(candidate);
+                    }
+                }
+            }
+            if (candidates.size() > 1) {
+                candidates.sort(this::compareCandidateTo);
+            }
+            return candidates;
+        }
+
+        private void addRetainedVariantCandidate(CandidateSeed candidate) {
+            for (CandidateSeed existing : candidates) {
+                if (existing == candidate) {
+                    return;
+                }
+            }
+            candidates.add(candidate);
+        }
+
+        private int worstCandidateIndex() {
+            if (!worstCandidateDirty && worstCandidateIndex >= 0 && worstCandidateIndex < candidates.size()) {
+                return worstCandidateIndex;
+            }
+            int worstIndex = 0;
+            CandidateSeed worst = candidates.getFirst();
+            for (int i = 1; i < candidates.size(); i++) {
+                CandidateSeed current = candidates.get(i);
+                if (compareCandidateTo(current, worst) > 0) {
+                    worst = current;
+                    worstIndex = i;
+                }
+            }
+            worstCandidateIndex = worstIndex;
+            worstCandidateDirty = false;
+            return worstIndex;
+        }
+
+        private int compareScratchTo(
+            int recipeIndex,
+            double[] scratchScore,
+            RoutingRecipeCatalog.StableRecipeKey stableKey,
+            CandidateSeed existing
+        ) {
+            int cmp = profile.rankPolicy().compare(scratchScore, existing.score);
+            if (cmp != 0) {
+                return cmp;
+            }
+            return defaultStableTieBreak
+                ? stableKey.compareTo(existing.stableKey)
+                : Integer.compare(recipeIndex, existing.recipeIndex);
+        }
+
+        private int compareCandidateTo(CandidateSeed left, CandidateSeed right) {
+            int cmp = profile.rankPolicy().compare(left.score, right.score);
+            if (cmp != 0) {
+                return cmp;
+            }
+            return defaultStableTieBreak
+                ? left.stableKey.compareTo(right.stableKey)
+                : Integer.compare(left.recipeIndex, right.recipeIndex);
         }
     }
 

@@ -119,6 +119,12 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
             ExecutionOverlayClientConfig.calculatorDatabaseLimitMin,
             ExecutionOverlayClientConfig.calculatorDatabaseLimitMax
         ));
+        database.addContent(switchRow(
+            CirrusLangs.Calculator.Settings.projectionUsesGlobalDatabase,
+            CirrusLangs.Calculator.Settings.projectionUsesGlobalDatabaseDesc,
+            ExecutionOverlayClientConfig::calculatorProjectionUsesGlobalDatabase,
+            ExecutionOverlayClientConfig::setCalculatorProjectionUsesGlobalDatabase
+        ));
         addWidget(database);
 
         CirrusSectionWidget rules = settingsSection(CirrusLangs.Calculator.Settings.categoryRules);

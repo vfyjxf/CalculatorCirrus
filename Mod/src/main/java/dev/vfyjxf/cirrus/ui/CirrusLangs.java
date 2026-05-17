@@ -464,6 +464,8 @@ public final class CirrusLangs {
             public static final LangEntry jeiTargetAutoCloseDesc = ui("calculator.settings.jei_target_auto_close.desc");
             public static final LangEntry databaseAutoRefresh = ui("calculator.settings.database_auto_refresh");
             public static final LangEntry databaseAutoRefreshDesc = ui("calculator.settings.database_auto_refresh.desc");
+            public static final LangEntry projectionUsesGlobalDatabase = ui("calculator.settings.projection_uses_global_database");
+            public static final LangEntry projectionUsesGlobalDatabaseDesc = ui("calculator.settings.projection_uses_global_database.desc");
             public static final LangEntry databaseLimit = ui("calculator.settings.database_limit");
             public static final LangEntry databaseLimitDesc = ui("calculator.settings.database_limit.desc");
             public static final LangEntry readOtherWorlds = ui("calculator.settings.read_other_worlds");
@@ -978,6 +980,8 @@ public final class CirrusLangs {
                 Calculator.Settings.jeiTargetAutoCloseDesc,
                 Calculator.Settings.databaseAutoRefresh,
                 Calculator.Settings.databaseAutoRefreshDesc,
+                Calculator.Settings.projectionUsesGlobalDatabase,
+                Calculator.Settings.projectionUsesGlobalDatabaseDesc,
                 Calculator.Settings.databaseLimit,
                 Calculator.Settings.databaseLimitDesc,
                 Calculator.Settings.readOtherWorlds,

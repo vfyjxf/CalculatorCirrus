@@ -115,6 +115,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
+import org.eclipse.collections.api.factory.Lists;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -405,7 +406,11 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         long version,
         Runnable recipeDetailBackAction
     ) {
-        return calculatorProjection(buildContextFromApi(), recipe, times, version, recipeDetailBackAction);
+        RecipeDatabaseIndex index = calculatorProjectionIndex(recipe);
+        DatabaseContext baseContext = ExecutionOverlayClientConfig.calculatorProjectionUsesGlobalDatabase()
+            ? buildContextFromApi().withFixedIndex(index)
+            : calculatorProjectionLocalContext(index);
+        return calculatorProjection(baseContext, recipe, times, version, recipeDetailBackAction);
     }
 
     public static DatabasePage calculatorProjection(
@@ -460,7 +465,9 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         this.selectedProjectionPluginId = null;
         this.databaseScopedIndex = context.databaseScopedIndex();
         this.asyncIndexBuildEnabled = databaseScopedIndex && context.asyncIndexBuild() && pageChrome == DatabasePageChrome.databaseBrowser;
-        this.explicitEntries = asyncIndexBuildEnabled
+        this.explicitEntries = !databaseScopedIndex
+            ? copyExplicitEntries(context.explicitEntries())
+            : asyncIndexBuildEnabled
             ? copyExplicitEntries(context.explicitEntries())
             : resolveExplicitEntries(workspace, systems, context.explicitEntries());
         if (databaseScopedIndex && asyncIndexBuildEnabled) {
@@ -794,6 +801,18 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
 
     public int debugActiveDatabaseRecipeCount() {
         return workspace.activeDatabase().recipes().size();
+    }
+
+    public int debugIndexRecordCount() {
+        return index.records().size();
+    }
+
+    public int debugSystemCatalogRecordCount() {
+        return systemCatalogIndex.records().size();
+    }
+
+    public boolean debugDatabaseScopedIndex() {
+        return databaseScopedIndex;
     }
 
     public boolean debugActiveDatabaseBuiltin() {
@@ -6746,6 +6765,38 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         );
     }
 
+    private static RecipeDatabaseIndex calculatorProjectionIndex(RecipeEntry<?> recipe) {
+        if (recipe == null) {
+            return RecipeDatabaseIndex.ofRecords(List.of());
+        }
+        DatabaseDefinition database = new DatabaseDefinition(
+            "calculator_projection",
+            "Calculator Projection",
+            DatabaseKind.custom,
+            true,
+            0,
+            List.of()
+        );
+        return RecipeDatabaseIndex.build(
+            List.of(database),
+            Lists.immutable.of(recipe.system()),
+            calculatorProjectionSystemTags(recipe),
+            Map.of(database.id(), List.of(recipe)),
+            RecipeDatabaseIndex.BuildProgress.none(),
+            null
+        );
+    }
+
+    private static Map<Namespace, List<Namespace>> calculatorProjectionSystemTags(RecipeEntry<?> recipe) {
+        try {
+            ArrayList<Namespace> tags = new ArrayList<>();
+            RecipeApi.instance().getSystemTags(recipe.systemId()).forEach(tags::add);
+            return tags.isEmpty() ? Map.of() : Map.of(recipe.systemId(), List.copyOf(tags));
+        } catch (RuntimeException ignored) {
+            return Map.of();
+        }
+    }
+
     private static Map<String, List<RecipeEntry<?>>> resolveExplicitEntries(
         RecipeDatabaseWorkspace workspace,
         List<RecipeSystem<?>> systems,
@@ -6814,6 +6865,25 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             Map.of(),
             List.of(),
             List.of(),
+            ProjectionContexts.global(),
+            null,
+            null,
+            DatabasePageChrome.databaseBrowser,
+            false,
+            false
+        );
+    }
+
+    private static DatabaseContext calculatorProjectionLocalContext(RecipeDatabaseIndex index) {
+        return new DatabaseContext(
+            Checks.checkNotNull(index, "index"),
+            RecipeDatabaseWorkspace.defaults(),
+            null,
+            List.of(),
+            Map.of(),
+            Map.of(),
+            projectionPluginsFromApi(),
+            projectionContextOptionsFromApi(),
             ProjectionContexts.global(),
             null,
             null,
@@ -7028,6 +7098,25 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                 pageChrome,
                 databaseScopedIndex,
                 asyncIndexBuild
+            );
+        }
+
+        private DatabaseContext withFixedIndex(RecipeDatabaseIndex index) {
+            return new DatabaseContext(
+                Checks.checkNotNull(index, "index"),
+                workspace,
+                repository,
+                systems,
+                systemTags,
+                explicitEntries,
+                projectionPlugins,
+                projectionContextOptions,
+                globalProjectionContext,
+                calculatorProjectionContext,
+                recipeDetailBackAction,
+                pageChrome,
+                false,
+                false
             );
         }
     }

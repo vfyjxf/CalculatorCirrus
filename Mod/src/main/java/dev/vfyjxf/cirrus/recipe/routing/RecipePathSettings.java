@@ -18,6 +18,7 @@ import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingService;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
+import dev.vfyjxf.cirrus.ui.CirrusUiAsync;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
@@ -37,6 +38,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class RecipePathSettings {
     private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Calculator");
@@ -45,9 +49,12 @@ public final class RecipePathSettings {
     private static final int maxCachedCatalogs = 4;
     private static final Object routingCacheLock = new Object();
     private static final Map<RoutingCacheKey, RoutingCacheEntry> routingCache = new HashMap<>();
+    private static final Map<RoutingCacheKey, CompletableFuture<RoutingCacheEntry>> routingBuilds = new HashMap<>();
     private static final Object catalogCacheLock = new Object();
     private static final Map<CatalogCacheKey, CatalogCacheEntry> catalogCache = new HashMap<>();
     private static final Object workspaceCacheLock = new Object();
+    private static final AtomicLong warmupSequence = new AtomicLong();
+    private static long routingCacheGeneration;
     private static @Nullable WorkspaceCacheEntry workspaceCache;
 
     private RecipePathSettings() {
@@ -66,6 +73,8 @@ public final class RecipePathSettings {
         }
         synchronized (routingCacheLock) {
             routingCache.clear();
+            routingBuilds.clear();
+            routingCacheGeneration++;
         }
     }
 
@@ -92,6 +101,76 @@ public final class RecipePathSettings {
             ExecutionOverlayClientConfig.calculatorPlannerMode(),
             ExecutionOverlayClientConfig.calculatorInventorySensitivity(),
             calculatorLoopPolicy(rule)
+        );
+    }
+
+    public static CompletableFuture<Void> prewarmCalculatorRoutingGraph(String reason) {
+        long warmupId = warmupSequence.incrementAndGet();
+        logger.info("routing.graph.prewarm.schedule reason={} warmupId={}", reason, warmupId);
+        return CirrusUiAsync.recipeTask(() -> {
+            long startNanos = System.nanoTime();
+            try {
+                Catalog catalog = calculatorCatalog(null);
+                RuleDefinition rule = calculatorRule();
+                PlannerMode plannerMode = ExecutionOverlayClientConfig.calculatorPlannerMode();
+                InventorySensitivityProfile inventorySensitivity = ExecutionOverlayClientConfig.calculatorInventorySensitivity();
+                LoopPolicy loopPolicy = calculatorLoopPolicy(rule);
+                RoutingCacheEntry cache = cachedRoutingGraph(catalog, rule, plannerMode, inventorySensitivity, loopPolicy);
+                logger.info(
+                    "routing.graph.prewarm.finish reason={} warmupId={} elapsedMs={} database={} recipes={} planner={} inventorySensitivity={} loopPolicy={} {}",
+                    reason,
+                    warmupId,
+                    (System.nanoTime() - startNanos) / 1_000_000L,
+                    catalog.databaseId(),
+                    catalog.recipes().size(),
+                    plannerMode,
+                    inventorySensitivity,
+                    loopPolicy,
+                    cache.graph().stats().summaryLine()
+                );
+            } catch (RuntimeException exception) {
+                logger.warn(
+                    "routing.graph.prewarm.failed reason={} warmupId={} elapsedMs={} cause={}",
+                    reason,
+                    warmupId,
+                    (System.nanoTime() - startNanos) / 1_000_000L,
+                    exception.toString(),
+                    exception
+                );
+            }
+            return null;
+        });
+    }
+
+    public static void clearRuntimeCaches(String reason) {
+        int clearedWorkspace = 0;
+        int clearedCatalogs;
+        int clearedRouting;
+        int clearedInFlight;
+        synchronized (workspaceCacheLock) {
+            if (workspaceCache != null) {
+                clearedWorkspace = 1;
+                workspaceCache = null;
+            }
+        }
+        synchronized (catalogCacheLock) {
+            clearedCatalogs = catalogCache.size();
+            catalogCache.clear();
+        }
+        synchronized (routingCacheLock) {
+            clearedRouting = routingCache.size();
+            clearedInFlight = routingBuilds.size();
+            routingCache.clear();
+            routingBuilds.clear();
+            routingCacheGeneration++;
+        }
+        logger.info(
+            "routing.cache.clear reason={} workspace={} catalogs={} routingGraphs={} inFlightBuilds={}",
+            reason,
+            clearedWorkspace,
+            clearedCatalogs,
+            clearedRouting,
+            clearedInFlight
         );
     }
 
@@ -338,22 +417,39 @@ public final class RecipePathSettings {
             inventorySensitivity,
             loopPolicy
         );
+        CompletableFuture<RoutingCacheEntry> buildFuture;
+        boolean buildOwner = false;
+        long buildGeneration = 0L;
         synchronized (routingCacheLock) {
             RoutingCacheEntry cached = routingCache.get(key);
             if (cached != null) {
                 RoutingCacheEntry touched = cached.touch();
                 routingCache.put(key, touched);
-                logger.debug(
-                    "routing.graph.cacheHit database={} recipes={} graphNodes={} planner={} inventorySensitivity={} loopPolicy={}",
-                    catalog.databaseId(),
-                    catalog.recipes().size(),
-                    touched.graph().nodes().size(),
-                    plannerMode,
-                    inventorySensitivity,
-                    loopPolicy
-                );
+                if (logger.isDebugEnabled()) {
+                    RecipeGraph.GraphStats stats = touched.graph().stats();
+                    logger.debug(
+                        "routing.graph.cacheHit database={} recipes={} planner={} inventorySensitivity={} loopPolicy={} {}",
+                        catalog.databaseId(),
+                        catalog.recipes().size(),
+                        plannerMode,
+                        inventorySensitivity,
+                        loopPolicy,
+                        stats.summaryLine()
+                    );
+                }
                 return touched;
             }
+            buildFuture = routingBuilds.get(key);
+            if (buildFuture == null) {
+                buildFuture = new CompletableFuture<>();
+                routingBuilds.put(key, buildFuture);
+                buildOwner = true;
+                buildGeneration = routingCacheGeneration;
+            }
+        }
+
+        if (!buildOwner) {
+            return awaitRoutingGraphBuild(catalog, plannerMode, inventorySensitivity, loopPolicy, key, buildFuture);
         }
 
         long totalStartNanos = System.nanoTime();
@@ -365,39 +461,141 @@ public final class RecipePathSettings {
             inventorySensitivity,
             loopPolicy
         );
-        long graphStartNanos = System.nanoTime();
-        RecipeGraph graph = RecipeGraph.buildGraph(catalog.recipes());
-        long graphBuiltNanos = System.nanoTime();
-        RoutingService service = new RoutingService(graph);
-        long serviceBuiltNanos = System.nanoTime();
-        RoutingCacheEntry entry = new RoutingCacheEntry(graph, service, serviceBuiltNanos);
-        synchronized (routingCacheLock) {
-            RoutingCacheEntry existing = routingCache.get(key);
-            if (existing != null) {
-                RoutingCacheEntry touched = existing.touch();
-                routingCache.put(key, touched);
-                logger.debug(
-                    "routing.graph.cacheRace database={} recipes={} graphBuildMs={} serviceInitMs={} totalMs={}",
+        try {
+            long graphStartNanos = System.nanoTime();
+            RecipeGraph graph = RecipeGraph.buildGraph(catalog.recipes());
+            long graphBuiltNanos = System.nanoTime();
+            RoutingService service = new RoutingService(graph);
+            long serviceBuiltNanos = System.nanoTime();
+            RoutingCacheEntry entry = new RoutingCacheEntry(graph, service, serviceBuiltNanos);
+            synchronized (routingCacheLock) {
+                routingBuilds.remove(key, buildFuture);
+                if (buildGeneration != routingCacheGeneration) {
+                    logger.info(
+                        "routing.graph.build.discard database={} recipes={} graphBuildMs={} serviceInitMs={} totalMs={} reason=cacheGenerationChanged",
+                        catalog.databaseId(),
+                        catalog.recipes().size(),
+                        (graphBuiltNanos - graphStartNanos) / 1_000_000L,
+                        (serviceBuiltNanos - graphBuiltNanos) / 1_000_000L,
+                        (serviceBuiltNanos - totalStartNanos) / 1_000_000L
+                    );
+                    buildFuture.complete(entry);
+                    return entry;
+                }
+                routingCache.put(key, entry);
+                trimRoutingCache();
+                RecipeGraph.GraphStats stats = graph.stats();
+                logger.info(
+                    "routing.graph.build.finish database={} recipes={} graphBuildMs={} serviceInitMs={} totalMs={} {}",
                     catalog.databaseId(),
                     catalog.recipes().size(),
                     (graphBuiltNanos - graphStartNanos) / 1_000_000L,
                     (serviceBuiltNanos - graphBuiltNanos) / 1_000_000L,
-                    (serviceBuiltNanos - totalStartNanos) / 1_000_000L
+                    (serviceBuiltNanos - totalStartNanos) / 1_000_000L,
+                    stats.detailLine()
+                );
+                buildFuture.complete(entry);
+                return entry;
+            }
+        } catch (RuntimeException | Error exception) {
+            synchronized (routingCacheLock) {
+                routingBuilds.remove(key, buildFuture);
+            }
+            buildFuture.completeExceptionally(exception);
+            throw exception;
+        }
+    }
+
+    private static RoutingCacheEntry awaitRoutingGraphBuild(
+        Catalog catalog,
+        PlannerMode plannerMode,
+        InventorySensitivityProfile inventorySensitivity,
+        LoopPolicy loopPolicy,
+        RoutingCacheKey key,
+        CompletableFuture<RoutingCacheEntry> buildFuture
+    ) {
+        long waitStartNanos = System.nanoTime();
+        logger.info(
+            "routing.graph.build.await database={} recipes={} planner={} inventorySensitivity={} loopPolicy={}",
+            catalog.databaseId(),
+            catalog.recipes().size(),
+            plannerMode,
+            inventorySensitivity,
+            loopPolicy
+        );
+        RoutingCacheEntry entry;
+        try {
+            entry = buildFuture.join();
+        } catch (CompletionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw exception;
+        }
+        synchronized (routingCacheLock) {
+            RoutingCacheEntry cached = routingCache.get(key);
+            if (cached != null) {
+                RoutingCacheEntry touched = cached.touch();
+                routingCache.put(key, touched);
+                logger.info(
+                    "routing.graph.build.await.finish database={} recipes={} elapsedMs={} source=cache {}",
+                    catalog.databaseId(),
+                    catalog.recipes().size(),
+                    (System.nanoTime() - waitStartNanos) / 1_000_000L,
+                    touched.graph().stats().summaryLine()
                 );
                 return touched;
             }
-            routingCache.put(key, entry);
-            trimRoutingCache();
             logger.info(
-                "routing.graph.build.finish database={} recipes={} graphNodes={} graphBuildMs={} serviceInitMs={} totalMs={}",
+                "routing.graph.build.await.finish database={} recipes={} elapsedMs={} source=inFlightResult {}",
                 catalog.databaseId(),
                 catalog.recipes().size(),
-                graph.nodes().size(),
-                (graphBuiltNanos - graphStartNanos) / 1_000_000L,
-                (serviceBuiltNanos - graphBuiltNanos) / 1_000_000L,
-                (serviceBuiltNanos - totalStartNanos) / 1_000_000L
+                (System.nanoTime() - waitStartNanos) / 1_000_000L,
+                entry.graph().stats().summaryLine()
             );
             return entry;
+        }
+    }
+
+    public static RoutingDiagnostics calculatorRoutingDiagnostics() {
+        long startNanos = System.nanoTime();
+        Catalog catalog = calculatorCatalog(null);
+        RuleDefinition rule = calculatorRule();
+        PlannerMode plannerMode = ExecutionOverlayClientConfig.calculatorPlannerMode();
+        InventorySensitivityProfile inventorySensitivity = ExecutionOverlayClientConfig.calculatorInventorySensitivity();
+        LoopPolicy loopPolicy = calculatorLoopPolicy(rule);
+        RoutingCacheEntry cache = cachedRoutingGraph(catalog, rule, plannerMode, inventorySensitivity, loopPolicy);
+        long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000L;
+        Runtime runtime = Runtime.getRuntime();
+        return new RoutingDiagnostics(
+            catalog.databaseId(),
+            catalog.recipes().size(),
+            plannerMode,
+            inventorySensitivity,
+            loopPolicy,
+            cache.graph().stats(),
+            cachedCatalogCount(),
+            cachedRoutingGraphCount(),
+            runtime.totalMemory(),
+            runtime.freeMemory(),
+            runtime.maxMemory(),
+            elapsedMs
+        );
+    }
+
+    private static int cachedCatalogCount() {
+        synchronized (catalogCacheLock) {
+            return catalogCache.size();
+        }
+    }
+
+    private static int cachedRoutingGraphCount() {
+        synchronized (routingCacheLock) {
+            return routingCache.size();
         }
     }
 
@@ -482,6 +680,55 @@ public final class RecipePathSettings {
         InventorySensitivityProfile inventorySensitivity,
         LoopPolicy loopPolicy
     ) {
+    }
+
+    public record RoutingDiagnostics(
+        String databaseId,
+        int catalogRecipeCount,
+        PlannerMode plannerMode,
+        InventorySensitivityProfile inventorySensitivity,
+        LoopPolicy loopPolicy,
+        RecipeGraph.GraphStats graphStats,
+        int cachedCatalogs,
+        int cachedRoutingGraphs,
+        long heapTotalBytes,
+        long heapFreeBytes,
+        long heapMaxBytes,
+        long elapsedMs
+    ) {
+        public String summaryLine() {
+            return "database=" + databaseId
+                + " recipes=" + catalogRecipeCount
+                + " planner=" + plannerMode
+                + " inventorySensitivity=" + inventorySensitivity
+                + " loopPolicy=" + loopPolicy
+                + " cachedCatalogs=" + cachedCatalogs
+                + " cachedRoutingGraphs=" + cachedRoutingGraphs
+                + " heapUsedMiB=" + mib(heapTotalBytes - heapFreeBytes)
+                + " heapTotalMiB=" + mib(heapTotalBytes)
+                + " heapMaxMiB=" + mib(heapMaxBytes)
+                + " elapsedMs=" + elapsedMs
+                + " " + graphStats.summaryLine();
+        }
+
+        public String detailLine() {
+            return "database=" + databaseId
+                + " recipes=" + catalogRecipeCount
+                + " planner=" + plannerMode
+                + " inventorySensitivity=" + inventorySensitivity
+                + " loopPolicy=" + loopPolicy
+                + " cachedCatalogs=" + cachedCatalogs
+                + " cachedRoutingGraphs=" + cachedRoutingGraphs
+                + " heapUsedMiB=" + mib(heapTotalBytes - heapFreeBytes)
+                + " heapTotalMiB=" + mib(heapTotalBytes)
+                + " heapMaxMiB=" + mib(heapMaxBytes)
+                + " elapsedMs=" + elapsedMs
+                + " " + graphStats.detailLine();
+        }
+
+        private static long mib(long bytes) {
+            return bytes / (1024L * 1024L);
+        }
     }
 
     private record RoutingCacheKey(

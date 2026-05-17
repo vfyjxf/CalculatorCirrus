@@ -611,6 +611,8 @@
   "cirrus.ui.calculator.settings.jei_target_auto_close.desc": "把 JEI 配方送入计算器后自动关闭 JEI 配方界面。",
   "cirrus.ui.calculator.settings.database_auto_refresh": "打开时刷新数据库",
   "cirrus.ui.calculator.settings.database_auto_refresh.desc": "打开计算器界面时刷新当前配方数据库。",
+  "cirrus.ui.calculator.settings.projection_uses_global_database": "投影使用全局数据库",
+  "cirrus.ui.calculator.settings.projection_uses_global_database.desc": "从计算器打开投影详情时使用当前保存的数据库上下文；关闭时只局限于当前配方。",
   "cirrus.ui.calculator.settings.read_other_worlds": "读取其他存档规则",
   "cirrus.ui.calculator.settings.read_other_worlds.desc": "允许规则选择读取其他存档保存的规则文件。",
   "cirrus.ui.calculator.settings.database_limit": "数据库结果上限",

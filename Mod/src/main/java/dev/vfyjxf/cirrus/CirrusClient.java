@@ -7,13 +7,16 @@ import dev.vfyjxf.cirrus.content.ClientContentApiImpl;
 import dev.vfyjxf.cirrus.content.ClientContentRegistryBuilder;
 import dev.vfyjxf.cirrus.content.ContentApiImpl;
 import dev.vfyjxf.cirrus.internal.integration.jei.JeiFallbackRecipeSystemPlugin;
+import dev.vfyjxf.cirrus.internal.lifecycle.CirrusClientRuntime;
+import dev.vfyjxf.cirrus.internal.lifecycle.CirrusLifecycleSources;
+import dev.vfyjxf.cirrus.internal.lifecycle.CirrusLifecycleStates;
 import dev.vfyjxf.cirrus.recipe.execution.ExecutionDriverRegistry;
 import dev.vfyjxf.cirrus.ui.execution.tooltip.ExecutionRecipeLayoutTooltipComponent;
 import dev.vfyjxf.cirrus.ui.execution.tooltip.JeiRecipeTooltipComponent;
 import dev.vfyjxf.cirrus.ui.tooltip.RichTooltipComponent;
 import dev.vfyjxf.cirrus.ui.widget.calculator.CalculatorInputKeyMappings;
 import dev.vfyjxf.cirrus.ui.widget.calculator.RecipeDatabaseKeyMappings;
-import dev.vfyjxf.cirrus.util.StartEventObserver;
+import dev.vfyjxf.cloudlib.api.lifecycle.LifecycleDriver;
 import dev.vfyjxf.cloudlib.api.plugin.AnnotationPluginLookup;
 import dev.vfyjxf.cloudlib.api.plugin.PluginDispatcher;
 import dev.vfyjxf.cloudlib.api.plugin.PluginLoader;
@@ -38,10 +41,33 @@ public final class CirrusClient extends Cirrus {
     public CirrusClient(ModContainer modContainer, IEventBus modBus) {
         super(modBus);
         ExecutionOverlayClientConfig.register(modContainer);
-        new StartEventObserver(this::load, this::unload).register();
+        registerLifecycleDriver(modBus);
         clientPlugins = PluginLoader.loadAndDispatcher(logger, "Client Cirrus Plugin", AnnotationPluginLookup.of(ClientCirrusPlugin.class), pluginExecutor);
         modBus.addListener(this::registerTooltipFactories);
         modBus.addListener(this::registerKeyMappings);
+    }
+
+    private void registerLifecycleDriver(IEventBus modBus) {
+        LifecycleDriver.builder("Calculator Cirrus Client")
+                .logger(logger)
+                .require(CirrusLifecycleStates.clientConnection)
+                .require(CirrusLifecycleStates.tagsReady)
+                .require(CirrusLifecycleStates.recipesReady)
+                .require(CirrusLifecycleStates.dataMapsReady)
+                .source(CirrusLifecycleSources.client(modBus))
+                .onLoad(this::load)
+                .onUnload(this::unload)
+                .build();
+    }
+
+    @Override
+    protected void afterLifecycleLoad() {
+        CirrusClientRuntime.afterLoad();
+    }
+
+    @Override
+    protected void beforeLifecycleUnload() {
+        CirrusClientRuntime.beforeUnload();
     }
 
     private void registerTooltipFactories(RegisterClientTooltipComponentFactoriesEvent event) {

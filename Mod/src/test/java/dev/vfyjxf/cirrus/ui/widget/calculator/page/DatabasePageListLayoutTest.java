@@ -485,6 +485,43 @@ class DatabasePageListLayoutTest {
     }
 
     @Test
+    void calculatorProjectionFromRecipeBuildsOnlySelectedRecipeIndex() {
+        RecipeApi previous = RecipeApiImpl.instance();
+        Namespace source = Namespace.of("test", "calculator_projection");
+        FakeRecipe target = new FakeRecipe(
+            "target",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outA, 1L))
+        );
+        FakeRecipe unrelated = new FakeRecipe(
+            "unrelated",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outB, 1L))
+        );
+        FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(target, unrelated));
+        RecipeApiRegistryBuilder builder = new RecipeApiRegistryBuilder();
+        builder.registerSystem(system);
+        RecipeApiImpl.attach(new RecipeApiImpl(builder));
+        try {
+            RecipeEntry<?> entry = RecipeEntry.of(system, target);
+            DatabasePage page = DatabasePage.calculatorProjection(entry, 2, 7L, () -> {});
+
+            assertFalse(page.debugDatabaseScopedIndex());
+            assertEquals(1, page.debugIndexRecordCount());
+            assertEquals(0, page.debugSystemCatalogRecordCount());
+            assertEquals(0, system.debugAllRecipesCalls());
+            assertTrue(page.openRecipe(entry));
+            assertEquals(ProjectionContextScope.calculator, page.debugProjectionContextScope());
+            assertEquals("builtin", page.debugProjectionContextDatabaseId());
+            assertFalse(page.debugActiveDatabaseEditable());
+        } finally {
+            if (previous instanceof RecipeApiImpl impl) {
+                RecipeApiImpl.attach(impl);
+            }
+        }
+    }
+
+    @Test
     void projectionDebugEffectsAndControlsShareIntegratedProjectionSection() {
         assumeTrue(DebugProjectionPlugin.debugEnabled());
 
@@ -1242,6 +1279,7 @@ class DatabasePageListLayoutTest {
         private final Namespace systemId;
         private final RichIterable<FakeRecipe> recipes;
         private final Map<String, FakeRecipe> byId = new ConcurrentHashMap<>();
+        private int allRecipesCalls;
 
         private FakeRecipeSystem(Namespace systemId, Collection<FakeRecipe> recipes) {
             this.systemId = systemId;
@@ -1291,7 +1329,12 @@ class DatabasePageListLayoutTest {
 
         @Override
         public RichIterable<FakeRecipe> allRecipes() {
+            allRecipesCalls++;
             return recipes;
+        }
+
+        private int debugAllRecipesCalls() {
+            return allRecipesCalls;
         }
     }
 

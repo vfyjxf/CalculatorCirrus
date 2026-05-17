@@ -3,22 +3,18 @@ package dev.vfyjxf.cirrus;
 import dev.vfyjxf.cirrus.api.plugin.CirrusPlugin;
 import dev.vfyjxf.cirrus.content.ContentApiImpl;
 import dev.vfyjxf.cirrus.content.ContentRegistryBuilder;
+import dev.vfyjxf.cirrus.internal.lifecycle.CirrusLifecycleSources;
+import dev.vfyjxf.cirrus.internal.lifecycle.CirrusLifecycleStates;
+import dev.vfyjxf.cloudlib.api.lifecycle.LifecycleDriver;
 import dev.vfyjxf.cloudlib.api.plugin.ProgressTracker;
 import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.TagsUpdatedEvent;
-import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import org.eclipse.collections.api.list.MutableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
 
 @Mod(value = CirrusConstants.modId, dist = Dist.DEDICATED_SERVER)
 public final class CirrusServer extends Cirrus {
@@ -27,7 +23,7 @@ public final class CirrusServer extends Cirrus {
 
     public CirrusServer(ModContainer modContainer, IEventBus modbus) {
         super(modbus);
-        registerLoadListener();
+        registerLifecycleDriver();
     }
 
     @Override
@@ -42,28 +38,15 @@ public final class CirrusServer extends Cirrus {
         ContentApiImpl.attach(new ContentApiImpl(contentRegistry));
     }
 
-    private void registerLoadListener() {
-        AtomicBoolean firstUntrigger = new AtomicBoolean(true);
-        var firstTrigger = new Consumer<ServerStartedEvent>() {
-            @Override
-            public void accept(ServerStartedEvent event) {
-                load();
-                NeoForge.EVENT_BUS.unregister(this);
-                firstUntrigger.set(false);
-            }
-        };
-
-        NeoForge.EVENT_BUS.addListener(firstTrigger);
-        NeoForge.EVENT_BUS.addListener(
-                EventPriority.LOWEST,
-                (TagsUpdatedEvent event) -> {
-                    //trigger after DataMap loaded
-                    boolean notRun = firstUntrigger.get() || event.getUpdateCause() != TagsUpdatedEvent.UpdateCause.SERVER_DATA_LOAD;
-                    if (notRun) return;
-                    unload();
-                    load();
-                }
-        );
+    private void registerLifecycleDriver() {
+        LifecycleDriver.builder("Calculator Cirrus Server")
+                .logger(logger)
+                .require(CirrusLifecycleStates.serverStarted)
+                .require(CirrusLifecycleStates.serverDataReady)
+                .source(CirrusLifecycleSources.server())
+                .onLoad(this::load)
+                .onUnload(this::unload)
+                .build();
     }
 
 }

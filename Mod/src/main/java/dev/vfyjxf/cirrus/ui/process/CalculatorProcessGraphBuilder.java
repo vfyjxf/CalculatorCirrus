@@ -5,6 +5,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentKind;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.database.DatabaseRecipeRef;
@@ -49,6 +50,7 @@ import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.eclipse.collections.api.factory.Lists;
+import org.eclipse.collections.api.list.ImmutableList;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -348,9 +350,10 @@ public final class CalculatorProcessGraphBuilder {
     }
 
     public static ProcessGraph fromRoutingPlan(RoutingPlan plan, RouteMode routeMode) {
-        ProcessGraph graph = new ProcessGraph();
-        ProducedPool produced = new ProducedPool();
-        PendingPool pending = new PendingPool();
+        PlanGraphSize graphSize = estimatePlanGraphSize(plan);
+        ProcessGraph graph = new ProcessGraph(graphSize.nodes(), graphSize.edges());
+        ProducedPool produced = new ProducedPool(graphSize.outputSlots());
+        PendingPool pending = new PendingPool(graphSize.pendingInputs());
         BuildContext buildContext = new BuildContext();
         String targetRootNodeId = null;
 
@@ -370,7 +373,7 @@ public final class CalculatorProcessGraphBuilder {
             if (execute.recipe().equals(plan.targetRecipe())) {
                 targetRootNodeId = nodeId;
             }
-            List<PlanAction.InputBinding> visibleInputs = visibleInputBindings(execute);
+            ImmutableList<PlanAction.InputBinding> visibleInputs = execute.boundInputs();
             List<MaterialSlot> inputs = new ArrayList<>(visibleInputs.size());
             for (PlanAction.InputBinding binding : visibleInputs) {
                 inputs.add(inputSlot(binding.input(), binding.amount()));
@@ -406,8 +409,24 @@ public final class CalculatorProcessGraphBuilder {
         return graph;
     }
 
-    private static List<PlanAction.InputBinding> visibleInputBindings(PlanAction.ExecuteRecipe execute) {
-        return execute.boundInputs().castToList();
+    private static PlanGraphSize estimatePlanGraphSize(RoutingPlan plan) {
+        int nodes = 0;
+        int edges = 0;
+        int outputSlots = 0;
+        int pendingInputs = 0;
+        for (PlanAction action : plan.actions()) {
+            if (action instanceof PlanAction.PendingInput) {
+                nodes++;
+                pendingInputs++;
+                continue;
+            }
+            if (action instanceof PlanAction.ExecuteRecipe execute) {
+                nodes++;
+                edges += execute.boundInputs().size();
+                outputSlots += execute.expectedOutputs().size();
+            }
+        }
+        return new PlanGraphSize(nodes + edges, edges, outputSlots, pendingInputs);
     }
 
     public static @Nullable RoutingPlan routePlan(
@@ -932,8 +951,11 @@ public final class CalculatorProcessGraphBuilder {
     }
 
     private static ProcessGraph fromProjectedRecipe(RecipeEntry<?> target, int times, FallbackDebugTrace trace) {
-        ProcessGraph graph = new ProcessGraph();
         RecipePathSettings.Catalog catalog = RecipePathSettings.calculatorCatalog(target);
+        ProcessGraph graph = new ProcessGraph(
+            projectedGraphExpectedNodes(catalog.recipes().size()),
+            projectedGraphExpectedEdges(catalog.recipes().size())
+        );
         FallbackProjectionIndex projectionIndex = cachedFallbackProjectionIndex(catalog);
         BuildContext buildContext = new BuildContext();
         ArrayList<ProjectedBuildFrame> stack = new ArrayList<>();
@@ -1039,7 +1061,7 @@ public final class CalculatorProcessGraphBuilder {
                 return touched.index();
             }
         }
-        FallbackProjectionIndex built = FallbackProjectionIndex.build(catalog.recipes().castToList(), catalog.databaseId());
+        FallbackProjectionIndex built = FallbackProjectionIndex.build(catalog.recipes(), catalog.databaseId());
         FallbackProjectionIndexCacheEntry entry = new FallbackProjectionIndexCacheEntry(built, System.nanoTime());
         synchronized (fallbackProjectionIndexCacheLock) {
             FallbackProjectionIndexCacheEntry existing = fallbackProjectionIndexCache.remove(key);
@@ -1173,19 +1195,26 @@ public final class CalculatorProcessGraphBuilder {
             );
             return new ProcessGraph();
         }
-        List<MaterialSlot> inputs = projected.inputs()
-            .reject(RecipeContent::isEmpty)
-            .collect(input -> inputSlot(input, Math.multiplyExact(input.amount(), times)))
-            .castToList();
-        List<MaterialSlot> outputs = projected.outputs()
-            .reject(RecipeContent::isEmpty)
-            .collect(output -> outputSlot(output, Math.multiplyExact(output.amount(), times)))
-            .castToList();
-        ProcessGraph graph = new ProcessGraph();
+        ImmutableList<InputContent> projectedInputs = projected.inputs();
+        ImmutableList<OutputContent> projectedOutputs = projected.outputs();
+        List<MaterialSlot> inputs = new ArrayList<>(projectedInputs.size());
+        for (InputContent input : projectedInputs) {
+            if (!input.isEmpty()) {
+                inputs.add(inputSlot(input, Math.multiplyExact(input.amount(), times)));
+            }
+        }
+        List<MaterialSlot> outputs = new ArrayList<>(projectedOutputs.size());
+        for (OutputContent output : projectedOutputs) {
+            if (!output.isEmpty()) {
+                outputs.add(outputSlot(output, Math.multiplyExact(output.amount(), times)));
+            }
+        }
+        ProcessGraph graph = new ProcessGraph(1 + inputs.size(), inputs.size());
         BuildContext buildContext = new BuildContext();
         MachineDisplay machine = buildContext.machineDisplay(target);
+        String rootNodeId = recipeNodeId(target, 0);
         graph.addNode(new ProcessNode(
-            recipeNodeId(target, 0),
+            rootNodeId,
             recipeName(target, outputs),
             machine.name(),
             inputs,
@@ -1194,8 +1223,8 @@ public final class CalculatorProcessGraphBuilder {
             machine.options(),
             target
         ));
-        graph.preferredRootNodeId(recipeNodeId(target, 0));
-        connectSourceInputs(graph, recipeNodeId(target, 0), 0, inputs);
+        graph.preferredRootNodeId(rootNodeId);
+        connectSourceInputs(graph, rootNodeId, 0, inputs);
         trace.add("fallback.single.finish nodes=" + graph.nodeCount() + " edges=" + graph.edgeCount());
         return graph;
     }
@@ -1204,7 +1233,7 @@ public final class CalculatorProcessGraphBuilder {
         ProcessGraph graph,
         String targetNodeId,
         int actionId,
-        List<PlanAction.InputBinding> inputs,
+        ImmutableList<PlanAction.InputBinding> inputs,
         ProducedPool produced,
         PendingPool pending,
         RouteMode routeMode
@@ -1268,7 +1297,7 @@ public final class CalculatorProcessGraphBuilder {
     }
 
     private static MaterialSlot inputSlot(InputContent input, long amount) {
-        InputContent scaled = input.copyWithAmount(amount);
+        InputContent scaled = input.amount() == amount ? input : input.copyWithAmount(amount);
         return materialSlot(scaled, amount, input.notConsumed());
     }
 
@@ -1277,7 +1306,7 @@ public final class CalculatorProcessGraphBuilder {
     }
 
     private static MaterialSlot outputSlot(OutputContent output, long amount) {
-        return materialSlot(output.copyWithAmount(amount), amount, false);
+        return materialSlot(output.amount() == amount ? output : output.copyWithAmount(amount), amount, false);
     }
 
     private static MaterialSlot materialSlot(RecipeContent content, long amount, boolean catalyst) {
@@ -1308,7 +1337,7 @@ public final class CalculatorProcessGraphBuilder {
     }
 
     private static <T, S> OutputContent outputContent(ContentStack<T, S> stack, long amount) {
-        return OutputContent.fromStack(stack.copyWithAmount(amount));
+        return OutputContent.fromStack(stack.type(), stack.value(), amount, RecipeContent.MAX_CHANCE);
     }
 
     private static <T> OutputContent outputContent(ContentValue<T> value, long amount) {
@@ -1470,6 +1499,24 @@ public final class CalculatorProcessGraphBuilder {
         return Math.max(0, (int) amount);
     }
 
+    private static int expectedMapCapacity(int expectedSize) {
+        if (expectedSize <= 0) {
+            return 0;
+        }
+        if (expectedSize >= 1 << 29) {
+            return 1 << 30;
+        }
+        return (int) (expectedSize / 0.75f) + 1;
+    }
+
+    private static int projectedGraphExpectedNodes(int catalogSize) {
+        return clampInt(catalogSize * 2, 8, 512);
+    }
+
+    private static int projectedGraphExpectedEdges(int catalogSize) {
+        return clampInt(catalogSize, 4, 256);
+    }
+
     private static long ceilDiv(long left, long right) {
         return left <= 0 ? 0 : (left + Math.max(1L, right) - 1L) / Math.max(1L, right);
     }
@@ -1524,8 +1571,13 @@ public final class CalculatorProcessGraphBuilder {
     }
 
     private static final class ProducedPool {
-        private final List<ProducedSlot> all = new ArrayList<>();
-        private final Map<String, List<ProducedSlot>> byResourceKey = new HashMap<>();
+        private final List<ProducedSlot> all;
+        private final Map<String, List<ProducedSlot>> byResourceKey;
+
+        private ProducedPool(int expectedSlots) {
+            this.all = new ArrayList<>(Math.max(0, expectedSlots));
+            this.byResourceKey = new HashMap<>(expectedMapCapacity(expectedSlots));
+        }
 
         private void add(ProducedSlot slot) {
             all.add(slot);
@@ -1533,11 +1585,16 @@ public final class CalculatorProcessGraphBuilder {
         }
 
         private long connect(ProcessGraph graph, String targetNodeId, PlanAction.InputBinding input) {
-            ContentResource directResource = directInputResource(input.input());
-            List<ProducedSlot> candidates = directResource == null
-                ? all
-                : byResourceKey.getOrDefault(resourceKey(directResource), List.of());
-            return connectCandidates(graph, targetNodeId, input, candidates);
+            ContentResource directResource = directMergeKeyResource(input.input());
+            if (directResource != null) {
+                return connectCandidates(
+                    graph,
+                    targetNodeId,
+                    input,
+                    byResourceKey.getOrDefault(resourceKey(directResource), List.of())
+                );
+            }
+            return connectCandidates(graph, targetNodeId, input, all);
         }
 
         private static long connectCandidates(
@@ -1570,15 +1627,45 @@ public final class CalculatorProcessGraphBuilder {
     }
 
     private static final class PendingPool {
-        private final List<PendingSlot> all = new ArrayList<>();
+        private final List<PendingSlot> all;
+        private final Map<String, List<PendingSlot>> byDirectResourceKey;
+
+        private PendingPool(int expectedSlots) {
+            this.all = new ArrayList<>(Math.max(0, expectedSlots));
+            this.byDirectResourceKey = new HashMap<>(expectedMapCapacity(expectedSlots));
+        }
 
         private void add(PendingSlot slot) {
             all.add(slot);
+            ContentResource directResource = directMergeKeyResource(slot.slot.content());
+            if (directResource != null) {
+                byDirectResourceKey.computeIfAbsent(resourceKey(directResource), ignored -> new ArrayList<>()).add(slot);
+            }
         }
 
         private long connect(ProcessGraph graph, String targetNodeId, PlanAction.InputBinding input, long amount) {
+            ContentResource directResource = directMergeKeyResource(input.input());
+            if (directResource != null) {
+                return connectCandidates(
+                    graph,
+                    targetNodeId,
+                    input,
+                    amount,
+                    byDirectResourceKey.getOrDefault(resourceKey(directResource), List.of())
+                );
+            }
+            return connectCandidates(graph, targetNodeId, input, amount, all);
+        }
+
+        private static long connectCandidates(
+            ProcessGraph graph,
+            String targetNodeId,
+            PlanAction.InputBinding input,
+            long amount,
+            List<PendingSlot> candidates
+        ) {
             long remaining = amount;
-            for (PendingSlot candidate : all) {
+            for (PendingSlot candidate : candidates) {
                 if (remaining <= 0) {
                     break;
                 }
@@ -1617,6 +1704,14 @@ public final class CalculatorProcessGraphBuilder {
     private record MachineDisplay(
         String name,
         List<MachineInfo> options
+    ) {
+    }
+
+    private record PlanGraphSize(
+        int nodes,
+        int edges,
+        int outputSlots,
+        int pendingInputs
     ) {
     }
 
@@ -1733,7 +1828,7 @@ public final class CalculatorProcessGraphBuilder {
     private static final class FallbackProjectionIndex {
         private final ProjectionEngine projectionEngine = new ProjectionEngine();
         private final String databaseId;
-        private final List<RecipeEntry<?>> candidates;
+        private final ImmutableList<RecipeEntry<?>> candidates;
         private final Map<RecipeEntry<?>, RecipeProjection> projections = new HashMap<>();
         private final Map<RecipeEntry<?>, ProjectedRecipe> baseProjects = new HashMap<>();
         private final Map<String, ArrayList<ProjectedOutput>> outputsByResource = new HashMap<>();
@@ -1748,13 +1843,13 @@ public final class CalculatorProcessGraphBuilder {
         private int lazyScanIndex;
         private boolean scannedAllOutputs;
 
-        private FallbackProjectionIndex(List<RecipeEntry<?>> candidates, String databaseId) {
+        private FallbackProjectionIndex(ImmutableList<RecipeEntry<?>> candidates, String databaseId) {
             this.databaseId = databaseId == null ? "" : databaseId;
-            this.candidates = List.copyOf(candidates);
+            this.candidates = candidates == null ? Lists.immutable.empty() : candidates;
             refreshFailureSkips();
         }
 
-        private static FallbackProjectionIndex build(List<RecipeEntry<?>> candidates, String databaseId) {
+        private static FallbackProjectionIndex build(ImmutableList<RecipeEntry<?>> candidates, String databaseId) {
             return new FallbackProjectionIndex(candidates, databaseId);
         }
 
@@ -2086,6 +2181,16 @@ public final class CalculatorProcessGraphBuilder {
             return stack.content();
         }
         if (input instanceof ValueContent<?> value) {
+            return value.content();
+        }
+        return null;
+    }
+
+    private static @Nullable ContentResource directMergeKeyResource(RecipeContent content) {
+        if (content instanceof StackContent<?, ?> stack && stack.matchStrategy().equals(MatchStrategy.identityAndComponent)) {
+            return stack.content();
+        }
+        if (content instanceof ValueContent<?> value) {
             return value.content();
         }
         return null;

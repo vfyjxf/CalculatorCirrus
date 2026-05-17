@@ -13,26 +13,43 @@ import java.util.*;
  */
 public class ProcessGraph {
 
-    private final Map<String, ProcessNode> nodes = new LinkedHashMap<>();
-    private final List<ProcessEdge> edges = new ArrayList<>();
+    private final Map<String, ProcessNode> nodes;
+    private final List<ProcessEdge> edges;
 
     // adjacency lists
-    private final Map<String, List<ProcessEdge>> outEdges = new HashMap<>();
-    private final Map<String, List<ProcessEdge>> inEdges = new HashMap<>();
+    private final Map<String, List<ProcessEdge>> outEdges;
+    private final Map<String, List<ProcessEdge>> inEdges;
 
     // ───────── group support ─────────
 
-    private final Map<String, ProcessGroup> groups = new LinkedHashMap<>();
+    private final Map<String, ProcessGroup> groups;
     /** nodeId → direct parent group id */
-    private final Map<String, String> nodeGroupMap = new HashMap<>();
+    private final Map<String, String> nodeGroupMap;
     private @Nullable String preferredRootNodeId;
+
+    public ProcessGraph() {
+        this(0, 0, 0);
+    }
+
+    public ProcessGraph(int expectedNodes, int expectedEdges) {
+        this(expectedNodes, expectedEdges, 0);
+    }
+
+    public ProcessGraph(int expectedNodes, int expectedEdges, int expectedGroups) {
+        int nodeCapacity = expectedMapCapacity(expectedNodes);
+        int groupCapacity = expectedMapCapacity(expectedGroups);
+        this.nodes = new LinkedHashMap<>(nodeCapacity);
+        this.edges = new ArrayList<>(Math.max(0, expectedEdges));
+        this.outEdges = new HashMap<>(nodeCapacity);
+        this.inEdges = new HashMap<>(nodeCapacity);
+        this.groups = new LinkedHashMap<>(groupCapacity);
+        this.nodeGroupMap = new HashMap<>(nodeCapacity);
+    }
 
     // ───────── mutation ─────────
 
     public ProcessGraph addNode(ProcessNode node) {
         nodes.put(node.id(), node);
-        outEdges.putIfAbsent(node.id(), new ArrayList<>());
-        inEdges.putIfAbsent(node.id(), new ArrayList<>());
         return this;
     }
 
@@ -215,5 +232,15 @@ public class ProcessGraph {
         return "ProcessGraph{nodes=" + nodes.size()
                 + ", edges=" + edges.size()
                 + ", groups=" + groups.size() + "}";
+    }
+
+    private static int expectedMapCapacity(int expectedSize) {
+        if (expectedSize <= 0) {
+            return 0;
+        }
+        if (expectedSize >= 1 << 29) {
+            return 1 << 30;
+        }
+        return (int) (expectedSize / 0.75f) + 1;
     }
 }

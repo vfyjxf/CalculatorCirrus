@@ -39,6 +39,7 @@ import dev.vfyjxf.cirrus.recipe.clause.ResolvePolicyClause;
 import dev.vfyjxf.cloudlib.util.Checks;
 import it.unimi.dsi.fastutil.Hash.Strategy;
 import it.unimi.dsi.fastutil.objects.AbstractObjectSet;
+import it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenCustomHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
@@ -221,7 +222,7 @@ public final class RecipeGraph {
 
     private final ObjectSet<Node> nodes;
     private final ImmutableList<Node> stableNodes;
-    private final Object2ObjectMap<Object, RefSet> outputCandidatesByKey;
+    private final OutputRefIndex outputCandidatesByKey;
     private final BoundedLookupCache<OutputContent, RefSet> producersByOutput;
     private final Object2ObjectMap<ContentKind<?>, RefSet> producersByKind;
     private final BoundedLookupCache<InputContent, RefSet> producersByInput;
@@ -230,7 +231,7 @@ public final class RecipeGraph {
     private RecipeGraph(
             ObjectSet<Node> nodes,
             ImmutableList<Node> stableNodes,
-            Object2ObjectMap<Object, RefSet> outputCandidatesByKey,
+            OutputRefIndex outputCandidatesByKey,
             BoundedLookupCache<OutputContent, RefSet> producersByOutput,
             Object2ObjectMap<ContentKind<?>, RefSet> producersByKind,
             BoundedLookupCache<InputContent, RefSet> producersByInput,
@@ -673,8 +674,7 @@ public final class RecipeGraph {
             inputCount += node.inputCount();
             outputCount += node.outputCount();
         }
-        Object2ObjectMap<Object, RefSet> outputCandidatesByKey =
-                new Object2ObjectOpenHashMap<>(outputCandidateIndexCapacity(outputCount));
+        OutputRefIndex outputCandidatesByKey = new OutputRefIndex(outputCandidateIndexCapacity(outputCount));
         BoundedLookupCache<InputContent, RefSet> producersByInput =
                 new BoundedLookupCache<>(lookupCacheCapacity(inputCount), inputHashStrategy);
         BoundedLookupCache<OutputContent, RefSet> producersByOutput =
@@ -722,7 +722,8 @@ public final class RecipeGraph {
                 nodes.add(node);
             }
         }
-        return uniqueInSourceOrder(nodes);
+        assert uniqueByRecipe(nodes);
+        return nodes.toImmutable();
     }
 
     private static ImmutableList<Node> uniqueInSourceOrder(org.eclipse.collections.api.list.MutableList<Node> nodes) {
@@ -741,6 +742,19 @@ public final class RecipeGraph {
             }
         }
         return removedDuplicate ? unique.toImmutable() : nodes.toImmutable();
+    }
+
+    private static boolean uniqueByRecipe(org.eclipse.collections.api.list.MutableList<Node> nodes) {
+        if (nodes.size() < 2) {
+            return true;
+        }
+        Map<RecipeEntry<?>, Boolean> seen = new HashMap<>(Math.min(nodes.size(), 16_384));
+        for (Node node : nodes) {
+            if (seen.putIfAbsent(node.recipe(), Boolean.TRUE) != null) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static int lookupCacheCapacity(int slotCount) {
@@ -767,14 +781,149 @@ public final class RecipeGraph {
         return consumersByOutput.size();
     }
 
+    public GraphStats stats() {
+        int inputSlots = 0;
+        int outputSlots = 0;
+        int multiInputArrays = 0;
+        int multiOutputArrays = 0;
+        int maxInputsPerNode = 0;
+        int maxOutputsPerNode = 0;
+        for (Node node : stableNodes) {
+            int inputs = node.inputCount();
+            int outputs = node.outputCount();
+            inputSlots += inputs;
+            outputSlots += outputs;
+            maxInputsPerNode = Math.max(maxInputsPerNode, inputs);
+            maxOutputsPerNode = Math.max(maxOutputsPerNode, outputs);
+            if (node.mergedInputs instanceof RecipeContent[]) {
+                multiInputArrays++;
+            }
+            if (node.mergedOutputs instanceof RecipeContent[]) {
+                multiOutputArrays++;
+            }
+        }
+        RefStats outputCandidates = outputCandidatesByKey.refStats();
+        RefStats producerKinds = refStats(producersByKind.values());
+        RefStats producersByInputCache = producersByInput.refStats();
+        RefStats producersByOutputCache = producersByOutput.refStats();
+        RefStats consumersByOutputCache = consumersByOutput.refStats();
+        return new GraphStats(
+                stableNodes.size(),
+                inputSlots,
+                outputSlots,
+                multiInputArrays,
+                multiOutputArrays,
+                maxInputsPerNode,
+                maxOutputsPerNode,
+                outputCandidatesByKey.size(),
+                outputCandidates.refCount(),
+                outputCandidates.refArrayCount(),
+                outputCandidates.refArrayCapacity(),
+                producersByKind.size(),
+                producerKinds.refCount(),
+                producerKinds.refArrayCount(),
+                producerKinds.refArrayCapacity(),
+                producersByInput.capacity(),
+                producersByInput.size(),
+                producersByInputCache.refCount(),
+                producersByOutput.capacity(),
+                producersByOutput.size(),
+                producersByOutputCache.refCount(),
+                consumersByOutput.capacity(),
+                consumersByOutput.size(),
+                consumersByOutputCache.refCount()
+        );
+    }
+
+    private static RefStats refStats(Iterable<RefSet> refs) {
+        long refCount = 0L;
+        int refArrayCount = 0;
+        long refArrayCapacity = 0L;
+        for (RefSet refSet : refs) {
+            if (refSet == null || refSet.isEmpty()) {
+                continue;
+            }
+            refCount += refSet.size();
+            int capacity = refSet.arrayCapacity();
+            if (capacity > 0) {
+                refArrayCount++;
+                refArrayCapacity += capacity;
+            }
+        }
+        return new RefStats(refCount, refArrayCount, refArrayCapacity);
+    }
+
+    private record RefStats(
+            long refCount,
+            int refArrayCount,
+            long refArrayCapacity
+    ) {
+    }
+
+    public record GraphStats(
+            int nodeCount,
+            int inputSlotCount,
+            int outputSlotCount,
+            int multiInputArrayCount,
+            int multiOutputArrayCount,
+            int maxInputsPerNode,
+            int maxOutputsPerNode,
+            int outputCandidateBucketCount,
+            long outputCandidateRefCount,
+            int outputCandidateRefArrayCount,
+            long outputCandidateRefArrayCapacity,
+            int producerKindBucketCount,
+            long producerKindRefCount,
+            int producerKindRefArrayCount,
+            long producerKindRefArrayCapacity,
+            int producersByInputCacheCapacity,
+            int producersByInputCacheSize,
+            long producersByInputCacheRefCount,
+            int producersByOutputCacheCapacity,
+            int producersByOutputCacheSize,
+            long producersByOutputCacheRefCount,
+            int consumersByOutputCacheCapacity,
+            int consumersByOutputCacheSize,
+            long consumersByOutputCacheRefCount
+    ) {
+        public String summaryLine() {
+            return "nodes=" + nodeCount
+                    + " inputSlots=" + inputSlotCount
+                    + " outputSlots=" + outputSlotCount
+                    + " outputBuckets=" + outputCandidateBucketCount
+                    + " outputRefs=" + outputCandidateRefCount
+                    + " kindBuckets=" + producerKindBucketCount
+                    + " kindRefs=" + producerKindRefCount;
+        }
+
+        public String detailLine() {
+            return summaryLine()
+                    + " multiInputArrays=" + multiInputArrayCount
+                    + " multiOutputArrays=" + multiOutputArrayCount
+                    + " maxInputsPerNode=" + maxInputsPerNode
+                    + " maxOutputsPerNode=" + maxOutputsPerNode
+                    + " outputRefArrays=" + outputCandidateRefArrayCount
+                    + " outputRefArrayCapacity=" + outputCandidateRefArrayCapacity
+                    + " kindRefs=" + producerKindRefCount
+                    + " kindRefArrays=" + producerKindRefArrayCount
+                    + " kindRefArrayCapacity=" + producerKindRefArrayCapacity
+                    + " producersByInputCache=" + producersByInputCacheSize + "/" + producersByInputCacheCapacity
+                    + " producersByInputCacheRefs=" + producersByInputCacheRefCount
+                    + " producersByOutputCache=" + producersByOutputCacheSize + "/" + producersByOutputCacheCapacity
+                    + " producersByOutputCacheRefs=" + producersByOutputCacheRefCount
+                    + " consumersByOutputCache=" + consumersByOutputCacheSize + "/" + consumersByOutputCacheCapacity
+                    + " consumersByOutputCacheRefs=" + consumersByOutputCacheRefCount;
+        }
+    }
+
     private static void addOutputCandidate(
-            Object2ObjectMap<Object, RefSet> outputCandidatesByKey,
+            OutputRefIndex outputCandidatesByKey,
             OutputContent output,
             long ref
     ) {
         Object key = contentMatchKey(output.asResource());
         if (key != null) {
-            putRef(outputCandidatesByKey, key, ref);
+            outputCandidatesByKey.putRef(key, ref);
         }
     }
 
@@ -1825,6 +1974,71 @@ public final class RecipeGraph {
         return (int) ref;
     }
 
+    private static final class OutputRefIndex {
+        private static final long noRef = -1L;
+        private final Object2LongOpenHashMap<Object> singletonRefs;
+        private @Nullable Object2ObjectMap<Object, RefSet> multiRefs;
+
+        private OutputRefIndex(int capacity) {
+            singletonRefs = new Object2LongOpenHashMap<>(capacity);
+            singletonRefs.defaultReturnValue(noRef);
+        }
+
+        private void putRef(Object key, long ref) {
+            RefSet refs = multiRefs == null ? null : multiRefs.get(key);
+            if (refs != null) {
+                refs.append(ref);
+                return;
+            }
+
+            long singleton = singletonRefs.getLong(key);
+            if (singleton == noRef && !singletonRefs.containsKey(key)) {
+                singletonRefs.put(key, ref);
+                return;
+            }
+            if (singleton == ref) {
+                return;
+            }
+
+            RefSet promoted = RefSet.of(singleton);
+            promoted.append(ref);
+            singletonRefs.removeLong(key);
+            multiRefs().put(key, promoted);
+        }
+
+        private @Nullable RefSet get(Object key) {
+            RefSet refs = multiRefs == null ? null : multiRefs.get(key);
+            if (refs != null) {
+                return refs;
+            }
+            long singleton = singletonRefs.getLong(key);
+            if (singleton == noRef && !singletonRefs.containsKey(key)) {
+                return null;
+            }
+            return RefSet.of(singleton);
+        }
+
+        private int size() {
+            return singletonRefs.size() + (multiRefs == null ? 0 : multiRefs.size());
+        }
+
+        private RefStats refStats() {
+            RefStats multiStats = multiRefs == null ? new RefStats(0L, 0, 0L) : RecipeGraph.refStats(multiRefs.values());
+            return new RefStats(
+                    singletonRefs.size() + multiStats.refCount(),
+                    multiStats.refArrayCount(),
+                    multiStats.refArrayCapacity()
+            );
+        }
+
+        private Object2ObjectMap<Object, RefSet> multiRefs() {
+            if (multiRefs == null) {
+                multiRefs = new Object2ObjectOpenHashMap<>();
+            }
+            return multiRefs;
+        }
+    }
+
     private static final class RefSet {
         private static final long noRef = -1L;
         private static final RefSet empty = new RefSet(noRef);
@@ -1857,6 +2071,10 @@ public final class RecipeGraph {
                 return 0;
             }
             return refs == null ? 1 : refCount;
+        }
+
+        private int arrayCapacity() {
+            return refs == null ? 0 : refs.length;
         }
 
         private void add(long ref) {
@@ -2183,6 +2401,28 @@ public final class RecipeGraph {
 
         private synchronized int size() {
             return entries.size();
+        }
+
+        private int capacity() {
+            return capacity;
+        }
+
+        private synchronized RefStats refStats() {
+            long refCount = 0L;
+            int refArrayCount = 0;
+            long refArrayCapacity = 0L;
+            for (CacheEntry<K, V> entry : entries.values()) {
+                if (!(entry.value instanceof RefSet refs) || refs.isEmpty()) {
+                    continue;
+                }
+                refCount += refs.size();
+                int capacity = refs.arrayCapacity();
+                if (capacity > 0) {
+                    refArrayCount++;
+                    refArrayCapacity += capacity;
+                }
+            }
+            return new RefStats(refCount, refArrayCount, refArrayCapacity);
         }
 
         private void moveToHead(CacheEntry<K, V> entry) {
