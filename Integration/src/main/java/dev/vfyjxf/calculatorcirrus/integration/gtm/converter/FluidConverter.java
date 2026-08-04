@@ -1,9 +1,9 @@
-package dev.vfyjxf.calculatorcirrus.integration.gtm.converter;
+package dev.vfyjxf.cirrus.integration.gtm.converter;
 
 import com.gregtechceu.gtceu.api.capability.recipe.FluidRecipeCapability;
 import com.gregtechceu.gtceu.api.recipe.content.Content;
-import dev.vfyjxf.calculatorcirrus.api.recipe.ingredient.IngredientStack;
-import dev.vfyjxf.calculatorcirrus.integration.gtm.ContentConverter;
+import dev.vfyjxf.cirrus.api.recipe.content.IngredientStack;
+import dev.vfyjxf.cirrus.integration.gtm.ContentConverter;
 
 public class FluidConverter implements ContentConverter {
     @Override

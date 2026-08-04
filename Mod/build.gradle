@@ -31,6 +31,8 @@ neoForge {
             gameDirectory = file('runs/client')
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'mixin.debug', 'true'
+            systemProperty 'moddev.service.port', '47812'
+            systemProperty 'moddev.skill.exportRoot', rootProject.file('.codex/generated/moddev-service').absolutePath
         }
 
         server {
@@ -38,6 +40,8 @@ neoForge {
             gameDirectory = file('runs/server')
             programArgument '--nogui'
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            systemProperty 'moddev.service.port', '47812'
+            systemProperty 'moddev.skill.exportRoot', rootProject.file('.codex/generated/moddev-service').absolutePath
         }
 
         gameTestServer {
@@ -79,12 +83,12 @@ configurations {
 }
 
 dependencies {
-//    compileOnly(group: 'org.scala-lang', name: 'scala3-library_3', version: '3.6.2')
-//    compileOnly(group: 'org.typelevel', name: 'cats-core_3', version: '2.12.1-kotori')
+//    compileOnly(group: 'org.scala-lang', name: 'scala3-library_3', version: '3.7.1')
+//    compileOnly(group: 'org.typelevel', name: 'cats-core_3', version: '2.13.0-kotori')
 //    runtimeOnly(
 //            group: "com.kotori316",
 //            name: "scalablecatsforce-neoforge",
-//            version: "3.6.2-build-0",
+//            version: "3.7.1-build-11",
 //            classifier: "with-library"
 //    ) {
 //        transitive = false
@@ -93,21 +97,21 @@ dependencies {
     api("dev.vfyjxf:cloudlib")
 
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
-    compileOnly("org.eclipse.collections:eclipse-collections-api:11.1.0")
-    compileOnly("org.eclipse.collections:eclipse-collections:11.1.0")
+    compileOnly("mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}")
 //    jarJar(project(":Integration"))
     compileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
 
-    compileOnly 'com.google.auto.service:auto-service:1.1.1'
-    annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
+//    compileOnly 'com.google.auto.service:auto-service:1.1.1'
+//    annotationProcessor 'com.google.auto.service:auto-service:1.1.1'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.7.1'
     testImplementation "net.neoforged:testframework:${project.neo_version}"
-    testImplementation 'com.palantir.javapoet:javapoet:0.6.0'
+    testCompileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
+    testCompileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
 
-    testCompileOnly 'com.google.auto.service:auto-service:1.1.1'
-    testAnnotationProcessor 'com.google.auto.service:auto-service:1.1.1'
+//    testCompileOnly 'com.google.auto.service:auto-service:1.1.1'
+//    testAnnotationProcessor 'com.google.auto.service:auto-service:1.1.1'
 
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testRuntimeOnly "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
@@ -118,6 +122,10 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    minHeapSize = "1g"
+    maxHeapSize = "3g"
+    systemProperty 'moddev.skill.exportRoot', layout.buildDirectory.dir('moddev-service').get().asFile.absolutePath
+    systemProperty 'moddevmcp.project.root', rootProject.projectDir.absolutePath
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
@@ -146,4 +154,8 @@ neoForge.ideSyncTask generateModMetadata
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+tasks.named('jmhJar', Jar).configure {
+    zip64 = true
 }

@@ -1,0 +1,1373 @@
+package dev.vfyjxf.cirrus.ui.widget.calculator.page;
+
+import com.mojang.blaze3d.platform.InputConstants;
+import dev.vfyjxf.cirrus.api.content.type.ValueType;
+import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
+import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.database.CustomRecipeDatabase;
+import dev.vfyjxf.cirrus.api.recipe.database.DatabaseDefinition;
+import dev.vfyjxf.cirrus.api.recipe.database.DatabaseKind;
+import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseIndex;
+import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseWorkspace;
+import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContextKey;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
+import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseSet;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
+import dev.vfyjxf.cirrus.api.recipe.projection.context.LongProjectionContextOption;
+import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextScope;
+import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridIndex;
+import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridSize;
+import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
+import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemas;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
+import dev.vfyjxf.cirrus.content.ContentApiImpl;
+import dev.vfyjxf.cirrus.content.ContentRegistryBuilder;
+import dev.vfyjxf.cirrus.internal.debug.DebugProjectionPlugin;
+import dev.vfyjxf.cirrus.internal.InternalPlugin;
+import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
+import dev.vfyjxf.cirrus.recipe.execution.ExecutionTargetRecipeState;
+import dev.vfyjxf.cirrus.recipe.RecipeApiRegistryBuilder;
+import dev.vfyjxf.cirrus.recipe.content.RecipeContentRendererApi;
+import dev.vfyjxf.cirrus.recipe.content.RecipeContentRendererRegistryBuilder;
+import dev.vfyjxf.cirrus.ui.CirrusLangs;
+import dev.vfyjxf.cirrus.ui.execution.tooltip.ExecutionRecipeLayoutTooltipComponent;
+import dev.vfyjxf.cirrus.ui.execution.widget.ExecutionRecipeLayoutPreviewWidget;
+import dev.vfyjxf.cirrus.ui.execution.widget.JeiRecipePreviewWidget;
+import dev.vfyjxf.cirrus.ui.tooltip.RichTooltipComponent;
+import dev.vfyjxf.cirrus.ui.widget.calculator.CalculatorTargetRecipeState;
+import dev.vfyjxf.cirrus.ui.widget.calculator.RecipeDatabaseKeyMappings;
+import dev.vfyjxf.cirrus.ui.widget.calculator.calc.RecipeContentSlotsWidget;
+import dev.vfyjxf.cirrus.ui.widget.common.CirrusButtonWidget;
+import dev.vfyjxf.cirrus.ui.widget.common.CirrusCardWidget;
+import dev.vfyjxf.cirrus.ui.widget.common.CirrusCheckboxWidget;
+import dev.vfyjxf.cirrus.ui.widget.common.CirrusFittedTextWidget;
+import dev.vfyjxf.cirrus.ui.widget.common.CirrusRowWidget;
+import dev.vfyjxf.cirrus.ui.widget.common.CirrusSectionWidget;
+import dev.vfyjxf.cirrus.ui.widget.common.CirrusWrappedTextWidget;
+import dev.vfyjxf.cirrus.ui.widget.toggle.sw.Slide;
+import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipEntry;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import dev.vfyjxf.taffy.style.AlignItems;
+import dev.vfyjxf.taffy.style.FlexWrap;
+import dev.vfyjxf.taffy.style.TaffyDimension;
+import net.minecraft.resources.ResourceLocation;
+import net.neoforged.neoforge.client.settings.KeyModifier;
+import org.eclipse.collections.api.RichIterable;
+import org.eclipse.collections.api.factory.Lists;
+import org.jetbrains.annotations.Nullable;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.lwjgl.glfw.GLFW;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
+
+class DatabasePageListLayoutTest {
+    private static final TestValueType input = new TestValueType("input");
+    private static final TestValueType outA = new TestValueType("output_a");
+    private static final TestValueType outB = new TestValueType("output_b");
+    private static final TestValueType outC = new TestValueType("output_c");
+    private static final TestValueType outD = new TestValueType("output_d");
+    private static final ProjectionPlugin irrelevantProjectionPlugin = ProjectionPlugin.of(
+        Namespace.of("test", "projection/irrelevant"),
+        "cirrus.ui.calculator.database.plugin.builtin",
+        "",
+        true
+    );
+    private static final ExecutionContextKey<Long> irrelevantProjectionOptionKey = ExecutionContextKey.create(
+        ResourceLocation.fromNamespaceAndPath("test", "projection/irrelevant/level"),
+        Long.class,
+        1L
+    );
+
+    @BeforeAll
+    static void attachRecipeContentRenderers() {
+        RecipeContentRendererRegistryBuilder builder = new RecipeContentRendererRegistryBuilder();
+        new InternalPlugin().registerRecipeContentRenderer(builder);
+        RecipeContentRendererApi.attach(new RecipeContentRendererApi(builder));
+        if (RecipeApiImpl.instance() == null) {
+            RecipeApiImpl.attach(new RecipeApiImpl(new RecipeApiRegistryBuilder()));
+        }
+    }
+
+    @AfterEach
+    void clearTargetRecipeStates() {
+        CalculatorTargetRecipeState.clear();
+        ExecutionTargetRecipeState.clear();
+    }
+
+    @Test
+    void listRowsPlaceOutputPreviewBeforeRecipeText() {
+        DatabasePage page = new DatabasePage(indexWithMultiOutputRecipe());
+        page.debugSetViewMode("list");
+        page.debugSetQuery("multi_output_recipe_with_a_very_long_id");
+
+        WidgetGroup<?> results = (WidgetGroup<?>) page.children().get(1);
+        assertEquals(1, results.children().size());
+        assertTrue(results.children().getFirst() instanceof DatabasePage.VirtualizedResultSectionsWidget);
+        DatabasePage.VirtualizedResultSectionsWidget list = (DatabasePage.VirtualizedResultSectionsWidget) results.children().getFirst();
+
+        assertEquals(1, list.debugCardCount());
+    }
+
+    @Test
+    void listPreviewWidthIsCappedToKeepRecipeIdReadable() {
+        assertEquals(32, DatabasePage.listRowHeight());
+        assertEquals(2, DatabasePage.listRowGap());
+        assertEquals(3, DatabasePage.listRowHorizontalPadding());
+        assertEquals(3, DatabasePage.listOutputSlotLimit());
+        assertEquals(56, DatabasePage.listOutputStripWidth(3));
+        assertEquals(56, DatabasePage.listOutputStripWidth(5));
+        assertEquals(
+            DatabasePage.resultCardActionButtonSize() * 2 + 2 + 4,
+            DatabasePage.resultCardActionColumnWidth()
+        );
+    }
+
+    @Test
+    void recipeContentSlotsWidgetSupportsMultipleOutputsAndOverflowTooltip() {
+        List<OutputContent> outputs = List.of(
+            OutputContent.fromValue(outA, 1L),
+            OutputContent.fromValue(outB, 2L),
+            OutputContent.fromValue(outC, 3L),
+            OutputContent.fromValue(outD, 4L)
+        );
+
+        assertEquals(3, RecipeContentSlotsWidget.visibleSlotCount(outputs.size(), 3));
+        assertEquals(56, RecipeContentSlotsWidget.stripWidth(outputs.size(), 3, 1));
+        assertEquals(0, RecipeContentSlotsWidget.slotIndexAt(1, 1, outputs.size(), 3, 1));
+        assertEquals(1, RecipeContentSlotsWidget.slotIndexAt(19, 1, outputs.size(), 3, 1));
+        assertEquals(-1, RecipeContentSlotsWidget.slotIndexAt(18, 1, outputs.size(), 3, 1));
+
+        Tooltip first = RecipeContentSlotsWidget.tooltipAt(outputs, 1, 1, 3, 1);
+        assertNotNull(first);
+        assertFalse(first.flatEntries().isEmpty());
+
+        Tooltip overflow = RecipeContentSlotsWidget.tooltipAt(outputs, 55, 17, 3, 1);
+        assertNotNull(overflow);
+        assertFalse(overflow.flatEntries().isEmpty());
+    }
+
+    @Test
+    void systemSortGroupsVisibleResultsByRecipeSystem() {
+        DatabasePage page = new DatabasePage(indexWithTwoSystems());
+        page.debugSetSortMode("system");
+
+        WidgetGroup<?> results = (WidgetGroup<?>) page.children().get(1);
+
+        assertEquals(16, DatabasePage.sectionHeaderHeight());
+        assertEquals(6, DatabasePage.sectionHeaderPaddingLeft());
+        assertEquals(4, DatabasePage.sectionHeaderPaddingRight());
+        assertEquals(3, DatabasePage.resultSectionBodyPadding());
+        assertEquals(16, DatabasePage.resultCategoryHeaderHeight());
+        assertEquals(3, DatabasePage.resultCategoryGroupPadding());
+        assertEquals(5, DatabasePage.resultCategoryHeaderPaddingLeft());
+        assertEquals(4, DatabasePage.resultCategoryHeaderPaddingRight());
+        assertEquals(30, DatabasePage.resultCategoryCountWidth());
+        assertEquals(14, DatabasePage.resultCategoryCountHeight());
+        assertEquals(3, DatabasePage.resultCategoryCountPadding());
+        assertEquals(1, results.children().size());
+        assertTrue(results.children().getFirst() instanceof DatabasePage.VirtualizedResultSectionsWidget);
+        DatabasePage.VirtualizedResultSectionsWidget list = (DatabasePage.VirtualizedResultSectionsWidget) results.children().getFirst();
+        assertEquals(2, list.debugCategoryCount());
+        assertEquals(2, list.debugCardCount());
+    }
+
+    @Test
+    void resultCategoriesCollapseWithoutResettingScroll() {
+        DatabasePage page = new DatabasePage(indexWithTwoSystems());
+        page.debugSetSortMode("system");
+
+        int expandedHeight = page.debugResultSectionsContentHeight();
+        page.scrollState().jumpTo(0, page.debugResultCategoryY(0));
+
+        page.debugToggleResultCategory(0);
+
+        assertEquals(2, page.debugResultCategoryCount());
+        assertEquals(2, page.debugResultCardCount());
+        assertEquals(1, page.debugCollapsedResultCategoryCount());
+        assertTrue(page.debugResultCategoryCollapsed(0));
+        assertTrue(page.debugResultSectionsContentHeight() < expandedHeight);
+        assertEquals(page.debugResultCategoryY(0), page.scrollState().targetScrollY());
+
+        page.debugToggleResultCategory(0);
+
+        assertEquals(0, page.debugCollapsedResultCategoryCount());
+        assertFalse(page.debugResultCategoryCollapsed(0));
+        assertEquals(expandedHeight, page.debugResultSectionsContentHeight());
+        assertEquals(page.debugResultCategoryY(0), page.scrollState().targetScrollY());
+    }
+
+    @Test
+    void systemSortUsesSystemTagsAsCategoriesWhenPresent() {
+        DatabasePage page = new DatabasePage(indexWithTwoSystemsInOneCategory());
+        page.debugSetSortMode("system");
+
+        WidgetGroup<?> results = (WidgetGroup<?>) page.children().get(1);
+
+        assertEquals(1, results.children().size());
+        assertTrue(results.children().getFirst() instanceof DatabasePage.VirtualizedResultSectionsWidget);
+        DatabasePage.VirtualizedResultSectionsWidget list = (DatabasePage.VirtualizedResultSectionsWidget) results.children().getFirst();
+        assertEquals(1, list.debugCategoryCount());
+        assertEquals(2, list.debugCardCount());
+    }
+
+    @Test
+    void sortTooltipDebugStateChangesWithCurrentSortMode() {
+        DatabasePage page = new DatabasePage(indexWithMultiOutputRecipe());
+
+        page.debugSetSortMode("database");
+        List<String> databaseTooltip = page.debugSortTooltipLines();
+        assertEquals("database->system", page.debugSortTooltipModeState());
+
+        page.debugSetSortMode("system");
+        List<String> systemTooltip = page.debugSortTooltipLines();
+        assertEquals("system->relevance", page.debugSortTooltipModeState());
+
+        assertEquals(databaseTooltip.size(), systemTooltip.size());
+        assertTrue(systemTooltip.size() >= 4);
+        assertTrue(page.debugSortTooltip().flatEntries().stream().anyMatch(TooltipEntry.DynamicEntry.class::isInstance));
+    }
+
+    @Test
+    void databaseSortDirectionCanReverseSystemGroupingOrder() {
+        DatabasePage page = new DatabasePage(indexWithTwoSystems());
+        page.debugSetSortMode("system");
+        page.debugSetSortDirection("descending");
+
+        assertEquals("test:beta", page.debugFirstResultSystemGroup());
+        assertEquals("descending", page.debugSortDirection());
+    }
+
+    @Test
+    void viewTooltipTracksCurrentViewModeAfterToggle() {
+        DatabasePage page = new DatabasePage(indexWithMultiOutputRecipe());
+        var tooltip = page.debugViewTooltip();
+
+        List<String> gridTooltip = DatabasePage.debugTooltipLines(tooltip);
+        assertEquals("grid->list", page.debugViewTooltipModeState());
+
+        page.debugSetViewMode("list");
+        List<String> listTooltip = DatabasePage.debugTooltipLines(tooltip);
+
+        assertEquals("list->grid", page.debugViewTooltipModeState());
+        assertEquals(gridTooltip.size(), listTooltip.size());
+        assertNotEquals(gridTooltip, listTooltip);
+        assertTrue(tooltip.flatEntries().stream().anyMatch(TooltipEntry.DynamicEntry.class::isInstance));
+    }
+
+    @Test
+    void databaseRecipeTooltipUsesExecutionPreviewComponentFallback() {
+        DatabasePage page = new DatabasePage(indexWithMultiOutputRecipe());
+        Tooltip tooltip = page.debugFirstResultTooltip();
+
+        assertTrue(tooltip.flatEntries().stream().anyMatch(entry ->
+            entry instanceof TooltipEntry.ComponentEntry component
+                && component.component() instanceof ExecutionRecipeLayoutTooltipComponent
+        ));
+        assertTrue(tooltip.flatEntries().stream().noneMatch(entry ->
+            entry instanceof TooltipEntry.ComponentEntry component
+                && component.component() instanceof RichTooltipComponent rich
+                && rich.entries().stream().anyMatch(RichTooltipComponent.Entry.JeiRecipeCard.class::isInstance)
+        ));
+    }
+
+    @Test
+    void databaseRecipeCardsCanSetCalculatorAndExecutionTargets() {
+        RecipeDatabaseIndex index = indexWithMultiOutputRecipe();
+        RecipeEntry<?> recipe = index.records().getFirst().recipe();
+        DatabasePage page = new DatabasePage(index);
+
+        page.debugActivateFirstResultCard("setCalculatorTarget");
+
+        assertNotNull(CalculatorTargetRecipeState.current());
+        assertEquals(recipe, CalculatorTargetRecipeState.current().recipe());
+        assertEquals(null, ExecutionTargetRecipeState.current());
+
+        page.debugActivateFirstResultCard("setExecutionTarget");
+
+        assertNotNull(ExecutionTargetRecipeState.current());
+        assertEquals(recipe, ExecutionTargetRecipeState.current().recipe());
+    }
+
+    @Test
+    void resultSectionsDoNotReserveLegacyResultsHeader() {
+        DatabasePage page = new DatabasePage(indexWithMultiOutputRecipe());
+        WidgetGroup<?> results = (WidgetGroup<?>) page.children().get(1);
+        DatabasePage.VirtualizedResultSectionsWidget list = (DatabasePage.VirtualizedResultSectionsWidget) results.children().getFirst();
+
+        assertEquals(0, list.debugFirstCategoryY());
+    }
+
+    @Test
+    void databaseRecipeTooltipDocumentsConfigurableShortcutActions() {
+        DatabasePage page = new DatabasePage(indexWithMultiOutputRecipe());
+
+        List<String> cardLines = DatabasePage.debugTooltipLines(page.debugFirstResultTooltip());
+        List<String> calculatorLines = DatabasePage.debugTooltipLines(page.debugFirstResultActionTooltip("setCalculatorTarget"));
+        List<String> executionLines = DatabasePage.debugTooltipLines(page.debugFirstResultActionTooltip("setExecutionTarget"));
+
+        assertFalse(hasLine(cardLines, "Shortcuts", "快捷键", "calculator.database.shortcut.header"));
+        assertTrue(hasLine(cardLines, "View projection details", "查看投射详情", "calculator.database.shortcut.default_click"));
+        assertFalse(hasLine(cardLines, "Set execution target", "设置执行目标", "calculator.database.action.set_execution"));
+        assertTrue(hasLine(calculatorLines, "Set calculator target", "设为计算器目标", "calculator.database.shortcut.set_calculator_target"));
+        assertTrue(hasLine(calculatorLines, "Open in calculator", "在计算器里打开", "calculator.database.shortcut.open_calculator"));
+        assertTrue(hasLine(calculatorLines, "Left Button", "按键 1"));
+        assertTrue(hasLine(executionLines, "Set execution target", "设置执行器目标", "calculator.database.action.set_execution"));
+    }
+
+    @Test
+    void openRecipeInCalculatorShortcutDefaultsToShiftLeftClick() {
+        assertEquals(KeyModifier.SHIFT, RecipeDatabaseKeyMappings.openRecipeInCalculator.getDefaultKeyModifier());
+        assertEquals(InputConstants.Type.MOUSE, RecipeDatabaseKeyMappings.openRecipeInCalculator.getDefaultKey().getType());
+        assertEquals(GLFW.GLFW_MOUSE_BUTTON_LEFT, RecipeDatabaseKeyMappings.openRecipeInCalculator.getDefaultKey().getValue());
+        String keyName = RecipeDatabaseKeyMappings.keyName(RecipeDatabaseKeyMappings.openRecipeInCalculator).getString();
+        assertTrue(keyName.contains(InputConstants.Type.MOUSE.getOrCreate(GLFW.GLFW_MOUSE_BUTTON_LEFT).getDisplayName().getString()));
+    }
+
+    @Test
+    void databaseRecipeCardDefaultClickOpensProjectionDetail() {
+        DatabasePage page = new DatabasePage(indexWithMultiOutputRecipe());
+
+        page.debugOpenFirstResultCardDefault();
+
+        assertTrue(page.debugRecipeDetailOpen());
+        assertEquals("test:multi_output_recipe_with_a_very_long_id", page.debugSelectedRecipeDetail());
+        assertEquals(null, CalculatorTargetRecipeState.current());
+        assertEquals(null, ExecutionTargetRecipeState.current());
+    }
+
+    @Test
+    void projectionRecipeViewKeepsGridSchemaAndLooseOutputsGeneric() {
+        FakeRecipeSystem system = new FakeRecipeSystem(Namespace.of("test", "projection_view"), List.of());
+        FakeRecipe recipe = new FakeRecipe("projection_view", List.of(), List.of());
+        RecipeProjection projection = new RecipeProjection(
+            RecipeEntry.of(system, recipe),
+            Lists.immutable.with(
+                ClausedContent.from(
+                    InputContent.fromValue(input, 1L),
+                    ProjectionSchema.empty().with(ProjectionSchemas.gridIndex, new GridIndex(0)),
+                    ClauseSet.create()
+                ),
+                ClausedContent.from(
+                    InputContent.fromValue(input, 2L),
+                    ProjectionSchema.empty().with(ProjectionSchemas.gridIndex, new GridIndex(4)),
+                    ClauseSet.create()
+                )
+            ),
+            Lists.immutable.with(
+                ClausedContent.from(OutputContent.fromValue(outA, 1L)),
+                ClausedContent.from(OutputContent.fromValue(outB, 2L))
+            ),
+            ProjectionSchema.empty().with(ProjectionSchemas.gridSize, new GridSize(3, 3)),
+            ClauseSet.create()
+        );
+
+        ProjectionRecipeViewWidget view = ProjectionRecipeViewWidget.create(projection);
+
+        assertNotNull(view);
+        assertTrue(view.usesGrid());
+        assertEquals(2, view.inputCount());
+        assertEquals(2, view.outputCount());
+    }
+
+    @Test
+    void databaseRecipeRowsOpenDetailPageWithPreviewAndEffectSections() {
+        DatabasePage page = new DatabasePage(indexWithMultiOutputRecipe());
+        page.debugSetViewMode("list");
+        page.debugSetQuery("multi_output_recipe_with_a_very_long_id");
+
+        page.debugOpenFirstResultDetail();
+
+        assertTrue(page.debugRecipeDetailOpen());
+        assertEquals("test:multi_output_recipe_with_a_very_long_id", page.debugSelectedRecipeDetail());
+        assertEquals(0, page.debugVisibleResultCount());
+        assertEquals(0, page.debugSystemRecipeSelectionCount());
+        assertEquals(0, page.debugRecipeDetailPluginCount());
+        assertEquals(3, page.debugRecipeDetailSectionCount());
+        assertFalse(page.debugRecipeDetailUsesJeiPreview());
+
+        WidgetGroup<?> results = (WidgetGroup<?>) page.children().get(1);
+        assertEquals(1, results.children().size());
+        assertTrue(results.children().getFirst() instanceof WidgetGroup<?>);
+        WidgetGroup<?> shell = (WidgetGroup<?>) results.children().getFirst();
+        assertEquals(3, shell.children().size());
+        assertTrue(shell.children().getFirst() instanceof CirrusCardWidget);
+        assertTrue(shell.children().get(1) instanceof CirrusCardWidget);
+        assertTrue(shell.children().get(2) instanceof CirrusCardWidget);
+        CirrusCardWidget header = (CirrusCardWidget) shell.children().getFirst();
+        assertTrue(header.body().children().getFirst() instanceof WidgetGroup<?>);
+        WidgetGroup<?> headerRow = (WidgetGroup<?>) header.body().children().getFirst();
+        assertTrue(headerRow.children().getFirst() instanceof CirrusButtonWidget);
+        assertEquals(18, DatabasePage.detailIconButtonSize());
+        assertEquals(32, DatabasePage.detailEffectRowHeight());
+        assertEquals(164, DatabasePage.detailProjectionControlPanelWidth());
+        assertEquals(126, DatabasePage.detailProjectionControlPanelHeight());
+        CirrusCardWidget preview = (CirrusCardWidget) shell.children().get(1);
+        assertEquals(1, preview.body().children().size());
+        assertTrue(preview.body().children().getFirst() instanceof WidgetGroup<?>);
+        WidgetGroup<?> groupedPreview = (WidgetGroup<?>) preview.body().children().getFirst();
+        assertEquals(2, groupedPreview.children().size());
+        assertTrue(groupedPreview.children().getFirst() instanceof CirrusFittedTextWidget);
+        CirrusFittedTextWidget previewCaption = (CirrusFittedTextWidget) groupedPreview.children().getFirst();
+        assertEquals(CirrusLangs.Calculator.Database.candidatesOriginal.component().getString(), previewCaption.text().getString());
+        assertTrue(groupedPreview.children().get(1) instanceof ExecutionRecipeLayoutPreviewWidget);
+        ExecutionRecipeLayoutPreviewWidget originalPreview = (ExecutionRecipeLayoutPreviewWidget) groupedPreview.children().get(1);
+        assertEquals(1, originalPreview.inputSlotCount());
+        assertEquals(4, originalPreview.outputSlotCount());
+        assertTrue(originalPreview.framed());
+        assertFalse(preview.extension().visible());
+
+        page.debugLeaveRecipeDetail();
+        assertFalse(page.debugRecipeDetailOpen());
+        assertEquals(1, page.debugVisibleResultCount());
+    }
+
+    @Test
+    void databasePageCanOpenRecipeDetailFromExternalRecipeEntry() {
+        RecipeDatabaseIndex index = indexWithMultiOutputRecipe();
+        RecipeEntry<?> entry = index.records().getFirst().recipe();
+        DatabasePage page = new DatabasePage(index);
+
+        assertTrue(page.openRecipe(entry));
+
+        assertTrue(page.debugRecipeDetailOpen());
+        assertEquals("test:multi_output_recipe_with_a_very_long_id", page.debugSelectedRecipeDetail());
+    }
+
+    @Test
+    void calculatorProjectionDetailUsesCalculatorContextAndExternalBackAction() {
+        RecipeDatabaseIndex index = indexWithMultiOutputRecipe();
+        RecipeEntry<?> entry = index.records().getFirst().recipe();
+        int[] backCalls = {0};
+        DatabasePage page = DatabasePage.calculatorProjection(index, entry, 12, 34L, () -> backCalls[0]++);
+
+        assertFalse(page.debugBrowserToolbarVisible());
+        assertFalse(page.debugSearchBoxVisible());
+        assertFalse(page.debugDatabaseChoiceVisible());
+        assertFalse(page.debugCreateDatabaseButtonVisible());
+        assertFalse(page.debugSourcesButtonVisible());
+        assertFalse(page.debugDeleteDatabaseVisible());
+        assertFalse(page.debugViewButtonVisible());
+        assertFalse(page.debugSortButtonVisible());
+        assertFalse(page.debugSortDirectionButtonVisible());
+        page.debugOpenSourcesPage();
+        assertFalse(page.debugSourcesPageOpen());
+
+        assertTrue(page.openRecipe(entry));
+        assertEquals(ProjectionContextScope.calculator, page.debugProjectionContextScope());
+        assertEquals("builtin", page.debugProjectionContextDatabaseId());
+        assertTrue(page.debugProjectionContextHasCalculatorRecipe());
+
+        page.debugLeaveRecipeDetail();
+
+        assertEquals(1, backCalls[0]);
+        assertTrue(page.debugRecipeDetailOpen());
+    }
+
+    @Test
+    void calculatorProjectionFromRecipeBuildsOnlySelectedRecipeIndex() {
+        RecipeApi previous = RecipeApiImpl.instance();
+        Namespace source = Namespace.of("test", "calculator_projection");
+        FakeRecipe target = new FakeRecipe(
+            "target",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outA, 1L))
+        );
+        FakeRecipe unrelated = new FakeRecipe(
+            "unrelated",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outB, 1L))
+        );
+        FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(target, unrelated));
+        RecipeApiRegistryBuilder builder = new RecipeApiRegistryBuilder();
+        builder.registerSystem(system);
+        RecipeApiImpl.attach(new RecipeApiImpl(builder));
+        try {
+            RecipeEntry<?> entry = RecipeEntry.of(system, target);
+            DatabasePage page = DatabasePage.calculatorProjection(entry, 2, 7L, () -> {});
+
+            assertFalse(page.debugDatabaseScopedIndex());
+            assertEquals(1, page.debugIndexRecordCount());
+            assertEquals(0, page.debugSystemCatalogRecordCount());
+            assertEquals(0, system.debugAllRecipesCalls());
+            assertTrue(page.openRecipe(entry));
+            assertEquals(ProjectionContextScope.calculator, page.debugProjectionContextScope());
+            assertEquals("builtin", page.debugProjectionContextDatabaseId());
+            assertFalse(page.debugActiveDatabaseEditable());
+        } finally {
+            if (previous instanceof RecipeApiImpl impl) {
+                RecipeApiImpl.attach(impl);
+            }
+        }
+    }
+
+    @Test
+    void projectionDebugEffectsAndControlsShareIntegratedProjectionSection() {
+        assumeTrue(DebugProjectionPlugin.debugEnabled());
+
+        RecipeApi previous = RecipeApiImpl.instance();
+        ContentApiImpl previousContent = ContentApiImpl.instance();
+        attachContentApiForDebugProjection();
+        RecipeApiImpl api = attachDebugProjectionRecipeApi();
+        try {
+            RecipeSystem<?> system = api.findSystem(DebugProjectionPlugin.systemId);
+            assertNotNull(system);
+            CustomRecipeDatabase database = new CustomRecipeDatabase(
+                "debug",
+                "Debug",
+                List.of(),
+                List.of(DebugProjectionPlugin.systemId),
+                List.of()
+            );
+            DatabasePage page = new DatabasePage(
+                new RecipeDatabaseWorkspace(List.of(database), "debug"),
+                List.of(system),
+                Map.of()
+            );
+
+            page.debugSetProjectionContextOption("calculator_cirrus:debug/projection_scale", 2L);
+            page.debugSetProjectionContextOption("calculator_cirrus:debug/projection_extra_output", true);
+            page.debugSetQuery("projection_probe");
+            page.debugOpenFirstResultDetail();
+
+            assertTrue(page.debugRecipeDetailEffectCount() >= 2);
+            assertEquals(1, page.debugRecipeDetailPluginCount());
+            WidgetGroup<?> results = (WidgetGroup<?>) page.children().get(1);
+            WidgetGroup<?> shell = (WidgetGroup<?>) results.children().getFirst();
+            assertEquals(3, shell.children().size());
+            assertTrue(shell.children().get(2) instanceof CirrusCardWidget);
+
+            CirrusCardWidget debug = (CirrusCardWidget) shell.children().get(2);
+            assertFalse(debug.title().getString().isBlank());
+            assertEquals(1, debug.body().children().size());
+            WidgetGroup<?> workspace = (WidgetGroup<?>) debug.body().children().getFirst();
+            assertEquals(2, workspace.children().size());
+            assertEquals(FlexWrap.NO_WRAP, workspace.style().layoutStyle().flexWrap);
+            assertEquals(AlignItems.STRETCH, workspace.style().layoutStyle().alignItems);
+            assertEquals(TaffyDimension.percent(1f), workspace.style().layoutStyle().size.width);
+
+            WidgetGroup<?> overview = (WidgetGroup<?>) workspace.children().getFirst();
+            assertEquals(1.0f, overview.style().layoutStyle().flexGrow, 0.001f);
+            assertEquals(1.0f, overview.style().layoutStyle().flexShrink, 0.001f);
+            assertEquals(TaffyDimension.length(0), overview.style().layoutStyle().minSize.width);
+            assertTrue(overview.children().size() >= 6);
+            assertTrue(page.debugProjectionEffectsMerged());
+            assertTrue(overview.children().stream().anyMatch(ProjectionRecipeViewWidget.class::isInstance));
+            assertTrue(overview.children().get(4) instanceof WidgetGroup<?>);
+            assertTrue(overview.children().get(5) instanceof WidgetGroup<?>);
+            WidgetGroup<?> inputEffectGroup = (WidgetGroup<?>) overview.children().get(4);
+            WidgetGroup<?> outputEffectGroup = (WidgetGroup<?>) overview.children().get(5);
+            assertTrue(inputEffectGroup.children().size() >= 2);
+            assertTrue(outputEffectGroup.children().size() >= 2);
+
+            WidgetGroup<?> controls = (WidgetGroup<?>) workspace.children().get(1);
+            assertEquals(TaffyDimension.length(DatabasePage.detailProjectionControlPanelWidth()), controls.style().layoutStyle().size.width);
+            assertEquals(TaffyDimension.length(DatabasePage.detailProjectionControlPanelWidth()), controls.style().layoutStyle().minSize.width);
+            assertEquals(TaffyDimension.length(DatabasePage.detailProjectionControlPanelWidth()), controls.style().layoutStyle().maxSize.width);
+            assertEquals(0.0f, controls.style().layoutStyle().flexGrow, 0.001f);
+            assertEquals(0.0f, controls.style().layoutStyle().flexShrink, 0.001f);
+            assertTrue(controls.children().size() >= 3);
+            assertEquals(3, DatabasePage.detailProjectionRowPadding());
+            assertEquals(8, DatabasePage.detailProjectionPanelGap());
+            assertEquals(3, DatabasePage.detailProjectionControlMarginLeft());
+            WidgetGroup<?> parameters = (WidgetGroup<?>) controls.children().get(2);
+            WidgetGroup<?> booleanRow = (WidgetGroup<?>) parameters.children().get(2);
+            assertTrue(booleanRow.children().getFirst() instanceof CirrusWrappedTextWidget);
+            assertTrue(booleanRow.children().get(1) instanceof Slide);
+
+            page.debugSetProjectionEffectsMerged(false);
+            assertFalse(page.debugProjectionEffectsMerged());
+        } finally {
+            if (previous instanceof RecipeApiImpl impl) {
+                RecipeApiImpl.attach(impl);
+            }
+            if (previousContent != null) {
+                ContentApiImpl.attach(previousContent);
+            }
+        }
+    }
+
+    @Test
+    void databaseRecipeDetailPreviewFiltersImplicitEnergyValues() {
+        DatabasePage page = new DatabasePage(indexWithEnergySpecRecipe());
+        page.debugSetQuery("energy_spec_recipe");
+
+        page.debugOpenFirstResultDetail();
+
+        WidgetGroup<?> results = (WidgetGroup<?>) page.children().get(1);
+        WidgetGroup<?> shell = (WidgetGroup<?>) results.children().getFirst();
+        CirrusCardWidget preview = (CirrusCardWidget) shell.children().get(1);
+        assertTrue(preview.body().children().getFirst() instanceof WidgetGroup<?>);
+        WidgetGroup<?> groupedPreview = (WidgetGroup<?>) preview.body().children().getFirst();
+        assertTrue(groupedPreview.children().getFirst() instanceof CirrusFittedTextWidget);
+        CirrusFittedTextWidget previewCaption = (CirrusFittedTextWidget) groupedPreview.children().getFirst();
+        assertEquals(CirrusLangs.Calculator.Database.candidatesOriginal.component().getString(), previewCaption.text().getString());
+        assertTrue(groupedPreview.children().get(1) instanceof ExecutionRecipeLayoutPreviewWidget);
+        ExecutionRecipeLayoutPreviewWidget originalPreview = (ExecutionRecipeLayoutPreviewWidget) groupedPreview.children().get(1);
+
+        assertEquals(1, originalPreview.outputSlotCount());
+    }
+
+    @Test
+    void projectionDetailRefreshKeepsScrollPosition() {
+        DatabasePage page = new DatabasePage(indexWithMultiOutputRecipe());
+        page.debugSetQuery("multi_output_recipe_with_a_very_long_id");
+        page.debugOpenFirstResultDetail();
+        page.scrollState().contentSize(100, 200);
+        page.scrollState().jumpTo(0, 42);
+
+        page.debugRefreshProjectionPreservingScroll();
+
+        assertEquals(42f, page.scrollState().targetScrollY());
+    }
+
+    @Test
+    void projectionDetailNavigationRestoresPreviousPageScrollPositions() {
+        DatabasePage page = new DatabasePage(indexWithMultiOutputRecipe());
+        page.debugSetQuery("multi_output_recipe_with_a_very_long_id");
+        page.scrollState().contentSize(100, 200);
+        page.scrollState().jumpTo(0, 37);
+
+        page.debugOpenFirstResultDetail();
+
+        assertEquals(0f, page.scrollState().targetScrollY());
+        page.scrollState().contentSize(100, 200);
+        page.scrollState().jumpTo(0, 42);
+
+        page.debugLeaveRecipeDetail();
+
+        assertEquals(37f, page.scrollState().targetScrollY());
+
+        page.debugOpenFirstResultDetail();
+
+        assertEquals(42f, page.scrollState().targetScrollY());
+    }
+
+    @Test
+    void sourceSubPagesRestoreIndependentScrollPositions() {
+        Namespace source = Namespace.of("test", "scroll_source");
+        FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(new FakeRecipe(
+            "scroll_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outA, 1L))
+        )));
+        DatabasePage page = databasePageWithScratch(system);
+        page.scrollState().contentSize(100, 200);
+        page.scrollState().jumpTo(0, 23);
+
+        page.debugOpenSourcesPage();
+
+        assertEquals(0f, page.scrollState().targetScrollY());
+        page.scrollState().contentSize(100, 200);
+        page.scrollState().jumpTo(0, 31);
+
+        page.debugOpenSystemRecipeSource(source.toString());
+
+        assertEquals(0f, page.scrollState().targetScrollY());
+        page.scrollState().contentSize(100, 200);
+        page.scrollState().jumpTo(0, 44);
+
+        page.debugLeaveSystemRecipeSource();
+
+        assertEquals(31f, page.scrollState().targetScrollY());
+
+        page.debugLeaveSourcesPage();
+
+        assertEquals(23f, page.scrollState().targetScrollY());
+
+        page.debugOpenSourcesPage();
+
+        assertEquals(31f, page.scrollState().targetScrollY());
+
+        page.debugOpenSystemRecipeSource(source.toString());
+
+        assertEquals(44f, page.scrollState().targetScrollY());
+    }
+
+    @Test
+    void jeiRecipePreviewWidgetIsAbsentWhenJeiRuntimeCannotRenderRecipe() {
+        assertEquals(null, JeiRecipePreviewWidget.create(null));
+        assertEquals(null, JeiRecipePreviewWidget.create(RecipeEntry.of(
+            new FakeRecipeSystem(Namespace.of("test", "no_jei"), List.of()),
+            new FakeRecipe("no_jei", List.of(), List.of())
+        )));
+    }
+
+    @Test
+    void databasePageDefaultsToEmptyUntilSystemsAreAdded() {
+        Namespace source = Namespace.of("test", "manual");
+        FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(new FakeRecipe(
+            "manual_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outA, 1L))
+        )));
+        DatabasePage page = databasePageWithScratch(system);
+
+        assertEquals(0, page.debugActiveDatabaseSystemSourceCount());
+        assertEquals(0, page.debugVisibleResultCount());
+
+        page.debugToggleSystemSource(source.toString());
+
+        assertEquals(1, page.debugActiveDatabaseSystemSourceCount());
+        assertEquals(1, page.debugEnabledDatabaseSystemSourceCount());
+        assertEquals(1, page.debugVisibleResultCount());
+
+        page.debugSetSystemSourceEnabled(source.toString(), false);
+
+        assertEquals(1, page.debugActiveDatabaseSystemSourceCount());
+        assertEquals(0, page.debugEnabledDatabaseSystemSourceCount());
+        assertEquals(0, page.debugVisibleResultCount());
+    }
+
+    @Test
+    void togglingSystemSourcesPreservesScrollPosition() {
+        Namespace source = Namespace.of("jei", "scroll_preserve");
+        FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(new FakeRecipe(
+            "scroll_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outA, 1L))
+        )));
+        DatabasePage page = databasePageWithScratch(system);
+        page.scrollState().contentSize(100, 240);
+        page.scrollState().jumpTo(0, 58);
+
+        page.debugToggleSystemSource(source.toString());
+
+        assertEquals(58f, page.scrollState().targetScrollY());
+
+        page.scrollState().jumpTo(0, 71);
+        page.debugSetSystemSourceEnabled(source.toString(), false);
+
+        assertEquals(71f, page.scrollState().targetScrollY());
+    }
+
+    @Test
+    void canToggleAllSourcesInSameRootAtOnce() {
+        Namespace jeiAlpha = Namespace.of("jei", "alpha");
+        Namespace jeiBeta = Namespace.of("jei", "beta");
+        Namespace other = Namespace.of("other", "gamma");
+        FakeRecipeSystem alphaSystem = new FakeRecipeSystem(jeiAlpha, List.of(new FakeRecipe(
+            "alpha_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outA, 1L))
+        )));
+        FakeRecipeSystem betaSystem = new FakeRecipeSystem(jeiBeta, List.of(new FakeRecipe(
+            "beta_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outB, 1L))
+        )));
+        FakeRecipeSystem otherSystem = new FakeRecipeSystem(other, List.of(new FakeRecipe(
+            "other_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outC, 1L))
+        )));
+        DatabasePage page = databasePageWithScratch(List.of(alphaSystem, betaSystem, otherSystem));
+
+        page.debugToggleSystemSourceGroup("jei");
+
+        assertEquals(2, page.debugActiveDatabaseSystemSourceCount());
+        assertEquals(2, page.debugEnabledDatabaseSystemSourceCount());
+        assertTrue(page.debugVisibleResultCount() > 0);
+
+        page.debugToggleSystemSourceGroup("jei");
+
+        assertEquals(2, page.debugActiveDatabaseSystemSourceCount());
+        assertEquals(0, page.debugEnabledDatabaseSystemSourceCount());
+    }
+
+    @Test
+    void builtinDatabaseHidesMutatingControlsAndShowsSystemCatalog() {
+        Namespace source = Namespace.of("test", "builtin_readonly");
+        FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(new FakeRecipe(
+            "readonly_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outA, 1L))
+        )));
+        DatabasePage page = new DatabasePage(RecipeDatabaseWorkspace.defaults(), List.of(system), Map.of());
+
+        assertTrue(page.debugActiveDatabaseBuiltin());
+        assertFalse(page.debugActiveDatabaseEditable());
+        assertFalse(page.debugDeleteDatabaseEnabled());
+        assertFalse(page.debugSourcesButtonEnabled());
+        assertFalse(page.debugDeleteDatabaseVisible());
+        assertFalse(page.debugSourcesButtonVisible());
+        assertEquals(1, page.debugVisibleResultCount());
+
+        page.debugOpenSourcesPage();
+        page.debugToggleSystemSource(source.toString());
+        page.debugSetSystemSourceEnabled(source.toString(), true);
+        page.debugOpenSystemRecipeSource(source.toString());
+        page.debugSetSystemRecipeSelected(source.toString(), "test:readonly_recipe", true);
+
+        assertFalse(page.debugSourcesPageOpen());
+        assertEquals(null, page.debugSelectedSystemRecipeSource());
+        assertEquals(0, page.debugActiveDatabaseSystemSourceCount());
+        assertEquals(0, page.debugActiveDatabaseRecipeCount());
+        assertEquals(1, page.debugVisibleResultCount());
+    }
+
+    @Test
+    void sourcesPageUsesCompactGridEntries() {
+        Namespace source = Namespace.of("test", "compact_source");
+        FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(new FakeRecipe(
+            "compact_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outA, 1L))
+        )));
+        DatabasePage page = databasePageWithScratch(system);
+
+        page.debugOpenSourcesPage();
+
+        assertTrue(page.debugSourcesPageOpen());
+        WidgetGroup<?> results = (WidgetGroup<?>) page.children().get(1);
+        CirrusSectionWidget sources = (CirrusSectionWidget) results.children().getFirst();
+        assertEquals(2, sources.body().children().size());
+        assertTrue(sources.body().children().get(1) instanceof DatabasePage.VirtualizedSourceGroupsWidget);
+        DatabasePage.VirtualizedSourceGroupsWidget groups = (DatabasePage.VirtualizedSourceGroupsWidget) sources.body().children().get(1);
+
+        assertEquals(4, DatabasePage.sourceSectionBodyPadding());
+        assertEquals(20, DatabasePage.systemSourceGroupHeaderHeight());
+        assertEquals(3, DatabasePage.systemSourceGroupPadding());
+        assertEquals(1, groups.debugGroupCount());
+        assertEquals(1, groups.debugSourceCount());
+        assertEquals(1, groups.children().size());
+        WidgetGroup<?> groupWidget = (WidgetGroup<?>) groups.children().getFirst();
+        assertEquals(2, groupWidget.children().size());
+        assertEquals(1, ((WidgetGroup<?>) groupWidget.children().get(1)).children().size());
+        assertEquals(93, DatabasePage.debugSystemSourceRowWidth(source.toString()));
+        assertEquals(34, DatabasePage.systemSourceControlHeight());
+        assertEquals(2, DatabasePage.systemSourceControlGap());
+        assertEquals(20, DatabasePage.sourcesButtonWidth());
+    }
+
+    @Test
+    void sourceGroupHeaderBulkButtonTogglesOnlyThroughButtonAction() {
+        Namespace first = Namespace.of("jei", "category/first");
+        Namespace second = Namespace.of("jei", "category/second");
+        DatabasePage page = databasePageWithScratch(List.of(
+            new FakeRecipeSystem(first, List.of(new FakeRecipe(
+                "first_recipe",
+                List.of(InputContent.fromValue(input, 1L)),
+                List.of(OutputContent.fromValue(outA, 1L))
+            ))),
+            new FakeRecipeSystem(second, List.of(new FakeRecipe(
+                "second_recipe",
+                List.of(InputContent.fromValue(input, 1L)),
+                List.of(OutputContent.fromValue(outA, 1L))
+            )))
+        ));
+
+        page.debugOpenSourcesPage();
+
+        WidgetGroup<?> results = (WidgetGroup<?>) page.children().get(1);
+        CirrusSectionWidget sources = (CirrusSectionWidget) results.children().getFirst();
+        DatabasePage.VirtualizedSourceGroupsWidget groups = (DatabasePage.VirtualizedSourceGroupsWidget) sources.body().children().get(1);
+        WidgetGroup<?> groupWidget = (WidgetGroup<?>) groups.children().getFirst();
+        CirrusRowWidget header = (CirrusRowWidget) groupWidget.children().getFirst();
+
+        assertEquals(4, header.children().size());
+        assertEquals(0, page.debugActiveDatabaseSystemSourceCount());
+        assertEquals(0, page.debugEnabledDatabaseSystemSourceCount());
+
+        page.debugToggleSystemSourceGroup("jei");
+        assertEquals(2, page.debugActiveDatabaseSystemSourceCount());
+        assertEquals(2, page.debugEnabledDatabaseSystemSourceCount());
+
+        page.debugToggleSystemSourceGroup("jei");
+        assertEquals(2, page.debugActiveDatabaseSystemSourceCount());
+        assertEquals(0, page.debugEnabledDatabaseSystemSourceCount());
+    }
+
+    @Test
+    void sourceCardsExpandToNamespaceTextAndClampAtMaxWidth() {
+        Namespace readable = Namespace.of("jei", "category/minecraft/compostable");
+        Namespace oversized = Namespace.of("jei", "category/minecraft/very_long_recipe_category_that_clamps");
+        FakeRecipeSystem readableSystem = new FakeRecipeSystem(readable, List.of(new FakeRecipe(
+            "readable_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outA, 1L))
+        )));
+        FakeRecipeSystem oversizedSystem = new FakeRecipeSystem(oversized, List.of(new FakeRecipe(
+            "oversized_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outA, 1L))
+        )));
+        DatabasePage page = databasePageWithScratch(List.of(readableSystem, oversizedSystem));
+
+        page.debugOpenSourcesPage();
+
+        WidgetGroup<?> results = (WidgetGroup<?>) page.children().get(1);
+        CirrusSectionWidget sources = (CirrusSectionWidget) results.children().getFirst();
+        assertTrue(sources.body().children().get(1) instanceof DatabasePage.VirtualizedSourceGroupsWidget);
+        DatabasePage.VirtualizedSourceGroupsWidget groups = (DatabasePage.VirtualizedSourceGroupsWidget) sources.body().children().get(1);
+
+        assertEquals(1, groups.debugGroupCount());
+        assertEquals(2, groups.debugSourceCount());
+        assertEquals(1, groups.children().size());
+        WidgetGroup<?> groupWidget = (WidgetGroup<?>) groups.children().getFirst();
+        assertEquals(2, groupWidget.children().size());
+        assertEquals(2, ((WidgetGroup<?>) groupWidget.children().get(1)).children().size());
+        assertEquals(189, DatabasePage.debugSystemSourceRowWidth(readable.toString()));
+        assertEquals(DatabasePage.systemSourceRowMaxWidth(), DatabasePage.debugSystemSourceRowWidth(oversized.toString()));
+    }
+
+    @Test
+    void sourceGroupsRenderAllEntriesInNormalWidgetTree() {
+        ArrayList<FakeRecipeSystem> systems = new ArrayList<>();
+        for (int index = 0; index < 10; index++) {
+            Namespace source = Namespace.of("jei", "category/wide_source_" + index);
+            systems.add(new FakeRecipeSystem(source, List.of(new FakeRecipe(
+                "wide_recipe_" + index,
+                List.of(InputContent.fromValue(input, 1L)),
+                List.of(OutputContent.fromValue(outA, 1L))
+            ))));
+        }
+        DatabasePage page = databasePageWithScratch(systems);
+
+        page.debugOpenSourcesPage();
+
+        WidgetGroup<?> results = (WidgetGroup<?>) page.children().get(1);
+        CirrusSectionWidget sources = (CirrusSectionWidget) results.children().getFirst();
+        DatabasePage.VirtualizedSourceGroupsWidget groups = (DatabasePage.VirtualizedSourceGroupsWidget) sources.body().children().get(1);
+
+        assertEquals(1, groups.children().size());
+        WidgetGroup<?> groupWidget = (WidgetGroup<?>) groups.children().getFirst();
+        assertEquals(2, groupWidget.children().size());
+        WidgetGroup<?> rows = (WidgetGroup<?>) groupWidget.children().get(1);
+        assertEquals(10, rows.children().size());
+        assertEquals(10, groups.debugSourceCount());
+    }
+
+    @Test
+    void databasePageCanMultiSelectIndividualSystemRecipesWithoutEnablingWholeSource() {
+        Namespace source = Namespace.of("test", "manual_partial");
+        FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(
+            new FakeRecipe(
+                "partial_alpha",
+                List.of(InputContent.fromValue(input, 1L)),
+                List.of(OutputContent.fromValue(outA, 1L))
+            ),
+            new FakeRecipe(
+                "partial_beta",
+                List.of(InputContent.fromValue(input, 2L)),
+                List.of(OutputContent.fromValue(outB, 1L))
+            )
+        ));
+        DatabasePage page = databasePageWithScratch(system);
+
+        assertEquals(0, page.debugVisibleResultCount());
+        assertEquals(0, page.debugSystemRecipeSelectionCount());
+        assertEquals(null, page.debugSelectedSystemRecipeSource());
+
+        page.debugOpenSystemRecipeSource(source.toString());
+
+        assertEquals(source.toString(), page.debugSelectedSystemRecipeSource());
+        assertEquals(2, page.debugSystemRecipeSelectionCount());
+
+        page.debugSetSystemRecipeSelected(source.toString(), "test:partial_alpha", true);
+        page.debugSetSystemRecipeSelected(source.toString(), "test:partial_beta", true);
+
+        assertEquals(0, page.debugActiveDatabaseSystemSourceCount());
+        assertEquals(2, page.debugActiveDatabaseRecipeCount());
+        assertTrue(page.debugActiveDatabaseContainsRecipe(source.toString(), "test:partial_alpha"));
+
+        page.debugLeaveSystemRecipeSource();
+        page.debugLeaveSourcesPage();
+        page.debugSetQuery("partial_alpha");
+        assertEquals(1, page.debugVisibleResultCount());
+
+        page.debugOpenSystemRecipeSource(source.toString());
+        page.debugSetSystemRecipeSelected(source.toString(), "test:partial_alpha", false);
+        page.debugLeaveSystemRecipeSource();
+        page.debugLeaveSourcesPage();
+        page.debugSetQuery("partial_alpha");
+
+        assertEquals(1, page.debugActiveDatabaseRecipeCount());
+        assertEquals(0, page.debugVisibleResultCount());
+    }
+
+    @Test
+    void systemRecipeSourcePageShowsAllMatchesWithSelectableRecipeRows() {
+        Namespace source = Namespace.of("test", "manual_many");
+        java.util.ArrayList<FakeRecipe> recipes = new java.util.ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            recipes.add(new FakeRecipe(
+                "manual_recipe_" + i,
+                List.of(InputContent.fromValue(input, i + 1L)),
+                List.of(OutputContent.fromValue(outA, 1L), OutputContent.fromValue(outB, 1L))
+            ));
+        }
+        FakeRecipeSystem system = new FakeRecipeSystem(source, recipes);
+        DatabasePage page = databasePageWithScratch(system);
+
+        page.debugOpenSystemRecipeSource(source.toString());
+
+        assertEquals(20, page.debugSystemRecipeSelectionCount());
+        assertEquals(28, DatabasePage.systemRecipeSelectionRowHeight());
+        assertEquals(2, DatabasePage.systemRecipeSelectionRowGap());
+        assertEquals(3, DatabasePage.systemRecipeSelectionRowPadding());
+        assertEquals(4, DatabasePage.systemRecipeSelectionActionGap());
+        assertEquals(20, DatabasePage.systemRecipeActionButtonWidth());
+        assertEquals(598, DatabasePage.systemRecipeSelectionListHeight(20));
+
+        WidgetGroup<?> results = (WidgetGroup<?>) page.children().get(1);
+        CirrusSectionWidget section = (CirrusSectionWidget) results.children().getFirst();
+        assertEquals(2, section.body().children().size());
+        assertTrue(section.body().children().get(1) instanceof DatabasePage.SystemRecipeSelectionListWidget);
+        DatabasePage.SystemRecipeSelectionListWidget list = (DatabasePage.SystemRecipeSelectionListWidget) section.body().children().get(1);
+
+        assertEquals(20, list.selectionCount());
+    }
+
+    @Test
+    void systemRecipeSourcePageBulkSelectsCurrentFilteredMatches() {
+        Namespace source = Namespace.of("test", "manual_bulk");
+        FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(
+            new FakeRecipe(
+                "bulk_alpha",
+                List.of(InputContent.fromValue(input, 1L)),
+                List.of(OutputContent.fromValue(outA, 1L))
+            ),
+            new FakeRecipe(
+                "bulk_beta",
+                List.of(InputContent.fromValue(input, 2L)),
+                List.of(OutputContent.fromValue(outB, 1L))
+            )
+        ));
+        DatabasePage page = databasePageWithScratch(system);
+
+        page.debugOpenSystemRecipeSource(source.toString());
+        page.debugSetQuery("bulk_alpha");
+        page.debugSetVisibleSystemRecipesSelected(source.toString(), true);
+
+        assertEquals(1, page.debugActiveDatabaseRecipeCount());
+        assertTrue(page.debugActiveDatabaseContainsRecipe(source.toString(), "test:bulk_alpha"));
+        assertFalse(page.debugActiveDatabaseContainsRecipe(source.toString(), "test:bulk_beta"));
+
+        page.debugSetVisibleSystemRecipesSelected(source.toString(), false);
+
+        assertEquals(0, page.debugActiveDatabaseRecipeCount());
+    }
+
+    @Test
+    void databasePageDeletesCustomDatabasesOnlyAfterConfirmation() {
+        Namespace source = Namespace.of("test", "delete_active");
+        RecipeDatabaseWorkspace workspace = new RecipeDatabaseWorkspace(List.of(
+            CustomRecipeDatabase.builtinDatabase(),
+            new CustomRecipeDatabase("scratch", "Scratch", List.of(), List.of(source), List.of())
+        ), "scratch");
+        DatabasePage page = new DatabasePage(workspace, List.of(), Map.of());
+
+        assertEquals("scratch", page.debugActiveDatabaseId());
+        assertEquals(2, page.debugCustomDatabaseCount());
+        assertTrue(page.debugDeleteDatabaseEnabled());
+
+        page.debugRequestDeleteActiveDatabase();
+
+        assertEquals("scratch", page.debugActiveDatabaseId());
+        assertTrue(page.debugDeleteDatabaseConfirmVisible());
+
+        page.debugConfirmDeleteActiveDatabase();
+
+        assertEquals(CustomRecipeDatabase.builtinId, page.debugActiveDatabaseId());
+        assertEquals(1, page.debugCustomDatabaseCount());
+        assertTrue(page.debugActiveDatabaseBuiltin());
+
+        page.debugRequestDeleteActiveDatabase();
+        assertTrue(page.debugActiveDatabaseBuiltin());
+        assertFalse(page.debugDeleteDatabaseEnabled());
+        assertFalse(page.debugDeleteDatabaseVisible());
+        assertFalse(page.debugDeleteDatabaseConfirmVisible());
+    }
+
+    @Test
+    void databasePageSearchesOnlyTheActiveDatabase() {
+        Namespace alpha = Namespace.of("test", "alpha-active");
+        Namespace beta = Namespace.of("test", "beta-active");
+        FakeRecipeSystem alphaSystem = new FakeRecipeSystem(alpha, List.of(new FakeRecipe(
+            "alpha_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outA, 1L))
+        )));
+        FakeRecipeSystem betaSystem = new FakeRecipeSystem(beta, List.of(new FakeRecipe(
+            "beta_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outB, 1L))
+        )));
+        RecipeDatabaseWorkspace workspace = new RecipeDatabaseWorkspace(List.of(
+            new CustomRecipeDatabase("alpha", "Alpha", List.of(), List.of(alpha), List.of()),
+            new CustomRecipeDatabase("beta", "Beta", List.of(), List.of(beta), List.of())
+        ), "alpha");
+        DatabasePage page = new DatabasePage(workspace, List.of(alphaSystem, betaSystem), Map.of());
+
+        page.debugSetQuery("alpha_recipe");
+        assertEquals(1, page.debugVisibleResultCount());
+        page.debugSetQuery("beta_recipe");
+        assertEquals(0, page.debugVisibleResultCount());
+
+        page.debugSetActiveDatabase("beta");
+
+        page.debugSetQuery("alpha_recipe");
+        assertEquals(0, page.debugVisibleResultCount());
+        page.debugSetQuery("beta_recipe");
+        assertEquals(1, page.debugVisibleResultCount());
+    }
+
+    private static DatabasePage databasePageWithScratch(RecipeSystem<?> system) {
+        return databasePageWithScratch(List.of(system));
+    }
+
+    private static DatabasePage databasePageWithScratch(List<? extends RecipeSystem<?>> systems) {
+        RecipeDatabaseWorkspace workspace = new RecipeDatabaseWorkspace(List.of(
+            CustomRecipeDatabase.builtinDatabase(),
+            new CustomRecipeDatabase("scratch", "Scratch", List.of(), List.of(), List.of())
+        ), "scratch");
+        return new DatabasePage(workspace, List.copyOf(systems), Map.of());
+    }
+
+    private static RecipeDatabaseIndex indexWithMultiOutputRecipe() {
+        Namespace source = Namespace.of("test", "database");
+        FakeRecipe recipe = new FakeRecipe(
+            "multi_output_recipe_with_a_very_long_id",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(
+                OutputContent.fromValue(outA, 1L),
+                OutputContent.fromValue(outB, 1L),
+                OutputContent.fromValue(outC, 1L),
+                OutputContent.fromValue(outD, 1L)
+            )
+        );
+        FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(recipe));
+        return RecipeDatabaseIndex.build(
+            List.of(new DatabaseDefinition("main", "Main", DatabaseKind.system, true, 0, List.of(source))),
+            Lists.immutable.of(system),
+            Map.of()
+        );
+    }
+
+    private static RecipeApiImpl attachDebugProjectionRecipeApi() {
+        DebugProjectionPlugin plugin = new DebugProjectionPlugin();
+        RecipeApiRegistryBuilder builder = new RecipeApiRegistryBuilder();
+        plugin.registerProjectionPlugin(builder);
+        plugin.registerProjectionContextOption(builder);
+        plugin.registerRecipeSystem(builder);
+        plugin.registerRecipeClause(builder);
+        plugin.registerMachineEntry(builder);
+        builder.registerProjectionPlugin(irrelevantProjectionPlugin);
+        builder.registerProjectionContextOption(new LongProjectionContextOption(
+            Namespace.of("test", "projection/irrelevant_level"),
+            irrelevantProjectionPlugin,
+            irrelevantProjectionOptionKey,
+            "cirrus.ui.calculator.database.debug_plugin.scale",
+            "",
+            1L,
+            8L,
+            1L
+        ));
+        RecipeApiImpl api = new RecipeApiImpl(builder);
+        RecipeApiImpl.attach(api);
+        return api;
+    }
+
+    private static void attachContentApiForDebugProjection() {
+        ContentRegistryBuilder builder = new ContentRegistryBuilder();
+        InternalPlugin internal = new InternalPlugin();
+        internal.registerContentType(builder);
+        internal.registerContentVariant(builder);
+        internal.registerContentResolver(builder);
+        ContentApiImpl.attach(new ContentApiImpl(builder));
+    }
+
+    private static RecipeDatabaseIndex indexWithEnergySpecRecipe() {
+        Namespace source = Namespace.of("test", "energy");
+        FakeRecipe recipe = new FakeRecipe(
+            "energy_spec_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(
+                OutputContent.fromValue(outA, 1L),
+                OutputContent.fromEnergy(16_000_000L)
+            )
+        );
+        FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(recipe));
+        return RecipeDatabaseIndex.build(
+            List.of(new DatabaseDefinition("main", "Main", DatabaseKind.system, true, 0, List.of(source))),
+            Lists.immutable.of(system),
+            Map.of()
+        );
+    }
+
+    private static RecipeDatabaseIndex indexWithTwoSystems() {
+        Namespace alpha = Namespace.of("test", "alpha");
+        Namespace beta = Namespace.of("test", "beta");
+        FakeRecipeSystem alphaSystem = new FakeRecipeSystem(alpha, List.of(new FakeRecipe(
+            "alpha_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outA, 1L))
+        )));
+        FakeRecipeSystem betaSystem = new FakeRecipeSystem(beta, List.of(new FakeRecipe(
+            "beta_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outB, 1L))
+        )));
+        return RecipeDatabaseIndex.build(
+            List.of(new DatabaseDefinition("main", "Main", DatabaseKind.system, true, 0, List.of(alpha, beta))),
+            Lists.immutable.of(betaSystem, alphaSystem),
+            Map.of()
+        );
+    }
+
+    private static RecipeDatabaseIndex indexWithTwoSystemsInOneCategory() {
+        Namespace alpha = Namespace.of("test", "alpha");
+        Namespace beta = Namespace.of("test", "beta");
+        Namespace category = Namespace.of("test", "category/crafting");
+        FakeRecipeSystem alphaSystem = new FakeRecipeSystem(alpha, List.of(new FakeRecipe(
+            "alpha_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outA, 1L))
+        )));
+        FakeRecipeSystem betaSystem = new FakeRecipeSystem(beta, List.of(new FakeRecipe(
+            "beta_recipe",
+            List.of(InputContent.fromValue(input, 1L)),
+            List.of(OutputContent.fromValue(outB, 1L))
+        )));
+        return RecipeDatabaseIndex.build(
+            List.of(new DatabaseDefinition("main", "Main", DatabaseKind.system, true, 0, List.of(alpha, beta))),
+            Lists.immutable.of(betaSystem, alphaSystem),
+            Map.of(alpha, List.of(category), beta, List.of(category))
+        );
+    }
+
+    private static boolean hasLine(List<String> lines, String... needles) {
+        for (String line : lines) {
+            for (String needle : needles) {
+                if (line.contains(needle)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private record FakeRecipe(
+        String id,
+        Collection<InputContent> inputs,
+        Collection<OutputContent> outputs
+    ) {
+    }
+
+    private static final class FakeRecipeSystem implements RecipeSystem<FakeRecipe> {
+        private final Namespace systemId;
+        private final RichIterable<FakeRecipe> recipes;
+        private final Map<String, FakeRecipe> byId = new ConcurrentHashMap<>();
+        private int allRecipesCalls;
+
+        private FakeRecipeSystem(Namespace systemId, Collection<FakeRecipe> recipes) {
+            this.systemId = systemId;
+            this.recipes = Lists.immutable.ofAll(recipes);
+            recipes.forEach(recipe -> byId.put(recipe.id(), recipe));
+        }
+
+        @Override
+        public Namespace systemId() {
+            return systemId;
+        }
+
+        @Override
+        public Class<?> basicType() {
+            return FakeRecipe.class;
+        }
+
+        @Override
+        public @Nullable ResourceLocation getId(FakeRecipe recipe) {
+            return ResourceLocation.fromNamespaceAndPath("test", recipe.id());
+        }
+
+        @Override
+        public @Nullable FakeRecipe findRecipe(String uniqueId) {
+            return byId.get(uniqueId);
+        }
+
+        @Override
+        public @Nullable FakeRecipe findRecipe(ResourceLocation registryName) {
+            return byId.get(registryName.getPath());
+        }
+
+        @Override
+        public int hash(FakeRecipe recipe) {
+            return recipe.id().hashCode();
+        }
+
+        @Override
+        public boolean sameRecipe(FakeRecipe r1, FakeRecipe r2) {
+            return Objects.equals(r1.id(), r2.id());
+        }
+
+        @Override
+        public ResolveResult resolveFallback(ResolveContext context, FakeRecipe recipe) {
+            return ResolveResult.resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
+        }
+
+        @Override
+        public RichIterable<FakeRecipe> allRecipes() {
+            allRecipesCalls++;
+            return recipes;
+        }
+
+        private int debugAllRecipesCalls() {
+            return allRecipesCalls;
+        }
+    }
+
+    private static final class TestValueType implements ValueType<Long> {
+        private final Namespace id;
+
+        private TestValueType(String path) {
+            this.id = Namespace.of("test", path);
+        }
+
+        @Override
+        public Namespace typeId() {
+            return id;
+        }
+
+        @Override
+        public long getValue(Long content) {
+            return content;
+        }
+
+        @Override
+        public boolean matches(Long first, Long second) {
+            return Objects.equals(first, second);
+        }
+
+        @Override
+        public Long fromValue(long value) {
+            return value;
+        }
+
+        @Override
+        public Long copy(Long content) {
+            return content;
+        }
+    }
+}

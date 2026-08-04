@@ -1,4 +1,4 @@
-package dev.vfyjxf.calculatorcirrus.integration.gtm.utils;
+package dev.vfyjxf.cirrus.integration.gtm.utils;
 
 public final class ContentHelper {
 

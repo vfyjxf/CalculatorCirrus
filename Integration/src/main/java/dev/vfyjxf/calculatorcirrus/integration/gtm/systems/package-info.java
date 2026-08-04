@@ -1,4 +1,4 @@
 @NotNullByDefault
-package dev.vfyjxf.calculatorcirrus.integration.gtm.systems;
+package dev.vfyjxf.cirrus.integration.gtm.systems;
 
-import dev.vfyjxf.calculatorcirrus.api.annotation.NotNullByDefault;
+import dev.vfyjxf.cirrus.api.annotation.NotNullByDefault;

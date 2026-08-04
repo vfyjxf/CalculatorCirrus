@@ -1,10 +1,13 @@
 {
   "required": true,
-  "package": "dev.vfyjxf.calculatorcirrus.mixin",
+  "package": "dev.vfyjxf.cirrus.mixin",
   "compatibilityLevel": "JAVA_21",
   "minVersion": "0.8",
   "mixins": [
   ],
   "client": [
+    "ItemDecoratorHandlerAccessor",
+    "PatchedDataComponentMapMixin",
+    "jei.BookmarkOverlayMixin"
   ]
 }

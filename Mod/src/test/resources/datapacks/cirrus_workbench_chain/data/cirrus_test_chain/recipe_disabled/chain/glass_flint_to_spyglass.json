@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "G": {
+      "item": "minecraft:glass"
+    },
+    "F": {
+      "item": "minecraft:flint"
+    }
+  },
+  "pattern": [
+    " G ",
+    "GFG",
+    " G "
+  ],
+  "result": {
+    "count": 1,
+    "id": "minecraft:spyglass"
+  }
+}
