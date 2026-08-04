@@ -203,6 +203,9 @@ public class MainPanel extends CompositeWidget<Widget> implements ExecutionOverl
 		ExecutionTargetRecipeState.Selection selection = ExecutionTargetRecipeState.current();
 		if (selection == null) {
 			cancelPendingSessionBuild();
+			if (hasIncompleteSession(currentDriver)) {
+				return;
+			}
 			if (appliedSelectionVersion != Long.MIN_VALUE) {
 				appliedSelectionVersion = Long.MIN_VALUE;
 				failedSelectionVersion = Long.MIN_VALUE;
@@ -286,7 +289,7 @@ public class MainPanel extends CompositeWidget<Widget> implements ExecutionOverl
 				pending.driver().initialize(session);
 				appliedSelectionVersion = pending.selectionVersion();
 				snapshot = pending.driver().snapshot();
-				clearActiveRecipeContext();
+				invalidateActiveRecipeContext();
 			}
 		} catch (CompletionException exception) {
 			failedSelectionVersion = pending.selectionVersion();
@@ -300,11 +303,29 @@ public class MainPanel extends CompositeWidget<Widget> implements ExecutionOverl
 		}
 	}
 
+	private boolean hasIncompleteSession(ExecutionDriver currentDriver) {
+		try {
+			ExecutionSession currentSession = currentDriver.session();
+			return currentSession != null && !currentSession.completed();
+		} catch (IllegalStateException ignored) {
+			ExecutionSession currentSession = snapshot == null ? null : snapshot.session();
+			return currentSession != null && !currentSession.completed();
+		}
+	}
+
 	private void syncActiveRecipeContext() {
 		pollPendingActiveRecipeContext();
 		ExecutionSession session = snapshot == null ? null : snapshot.session();
-		if (session == null || calculating()) {
+		if (session == null) {
+			if (calculating()) {
+				invalidateActiveRecipeContext();
+				return;
+			}
 			clearActiveRecipeContext();
+			return;
+		}
+		if (calculating()) {
+			invalidateActiveRecipeContext();
 			return;
 		}
 		if (pendingActiveContextBuild != null) {
@@ -350,6 +371,12 @@ public class MainPanel extends CompositeWidget<Widget> implements ExecutionOverl
 		activeContextRequestId++;
 		activeContextSession = null;
 		activeRecipeContext = null;
+		pendingActiveContextBuild = null;
+	}
+
+	private void invalidateActiveRecipeContext() {
+		activeContextRequestId++;
+		activeContextSession = null;
 		pendingActiveContextBuild = null;
 	}
 

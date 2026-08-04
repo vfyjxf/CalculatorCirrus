@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.recipe.execution;
 
 import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
+import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
@@ -26,9 +27,11 @@ import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionGuideResult
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionPerformResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionProbeResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
+import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.routing.RecipeGraph;
 import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
+import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultRuleProfiles;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingIssuePayload;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
@@ -239,6 +242,72 @@ class ExecutionTargetRecipeStateTest {
 
             assertEquals(ExecutionObservedStockPolicy.consumeObservedStock, session.observedStockPolicy());
             assertEquals(1L, session.baselinePlanningSnapshot().stock().countMatching(ContentStack.fromStack(new ItemStack(Items.OAK_LOG))));
+        } finally {
+            restoreRecipeApi(previous);
+        }
+    }
+
+    @Test
+    void suffixRetranslationKeepsUnfinishedCleanupWhenTargetAlreadyObserved(MinecraftServer server) {
+        TestRecipeSystem system = new TestRecipeSystem(Namespace.of("test", "target_suffix_cleanup"));
+        TestRecipe makePlanks = new TestRecipe(
+            "make_planks",
+            List.of(InputContent.fromItemStack(new ItemStack(Items.OAK_LOG), 1)),
+            List.of(OutputContent.fromItemStack(new ItemStack(Items.OAK_PLANKS), 4))
+        );
+        system.add(makePlanks);
+        RecipeApiImpl previous = attachRecipeApi(system);
+        try {
+            RecipeEntry<TestRecipe> target = RecipeEntry.of(system, makePlanks);
+            ExecutionTargetRecipeState.Selection selection = ExecutionTargetRecipeState.set(target, 1);
+            ContentResource output = ContentStack.fromStack(new ItemStack(Items.OAK_PLANKS, 4));
+            PlanAction.OutputBinding outputBinding = new PlanAction.OutputBinding(output, 4);
+            InteractionExecutionPlan plan = new InteractionExecutionPlan(
+                target,
+                1,
+                Lists.immutable.of(
+                    new InteractionStep.CollectOutputsStep(
+                        dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSideRequirement.clientSide,
+                        dev.vfyjxf.cirrus.api.recipe.execution.ExecutionCapability.inventoryTransfer,
+                        target,
+                        Lists.immutable.of(outputBinding)
+                    ),
+                    new InteractionStep.StoreOutputsStep(
+                        dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSideRequirement.clientSide,
+                        dev.vfyjxf.cirrus.api.recipe.execution.ExecutionCapability.outputStorage,
+                        output,
+                        4
+                    )
+                )
+            );
+            ExecutionFlowNode root = ExecutionFlowNode.pending(
+                "root",
+                Component.literal("root"),
+                plan.steps(),
+                null,
+                Lists.immutable.empty()
+            );
+            ExecutionSession current = new ExecutionRuntime(null, null).advance(ExecutionSession.start(
+                plan,
+                root,
+                ExecutionPlanningSnapshot.empty(),
+                ExecutionObservedStockPolicy.consumeObservedStock
+            ));
+            assertTrue(current.currentStep() instanceof InteractionStep.StoreOutputsStep);
+
+            Stock observed = Stock.empty();
+            observed.add(ContentStack.fromStack(new ItemStack(Items.OAK_PLANKS, 4)));
+            ExecutionInteraction observedInteraction = new ExecutionInteraction(
+                Namespace.ofMc("crafting_table"),
+                new SnapshotInteractionApi(Namespace.ofMc("crafting_table"), observed, 9111L)
+            );
+
+            ExecutionSession rebuilt = ExecutionTargetRecipeState.rebuildSession(selection, observedInteraction, current);
+
+            assertFalse(rebuilt.completed());
+            assertEquals(1, rebuilt.nextStepIndex());
+            assertTrue(rebuilt.plan().steps().get(0) instanceof InteractionStep.CollectOutputsStep);
+            assertTrue(rebuilt.currentStep() instanceof InteractionStep.StoreOutputsStep);
         } finally {
             restoreRecipeApi(previous);
         }

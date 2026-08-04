@@ -43,6 +43,7 @@ import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.factory.Sets;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
+import org.eclipse.collections.api.set.ImmutableSet;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.LinkedHashSet;
@@ -385,6 +386,12 @@ public final class ExecutionTargetRecipeState {
         ExecutionPlanningSnapshot observedSnapshot = interaction.planningSnapshot();
         ExecutionPlanningSnapshot effectiveSnapshot = effectivePlanningSnapshot(currentSession, observedSnapshot);
         int remainingTimes = remainingTargetTimes(selected, currentSession, effectiveSnapshot);
+        if (remainingTimes <= 0) {
+            ExecutionSession carried = carryUnfinishedSuffixSession(selected, currentSession);
+            if (carried != null) {
+                return carried;
+            }
+        }
         Selection remainingSelection = new Selection(
             selected.recipe(),
             Math.max(1, remainingTimes),
@@ -408,6 +415,96 @@ public final class ExecutionTargetRecipeState {
                 currentSession.baselinePlanningSnapshot(),
                 currentSession.observedStockPolicy()
             );
+    }
+
+    private static @Nullable ExecutionSession carryUnfinishedSuffixSession(
+        Selection selected,
+        ExecutionSession currentSession
+    ) {
+        ImmutableList<InteractionStep> previousSteps = currentSession.plan().steps();
+        int nextStepIndex = Math.max(0, Math.min(currentSession.nextStepIndex(), previousSteps.size()));
+        if (nextStepIndex >= previousSteps.size()) {
+            return null;
+        }
+        int anchorIndex = unfinishedSuffixAnchorIndex(previousSteps, nextStepIndex);
+        MutableList<InteractionStep> suffixSteps = Lists.mutable.empty();
+        for (int index = anchorIndex; index < previousSteps.size(); index++) {
+            suffixSteps.add(previousSteps.get(index));
+        }
+        if (suffixSteps.isEmpty()) {
+            return null;
+        }
+
+        InteractionExecutionPlan carriedPlan = new InteractionExecutionPlan(
+            selected.recipe(),
+            1,
+            suffixSteps.toImmutable()
+        );
+        int carriedNextStepIndex = Math.max(0, Math.min(nextStepIndex - anchorIndex, carriedPlan.steps().size()));
+        ExecutionFlowNode root = buildFlowRoot(carriedPlan, null);
+        ImmutableSet<InteractionStep> completedSteps = carriedCompletedSteps(carriedPlan.steps(), carriedNextStepIndex);
+        ImmutableSet<InteractionStep> pausedSteps = currentSession.paused() && carriedNextStepIndex < carriedPlan.steps().size()
+            ? Sets.immutable.of(carriedPlan.steps().get(carriedNextStepIndex))
+            : Sets.immutable.empty();
+        var runtimeState = new ExecutionFlowViewModel.RuntimeState(
+            completedSteps,
+            pausedSteps,
+            currentSession.runningStep(),
+            null
+        );
+        return new ExecutionSession(
+            carriedPlan,
+            root,
+            carriedNextStepIndex,
+            completedSteps,
+            pausedSteps,
+            currentSession.runningStep(),
+            currentSession.pauseReason(),
+            null,
+            ExecutionFlowViewModel.derive(root, runtimeState),
+            currentSession.baselinePlanningSnapshot(),
+            currentSession.observedStockPolicy()
+        );
+    }
+
+    private static int unfinishedSuffixAnchorIndex(ImmutableList<InteractionStep> steps, int nextStepIndex) {
+        if (nextStepIndex < steps.size() && recipeContextStep(steps.get(nextStepIndex))) {
+            return recipeGroupStartIndex(steps, nextStepIndex);
+        }
+        for (int index = Math.min(nextStepIndex - 1, steps.size() - 1); index >= 0; index--) {
+            if (recipeContextStep(steps.get(index))) {
+                return recipeGroupStartIndex(steps, index);
+            }
+        }
+        return nextStepIndex;
+    }
+
+    private static int recipeGroupStartIndex(ImmutableList<InteractionStep> steps, int contextIndex) {
+        for (int index = Math.max(0, contextIndex); index >= 0; index--) {
+            if (steps.get(index) instanceof InteractionStep.OpenInteractionStep) {
+                return index;
+            }
+        }
+        return contextIndex;
+    }
+
+    private static boolean recipeContextStep(InteractionStep step) {
+        return step instanceof InteractionStep.OpenInteractionStep
+            || step instanceof InteractionStep.PrepareInputsStep
+            || step instanceof InteractionStep.ExecuteRecipeStep
+            || step instanceof InteractionStep.CollectOutputsStep;
+    }
+
+    private static ImmutableSet<InteractionStep> carriedCompletedSteps(
+        ImmutableList<InteractionStep> steps,
+        int nextStepIndex
+    ) {
+        var completed = Sets.mutable.<InteractionStep>empty();
+        int end = Math.max(0, Math.min(nextStepIndex, steps.size()));
+        for (int index = 0; index < end; index++) {
+            completed.add(steps.get(index));
+        }
+        return completed.toImmutable();
     }
 
     private static int remainingTargetTimes(

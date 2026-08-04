@@ -8,10 +8,16 @@ import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionTelemetrySnapshot;
+import dev.vfyjxf.cirrus.api.recipe.execution.driver.ExecutionDriver;
+import dev.vfyjxf.cirrus.api.recipe.execution.driver.ExecutionDriverSnapshot;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayLaneSegment;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayNode;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayNodeKind;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayRecipePreview;
+import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayTraceSnapshot;
+import dev.vfyjxf.cirrus.api.recipe.execution.overlay.OverlayTargetProgress;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowStatus;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
@@ -19,6 +25,7 @@ import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.recipe.content.RecipeContentRendererTestBootstrap;
+import dev.vfyjxf.cirrus.ui.execution.state.ExecutionOverlayViewState;
 import dev.vfyjxf.cirrus.ui.execution.tooltip.ExecutionRecipeLayoutTooltipComponent;
 import dev.vfyjxf.cirrus.ui.execution.widget.JeiRecipePreviewWidget;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode;
@@ -33,6 +40,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -114,18 +122,26 @@ class ExecutionOverlayResponsivePageTest {
         assertEquals(4, RecipePage.controlButtonGap(RecipePage.LayoutDensity.normal));
         assertEquals(3, RecipePage.controlButtonGap(RecipePage.LayoutDensity.compact));
         assertEquals(2, RecipePage.controlButtonGap(RecipePage.LayoutDensity.dense));
-        assertEquals(66, RecipePage.materialPanelHeight(RecipePage.LayoutDensity.normal));
-        assertEquals(54, RecipePage.materialPanelHeight(RecipePage.LayoutDensity.compact));
-        assertEquals(42, RecipePage.materialPanelHeight(RecipePage.LayoutDensity.dense));
-        assertEquals(48, RecipeMaterialsPanelWidget.resolveCellWidth(RecipePage.LayoutDensity.normal));
-        assertEquals(42, RecipeMaterialsPanelWidget.resolveCellWidth(RecipePage.LayoutDensity.dense));
+        assertEquals(70, RecipePage.materialPanelHeight(RecipePage.LayoutDensity.normal));
+        assertEquals(58, RecipePage.materialPanelHeight(RecipePage.LayoutDensity.compact));
+        assertEquals(46, RecipePage.materialPanelHeight(RecipePage.LayoutDensity.dense));
+        assertEquals(22, RecipeMaterialsPanelWidget.resolveToolbarHeight(RecipePage.LayoutDensity.normal));
+        assertEquals(22, RecipeMaterialsPanelWidget.resolveButtonSize(RecipePage.LayoutDensity.dense));
+        assertEquals(0, RecipeMaterialsPanelWidget.resolveGridGap(RecipePage.LayoutDensity.normal));
+        assertEquals(36, RecipeMaterialsPanelWidget.resolveCellWidth(RecipePage.LayoutDensity.normal));
+        assertEquals(32, RecipeMaterialsPanelWidget.resolveCellWidth(RecipePage.LayoutDensity.dense));
         assertEquals(22, RecipeMaterialsPanelWidget.resolveCellHeight(RecipePage.LayoutDensity.normal));
-        assertEquals(20, RecipeMaterialsPanelWidget.resolveCellHeight(RecipePage.LayoutDensity.dense));
+        assertEquals(22, RecipeMaterialsPanelWidget.resolveCellHeight(RecipePage.LayoutDensity.dense));
         assertEquals(8, RecipeCurrentRecipeCardWidget.traceRightInset(RecipePage.LayoutDensity.normal));
         assertEquals(6, RecipeCurrentRecipeCardWidget.traceRightInset(RecipePage.LayoutDensity.compact));
         assertEquals(5, RecipeCurrentRecipeCardWidget.traceRightInset(RecipePage.LayoutDensity.dense));
         assertEquals(20, RecipeCurrentRecipeCardWidget.traceToggleWidth());
         assertEquals(13, RecipeCurrentRecipeCardWidget.traceToggleHeight());
+    }
+
+    @Test
+    void recipePageConstructionDoesNotRequireMountedContext() {
+        assertDoesNotThrow(() -> new RecipePage(new EmptyExecutionOverlayViewState()));
     }
 
     @Test
@@ -273,6 +289,75 @@ class ExecutionOverlayResponsivePageTest {
     }
 
     private static final TestRecipeSystem testRecipeSystem = new TestRecipeSystem();
+
+    private static final class EmptyExecutionOverlayViewState implements ExecutionOverlayViewState {
+        @Override
+        public ExecutionDriver driver() {
+            return null;
+        }
+
+        @Override
+        public ExecutionDriverSnapshot snapshot() {
+            return null;
+        }
+
+        @Override
+        public ExecutionTelemetrySnapshot telemetry() {
+            return null;
+        }
+
+        @Override
+        public ExecutionOverlayTraceSnapshot trace() {
+            return null;
+        }
+
+        @Override
+        public OverlayTargetProgress targetProgress() {
+            return null;
+        }
+
+        @Override
+        public boolean calculating() {
+            return false;
+        }
+
+        @Override
+        public RecipeActiveContext activeRecipeContext() {
+            return null;
+        }
+
+        @Override
+        public String targetLabel() {
+            return null;
+        }
+
+        @Override
+        public int targetTimes() {
+            return 1;
+        }
+
+        @Override
+        public void setTargetTimes(int times) {
+        }
+
+        @Override
+        public void flushTargetTimes() {
+        }
+
+        @Override
+        public RecipeContent targetContent() {
+            return RecipeContent.empty();
+        }
+
+        @Override
+        public boolean traceEnabled() {
+            return false;
+        }
+
+        @Override
+        public void setTraceEnabled(boolean enabled) {
+        }
+    }
 
     private record TestRecipe(String id) {}
 

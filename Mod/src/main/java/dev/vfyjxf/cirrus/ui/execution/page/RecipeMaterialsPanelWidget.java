@@ -34,21 +34,30 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minHeight;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minWidth;
 
 final class RecipeMaterialsPanelWidget extends Widget {
-    private static final int padding = 5;
-    private static final int paddingCompact = 4;
-    private static final int paddingDense = 3;
-    private static final int toolbarHeight = 18;
-    private static final int toolbarHeightDense = 16;
-    private static final int buttonSize = 18;
-    private static final int buttonSizeDense = 16;
-    private static final int gridGap = 3;
-    private static final int gridGapDense = 2;
-    private static final int cellWidth = 48;
-    private static final int cellWidthDense = 42;
+    private static final int padding = 3;
+    private static final int paddingCompact = 2;
+    private static final int paddingDense = 2;
+    private static final int toolbarHeight = 22;
+    private static final int toolbarHeightDense = 22;
+    private static final int displayModeIconSize = 16;
+    private static final int displayModeButtonPadding = 3;
+    private static final int buttonSize = displayModeIconSize + displayModeButtonPadding * 2;
+    private static final int buttonSizeDense = buttonSize;
+    private static final int gridTopGap = 1;
+    private static final int gridGap = 0;
+    private static final int gridGapDense = 0;
+    private static final int cellWidth = 36;
+    private static final int cellWidthCompact = 34;
+    private static final int cellWidthDense = 32;
     private static final int cellHeight = 22;
-    private static final int cellHeightDense = 20;
-    private static final int slotVisualSize = 18;
-    private static final int metricMarkerWidth = 2;
+    private static final int cellHeightDense = 22;
+    private static final int contentVisualSize = 16;
+    private static final int cellHorizontalPadding = 4;
+    private static final int iconMetricGap = 2;
+    private static final int minMetricWidth = 6;
+    private static final int scrollbarWidth = 4;
+    private static final int scrollbarWidthDense = 3;
+    private static final int scrollbarGap = 2;
 
     private final ExecutionOverlayViewState state;
     private final ArrayList<InteractiveArea> interactiveAreas = new ArrayList<>();
@@ -56,7 +65,8 @@ final class RecipeMaterialsPanelWidget extends Widget {
     private RecipePage.LayoutDensity layoutDensity = RecipePage.LayoutDensity.normal;
 
     private final ScrollState materialsScrollState = CirrusScroll.longVerticalState(10);
-    private int scrollY = 0;
+    private float scrollY;
+    private float maxScrollY;
 
     RecipeMaterialsPanelWidget(ExecutionOverlayViewState state) {
         this.state = state;
@@ -78,18 +88,25 @@ final class RecipeMaterialsPanelWidget extends Widget {
             return EventDispatch.pass;
         });
         onMouseScrolled((mouseX, mouseY, scrollX, scrollY, context) -> {
-            if (scrollY != 0) {
-                materialsScrollState.scrollBy(0, (float) scrollY);
-                clampScrollY();
-                return EventDispatch.consumed;
+            if (scrollY == 0) {
+                return EventDispatch.pass;
             }
-            return EventDispatch.pass;
+            int localX = (int) Math.round(mouseX);
+            int localY = (int) Math.round(mouseY);
+            Rect2i viewport = materialsViewportArea();
+            if (!ExecutionOverlayUi.contains(viewport, localX, localY)) {
+                return EventDispatch.pass;
+            }
+            if (maxScrollY <= 0f) {
+                return EventDispatch.pass;
+            }
+            this.scrollY = clamp(this.scrollY + materialsScrollState.wheelDelta(scrollX, scrollY).y(), 0f, maxScrollY);
+            return EventDispatch.consumed;
         });
     }
 
     void setLayoutDensity(RecipePage.LayoutDensity density) {
         layoutDensity = density == null ? RecipePage.LayoutDensity.normal : density;
-        clampScrollY();
     }
 
     @Override
@@ -106,7 +123,7 @@ final class RecipeMaterialsPanelWidget extends Widget {
         }
 
         drawToolbar(canvas, font, pad, pad, contentW, toolbarH, mouseX, mouseY);
-        int gridY = pad + toolbarH + 3;
+        int gridY = pad + toolbarH + gridTopGap;
         int gridH = Math.max(0, height() - pad - gridY);
         drawMaterials(canvas, font, pad, gridY, contentW, gridH, mouseX, mouseY);
     }
@@ -164,6 +181,8 @@ final class RecipeMaterialsPanelWidget extends Widget {
     private void drawMaterials(SceneCanvas canvas, Font font, int x, int y, int width, int height, int mouseX, int mouseY) {
         List<OverlayMaterialRequirement> requirements = visibleRequirements();
         if (requirements.isEmpty()) {
+            maxScrollY = 0f;
+            scrollY = 0f;
             String text = state.calculating()
                 ? ExecutionOverlayUi.tr(CirrusLangs.Execution.Overlay.calculatingShort)
                 : ExecutionOverlayUi.tr(displayMode.emptyLabel());
@@ -171,58 +190,67 @@ final class RecipeMaterialsPanelWidget extends Widget {
             return;
         }
 
-        int gap = resolveGridGap(layoutDensity);
-        int cellW = resolveCellWidth(layoutDensity);
-        int cellH = resolveCellHeight(layoutDensity);
-        int columns = Math.max(1, Math.min(requirements.size(), (width + gap) / Math.max(1, cellW + gap)));
-        int usedWidth = columns * cellW + Math.max(0, columns - 1) * gap;
-        int startX = x + Math.max(0, (width - usedWidth) / 2);
+        GridMetrics metrics = gridMetrics(font, width, height, requirements);
+        maxScrollY = Math.max(0, metrics.contentHeight() - metrics.viewportHeight());
+        int gap = metrics.gap();
+        int cellH = metrics.cellHeight();
+        int columns = metrics.columns();
+        int viewportW = metrics.contentWidth();
+        int startX = x;
 
-        clampScrollY();
-        int totalRows = requirements.isEmpty() ? 0 : (requirements.size() + columns - 1) / columns;
-        int scrolledY = y - scrollY;
+        clampScrollY(maxScrollY);
+        int scrolledY = y - Math.round(scrollY);
+        Rect2i viewport = new Rect2i(x, y, viewportW, height);
+        int absX = absolutePos().x() + viewport.getX();
+        int absY = absolutePos().y() + viewport.getY();
+        canvas.pushClip(absX, absY, viewport.getWidth(), viewport.getHeight());
 
         for (int index = 0; index < requirements.size(); index++) {
             int col = index % columns;
             int row = index / columns;
-            int cellX = startX + col * (cellW + gap);
+            int cellW = metrics.widthForColumn(col);
+            int cellX = startX + metrics.xForColumn(col);
             int cellY = scrolledY + row * (cellH + gap);
             if (cellY + cellH < y) continue;
             if (cellY > y + height) break;
             Rect2i cell = new Rect2i(cellX, cellY, cellW, cellH);
             OverlayMaterialRequirement requirement = requirements.get(index);
-            boolean hovered = hover(cell, mouseX, mouseY);
+            boolean hovered = hover(cell, mouseX, mouseY) && hover(viewport, mouseX, mouseY);
             drawMaterialCell(canvas, font, cell, requirement, hovered);
-            interactiveAreas.add(new InteractiveArea(cell, () -> materialTooltip(requirement), null));
+            Rect2i interactive = intersection(cell, viewport);
+            if (interactive != null) {
+                interactiveAreas.add(new InteractiveArea(interactive, () -> materialTooltip(requirement), null));
+            }
         }
+        canvas.popClip();
+        drawScrollbar(canvas, x, y, width, height, metrics);
     }
 
     private void drawMaterialCell(SceneCanvas canvas, Font font, Rect2i cell, OverlayMaterialRequirement requirement, boolean hovered) {
-        canvas.texture(Background.flat, cell.getX(), cell.getY(), cell.getWidth(), cell.getHeight());
+        canvas.texture(Background.Outlined.inset, cell.getX(), cell.getY(), cell.getWidth(), cell.getHeight());
         if (hovered) {
-            canvas.fill(cell.getX(), cell.getY(), cell.getWidth(), cell.getHeight(), 0x12FFFFFF);
+            canvas.fill(cell.getX() + 1, cell.getY() + 1, Math.max(0, cell.getWidth() - 2), Math.max(0, cell.getHeight() - 2), 0x12FFFFFF);
         }
 
         RecipeContent content = requirement.material();
-        int slotX = cell.getX() + 2;
-        int slotY = cell.getY() + Math.max(1, (cell.getHeight() - slotVisualSize) / 2);
+        int slotX = cell.getX() + cellHorizontalPadding;
+        int slotY = cell.getY() + Math.max(1, (cell.getHeight() - contentVisualSize) / 2);
         if (ExecutionOverlayContentHelper.hasRenderableVisual(content)) {
-            ExecutionOverlayUi.drawSlot(canvas, content, slotX, slotY);
+            ExecutionOverlayContentHelper.renderRecipeContent(canvas, content, slotX, slotY, contentVisualSize, contentVisualSize, 0);
         } else {
-            canvas.texture(Background.Slot.dark, slotX, slotY, slotVisualSize, slotVisualSize);
             String token = ExecutionOverlayContentHelper.fallbackToken(content);
             canvas.drawString(
                 token,
-                slotX + Math.max(1, (slotVisualSize - font.width(token)) / 2),
-                slotY + 5,
+                slotX + Math.max(1, (contentVisualSize - font.width(token)) / 2),
+                slotY + 4,
                 ExecutionOverlayUi.textSecondary,
                 false
             );
         }
 
-        int metricX = slotX + slotVisualSize + 3;
+        int metricX = slotX + contentVisualSize + iconMetricGap;
         int metricY = cell.getY() + Math.max(1, (cell.getHeight() - font.lineHeight) / 2);
-        int metricW = Math.max(0, cell.getX() + cell.getWidth() - metricX - 3);
+        int metricW = Math.max(0, cell.getX() + cell.getWidth() - metricX - cellHorizontalPadding);
         drawMetric(canvas, font, metricX, metricY, metricW, displayMode.activeColor(), displayMode.value(requirement), displayMode.emphasize(requirement));
     }
 
@@ -239,27 +267,146 @@ final class RecipeMaterialsPanelWidget extends Widget {
         if (width <= 0) {
             return;
         }
-        canvas.fill(x, y + 2, metricMarkerWidth, Math.max(1, font.lineHeight - 4), color);
         String text = ExecutionOverlayUi.compactNumber(value);
-        int textX = x + metricMarkerWidth + 2;
         canvas.drawString(
-            ExecutionOverlayUi.trim(font, text, Math.max(0, width - metricMarkerWidth - 2)),
-            textX,
+            ExecutionOverlayUi.trim(font, text, width),
+            x,
             y,
             emphasize ? color : ExecutionOverlayUi.textPrimary,
             false
         );
     }
 
-    private void clampScrollY() {
-        List<OverlayMaterialRequirement> req = visibleRequirements();
+    private void clampScrollY(float maxScrollY) {
+        scrollY = clamp(scrollY, 0f, maxScrollY);
+    }
+
+    private Rect2i materialsViewportArea() {
+        int pad = resolvePadding(layoutDensity);
+        int toolbarH = resolveToolbarHeight(layoutDensity);
+        int contentW = Math.max(0, width() - pad * 2);
+        int gridY = pad + toolbarH + gridTopGap;
+        int gridH = Math.max(0, height() - pad - gridY);
+        return new Rect2i(pad, gridY, contentW, gridH);
+    }
+
+    private GridMetrics gridMetrics(Font font, int width, int height, List<OverlayMaterialRequirement> requirements) {
+        int count = requirements.size();
         int gap = resolveGridGap(layoutDensity);
         int cellH = resolveCellHeight(layoutDensity);
-        int cols = Math.max(1, Math.min(req.size(), (width() + gap) / Math.max(1, cellH + gap)));
-        int rows = req.isEmpty() ? 0 : (req.size() + cols - 1) / cols;
-        int contentH = rows * cellH + Math.max(0, rows - 1) * gap;
-        int maxScroll = Math.max(0, contentH - height());
-        scrollY = Math.max(0, Math.min((int) materialsScrollState.targetScrollY(), maxScroll));
+        int[] itemWidths = itemWidths(font, requirements);
+        int columns = resolveColumns(width, itemWidths, gap);
+        int[] columnWidths = columnWidths(itemWidths, columns);
+        int contentH = gridContentHeight(count, columns, cellH, gap);
+        boolean overflow = contentH > height;
+        int barW = overflow ? resolveScrollbarWidth(layoutDensity) : 0;
+        int contentW = overflow ? Math.max(0, width - barW - scrollbarGap) : width;
+        if (overflow) {
+            columns = resolveColumns(contentW, itemWidths, gap);
+            columnWidths = columnWidths(itemWidths, columns);
+            contentH = gridContentHeight(count, columns, cellH, gap);
+            overflow = contentH > height;
+            if (!overflow) {
+                barW = 0;
+                contentW = width;
+            }
+        }
+        return new GridMetrics(
+            Math.max(0, contentW),
+            Math.max(1, columns),
+            gap,
+            columnWidths,
+            cellH,
+            contentH,
+            Math.max(0, height),
+            overflow,
+            barW
+        );
+    }
+
+    private int[] itemWidths(Font font, List<OverlayMaterialRequirement> requirements) {
+        int minWidth = resolveCellWidth(layoutDensity);
+        int[] widths = new int[requirements.size()];
+        for (int index = 0; index < requirements.size(); index++) {
+            String text = ExecutionOverlayUi.compactNumber(displayMode.value(requirements.get(index)));
+            int textWidth = Math.max(minMetricWidth, font.width(text));
+            widths[index] = Math.max(minWidth, cellHorizontalPadding * 2 + contentVisualSize + iconMetricGap + textWidth);
+        }
+        return widths;
+    }
+
+    private static int resolveColumns(int width, int[] itemWidths, int gap) {
+        if (itemWidths.length <= 0 || width <= 0) {
+            return 1;
+        }
+        int best = 1;
+        int maxColumns = itemWidths.length;
+        for (int columns = 1; columns <= maxColumns; columns++) {
+            int used = usedWidth(columnWidths(itemWidths, columns), gap);
+            if (used > width) {
+                break;
+            }
+            best = columns;
+        }
+        return best;
+    }
+
+    private static int[] columnWidths(int[] itemWidths, int columns) {
+        int safeColumns = Math.max(1, columns);
+        int[] out = new int[safeColumns];
+        for (int index = 0; index < itemWidths.length; index++) {
+            int column = index % safeColumns;
+            out[column] = Math.max(out[column], itemWidths[index]);
+        }
+        return out;
+    }
+
+    private static int usedWidth(int[] columnWidths, int gap) {
+        if (columnWidths.length == 0) {
+            return 0;
+        }
+        int width = Math.max(0, columnWidths.length - 1) * gap;
+        for (int columnWidth : columnWidths) {
+            width += columnWidth;
+        }
+        return width;
+    }
+
+    private static int gridContentHeight(int count, int columns, int cellH, int gap) {
+        if (count <= 0) {
+            return 0;
+        }
+        int rows = (count + Math.max(1, columns) - 1) / Math.max(1, columns);
+        return rows * cellH + Math.max(0, rows - 1) * gap;
+    }
+
+    private void drawScrollbar(SceneCanvas canvas, int x, int y, int width, int height, GridMetrics metrics) {
+        if (!metrics.overflow() || height <= 0) {
+            return;
+        }
+        int trackW = Math.max(1, metrics.scrollbarWidth());
+        int trackX = x + Math.max(0, width - trackW);
+        canvas.texture(Background.scroll, trackX, y, trackW, height);
+        int maxScroll = Math.max(1, metrics.contentHeight() - metrics.viewportHeight());
+        int thumbH = Math.min(height, Math.max(10, (int) ((double) height / Math.max(1, metrics.contentHeight()) * height)));
+        int travel = Math.max(0, height - thumbH);
+        int thumbY = y + Math.round((scrollY / maxScroll) * travel);
+        canvas.texture(CirrusTextures.Icon.scrollBarVertical, trackX, thumbY, trackW, thumbH);
+    }
+
+    private static @Nullable Rect2i intersection(Rect2i left, Rect2i right) {
+        int x1 = Math.max(left.getX(), right.getX());
+        int y1 = Math.max(left.getY(), right.getY());
+        int x2 = Math.min(left.getX() + left.getWidth(), right.getX() + right.getWidth());
+        int y2 = Math.min(left.getY() + left.getHeight(), right.getY() + right.getHeight());
+        if (x2 <= x1 || y2 <= y1) {
+            return null;
+        }
+        return new Rect2i(x1, y1, x2 - x1, y2 - y1);
+    }
+
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private List<OverlayMaterialRequirement> visibleRequirements() {
@@ -280,6 +427,7 @@ final class RecipeMaterialsPanelWidget extends Widget {
     private void toggleDisplayMode() {
         displayMode = displayMode == DisplayMode.missing ? DisplayMode.total : DisplayMode.missing;
         materialsScrollState.resetScroll();
+        scrollY = 0f;
         ExecutionOverlayUi.playClickSound();
     }
 
@@ -337,24 +485,32 @@ final class RecipeMaterialsPanelWidget extends Widget {
         };
     }
 
-    private static int resolveToolbarHeight(RecipePage.LayoutDensity density) {
+    static int resolveToolbarHeight(RecipePage.LayoutDensity density) {
         return density == RecipePage.LayoutDensity.dense ? toolbarHeightDense : toolbarHeight;
     }
 
-    private static int resolveButtonSize(RecipePage.LayoutDensity density) {
+    static int resolveButtonSize(RecipePage.LayoutDensity density) {
         return density == RecipePage.LayoutDensity.dense ? buttonSizeDense : buttonSize;
     }
 
-    private static int resolveGridGap(RecipePage.LayoutDensity density) {
+    static int resolveGridGap(RecipePage.LayoutDensity density) {
         return density == RecipePage.LayoutDensity.dense ? gridGapDense : gridGap;
     }
 
     static int resolveCellWidth(RecipePage.LayoutDensity density) {
-        return density == RecipePage.LayoutDensity.dense ? cellWidthDense : cellWidth;
+        return switch (density) {
+            case normal -> cellWidth;
+            case compact -> cellWidthCompact;
+            case dense -> cellWidthDense;
+        };
     }
 
     static int resolveCellHeight(RecipePage.LayoutDensity density) {
         return density == RecipePage.LayoutDensity.dense ? cellHeightDense : cellHeight;
+    }
+
+    private static int resolveScrollbarWidth(RecipePage.LayoutDensity density) {
+        return density == RecipePage.LayoutDensity.dense ? scrollbarWidthDense : scrollbarWidth;
     }
 
     private enum DisplayMode {
@@ -445,5 +601,33 @@ final class RecipeMaterialsPanelWidget extends Widget {
     }
 
     private record InteractiveArea(Rect2i bounds, Supplier<Tooltip> tooltip, @Nullable Runnable action) {
+    }
+
+    private record GridMetrics(
+        int contentWidth,
+        int columns,
+        int gap,
+        int[] columnWidths,
+        int cellHeight,
+        int contentHeight,
+        int viewportHeight,
+        boolean overflow,
+        int scrollbarWidth
+    ) {
+        int widthForColumn(int column) {
+            if (columnWidths.length == 0) {
+                return 0;
+            }
+            return columnWidths[Math.max(0, Math.min(column, columnWidths.length - 1))];
+        }
+
+        int xForColumn(int column) {
+            int x = 0;
+            int limit = Math.max(0, Math.min(column, columnWidths.length));
+            for (int index = 0; index < limit; index++) {
+                x += columnWidths[index] + gap;
+            }
+            return x;
+        }
     }
 }

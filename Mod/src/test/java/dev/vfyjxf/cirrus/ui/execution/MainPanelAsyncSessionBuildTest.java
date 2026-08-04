@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MainPanelAsyncSessionBuildTest {
@@ -117,6 +118,59 @@ class MainPanelAsyncSessionBuildTest {
             assertNotNull(panel.snapshot());
             assertNotNull(panel.snapshot().session());
             assertFalse(panel.snapshot().autoAdvanceEnabled());
+        } finally {
+            CalculatorSyntheticScenario.restoreRecipeApi(previous);
+        }
+    }
+
+    @Test
+    void clearingSelectionKeepsIncompleteExecutionSession() {
+        CalculatorSyntheticScenario.Scenario scenario = CalculatorSyntheticScenario.createWorkbenchLike(8);
+        RecipeApiImpl previous = CalculatorSyntheticScenario.attachRecipeApi(scenario.system());
+        try {
+            RecipeContentRendererTestBootstrap.ensureInitialized();
+            ExecutionTargetRecipeState.set(scenario.target(), 2);
+            MainPanel panel = new MainPanel(handle());
+            panel.tick();
+            panel.debugCompletePendingSessionBuild();
+
+            assertNotNull(panel.snapshot());
+            assertNotNull(panel.snapshot().session());
+            assertFalse(panel.snapshot().session().completed());
+
+            ExecutionTargetRecipeState.clear();
+            panel.tick();
+
+            assertFalse(panel.debugSessionBuildPending());
+            assertNotNull(panel.snapshot());
+            assertNotNull(panel.snapshot().session());
+            assertFalse(panel.snapshot().session().completed());
+        } finally {
+            CalculatorSyntheticScenario.restoreRecipeApi(previous);
+        }
+    }
+
+    @Test
+    void clearingSelectionAfterCompletionResetsSession() {
+        CalculatorSyntheticScenario.Scenario scenario = CalculatorSyntheticScenario.createWorkbenchLike(8);
+        RecipeApiImpl previous = CalculatorSyntheticScenario.attachRecipeApi(scenario.system());
+        try {
+            RecipeContentRendererTestBootstrap.ensureInitialized();
+            ExecutionTargetRecipeState.set(scenario.target(), 1);
+            MainPanel panel = new MainPanel(handle());
+            panel.tick();
+            panel.debugCompletePendingSessionBuild();
+            assertNotNull(panel.snapshot());
+            assertNotNull(panel.snapshot().session());
+
+            panel.driver().advanceSteps(panel.snapshot().session().plan().steps().size());
+            assertTrue(panel.driver().snapshot().telemetry().completed());
+
+            ExecutionTargetRecipeState.clear();
+            panel.tick();
+
+            assertNotNull(panel.snapshot());
+            assertNull(panel.snapshot().session());
         } finally {
             CalculatorSyntheticScenario.restoreRecipeApi(previous);
         }

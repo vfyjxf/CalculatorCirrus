@@ -144,7 +144,10 @@ final class RecipeCurrentRecipeCardWidget extends CompositeWidget<Widget> {
 	public void tick() {
 		super.tick();
 		syncResponsiveLayout();
-		RecipeActiveContext current = owner.viewState().calculating() ? null : owner.activeRecipeContext();
+		RecipeActiveContext current = owner.activeRecipeContext();
+		if (current == null && owner.viewState().calculating() && boundContext != null) {
+			current = boundContext;
+		}
 		if (!sameContext(boundContext, current)) {
 			syncContext(current);
 		} else if (current != null) {

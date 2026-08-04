@@ -1,26 +1,37 @@
 package dev.vfyjxf.cirrus.util;
 
+import java.util.Locale;
+
 public class NumberUtils {
 
     private static final char[] ENCODED_POSTFIXES = "KMGTPE".toCharArray();
 
 
     public static String toSuffix(long number) {
-        String numberStr = Long.toString(number);
-        if (numberStr.length() <= 3) {
-            return numberStr;
+        boolean negative = number < 0;
+        double absolute = negative ? -(double) number : (double) number;
+        if (absolute < 1_000D) {
+            return Long.toString(number);
         }
 
-        long base = number;
+        double scaled = absolute;
         int exponent = -1;
-        String reslut = "";
-        while (Long.toString(base).length() > 3) {
-            reslut = String.format("%.2f", base / 1000F);
-            base = base / 1000;
+        while (scaled >= 1_000D && exponent + 1 < ENCODED_POSTFIXES.length) {
+            scaled /= 1_000D;
             exponent++;
         }
 
-        return reslut + ENCODED_POSTFIXES[exponent];
+        double rounded = scaled >= 100D ? Math.round(scaled) : Math.round(scaled * 10D) / 10D;
+        if (rounded >= 1_000D && exponent + 1 < ENCODED_POSTFIXES.length) {
+            rounded /= 1_000D;
+            exponent++;
+        }
+
+        String prefix = negative ? "-" : "";
+        String value = rounded == Math.rint(rounded)
+            ? Long.toString((long) rounded)
+            : String.format(Locale.ROOT, "%.1f", rounded);
+        return prefix + value + ENCODED_POSTFIXES[Math.max(0, exponent)];
     }
 
 }

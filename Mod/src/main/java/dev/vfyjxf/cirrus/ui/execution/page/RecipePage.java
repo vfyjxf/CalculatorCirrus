@@ -77,9 +77,9 @@ public class RecipePage extends CompositeWidget<Widget> {
 	private static final int executionCardHeight = 98;
 	private static final int executionCardHeightCompact = 80;
 	private static final int executionCardHeightDense = 64;
-	private static final int materialPanelHeight = 66;
-	private static final int materialPanelHeightCompact = 54;
-	private static final int materialPanelHeightDense = 42;
+	private static final int materialPanelHeight = 70;
+	private static final int materialPanelHeightCompact = 58;
+	private static final int materialPanelHeightDense = 46;
 	private static final int currentRecipeScrollBarWidth = 6;
 	//endregion
 
@@ -206,7 +206,6 @@ public class RecipePage extends CompositeWidget<Widget> {
 				sizeOf(-1, materialPanelHeight)
 		));
 		materialsPanel.setLayoutDensity(layoutDensity);
-		syncResponsiveLayout();
 	}
 	//endregion
 
