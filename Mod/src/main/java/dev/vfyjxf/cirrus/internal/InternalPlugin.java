@@ -67,6 +67,9 @@ public class InternalPlugin implements CirrusPlugin {
 
         register.registerStackType(CirrusTypes.Contents.ITEM, CirrusTypes.Contents.ITEM_STACK);
         register.registerStackType(CirrusTypes.Contents.FLUID, CirrusTypes.Contents.FLUID_STACK);
+
+        register.registerValueType(CirrusTypes.Contents.TIME);
+        register.registerValueType(CirrusTypes.Contents.ENERGY);
     }
 
     @Override

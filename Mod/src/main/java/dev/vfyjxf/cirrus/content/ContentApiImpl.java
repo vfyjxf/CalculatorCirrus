@@ -384,8 +384,27 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
     }
 
     @Override
+    public @UnmodifiableView RichIterable<? extends ValueType<?>> valueTypes() {
+        return CollectionAdapter.adapt(valueTypeById.values()).asUnmodifiable();
+    }
+
+    @Override
     public RichIterable<? extends VariantType<?, ?>> variantTypes() {
         return CollectionAdapter.adapt(variantTypes.values()).asUnmodifiable();
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Override
+    public @UnmodifiableView RichIterable<? extends ContentApi.VariantBinding<?, ?>> variantBindings() {
+        Set<Map.Entry<ContentWithType, VariantType>> rawEntries = (Set) variantTypeByContent.entrySet();
+        return (RichIterable) CollectionAdapter.adapt(rawEntries).collect(entry -> {
+            ContentApi.VariantBinding binding = new ContentApi.VariantBinding(
+                entry.getKey().content(),
+                entry.getKey().contentType(),
+                entry.getValue()
+            );
+            return binding;
+        }).asUnmodifiable();
     }
 
     //endregion

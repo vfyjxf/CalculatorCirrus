@@ -211,6 +211,18 @@ public interface ContentApi {
     //region variant type
 
     /**
+     * A registered binding between a content instance and its variant type.
+     *
+     * @param content     the registered content instance, such as {@code Items.ENCHANTED_BOOK}
+     * @param contentType the content type of the content
+     * @param variantType the variant type bound to the content
+     * @param <T>         the content type
+     * @param <S>         the stack type
+     */
+    record VariantBinding<T, S>(T content, ContentType<T> contentType, VariantType<T, S> variantType) {
+    }
+
+    /**
      * Check if a variant type exists
      *
      * @param typeId the type id
@@ -353,10 +365,22 @@ public interface ContentApi {
     RichIterable<? extends TagType<?>> tagTypes();
 
     /**
+     * @return an unmodifiable view of all registered value types
+     */
+    @UnmodifiableView
+    RichIterable<? extends ValueType<?>> valueTypes();
+
+    /**
      * @return an unmodifiable view of all registered variant types
      */
     @UnmodifiableView
     RichIterable<? extends VariantType<?, ?>> variantTypes();
+
+    /**
+     * @return an unmodifiable view of all registered content-to-variant bindings
+     */
+    @UnmodifiableView
+    RichIterable<? extends VariantBinding<?, ?>> variantBindings();
 
     //endregion
 
