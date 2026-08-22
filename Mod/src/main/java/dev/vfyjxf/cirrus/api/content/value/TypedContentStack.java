@@ -1,10 +1,12 @@
 package dev.vfyjxf.cirrus.api.content.value;
 
 import dev.vfyjxf.cirrus.api.CirrusTypes;
+import dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer;
 import dev.vfyjxf.cirrus.api.content.ContentApi;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.VariantType;
+import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
@@ -14,6 +16,19 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
     private final VariantType<T, S> variantType;
     private final S value;
     private long amount;
+    /**
+     * Lazily resolved canonical components plus the pool generation they were resolved in;
+     * reference equality between two of these proves component-map equality, and differing
+     * representatives resolved in the same generation prove inequality. Benign race on concurrent
+     * resolution: the pool returns the same representative for equal maps.
+     *
+     * @see dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer
+     */
+    private transient volatile Canonical canonical;
+    private transient volatile ComponentStackKey componentKey;
+
+    private record Canonical(DataComponentMap components, long generation) {
+    }
 
     TypedContentStack(StackType<T, S> type, long amount, S value) {
         this.type = type;
@@ -54,6 +69,35 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
     }
 
     @Override
+    public DataComponentMap canonicalComponents() {
+        return canonicalHolder().components();
+    }
+
+    @Override
+    public long canonicalGeneration() {
+        return canonicalHolder().generation();
+    }
+
+    @Override
+    public ComponentStackKey componentKey() {
+        ComponentStackKey key = componentKey;
+        if (key == null) {
+            key = ComponentStackKey.of(this);
+            componentKey = key;
+        }
+        return key;
+    }
+
+    private Canonical canonicalHolder() {
+        Canonical holder = canonical;
+        if (holder == null) {
+            holder = new Canonical(type().canonicalComponents(value), ComponentCanonicalizer.generation());
+            canonical = holder;
+        }
+        return holder;
+    }
+
+    @Override
     public long amount() {
         return amount;
     }
@@ -62,6 +106,40 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
     public ContentStack<T, S> setAmount(long amount) {
         this.amount = amount;
         return this;
+    }
+
+    @Override
+    public ContentStack<T, S> copy() {
+        ContentStack<T, S> copied = ContentStack.super.copy();
+        if (copied instanceof TypedContentStack<?, ?> typed) typed.adoptCachesFrom(this);
+        return copied;
+    }
+
+    @Override
+    public ContentStack<T, S> copyWithAmount(long amount) {
+        ContentStack<T, S> copied = ContentStack.super.copyWithAmount(amount);
+        if (copied instanceof TypedContentStack<?, ?> typed) typed.adoptCachesFrom(this);
+        return copied;
+    }
+
+    @Override
+    public ContentStack<T, S> normalize() {
+        ContentStack<T, S> normalized = ContentStack.super.normalize();
+        if (normalized instanceof TypedContentStack<?, ?> typed) typed.adoptCachesFrom(this);
+        return normalized;
+    }
+
+    /**
+     * Adopts the canonical/key caches of an equal source: {@code copy}/{@code normalize} chains
+     * COW-share the components patch with the source, so the source's canonical representative is
+     * equally valid here — sparing a fresh pool canonicalization per copied stack.
+     */
+    private void adoptCachesFrom(TypedContentStack<?, ?> source) {
+        if (this.canonical == null && source.canonical != null) {
+            this.canonical = source.canonical;
+            ComponentStackKey sourceKey = source.componentKey;
+            this.componentKey = sourceKey == null ? null : sourceKey.forStack(this);
+        }
     }
 
     @SuppressWarnings("unchecked")

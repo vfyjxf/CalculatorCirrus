@@ -158,4 +158,9 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.named('jmhJar', Jar).configure {
     zip64 = true
+    // The fat jmh jar merges log4j's multi-release classes; without this attribute
+    // log4j-api falls back to its Java-8 StackLocator and caller detection fails on JDK 21.
+    manifest {
+        attributes 'Multi-Release': 'true'
+    }
 }

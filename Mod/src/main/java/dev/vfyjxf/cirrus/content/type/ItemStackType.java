@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.content.type;
 
 import com.google.common.primitives.Ints;
+import dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer;
 import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.type.VariantType;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
@@ -57,6 +58,16 @@ public final class ItemStackType extends BasicStackType<Item, ItemStack> {
     @Override
     public DataComponentPatch getComponentsPatch(ItemStack stack) {
         return stack.getComponentsPatch();
+    }
+
+    @Override
+    public DataComponentMap canonicalComponents(ItemStack stack) {
+        if (stack.getComponentsPatch().isEmpty()) {
+            // Patch-empty stacks all share the per-Item prototype singleton: same reference for
+            // free, no hashing and no pooling.
+            return stack.getPrototype();
+        }
+        return ComponentCanonicalizer.canonical(stack.getComponents());
     }
 
     @Override

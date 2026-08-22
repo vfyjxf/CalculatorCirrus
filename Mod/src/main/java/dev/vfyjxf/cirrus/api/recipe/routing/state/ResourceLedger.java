@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.routing.state;
 
-import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentKind;
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
@@ -45,7 +45,7 @@ import java.util.HashSet;
  */
 public final class ResourceLedger {
     private final Stock stock;
-    private final Object2LongMap<ContentResource> byproducts;
+    private final Object2LongMap<ComponentStackKey> byproducts;
     private final Object2LongMap<ValueType<?>> valueByproducts;
     private final ArrayList<TransactionScope> transactionScopes = new ArrayList<>();
     private @Nullable Object2LongMap<ContentKind<?>> byproductKindAmounts;
@@ -57,7 +57,7 @@ public final class ResourceLedger {
 
     private ResourceLedger(
         Stock stock,
-        Object2LongMap<ContentResource> byproducts,
+        Object2LongMap<ComponentStackKey> byproducts,
         Object2LongMap<ValueType<?>> valueByproducts
     ) {
         this.stock = Checks.checkNotNull(stock, "stock");
@@ -118,9 +118,9 @@ public final class ResourceLedger {
 
         var iterator = Object2LongMaps.fastIterator(byproducts);
         while (iterator.hasNext()) {
-            Object2LongMap.Entry<ContentResource> entry = iterator.next();
+            Object2LongMap.Entry<ComponentStackKey> entry = iterator.next();
             long available = entry.getLongValue();
-            if (available > 0L && input.satisfy(entry.getKey())) {
+            if (available > 0L && input.satisfy(entry.getKey().stack())) {
                 total = safeAdd(total, available);
             }
         }
@@ -206,7 +206,7 @@ public final class ResourceLedger {
 
     /** Creates a deep copy of this ledger (both stock and byproduct pools are cloned). */
     public ResourceLedger copy() {
-        Object2LongOpenHashMap<ContentResource> copied = new Object2LongOpenHashMap<>();
+        Object2LongOpenHashMap<ComponentStackKey> copied = new Object2LongOpenHashMap<>();
         copied.putAll(byproducts);
         Object2LongOpenHashMap<ValueType<?>> copiedValues = new Object2LongOpenHashMap<>();
         copiedValues.putAll(valueByproducts);
@@ -277,8 +277,12 @@ public final class ResourceLedger {
             valueByproducts.put(type, valueByproducts.getLong(type) + amount);
             return;
         }
-        recordByproduct(normalized);
-        byproducts.put(normalized, byproducts.getOrDefault(normalized, 0L) + amount);
+        if (!(normalized instanceof ContentStack<?, ?> stack) || stack.isEmpty()) {
+            return;
+        }
+        ComponentStackKey key = stack.componentKey();
+        recordByproduct(key);
+        byproducts.put(key, byproducts.getOrDefault(key, 0L) + amount);
         invalidateByproductKindAmounts();
     }
 
@@ -306,11 +310,11 @@ public final class ResourceLedger {
 
         var iterator = Object2LongMaps.fastIterator(byproducts);
         while (iterator.hasNext()) {
-            Object2LongMap.Entry<ContentResource> entry = iterator.next();
+            Object2LongMap.Entry<ComponentStackKey> entry = iterator.next();
             if (remaining <= 0) {
                 break;
             }
-            if (input.satisfy(entry.getKey())) {
+            if (input.satisfy(entry.getKey().stack())) {
                 long available = entry.getLongValue();
                 long consumed = Math.min(available, remaining);
                 recordByproduct(entry.getKey());
@@ -363,11 +367,15 @@ public final class ResourceLedger {
             return consumeByproductValue(value, amount);
         }
         ContentResource normalized = normalize(resource);
-        long available = byproducts.getLong(normalized);
+        if (!(normalized instanceof ContentStack<?, ?> stack) || stack.isEmpty()) {
+            return 0;
+        }
+        ComponentStackKey key = stack.componentKey();
+        long available = byproducts.getLong(key);
         if (available > 0L) {
             long consumed = Math.min(available, amount);
-            recordByproduct(normalized);
-            byproducts.put(normalized, available - consumed);
+            recordByproduct(key);
+            byproducts.put(key, available - consumed);
             invalidateByproductKindAmounts();
             return consumed;
         }
@@ -379,11 +387,14 @@ public final class ResourceLedger {
             return countByproductValue(value);
         }
         ContentResource normalized = normalize(resource);
-        return byproducts.getLong(normalized);
+        if (!(normalized instanceof ContentStack<?, ?> stack) || stack.isEmpty()) {
+            return 0;
+        }
+        return byproducts.getLong(stack.componentKey());
     }
 
     private long countByproductResourceNormalized(ContentStack<?, ?> normalized) {
-        return byproducts.getLong(normalized);
+        return byproducts.getLong(normalized.componentKey());
     }
 
     private long countByproductValue(ContentValue<?> value) {
@@ -398,8 +409,8 @@ public final class ResourceLedger {
         long total = 0;
         var iterator = Object2LongMaps.fastIterator(byproducts);
         while (iterator.hasNext()) {
-            Object2LongMap.Entry<ContentResource> entry = iterator.next();
-            if (entry.getKey().matches(normalized, MatchStrategy.identityAndComponent)) {
+            Object2LongMap.Entry<ComponentStackKey> entry = iterator.next();
+            if (entry.getKey().stack().matchesResource(normalized)) {
                 total = safeAdd(total, entry.getLongValue());
             }
         }
@@ -413,11 +424,12 @@ public final class ResourceLedger {
         long remaining = amount;
         var iterator = Object2LongMaps.fastIterator(byproducts);
         while (iterator.hasNext()) {
-            Object2LongMap.Entry<ContentResource> entry = iterator.next();
+            Object2LongMap.Entry<ComponentStackKey> entry = iterator.next();
             if (remaining <= 0) {
                 break;
             }
-            if (entry.getKey() instanceof ContentStack<?, ?> stack && stack.matchesContent(kind)) {
+            ContentStack<?, ?> stack = entry.getKey().stack();
+            if (stack.matchesContent(kind)) {
                 long available = entry.getLongValue();
                 long consumed = Math.min(available, remaining);
                 recordByproduct(entry.getKey());
@@ -453,10 +465,10 @@ public final class ResourceLedger {
         cached.clear();
         var iterator = Object2LongMaps.fastIterator(byproducts);
         while (iterator.hasNext()) {
-            Object2LongMap.Entry<ContentResource> entry = iterator.next();
+            Object2LongMap.Entry<ComponentStackKey> entry = iterator.next();
             long amount = entry.getLongValue();
-            if (amount != 0L && entry.getKey() instanceof ContentStack<?, ?> stack) {
-                ContentKind<?> kind = stack.kind();
+            if (amount != 0L) {
+                ContentKind<?> kind = entry.getKey().stack().kind();
                 cached.put(kind, safeAdd(cached.getLong(kind), amount));
             }
         }
@@ -539,7 +551,7 @@ public final class ResourceLedger {
         parent.changes.addAll(child.changes);
     }
 
-    private void recordByproduct(ContentResource key) {
+    private void recordByproduct(ComponentStackKey key) {
         if (transactionScopes.isEmpty()) {
             return;
         }
@@ -590,11 +602,11 @@ public final class ResourceLedger {
         private int smallByproductKeyCount;
         private @Nullable Object[] smallValueByproductKeys;
         private int smallValueByproductKeyCount;
-        private @Nullable HashSet<ContentResource> byproductKeys;
+        private @Nullable HashSet<ComponentStackKey> byproductKeys;
         private @Nullable HashSet<ValueType<?>> valueByproductKeys;
 
-        private boolean addByproductKey(ContentResource key) {
-            HashSet<ContentResource> keys = byproductKeys;
+        private boolean addByproductKey(ComponentStackKey key) {
+            HashSet<ComponentStackKey> keys = byproductKeys;
             if (keys != null) {
                 return keys.add(key);
             }
@@ -611,7 +623,7 @@ public final class ResourceLedger {
             }
             keys = new HashSet<>(smallKeySetLimit * 2);
             for (int i = 0; i < smallByproductKeyCount; i++) {
-                keys.add((ContentResource) smallKeys[i]);
+                keys.add((ComponentStackKey) smallKeys[i]);
             }
             smallByproductKeys = null;
             byproductKeys = keys;
@@ -658,7 +670,7 @@ public final class ResourceLedger {
         void rollback(ResourceLedger ledger);
     }
 
-    private record ByproductChange(ContentResource key, boolean existed, long oldValue) implements LedgerChange {
+    private record ByproductChange(ComponentStackKey key, boolean existed, long oldValue) implements LedgerChange {
         @Override
         public void rollback(ResourceLedger ledger) {
             if (existed) {

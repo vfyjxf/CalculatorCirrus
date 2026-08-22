@@ -101,6 +101,22 @@ public interface StackType<T, S> {
     DataComponentPatch getComponentsPatch(S stack);
 
     /**
+     * Returns a canonical representative of the stack's components: two stacks whose components are
+     * equal (per {@link DataComponentMap#equals(Object)}) resolve to the <b>same instance</b>, so
+     * reference comparison of canonical components is a sound shortcut for component equality.
+     *
+     * <p>Implementations may return a shared singleton instead of consulting the pool when the
+     * stack carries no component patch (e.g. an item's prototype map).
+     *
+     * @param stack the stack whose components to canonicalize
+     * @return the canonical components, or {@code null} if the type does not support components
+     * @see dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer
+     */
+    default @Nullable DataComponentMap canonicalComponents(S stack) {
+        return dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer.canonical(getComponents(stack));
+    }
+
+    /**
      * Checks if the given stack has the specified data component.
      *
      * @param stack         the stack to check for the component

@@ -14,7 +14,10 @@ import dev.vfyjxf.cirrus.api.recipe.content.TypedStackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.resources.ResourceLocation;
+import com.google.common.collect.MapMaker;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * Stable, amount-insensitive keys used to carry a user-selected input variant
@@ -75,11 +78,21 @@ public final class RoutingVariantKeys {
         return builder.toString();
     }
 
+    private static final ConcurrentMap<ContentStack<?, ?>, String> STACK_KEY_CACHE =
+            new MapMaker().weakKeys().concurrencyLevel(4).makeMap();
+
     private static String stackKey(ContentStack<?, ?> stack) {
+        // The planner computes variant keys in hot loops; hashing the components patch is expensive
+        // (deep NBT/component hashes), so cache the built key per stack instance (identity-keyed —
+        // lookups never invoke the stack's own hashCode; entries evaporate with the stack).
+        // Contract: stacks are read-only after construction, like the canonical component pool.
+        String cached = STACK_KEY_CACHE.get(stack);
+        if (cached != null) return cached;
         String key = "stack:" + stack.type().typeId() + ":" + contentKey(stack.contentType(), stack.content());
         if (!stack.componentsPatch().isEmpty()) {
             key += ":components:" + Integer.toHexString(stack.componentsPatch().hashCode());
         }
+        STACK_KEY_CACHE.put(stack, key);
         return key;
     }
 
