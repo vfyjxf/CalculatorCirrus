@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.recipe.routing;
 
+import dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
@@ -85,6 +86,7 @@ public final class RecipePathSettings {
             routingBuilds.clear();
             routingCacheGeneration++;
         }
+        ComponentCanonicalizer.clear();
     }
 
     static int cachedCatalogCountForTests() {
@@ -166,6 +168,7 @@ public final class RecipePathSettings {
         int clearedCatalogs;
         int clearedRouting;
         int clearedInFlight;
+        ComponentCanonicalizer.clear();
         synchronized (workspaceCacheLock) {
             if (workspaceCache != null) {
                 clearedWorkspace = 1;

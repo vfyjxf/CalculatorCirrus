@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.api.recipe.routing;
 
 import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentKind;
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
@@ -37,7 +38,7 @@ import java.util.HashSet;
 public class Stock {
 
     private final MutableList<ContentStack<?, ?>> stacks = Lists.mutable.empty();
-    private final Object2LongMap<ContentStack<?, ?>> stackAmounts = new Object2LongOpenHashMap<>();
+    private final Object2LongMap<ComponentStackKey> stackAmounts = new Object2LongOpenHashMap<>();
     private final Object2LongMap<ContentValue<?>> valueAmounts = new Object2LongOpenHashMap<>();
     private final Object2LongMap<ValueType<?>> valueTypeAmounts = new Object2LongOpenHashMap<>();
     private final ArrayList<TransactionScope> transactionScopes = new ArrayList<>();
@@ -75,20 +76,21 @@ public class Stock {
         if (stack.isEmpty()) return;
         ContentStack<?, ?> normalized = stack.normalize();
 
-        for (ContentStack<?, ?> existing : stacks) {
-            if (existing.matches(normalized, MatchStrategy.identityAndComponent)) {
-                long current = stackAmounts.getOrDefault(existing, 0L);
-                recordStackAmount(existing);
-                stackAmounts.put(existing, current + stack.amount());
-                invalidateKindAmounts();
-                return;
-            }
+        // ComponentStackKey equality is exactly identityAndComponent: a map hit is equivalent to
+        // (and O(1) instead of) the previous linear scan over the stack list.
+        ComponentStackKey key = normalized.componentKey();
+        if (stackAmounts.containsKey(key)) {
+            long current = stackAmounts.getOrDefault(key, 0L);
+            recordStackAmount(key);
+            stackAmounts.put(key, current + stack.amount());
+            invalidateKindAmounts();
+            return;
         }
 
         recordStackList();
-        recordStackAmount(normalized);
+        recordStackAmount(key);
         stacks.add(normalized);
-        stackAmounts.put(normalized, stack.amount());
+        stackAmounts.put(key, stack.amount());
         invalidateKindAmounts();
     }
 
@@ -129,19 +131,15 @@ public class Stock {
         if (stack.isEmpty() || amount <= 0) return 0;
         ContentStack<?, ?> normalized = stack.normalize();
 
-        for (ContentStack<?, ?> existing : stacks) {
-            if (existing.matches(normalized, MatchStrategy.identityAndComponent)) {
-                long available = stackAmounts.getOrDefault(existing, 0L);
-                long consumed = Math.min(available, amount);
-                if (consumed > 0) {
-                    recordStackAmount(existing);
-                    stackAmounts.put(existing, available - consumed);
-                    invalidateKindAmounts();
-                }
-                return consumed;
-            }
+        ComponentStackKey key = normalized.componentKey();
+        long available = stackAmounts.getOrDefault(key, 0L);
+        long consumed = Math.min(available, amount);
+        if (consumed > 0) {
+            recordStackAmount(key);
+            stackAmounts.put(key, available - consumed);
+            invalidateKindAmounts();
         }
-        return 0;
+        return consumed;
     }
 
     /**
@@ -227,18 +225,12 @@ public class Stock {
      */
     public long countMatching(ContentStack<?, ?> stack) {
         if (stack.isEmpty()) return 0;
-
-        for (ContentStack<?, ?> existing : stacks) {
-            if (existing.matches(stack, MatchStrategy.identityAndComponent)) {
-                return stackAmounts.getOrDefault(existing, 0L);
-            }
-        }
-        return 0;
+        return countMatchingNormalized(stack.normalize());
     }
 
     public long countMatchingNormalized(ContentStack<?, ?> normalized) {
         if (normalized.isEmpty()) return 0;
-        return stackAmounts.getOrDefault(normalized, 0L);
+        return stackAmounts.getOrDefault(normalized.componentKey(), 0L);
     }
 
     /**
@@ -301,7 +293,7 @@ public class Stock {
     private void rebuildKindAmounts(Object2LongMap<ContentKind<?>> cached) {
         cached.clear();
         for (ContentStack<?, ?> existing : stacks) {
-            long amount = stackAmounts.getOrDefault(existing, 0L);
+            long amount = stackAmounts.getOrDefault(existing.componentKey(), 0L);
             if (amount != 0L) {
                 ContentKind<?> kind = existing.kind();
                 cached.put(kind, safeAdd(cached.getLong(kind), amount));
@@ -380,11 +372,12 @@ public class Stock {
         for (ContentStack<?, ?> existing : stacks) {
             if (remaining <= 0) break;
             if (existing.matchesContent(kind)) {
-                long available = stackAmounts.getOrDefault(existing, 0L);
+                ComponentStackKey key = existing.componentKey();
+                long available = stackAmounts.getOrDefault(key, 0L);
                 long consumed = Math.min(available, remaining);
                 if (consumed > 0) {
-                    recordStackAmount(existing);
-                    stackAmounts.put(existing, available - consumed);
+                    recordStackAmount(key);
+                    stackAmounts.put(key, available - consumed);
                     invalidateKindAmounts();
                     remaining -= consumed;
                 }
@@ -447,13 +440,14 @@ public class Stock {
                     if (!existing.matchesContent(kind)) {
                         continue;
                     }
-                    long available = stackAmounts.getOrDefault(existing, 0L);
+                    ComponentStackKey key = existing.componentKey();
+                    long available = stackAmounts.getOrDefault(key, 0L);
                     long taken = Math.min(available, remaining);
                     if (taken <= 0) {
                         continue;
                     }
-                    recordStackAmount(existing);
-                    stackAmounts.put(existing, available - taken);
+                    recordStackAmount(key);
+                    stackAmounts.put(key, available - taken);
                     invalidateKindAmounts();
                     consumed.add(new ConsumedResource(existing.normalize(), taken));
                     remaining -= taken;
@@ -488,13 +482,14 @@ public class Stock {
             if (remaining <= 0) {
                 break;
             }
-            long available = stackAmounts.getOrDefault(existing, 0L);
+            ComponentStackKey key = existing.componentKey();
+            long available = stackAmounts.getOrDefault(key, 0L);
             if (available <= 0 || !input.satisfy(existing)) {
                 continue;
             }
             long taken = Math.min(available, remaining);
-            recordStackAmount(existing);
-            stackAmounts.put(existing, available - taken);
+            recordStackAmount(key);
+            stackAmounts.put(key, available - taken);
             invalidateKindAmounts();
             consumed.add(new ConsumedResource(existing.normalize(), taken));
             remaining -= taken;
@@ -598,7 +593,7 @@ public class Stock {
     public MutableList<ConsumedResource> snapshotResources() {
         MutableList<ConsumedResource> resources = Lists.mutable.empty();
         for (ContentStack<?, ?> existing : stacks) {
-            long amount = stackAmounts.getOrDefault(existing, 0L);
+            long amount = stackAmounts.getOrDefault(existing.componentKey(), 0L);
             if (amount > 0L) {
                 resources.add(new ConsumedResource(existing.normalize(), amount));
             }
@@ -695,7 +690,7 @@ public class Stock {
         parent.changes.addAll(child.changes);
     }
 
-    private void recordStackAmount(ContentStack<?, ?> key) {
+    private void recordStackAmount(ComponentStackKey key) {
         if (transactionScopes.isEmpty()) {
             return;
         }
@@ -764,12 +759,12 @@ public class Stock {
         private int smallStackAmountKeyCount;
         private @Nullable Object[] smallValueAmountKeys;
         private int smallValueAmountKeyCount;
-        private @Nullable HashSet<ContentStack<?, ?>> stackAmountKeys;
+        private @Nullable HashSet<ComponentStackKey> stackAmountKeys;
         private @Nullable HashSet<ContentValue<?>> valueAmountKeys;
         private boolean stackListChanged;
 
-        private boolean addStackAmountKey(ContentStack<?, ?> key) {
-            HashSet<ContentStack<?, ?>> keys = stackAmountKeys;
+        private boolean addStackAmountKey(ComponentStackKey key) {
+            HashSet<ComponentStackKey> keys = stackAmountKeys;
             if (keys != null) {
                 return keys.add(key);
             }
@@ -786,7 +781,7 @@ public class Stock {
             }
             keys = new HashSet<>(smallKeySetLimit * 2);
             for (int i = 0; i < smallStackAmountKeyCount; i++) {
-                keys.add((ContentStack<?, ?>) smallKeys[i]);
+                keys.add((ComponentStackKey) smallKeys[i]);
             }
             smallStackAmountKeys = null;
             stackAmountKeys = keys;
@@ -833,7 +828,7 @@ public class Stock {
         void rollback(Stock stock);
     }
 
-    private record StackAmountChange(ContentStack<?, ?> key, boolean existed, long oldValue) implements StockChange {
+    private record StackAmountChange(ComponentStackKey key, boolean existed, long oldValue) implements StockChange {
         @Override
         public void rollback(Stock stock) {
             if (existed) {

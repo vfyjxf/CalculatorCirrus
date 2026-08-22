@@ -28,7 +28,8 @@ public record MatchStrategy(
         boolean withIdentity,
         boolean withAmount,
         boolean withComponent,
-        BiPredicate<DataComponentMap, DataComponentMap> componentMatcher
+        BiPredicate<DataComponentMap, DataComponentMap> componentMatcher,
+        boolean usesExactComponents
 ) {
 
     //region Extra Component Match Strategies
@@ -51,13 +52,17 @@ public record MatchStrategy(
             boolean withComponent,
             BiPredicate<DataComponentMap, DataComponentMap> componentMatcher
     ) {
-        this.withIdentity = withIdentity || withComponent;//ok,ok,I don't think a stack's component will be meaningful without identity.
-        this.withAmount = withAmount;
-        this.withComponent = withComponent;
-        this.componentMatcher = (a, b) -> {
+        this(withIdentity, withAmount, withComponent, componentMatcher, withComponent && componentMatcher == same);
+    }
+
+    public MatchStrategy {
+        withIdentity = withIdentity || withComponent;//ok,ok,I don't think a stack's component will be meaningful without identity.
+        usesExactComponents = withComponent && componentMatcher == same;
+        BiPredicate<DataComponentMap, DataComponentMap> original = componentMatcher;
+        componentMatcher = (a, b) -> {
             if (!withComponent || a == b) return true;
             if (a == null || b == null) return false;
-            return componentMatcher.test(a, b);
+            return original.test(a, b);
         };
     }
 
@@ -67,6 +72,16 @@ public record MatchStrategy(
             boolean withComponent
     ) {
         this(withIdentity, withAmount, withComponent, withComponent ? same : nothing);
+    }
+
+    /**
+     * @return whether the component matcher is exactly {@link #same} (full map equality), meaning
+     * reference-equal <b>canonical</b> component maps prove the component part of the strategy —
+     * see {@link ComponentCanonicalizer}. Custom matchers keep their own semantics and must not
+     * take that shortcut.
+     */
+    public boolean usesExactComponents() {
+        return usesExactComponents;
     }
 
     public boolean testComponents(@Nullable DataComponentMap a, @Nullable DataComponentMap b) {

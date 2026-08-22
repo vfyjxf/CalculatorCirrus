@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.content.value;
 
 import dev.vfyjxf.cirrus.api.CirrusTypes;
+import dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer;
 import dev.vfyjxf.cirrus.api.content.ContentApi;
 import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
@@ -181,6 +182,38 @@ public sealed interface ContentStack<T, S>
         return type().getComponents(value());
     }
 
+    /**
+     * The canonical representative of this stack's components. Two stacks with reference-equal
+     * canonical components have equal component maps, which lets
+     * {@link #matches(ContentStack, MatchStrategy)} skip the expensive vanilla deep comparison for
+     * exact-component strategies.
+     *
+     * @return the canonical components, or {@code null} if this stack has no components
+     * @see dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer
+     */
+    default @Nullable DataComponentMap canonicalComponents() {
+        return type().canonicalComponents(value());
+    }
+
+    /**
+     * The canonical-pool generation in which {@link #canonicalComponents()} was resolved. Two
+     * stacks resolved in the same (current) generation with different canonical representatives
+     * provably have unequal component maps.
+     */
+    default long canonicalGeneration() {
+        return ComponentCanonicalizer.generation();
+    }
+
+    /**
+     * A component-aware map key for this stack (equality = identity plus components, independent
+     * of amount), cached by the implementation.
+     *
+     * @see ComponentStackKey
+     */
+    default ComponentStackKey componentKey() {
+        return ComponentStackKey.of(this);
+    }
+
     default DataComponentPatch componentsPatch() {
         return type().getComponentsPatch(value());
     }
@@ -205,9 +238,30 @@ public sealed interface ContentStack<T, S>
         if (this == other) return true;
         if (this == empty() || other == empty()) return false;
         if (type() != other.type()) return false;
+        if (strategy.withAmount() && amount() != other.amount()) return false;
 
-        return (!strategy.withAmount() || amount() == other.amount()) &&
-                type().matches(value(), other.<T, S>cast().value(), variantType(), strategy);
+        if (strategy.withComponent() && strategy.usesExactComponents()) {
+            // Reject on identity first — as cheap as the classic path for cross-item misses.
+            if (strategy.withIdentity()
+                    && !type().matchesIdentity(value(), other.<T, S>cast().value(), variantType())) {
+                return false;
+            }
+            DataComponentMap canonical = canonicalComponents();
+            DataComponentMap otherCanonical = other.canonicalComponents();
+            if (canonical == otherCanonical) {
+                // Reference-equal canonical components prove the component part of the strategy
+                // (and imply variant identity, since variant-defining data lives in components).
+                return true;
+            }
+            long generation = ComponentCanonicalizer.generation();
+            if (canonicalGeneration() == generation && other.canonicalGeneration() == generation) {
+                // Same pool generation with different representatives: the pool is append-only
+                // within a generation, so the component maps provably differ.
+                return false;
+            }
+            // Cross-generation comparison (pool cleared in between): fall through to the exact path.
+        }
+        return type().matches(value(), other.<T, S>cast().value(), variantType(), strategy);
     }
 
     default boolean matches(ContentStack<?, ?> other) {
