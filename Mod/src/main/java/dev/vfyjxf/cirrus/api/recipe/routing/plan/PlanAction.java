@@ -82,20 +82,69 @@ public sealed interface PlanAction permits
      *
      * <p>This is used when the planner cannot resolve a source and should stop
      * expanding the chain instead of forcing the request down to base materials.
+     *
+     * @param candidateCount how many producer candidates were known for this input
+     *                       ({@code 0} when resolution never reached candidate evaluation);
+     *                       used by continuation runs to decide whether a deeper wave
+     *                       could still resolve this input
+     * @param attemptedCount how many of those candidates were actually tried before
+     *                       the input went pending
+     * @param truncated      whether the input went pending only because a budget or
+     *                       ranking window cut resolution short — such pendings can
+     *                       still be resolved by a deeper/continuation wave, unlike
+     *                       {@link PendingReason#TRUE_NO_SOURCE} or
+     *                       {@link PendingReason#CASCADE_EXHAUSTED}
+     * @param reason         why the input went pending; never {@code null}
      */
     record PendingInput(
         int actionId,
         int actionIndex,
         boolean blocking,
         InputContent input,
-        long amount
+        long amount,
+        int candidateCount,
+        int attemptedCount,
+        boolean truncated,
+        PendingReason reason
     ) implements PlanAction {
         public PendingInput {
             Checks.checkNotNull(input, "input");
             Checks.checkArgument(amount > 0, "amount must be positive");
             Checks.checkArgument(actionId >= 0, "actionId must be non-negative");
             Checks.checkArgument(actionIndex >= 0, "actionIndex must be non-negative");
+            Checks.checkArgument(candidateCount >= 0, "candidateCount must be non-negative");
+            Checks.checkArgument(attemptedCount >= 0, "attemptedCount must be non-negative");
+            Checks.checkNotNull(reason, "reason");
         }
+
+        /** Compatibility constructor used when no truncation analysis is available. */
+        public PendingInput(
+            int actionId,
+            int actionIndex,
+            boolean blocking,
+            InputContent input,
+            long amount,
+            int candidateCount,
+            int attemptedCount
+        ) {
+            this(actionId, actionIndex, blocking, input, amount, candidateCount, attemptedCount, false, PendingReason.TRUE_NO_SOURCE);
+        }
+    }
+
+    /**
+     * Why an input went pending. Distinguishes genuinely unreachable demands from
+     * "no source found" verdicts that are merely budget/ranking artifacts — the
+     * latter are resolvable by continuation waves with a larger budget.
+     */
+    enum PendingReason {
+        /** No producer exists in the (policy-filtered) index; not resolvable by deepening. */
+        TRUE_NO_SOURCE,
+        /** Producer enumeration was cut by a budget gate before this input was reached. */
+        BUDGET_TRUNCATED,
+        /** Real producers existed but were dropped by the top-K candidate ranking window. */
+        RANK_TRUNCATED,
+        /** All candidates were genuinely tried and failed; not resolvable by deepening. */
+        CASCADE_EXHAUSTED
     }
 
     /**

@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.recipe.routing;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationResult;
 import dev.vfyjxf.cirrus.api.recipe.database.CustomRecipeDatabase;
 import dev.vfyjxf.cirrus.api.recipe.database.DatabaseRecipeRef;
 import dev.vfyjxf.cirrus.api.recipe.database.FileRecipeDatabaseRepository;
@@ -18,6 +19,8 @@ import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingService;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
+import dev.vfyjxf.cirrus.recipe.classify.ClassificationHeuristics;
+import dev.vfyjxf.cirrus.recipe.classify.RecipeClassificationService;
 import dev.vfyjxf.cirrus.ui.CirrusUiAsync;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Inventory;
@@ -35,6 +38,7 @@ import java.nio.file.Path;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,6 +56,8 @@ public final class RecipePathSettings {
     private static final Map<RoutingCacheKey, CompletableFuture<RoutingCacheEntry>> routingBuilds = new HashMap<>();
     private static final Object catalogCacheLock = new Object();
     private static final Map<CatalogCacheKey, CatalogCacheEntry> catalogCache = new HashMap<>();
+    private static final Object classificationCacheLock = new Object();
+    private static final Map<Long, ClassificationResult> classificationCache = new LinkedHashMap<>(16, 0.75f, true);
     private static final Object workspaceCacheLock = new Object();
     private static final AtomicLong warmupSequence = new AtomicLong();
     private static long routingCacheGeneration;
@@ -70,6 +76,9 @@ public final class RecipePathSettings {
         }
         synchronized (catalogCacheLock) {
             catalogCache.clear();
+        }
+        synchronized (classificationCacheLock) {
+            classificationCache.clear();
         }
         synchronized (routingCacheLock) {
             routingCache.clear();
@@ -116,11 +125,21 @@ public final class RecipePathSettings {
                 InventorySensitivityProfile inventorySensitivity = ExecutionOverlayClientConfig.calculatorInventorySensitivity();
                 LoopPolicy loopPolicy = calculatorLoopPolicy(rule);
                 RoutingCacheEntry cache = cachedRoutingGraph(catalog, rule, plannerMode, inventorySensitivity, loopPolicy);
+                // The resource-level topology (Kosaraju SCC over the whole graph) is
+                // lazy on the service and is what auto-mode dispatch and cone-sized
+                // budgets both need. Without warming it here the cost lands on the
+                // first calculator request instead — a full-pack graph takes seconds,
+                // which reads to the user as "the calculator is slow" even though the
+                // graph itself was already prewarmed.
+                long topologyStartNanos = System.nanoTime();
+                cache.service().topology();
+                long topologyMs = (System.nanoTime() - topologyStartNanos) / 1_000_000L;
                 logger.info(
-                    "routing.graph.prewarm.finish reason={} warmupId={} elapsedMs={} database={} recipes={} planner={} inventorySensitivity={} loopPolicy={} {}",
+                    "routing.graph.prewarm.finish reason={} warmupId={} elapsedMs={} topologyMs={} database={} recipes={} planner={} inventorySensitivity={} loopPolicy={} {}",
                     reason,
                     warmupId,
                     (System.nanoTime() - startNanos) / 1_000_000L,
+                    topologyMs,
                     catalog.databaseId(),
                     catalog.recipes().size(),
                     plannerMode,
@@ -318,6 +337,13 @@ public final class RecipePathSettings {
         CustomRecipeDatabase active = workspace.activeDatabase();
         if (active.builtin()) {
             for (RecipeSystem<?> system : api.allSystems()) {
+                // display-only / duplicate systems (quest browsers, colony
+                // teachable views, JEI mirrors of vanilla systems) never
+                // participate in builtin-catalog planning; custom databases
+                // still opt in explicitly per source
+                if (RecipeClassificationService.classifier().isExcludedSystem(system.systemId().toString())) {
+                    continue;
+                }
                 addEntries(recipes, seen, entriesForSystem(system));
             }
         } else {
@@ -415,7 +441,8 @@ public final class RecipePathSettings {
             rule.clauses().hashCode(),
             plannerMode,
             inventorySensitivity,
-            loopPolicy
+            loopPolicy,
+            ExecutionOverlayClientConfig.calculatorRecipeScreeningEnabled()
         );
         CompletableFuture<RoutingCacheEntry> buildFuture;
         boolean buildOwner = false;
@@ -463,9 +490,17 @@ public final class RecipePathSettings {
         );
         try {
             long graphStartNanos = System.nanoTime();
+            // classification hints must be registered before the graph is
+            // built: node hints are computed once per node during buildGraph.
+            // Registration is unconditional (idempotent); the heuristic match
+            // conditions read the screening config switch at evaluation time.
+            ClassificationHeuristics.register();
             RecipeGraph graph = RecipeGraph.buildGraph(catalog.recipes());
             long graphBuiltNanos = System.nanoTime();
             RoutingService service = new RoutingService(graph);
+            if (ExecutionOverlayClientConfig.calculatorRecipeScreeningEnabled()) {
+                service.tagIndex().populate(cachedClassification(catalog, graph).tagToRecipes());
+            }
             long serviceBuiltNanos = System.nanoTime();
             RoutingCacheEntry entry = new RoutingCacheEntry(graph, service, serviceBuiltNanos);
             synchronized (routingCacheLock) {
@@ -635,6 +670,31 @@ public final class RecipePathSettings {
         }
     }
 
+    /**
+     * Classification is derived from catalog recipes only, so the result is
+     * shared across the routing-graph variants (planner mode, inventory
+     * sensitivity, loop policy, rules) built from the same catalog.
+     */
+    private static ClassificationResult cachedClassification(Catalog catalog, RecipeGraph graph) {
+        long fingerprint = catalog.fingerprint();
+        synchronized (classificationCacheLock) {
+            ClassificationResult cached = classificationCache.get(fingerprint);
+            if (cached != null) {
+                return cached;
+            }
+        }
+        ClassificationResult result = RecipeClassificationService.classify(graph);
+        synchronized (classificationCacheLock) {
+            classificationCache.put(fingerprint, result);
+            while (classificationCache.size() > maxCachedCatalogs) {
+                var iterator = classificationCache.keySet().iterator();
+                iterator.next();
+                iterator.remove();
+            }
+        }
+        return result;
+    }
+
     private static long recipeFingerprint(RecipeEntry<?> recipe) {
         long out = recipe.systemId().hashCode();
         out = 31L * out + System.identityHashCode(recipe.system());
@@ -739,7 +799,8 @@ public final class RecipePathSettings {
         int clausesHash,
         PlannerMode plannerMode,
         InventorySensitivityProfile inventorySensitivity,
-        LoopPolicy loopPolicy
+        LoopPolicy loopPolicy,
+        boolean recipeScreeningEnabled
     ) {
     }
 

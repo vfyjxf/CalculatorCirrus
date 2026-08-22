@@ -1,0 +1,24 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT License"
+
+[[mods]]
+modId = "cirrus_test"
+version = "0.0.1"
+displayName = "Cirrus Test Data"
+description = "Dummy items, fluids and recipes for watching the calculator in-game."
+authors = "vfyjxf"
+
+[[dependencies.cirrus_test]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1.219,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.cirrus_test]]
+modId = "calculator_cirrus"
+type = "required"
+versionRange = "[0.0.1,)"
+ordering = "AFTER"
+side = "BOTH"

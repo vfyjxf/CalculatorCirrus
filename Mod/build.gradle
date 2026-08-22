@@ -16,6 +16,17 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+// In-game dummy test data mod: a few items/fluids plus generated recipes so
+// the screening/planner behavior can be observed with runClient. The source
+// set is registered as a separate mod (cirrus_test) and never enters the
+// published jar. Declared before the neoForge block so mods{} can see it.
+sourceSets {
+    testmod {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+
 neoForge {
     version = project.neo_version
 
@@ -33,6 +44,40 @@ neoForge {
             systemProperty 'mixin.debug', 'true'
             systemProperty 'moddev.service.port', '47812'
             systemProperty 'moddev.skill.exportRoot', rootProject.file('.codex/generated/moddev-service').absolutePath
+            // dev defaults sized for replayed export packs (280k+ recipes): big young
+            // gen keeps build-time garbage out of old gen and avoids full-gc stalls
+            jvmArguments.addAll('-Xmx8g', '-XX:+UnlockExperimentalVMOptions', '-XX:G1NewSizePercent=25', '-XX:G1MaxNewSizePercent=60', '-XX:MaxGCPauseMillis=80')
+            // dev-only: -PcirrusClientJvmArgs='-Xmx8g;-Dcirrus.test.autocalc=allthetweaks:atm_star;...'
+            // appends profiling/benchmark JVM args; -PcirrusQuickPlay=<world> auto-enters a save
+            if (project.hasProperty('cirrusClientJvmArgs')) {
+                jvmArguments.addAll(project.property('cirrusClientJvmArgs').toString().split(';'))
+            }
+            if (project.hasProperty('cirrusQuickPlay')) {
+                programArguments.addAll('--quickPlaySingleplayer', project.property('cirrusQuickPlay').toString())
+            }
+            // clean client for hands-on profiling: the testmod mod stays on the
+            // classpath but dormant (no mimic data, no hooks) unless enabled
+            systemProperty 'cirrus.test.enabled', 'false'
+        }
+
+        // testmod client: flips the testmod runtime switch so the replayed
+        // export packs and the autoui/autocalc hooks activate; those hooks
+        // additionally stay property-gated (-Dcirrus.test.autoui=...)
+        testClient {
+            client()
+            gameDirectory = file('runs/client')
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            systemProperty 'mixin.debug', 'true'
+            systemProperty 'moddev.service.port', '47812'
+            systemProperty 'moddev.skill.exportRoot', rootProject.file('.codex/generated/moddev-service').absolutePath
+            systemProperty 'cirrus.test.enabled', 'true'
+            jvmArguments.addAll('-Xmx8g', '-XX:+UnlockExperimentalVMOptions', '-XX:G1NewSizePercent=25', '-XX:G1MaxNewSizePercent=60', '-XX:MaxGCPauseMillis=80')
+            if (project.hasProperty('cirrusClientJvmArgs')) {
+                jvmArguments.addAll(project.property('cirrusClientJvmArgs').toString().split(';'))
+            }
+            if (project.hasProperty('cirrusQuickPlay')) {
+                programArguments.addAll('--quickPlaySingleplayer', project.property('cirrusQuickPlay').toString())
+            }
         }
 
         server {
@@ -47,6 +92,22 @@ neoForge {
         gameTestServer {
             type = "gameTestServer"
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        }
+
+        // headless plan sampling: dedicated server + testmod + autosample hook,
+        // no client window. Drives via -PcirrusClientJvmArgs (same convention as
+        // the client runs), e.g.
+        //   -PcirrusClientJvmArgs='-Dcirrus.test.autosample=100;-Dcirrus.test.autosample.force=allthetweaks:atm_star'
+        sampleServer {
+            server()
+            gameDirectory = file('runs/sample-server')
+            programArgument '--nogui'
+            systemProperty 'cirrus.test.enabled', 'true'
+            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            jvmArguments.addAll('-Xmx8g', '-XX:+UnlockExperimentalVMOptions', '-XX:G1NewSizePercent=25', '-XX:G1MaxNewSizePercent=60', '-XX:MaxGCPauseMillis=80')
+            if (project.hasProperty('cirrusClientJvmArgs')) {
+                jvmArguments.addAll(project.property('cirrusClientJvmArgs').toString().split(';'))
+            }
         }
 
         data {
@@ -66,6 +127,9 @@ neoForge {
     mods {
         "${mod_id}" {
             sourceSet(sourceSets.main)
+        }
+        cirrus_test {
+            sourceSet(sourceSets.testmod)
         }
     }
 
@@ -154,6 +218,16 @@ neoForge.ideSyncTask generateModMetadata
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+// Regenerates the test mod's recipe/tag/model JSONs into src/testmod/resources.
+// Replay a different export pack with -PcirrusExportPack=<dir under /tmp/cirrus_exports>.
+tasks.register('generateTestModData', JavaExec) {
+    group = 'testmod'
+    classpath = sourceSets.testmod.runtimeClasspath
+    mainClass = 'dev.vfyjxf.cirrus.testmod.datagen.TestDataGenerator'
+    workingDir = projectDir
+    systemProperty 'cirrusExportPack', (findProperty('cirrusExportPack') ?: 'atm10-lite')
 }
 
 tasks.named('jmhJar', Jar).configure {

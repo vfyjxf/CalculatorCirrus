@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.widget.calculator.search;
 
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.database.DatabaseDefinition;
 import dev.vfyjxf.cirrus.api.recipe.database.DatabaseKind;
@@ -7,8 +8,8 @@ import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseIndex;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseRecord;
 import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchDocument;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchDocument;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchField;
+import dev.vfyjxf.cloudlib.api.search.SearchDocument;
+import dev.vfyjxf.cloudlib.api.search.SearchField;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -101,16 +102,16 @@ class RecipeDatabaseSuggestionSourceTest {
     private static RecipeDatabaseIndex indexWithDocument() {
         FakeRecipe recipe = new FakeRecipe("smoker");
         FakeRecipeSystem system = new FakeRecipeSystem();
-        SearchDocument document = SearchDocument.builder()
-            .text(SearchField.mod, "minecraft")
-            .searchableText(SearchField.id, "minecraft:smoker")
-            .searchableText(SearchField.name, "smoker")
-            .searchableText(SearchField.in, "minecraft:furnace")
-            .searchableText(SearchField.in_id, "minecraft:furnace")
-            .searchableText(SearchField.out, "minecraft:smoker")
-            .searchableText(SearchField.out_id, "minecraft:smoker")
-            .searchableText(SearchField.cat, "minecraft:bucket")
-            .searchableText(SearchField.cat_id, "minecraft:bucket")
+        SearchDocument document = SearchDocument.builder(CirrusSearchFields.SET, CirrusSearchFields.text)
+            .text(CirrusSearchFields.mod, "minecraft")
+            .searchableText(CirrusSearchFields.id, "minecraft:smoker")
+            .searchableText(CirrusSearchFields.name, "smoker")
+            .searchableText(CirrusSearchFields.in, "minecraft:furnace")
+            .searchableText(CirrusSearchFields.in_id, "minecraft:furnace")
+            .searchableText(CirrusSearchFields.out, "minecraft:smoker")
+            .searchableText(CirrusSearchFields.out_id, "minecraft:smoker")
+            .searchableText(CirrusSearchFields.cat, "minecraft:bucket")
+            .searchableText(CirrusSearchFields.cat_id, "minecraft:bucket")
             .build();
         RecipeDatabaseRecord record = new RecipeDatabaseRecord(
             RecipeEntry.of(system, recipe),
@@ -125,13 +126,13 @@ class RecipeDatabaseSuggestionSourceTest {
     private static RecipeDatabaseIndex indexWithNumericContent() {
         FakeRecipeSystem system = new FakeRecipeSystem();
         DatabaseDefinition database = new DatabaseDefinition("main", "Main", DatabaseKind.system, true, 0, List.of(system.systemId()));
-        return RecipeDatabaseIndex.ofRecords(List.of(record(system, database, "smoker", SearchDocument.builder()
-            .text(SearchField.mod, "minecraft")
-            .searchableContent(SearchField.in, "minecraft:furnace", 64)
-            .searchableContent(SearchField.in_id, "minecraft:furnace", 64)
-            .searchableText(SearchField.in, "64")
-            .searchableContent(SearchField.out, "minecraft:smoker", 1)
-            .searchableContent(SearchField.out_id, "minecraft:smoker", 1)
+        return RecipeDatabaseIndex.ofRecords(List.of(record(system, database, "smoker", SearchDocument.builder(CirrusSearchFields.SET, CirrusSearchFields.text)
+            .text(CirrusSearchFields.mod, "minecraft")
+            .searchableContent(CirrusSearchFields.in, "minecraft:furnace", 64)
+            .searchableContent(CirrusSearchFields.in_id, "minecraft:furnace", 64)
+            .searchableText(CirrusSearchFields.in, "64")
+            .searchableContent(CirrusSearchFields.out, "minecraft:smoker", 1)
+            .searchableContent(CirrusSearchFields.out_id, "minecraft:smoker", 1)
             .build()
         )));
     }
@@ -140,34 +141,34 @@ class RecipeDatabaseSuggestionSourceTest {
         FakeRecipeSystem system = new FakeRecipeSystem();
         DatabaseDefinition database = new DatabaseDefinition("main", "Main", DatabaseKind.system, true, 0, List.of(system.systemId()));
         return RecipeDatabaseIndex.ofRecords(List.of(
-            record(system, database, "smoker", SearchDocument.builder()
-                .text(SearchField.mod, "minecraft")
-                .searchableText(SearchField.id, "minecraft:smoker")
-                .searchableText(SearchField.name, "smoker")
-                .searchableText(SearchField.in, "minecraft:furnace")
-                .searchableText(SearchField.in_id, "minecraft:furnace")
-                .searchableText(SearchField.out, "minecraft:smoker")
-                .searchableText(SearchField.out_id, "minecraft:smoker")
+            record(system, database, "smoker", SearchDocument.builder(CirrusSearchFields.SET, CirrusSearchFields.text)
+                .text(CirrusSearchFields.mod, "minecraft")
+                .searchableText(CirrusSearchFields.id, "minecraft:smoker")
+                .searchableText(CirrusSearchFields.name, "smoker")
+                .searchableText(CirrusSearchFields.in, "minecraft:furnace")
+                .searchableText(CirrusSearchFields.in_id, "minecraft:furnace")
+                .searchableText(CirrusSearchFields.out, "minecraft:smoker")
+                .searchableText(CirrusSearchFields.out_id, "minecraft:smoker")
                 .build()
             ),
-            record(system, database, "crafting_table", SearchDocument.builder()
-                .text(SearchField.mod, "minecraft")
-                .searchableText(SearchField.id, "minecraft:crafting_table")
-                .searchableText(SearchField.name, "crafting_table")
-                .searchableText(SearchField.in, "minecraft:planks")
-                .searchableText(SearchField.in_id, "minecraft:planks")
-                .searchableText(SearchField.out, "minecraft:crafting_table")
-                .searchableText(SearchField.out_id, "minecraft:crafting_table")
+            record(system, database, "crafting_table", SearchDocument.builder(CirrusSearchFields.SET, CirrusSearchFields.text)
+                .text(CirrusSearchFields.mod, "minecraft")
+                .searchableText(CirrusSearchFields.id, "minecraft:crafting_table")
+                .searchableText(CirrusSearchFields.name, "crafting_table")
+                .searchableText(CirrusSearchFields.in, "minecraft:planks")
+                .searchableText(CirrusSearchFields.in_id, "minecraft:planks")
+                .searchableText(CirrusSearchFields.out, "minecraft:crafting_table")
+                .searchableText(CirrusSearchFields.out_id, "minecraft:crafting_table")
                 .build()
             ),
-            record(system, database, "mechanical_press", SearchDocument.builder()
-                .text(SearchField.mod, "create")
-                .searchableText(SearchField.id, "create:mechanical_press")
-                .searchableText(SearchField.name, "mechanical_press")
-                .searchableText(SearchField.in, "minecraft:andesite_alloy")
-                .searchableText(SearchField.in_id, "minecraft:andesite_alloy")
-                .searchableText(SearchField.out, "create:mechanical_press")
-                .searchableText(SearchField.out_id, "create:mechanical_press")
+            record(system, database, "mechanical_press", SearchDocument.builder(CirrusSearchFields.SET, CirrusSearchFields.text)
+                .text(CirrusSearchFields.mod, "create")
+                .searchableText(CirrusSearchFields.id, "create:mechanical_press")
+                .searchableText(CirrusSearchFields.name, "mechanical_press")
+                .searchableText(CirrusSearchFields.in, "minecraft:andesite_alloy")
+                .searchableText(CirrusSearchFields.in_id, "minecraft:andesite_alloy")
+                .searchableText(CirrusSearchFields.out, "create:mechanical_press")
+                .searchableText(CirrusSearchFields.out_id, "create:mechanical_press")
                 .build()
             )
         ));

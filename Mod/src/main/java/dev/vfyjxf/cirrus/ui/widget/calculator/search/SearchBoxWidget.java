@@ -451,7 +451,20 @@ public class SearchBoxWidget extends Widget {
         }
     }
 
+    private String suggestionTypedPrefix = "";
+
+    /** The word being completed at the cursor, for emphasizing the matching part of suggestion rows. */
+    private String typedCompletionPrefix() {
+        String upToCursor = text.substring(0, Math.min(cursorPosition, text.length()));
+        int start = upToCursor.length();
+        while (start > 0 && !Character.isWhitespace(upToCursor.charAt(start - 1))) {
+            start--;
+        }
+        return upToCursor.substring(start);
+    }
+
     private void refreshDerivedState() {
+        suggestionTypedPrefix = typedCompletionPrefix();
         List<SearchHighlightSegment> nextHighlights = highlighter.apply(text);
         highlightedSegments = nextHighlights == null ? List.of() : nextHighlights;
         List<SearchSuggestion> nextSuggestions = suggestionSource.suggest(text, cursorPosition, maxSuggestionCandidates);
@@ -614,11 +627,64 @@ public class SearchBoxWidget extends Widget {
         }
     }
 
+    /** Committed search words render in their own color, not plain text color. */
+    private static final int searchWordColor = 0xFF3D7AB8;
+    /** Accent color of the word at the cursor — the same color emphasizes the typed prefix in suggestion rows. */
+    private static final int activeTokenColor = 0xFF2E86C1;
+
     private void renderHighlightedText(SceneCanvas canvas, Font font, int textY) {
+        int activeStart = -1;
+        int activeEnd = -1;
+        if (focused()) {
+            int position = Math.min(cursorPosition, text.length());
+            activeStart = position;
+            while (activeStart > 0 && !Character.isWhitespace(text.charAt(activeStart - 1))) {
+                activeStart--;
+            }
+            activeEnd = position;
+            while (activeEnd < text.length() && !Character.isWhitespace(text.charAt(activeEnd))) {
+                activeEnd++;
+            }
+            if (activeEnd <= activeStart) {
+                activeStart = -1;
+            }
+        }
+        // segments must cover the current text exactly; a programmatic text
+        // change without refresh would misalign offsets, so fall back to plain
+        boolean segmentsCurrent = !highlightedSegments.isEmpty()
+            && highlightedSegments.getFirst().start() == 0
+            && highlightedSegments.getLast().end() == text.length();
+        if (!segmentsCurrent) {
+            canvas.text(text, paddingLeft - scrollOffset, textY, textPrimary, false);
+            return;
+        }
         int x = paddingLeft - scrollOffset;
         for (SearchHighlightSegment segment : highlightedSegments) {
-            canvas.text(segment.text(), x, textY, highlightColorFor(segment.kind()), false);
-            x += font.width(segment.text());
+            int from = segment.start();
+            int to = segment.end();
+            while (from < to) {
+                int color = segment.kind() == SearchHighlightKind.text ? searchWordColor : highlightColorFor(segment.kind());
+                int end = to;
+                if (activeStart >= 0) {
+                    if (from < activeStart) {
+                        end = Math.min(to, activeStart);
+                    } else if (from < activeEnd) {
+                        color = activeTokenColor;
+                        end = Math.min(to, activeEnd);
+                    }
+                }
+                String piece = text.substring(from, end);
+                canvas.text(piece, x, textY, color, false);
+                x += font.width(piece);
+                from = end;
+            }
+        }
+        if (activeStart >= 0) {
+            // underline the word being typed: brightest blue plus a bar, so it
+            // reads as "active" against the committed search words
+            int activeX = paddingLeft - scrollOffset + font.width(text.substring(0, activeStart));
+            int activeW = font.width(text.substring(activeStart, activeEnd));
+            canvas.fill(activeX, textY + font.lineHeight - 1, activeW, 1, activeTokenColor);
         }
     }
 
@@ -866,8 +932,42 @@ public class SearchBoxWidget extends Widget {
             }
             Font font = context().font();
             SearchSuggestion suggestion = suggestions.get(index);
-            String token = fit(font, suggestion.token(), Math.max(0, width() - 12));
-            canvas.text(token, 6, 3, selected || hovered() ? textPrimary : textSecondary, false);
+            String countLabel = suggestion.count() > 0 ? dev.vfyjxf.cirrus.util.NumberUtils.toSuffix(suggestion.count()) : null;
+            int tokenBudget = Math.max(0, width() - 12 - (countLabel == null ? 0 : font.width(countLabel) + 6));
+            String token = fit(font, suggestion.token(), tokenBudget);
+            // syntax-colored segments (field/prefix/colon/keyword/...) matching
+            // the query box, with the already-typed prefix drawn in accent
+            boolean emphasized = selected || hovered();
+            int baseColor = emphasized ? textPrimary : textSecondary;
+            int accent = 0xFF2E86C1;
+            String typedPrefix = suggestionTypedPrefix.toLowerCase(java.util.Locale.ROOT);
+            int prefixStart = typedPrefix.isEmpty() ? -1 : token.toLowerCase(java.util.Locale.ROOT).indexOf(typedPrefix);
+            int prefixEnd = prefixStart < 0 ? -1 : prefixStart + typedPrefix.length();
+            int x = 6;
+            for (SearchHighlightSegment segment : RecipeSearchHighlighter.highlight(token)) {
+                int segmentColor = segment.kind() == SearchHighlightKind.text ? baseColor : highlightColorFor(segment.kind());
+                int from = segment.start();
+                int to = segment.end();
+                while (from < to) {
+                    int color = segmentColor;
+                    int end = to;
+                    if (prefixStart >= 0) {
+                        if (from < prefixStart) {
+                            end = Math.min(to, prefixStart);
+                        } else if (from < prefixEnd) {
+                            color = accent;
+                            end = Math.min(to, prefixEnd);
+                        }
+                    }
+                    String piece = token.substring(from, end);
+                    canvas.text(piece, x, 3, color, false);
+                    x += font.width(piece);
+                    from = end;
+                }
+            }
+            if (countLabel != null) {
+                canvas.text(countLabel, Math.max(8, width() - 4 - font.width(countLabel)), 3, textMuted, false);
+            }
         }
 
         private @Nullable Tooltip suggestionTooltip() {

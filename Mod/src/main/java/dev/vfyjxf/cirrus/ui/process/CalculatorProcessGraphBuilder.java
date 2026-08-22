@@ -28,7 +28,6 @@ import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleDefinition;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.LoopBudget;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.PlannerMode;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingBudget;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingMetrics;
@@ -39,7 +38,9 @@ import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingStatus;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveError;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
+import dev.vfyjxf.cirrus.recipe.routing.topology.ConeStats;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MachineInfo;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialSlot;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
@@ -56,6 +57,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
@@ -245,6 +247,17 @@ public final class CalculatorProcessGraphBuilder {
         Map<String, String> preferredVariants,
         RouteMode routeMode
     ) {
+        return buildResult(target, times, stock, preferredVariants, routeMode, false);
+    }
+
+    public static BuildResult buildResult(
+        RecipeEntry<?> target,
+        int times,
+        Stock stock,
+        Map<String, String> preferredVariants,
+        RouteMode routeMode,
+        boolean forceDeepen
+    ) {
         int safeTimes = Math.max(1, times);
         RecipePathSettings.Catalog catalog = RecipePathSettings.calculatorCatalog(target);
         if (usesFastCalculatorPreview(target, safeTimes, stock, preferredVariants, routeMode)) {
@@ -264,7 +277,7 @@ public final class CalculatorProcessGraphBuilder {
             return new BuildResult(graph, null, RouteMode.calculator, debugInfo, trace);
         }
 
-        RouteResult routeResult = routeResult(target, safeTimes, stock, preferredVariants, routeMode);
+        RouteResult routeResult = routeResult(target, safeTimes, stock, preferredVariants, routeMode, forceDeepen);
         ArrayList<String> trace = new ArrayList<>();
         appendRouteTrace(trace, routeResult);
         RoutingPlan plan = routeResult.plan();
@@ -446,6 +459,17 @@ public final class CalculatorProcessGraphBuilder {
         Map<String, String> preferredVariants,
         RouteMode routeMode
     ) {
+        return routeResult(target, times, stock, preferredVariants, routeMode, false);
+    }
+
+    private static RouteResult routeResult(
+        RecipeEntry<?> target,
+        int times,
+        Stock stock,
+        Map<String, String> preferredVariants,
+        RouteMode routeMode,
+        boolean forceDeepen
+    ) {
         RecipePathSettings.Catalog catalog = RecipePathSettings.calculatorCatalog(target);
         try {
             RecipePathSettings.RoutingContext routingContext = switch (routeMode) {
@@ -479,19 +503,17 @@ public final class CalculatorProcessGraphBuilder {
                 stock == null || stock.isEmpty(),
                 preferredVariants == null ? 0 : preferredVariants.size()
             );
-            RoutingOutcome outcome = service.route(
-                RoutingRequest.builder()
-                    .plannerMode(routingContext.plannerMode())
-                    .targetRecipe(target, times)
-                    .ruleProfileId(calculatorRule.profile().profileId())
-                    .sourcePolicyId(calculatorRule.sourcePolicy().policyId())
-                    .budget(budget)
-                    .maxProducerCandidates(maxProducerCandidates(budget, routingContext.plannerMode()))
-                    .stock(stock == null ? Stock.empty() : stock.copy())
-                    .inventorySensitivityProfile(routingContext.inventorySensitivity())
-                    .loopPolicy(routingContext.loopPolicy())
-                    .preferredVariants(preferredVariants)
-                    .build()
+            RoutingOutcome outcome = routeWithDeepenWaves(
+                service,
+                routingContext,
+                calculatorRule,
+                target,
+                times,
+                budget,
+                stock,
+                preferredVariants,
+                routeMode,
+                forceDeepen
             );
             logger.info(
                 "calculator.route.result target={} status={} planActions={} issues={} elapsedMs={} expanded={} generated={} accepted={} budgetExhausted={} budgetStop={} budgetCulprit={} budgetInput={} budgetDepth={} budgetRemaining={} budgetCycle={}",
@@ -523,6 +545,162 @@ public final class CalculatorProcessGraphBuilder {
             );
             return new RouteResult(null, null, debugInfo(target, times, routeMode, catalog.recipes().size(), null, exception));
         }
+    }
+
+    /**
+     * Runs the calculator route as a sequence of budget waves: the first wave uses a
+     * quarter of the full cone-sized budget so the UI gets a partial plan quickly;
+     * when a wave stops on budget limits with pending inputs left, the next wave
+     * continues the same planning session (producer shortlists and cost memos are
+     * reused, never re-scanned) with double the budget. The loop stops when a wave
+     * resolves nothing new, when the plan has no pending inputs, or when the
+     * user-configured generated-candidate cap would be exceeded.
+     */
+    private static RoutingOutcome routeWithDeepenWaves(
+        RoutingService service,
+        RecipePathSettings.RoutingContext routingContext,
+        RuleDefinition calculatorRule,
+        RecipeEntry<?> target,
+        int times,
+        RoutingBudget fullBudget,
+        Stock stock,
+        Map<String, String> preferredVariants,
+        RouteMode routeMode,
+        boolean forceDeepen
+    ) {
+        int maxWaves = routeMode == RouteMode.calculator
+            && (forceDeepen || ExecutionOverlayClientConfig.calculatorAutoDeepenEnabled()) ? 3 : 1;
+        int deepenMaxGenerated = ExecutionOverlayClientConfig.calculatorDeepenMaxGenerated();
+        RoutingOutcome outcome = null;
+        String token = null;
+        long previousPending = -1;
+        long previousActions = -1;
+        for (int wave = 1; wave <= maxWaves; wave++) {
+            RoutingBudget waveBudget = waveBudget(fullBudget, wave, maxWaves);
+            if (wave > 1 && waveBudget.maxGeneratedCandidates() > deepenMaxGenerated) {
+                // Big cones used to stop here: the last wave asks for the full
+                // cone-sized candidate budget, which for pack-sized targets sits
+                // above the configured cap, and abandoning the wave left pending
+                // branches unresolved for good. Instead the wave is clamped to the
+                // cap and still runs — the cap bounds the requested allocation,
+                // the wall-time budget bounds the actual work, and deepening keeps
+                // making progress on whatever it can reach.
+                int requestedCandidates = waveBudget.maxGeneratedCandidates();
+                waveBudget = waveBudget.withMaxGeneratedCandidates(deepenMaxGenerated);
+                logger.info(
+                    "calculator.route.deepen.clamp wave={} requested={} cap={} actions={} pending={}",
+                    wave,
+                    requestedCandidates,
+                    deepenMaxGenerated,
+                    previousActions,
+                    previousPending
+                );
+            }
+            RoutingRequest request = RoutingRequest.builder()
+                .plannerMode(routingContext.plannerMode())
+                .targetRecipe(target, times)
+                .ruleProfileId(calculatorRule.profile().profileId())
+                .sourcePolicyId(calculatorRule.sourcePolicy().policyId())
+                .budget(waveBudget)
+                .maxProducerCandidates(maxProducerCandidates(waveBudget, routingContext.plannerMode()))
+                .stock(stock == null ? Stock.empty() : stock.copy())
+                .inventorySensitivityProfile(routingContext.inventorySensitivity())
+                .loopPolicy(routingContext.loopPolicy())
+                .preferredVariants(preferredVariants)
+                .build();
+            RoutingOutcome waveOutcome = token == null
+                ? service.route(request)
+                : service.routeContinuation(token, request);
+            long pending = countPendingInputs(waveOutcome.plan());
+            long actions = waveOutcome.plan() == null ? 0 : waveOutcome.plan().actions().size();
+            // Waves with only genuinely-unreachable pendings cannot make progress
+            // by deepening (TRUE_NO_SOURCE / CASCADE_EXHAUSTED); waves whose
+            // pendings were budget/rank-truncated still can. The old
+            // equal-count noProgress heuristic conflated the two and both
+            // stopped too early on renamings and burned waves on dead demands.
+            boolean anyTruncated = anyTruncatedPending(waveOutcome.plan());
+            boolean noProgress = wave > 1 && !anyTruncated && pending == previousPending && actions == previousActions;
+            outcome = waveOutcome;
+            if (noProgress) {
+                logger.info(
+                    "calculator.route.deepen.stop reason=noProgress wave={} pending={} actions={}",
+                    wave,
+                    pending,
+                    actions
+                );
+                break;
+            }
+            previousPending = pending;
+            previousActions = actions;
+            token = waveOutcome.continuationToken();
+            boolean deepenable = anyTruncated || pending == 0;
+            if (token == null || !waveOutcome.metrics().budgetExhausted() || !deepenable) {
+                break;
+            }
+            logger.info(
+                "calculator.route.deepen.next wave={} nextWave={} pending={} actions={} generated={} stop={}",
+                wave,
+                wave + 1,
+                pending,
+                actions,
+                waveOutcome.metrics().generatedCandidates(),
+                waveOutcome.metrics().budgetStopReason()
+            );
+        }
+        return outcome;
+    }
+
+    /**
+     * Geometric wave budget: with {@code maxWaves} waves, wave 1 gets
+     * {@code 1 / 2^(maxWaves-1)} of the full budget and each later wave doubles it,
+     * so the last wave runs with the full cone-sized budget.
+     */
+    private static RoutingBudget waveBudget(RoutingBudget full, int wave, int maxWaves) {
+        if (wave >= maxWaves) {
+            return full;
+        }
+        int shift = maxWaves - wave;
+        double scale = 1.0d / (1 << shift);
+        return new RoutingBudget(
+            Math.max(600, (int) (full.maxExpandedNodes() * scale)),
+            Math.max(4_000, (int) (full.maxGeneratedCandidates() * scale)),
+            full.maxWallTimeMs() == 0 ? 0 : Math.max(800, (int) (full.maxWallTimeMs() * scale)),
+            Math.max(1_000, (int) (full.maxMemoryStates() * scale)),
+            full.maxRootInputExpandedNodes() == 0 ? 0 : Math.max(256, (int) (full.maxRootInputExpandedNodes() * scale)),
+            full.maxRootInputGeneratedCandidates() == 0 ? 0 : Math.max(2_000, (int) (full.maxRootInputGeneratedCandidates() * scale)),
+            full.explorationBudgetShare(),
+            full.loopBudget()
+        );
+    }
+
+    private static long countPendingInputs(@Nullable RoutingPlan plan) {
+        if (plan == null) {
+            return 0;
+        }
+        long count = 0;
+        for (PlanAction action : plan.actions()) {
+            if (action instanceof PlanAction.PendingInput) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Whether any pending input was budget/rank-truncated — i.e. a deeper wave
+     * with a larger budget could still resolve it, as opposed to genuinely
+     * unreachable demands which deepening can never fix.
+     */
+    private static boolean anyTruncatedPending(@Nullable RoutingPlan plan) {
+        if (plan == null) {
+            return false;
+        }
+        for (PlanAction action : plan.actions()) {
+            if (action instanceof PlanAction.PendingInput pending && pending.truncated()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static CalculatorBuildDebugInfo baseDebug(
@@ -826,7 +1004,8 @@ public final class CalculatorProcessGraphBuilder {
         }
     }
 
-    private static RoutingBudget routingBudget(
+    /** Visible for the testmod plan-dump hook so it can reuse the exact budget sizing. */
+    public static RoutingBudget routingBudget(
         RecipeEntry<?> target,
         int times,
         RecipePathSettings.Catalog catalog,
@@ -834,42 +1013,48 @@ public final class CalculatorProcessGraphBuilder {
         PlannerMode plannerMode,
         RouteMode routeMode
     ) {
-        if (routeMode == RouteMode.execution || plannerMode != PlannerMode.standard) {
+        if (routeMode == RouteMode.execution) {
             return plannerMode == PlannerMode.standard ? RoutingBudget.standardDefault() : RoutingBudget.assuredDefault();
         }
 
-        ProjectionComplexity targetShape = projectionComplexity(target, service);
-        int catalogSize = catalog.recipes().size();
-        int catalogScore = catalogSize <= 256
-            ? 0
-            : catalogSize <= 2_000
-                ? 2
-                : catalogSize <= 8_000
-                    ? 5
-                    : 8;
-        int timesScore = times <= 16
-            ? 0
-            : times <= 256
-                ? 2
-                : times <= 4096
-                    ? 4
-                    : 6;
-        int score = targetShape.score() + catalogScore + timesScore;
-        int expanded = clampInt(1_200 + score * 320 + Math.min(2_000, catalogSize / 3), 1_200, 8_000);
-        int generated = clampInt(6_000 + score * 2_400 + Math.min(24_000, catalogSize * 3), 6_000, 80_000);
-        int rootInputExpanded = clampInt(Math.max(256, expanded / Math.max(4, targetShape.inputCount())), 256, 1_200);
-        int rootInputGenerated = clampInt(Math.max(2_000, generated / Math.max(3, targetShape.inputCount())), 2_000, 12_000);
-        int wall = clampInt(30 + score * 6 + Math.min(24, catalogSize / 500), 30, 120);
-        int memory = clampInt(2_000 + score * 650 + Math.min(6_000, catalogSize), 2_000, 20_000);
-        LoopBudget loopBudget = score >= 14
-            ? new LoopBudget(8, 160)
-            : score >= 8
-                ? new LoopBudget(6, 80)
-                : LoopBudget.standardDefault();
-        return new RoutingBudget(expanded, generated, wall, memory, rootInputExpanded, rootInputGenerated, 0.08, loopBudget);
+        // Calculator modes size the budget from the actual request cone: one
+        // backward-reachability pass over the full graph (cached on the service)
+        // replaces the old projection-score proxy, so deep/large targets get
+        // proportionally more room without hand-tuned score tables.
+        int targetIndex = service.catalog().indexOf(target);
+        ConeStats cone = targetIndex >= 0
+            ? service.coneStats(targetIndex, allRecipesAllowed(service.catalog().size()))
+            : ConeStats.empty;
+        int roots = Math.max(1, mergedInputCount(target, service));
+        RoutingBudget budget = RoutingBudget.fromConeStats(cone, plannerMode, roots);
+        if (logger.isDebugEnabled()) {
+            logger.debug(
+                "calculator.route.budget target={} mode={} coneNodes={} coneResources={} coneLoops={} coneCandidates={} roots={} expanded={} generated={} wall={} rootExpanded={} rootGenerated={}",
+                describeRecipe(target),
+                plannerMode,
+                cone.nodeCount(),
+                cone.resourceCount(),
+                cone.loopSccCount(),
+                cone.fatInputCandidateEstimate(),
+                roots,
+                budget.maxExpandedNodes(),
+                budget.maxGeneratedCandidates(),
+                budget.maxWallTimeMs(),
+                budget.maxRootInputExpandedNodes(),
+                budget.maxRootInputGeneratedCandidates()
+            );
+        }
+        return budget;
     }
 
-    private static int maxProducerCandidates(RoutingBudget budget, PlannerMode plannerMode) {
+    private static BitSet allRecipesAllowed(int catalogSize) {
+        BitSet all = new BitSet(catalogSize);
+        all.set(0, Math.max(0, catalogSize));
+        return all;
+    }
+
+    /** Visible for the testmod plan-dump hook so it can reuse the exact request shaping. */
+    public static int maxProducerCandidates(RoutingBudget budget, PlannerMode plannerMode) {
         if (plannerMode != PlannerMode.standard) {
             return 16;
         }
@@ -880,52 +1065,6 @@ public final class CalculatorProcessGraphBuilder {
             return 12;
         }
         return 8;
-    }
-
-    private static ProjectionComplexity projectionComplexity(RecipeEntry<?> target, RoutingService service) {
-        RecipeProjection projection;
-        try {
-            projection = target.resolveResult().projection();
-        } catch (RuntimeException | LinkageError exception) {
-            logger.debug(
-                "calculator.projectionComplexity.resolveException target={} cause={}",
-                describeRecipe(target),
-                exception.toString(),
-                exception
-            );
-            return new ProjectionComplexity(8, 4);
-        }
-        if (projection == null) {
-            return new ProjectionComplexity(6, 4);
-        }
-        ProjectedRecipe projected;
-        try {
-            projected = new ProjectionEngine().project(calculatorProjectionContext(target, 1), projection);
-        } catch (RuntimeException | LinkageError ignored) {
-            return new ProjectionComplexity(8, 4);
-        }
-
-        int inputCount = 0;
-        int semanticInputs = 0;
-        for (InputContent input : projected.inputs()) {
-            if (input.isEmpty()) {
-                continue;
-            }
-            inputCount++;
-            if (directInputResource(input) == null) {
-                semanticInputs++;
-            }
-        }
-        int outputCount = 0;
-        for (OutputContent output : projected.outputs()) {
-            if (!output.isEmpty()) {
-                outputCount++;
-            }
-        }
-        int mergedInputCount = mergedInputCount(target, service);
-        int effectiveInputCount = mergedInputCount > 0 ? mergedInputCount : Math.max(1, inputCount);
-        int score = inputCount * 2 + semanticInputs * 4 + Math.max(0, effectiveInputCount - 4) * 3 + Math.max(0, outputCount - 2);
-        return new ProjectionComplexity(score, effectiveInputCount);
     }
 
     private static int mergedInputCount(RecipeEntry<?> target, RoutingService service) {
@@ -1719,12 +1858,6 @@ public final class CalculatorProcessGraphBuilder {
         RecipeEntry<?> recipe,
         long amountPerRun
     ) {}
-
-    private record ProjectionComplexity(
-        int score,
-        int inputCount
-    ) {
-    }
 
     private static final class FallbackDebugTrace {
         private static final int maxLines = 160;

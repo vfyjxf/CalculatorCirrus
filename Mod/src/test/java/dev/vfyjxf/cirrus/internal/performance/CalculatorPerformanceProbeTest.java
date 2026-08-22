@@ -29,7 +29,10 @@ class CalculatorPerformanceProbeTest {
         assertTrue(sample.graphBuildNanos() > 0, sample::diagnosticLine);
         assertTrue(sample.routeNanos() > 0, sample::diagnosticLine);
         assertTrue(sample.processGraphNanos() > 0, sample::diagnosticLine);
-        assertTrue(sample.metrics().generatedCandidates() >= 512, sample::diagnosticLine);
+        // Producer scans are capped per input (deterministic truncation), so the
+        // wide pool is exercised up to the scan-cap floor rather than in full.
+        assertTrue(sample.metrics().scannedRefs() >= 256, sample::diagnosticLine);
+        assertTrue(sample.metrics().generatedCandidates() >= 100, sample::diagnosticLine);
     }
 
     @Test

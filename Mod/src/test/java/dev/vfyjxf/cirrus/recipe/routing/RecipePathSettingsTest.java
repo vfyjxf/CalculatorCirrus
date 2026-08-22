@@ -50,7 +50,7 @@ class RecipePathSettingsTest {
     void executionPathSettingsShareCalculatorSettingsByDefault() {
         assertTrue(ExecutionOverlayClientConfig.executionUsesCalculatorPathSettings());
         assertTrue(ExecutionOverlayClientConfig.executionUsesCalculatorPathSettingsDefault);
-        assertEquals(PlannerMode.standard, ExecutionOverlayClientConfig.calculatorPlannerMode());
+        assertEquals(PlannerMode.auto, ExecutionOverlayClientConfig.calculatorPlannerMode());
         assertEquals(PlannerMode.standard, ExecutionOverlayClientConfig.executionPlannerMode());
     }
 

@@ -15,6 +15,12 @@ public enum RoutingFailureCode {
     cycleBlocked,
     /** Cyclic re-entry would exceed the amplification risk threshold. */
     cycleAmplificationBlocked,
+    /**
+     * An equal-amount round-trip pair (compress↔decompress, revert↔_revert,
+     * chiseling back and forth) was about to close a net-zero loop; the loop
+     * policy forbids it.
+     */
+    cycleRoundTripBlocked,
     /** The per-recipe active-path or global loop budget was exhausted. */
     cycleBudgetExhausted,
     /** The rule profile lacks required capability flags for the requested planner mode. */

@@ -1,10 +1,11 @@
 package dev.vfyjxf.cirrus.ui.widget.calculator.search;
 
-import dev.vfyjxf.cirrus.api.recipe.search.SearchParseException;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchField;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchParser;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchSyntaxKind;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchSyntaxSpan;
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
+import dev.vfyjxf.cloudlib.api.search.SearchParseException;
+import dev.vfyjxf.cloudlib.api.search.SearchField;
+import dev.vfyjxf.cloudlib.api.search.SearchParser;
+import dev.vfyjxf.cloudlib.api.search.SearchSyntaxKind;
+import dev.vfyjxf.cloudlib.api.search.SearchSyntaxSpan;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,7 +21,7 @@ public final class RecipeSearchHighlighter {
             return List.of();
         }
 
-        SearchParser parser = new SearchParser();
+        SearchParser parser = CirrusSearchFields.parser();
         List<SearchSyntaxSpan> spans;
         int errorPosition = input.length();
         try {
@@ -185,7 +186,7 @@ public final class RecipeSearchHighlighter {
             return index;
         }
 
-        SearchField prefixField = word.length() > 1 ? SearchField.fromJeiPrefix(word.charAt(0)) : null;
+        SearchField prefixField = word.length() > 1 ? CirrusSearchFields.SET.byJeiPrefix(word.charAt(0)) : null;
         if (prefixField != null) {
             out.add(new SearchSyntaxSpan(start, start + 1, SearchSyntaxKind.prefix));
             addLexicalValueSpans(out, start + 1, word.substring(1), prefixField);
@@ -195,8 +196,8 @@ public final class RecipeSearchHighlighter {
         int colon = word.indexOf(':');
         if (colon > 0) {
             String alias = word.substring(0, colon);
-            if (SearchField.isKnownAlias(alias)) {
-                SearchField field = SearchField.fromAlias(alias);
+            if (CirrusSearchFields.SET.isKnownAlias(alias)) {
+                SearchField field = CirrusSearchFields.SET.byAlias(alias);
                 out.add(new SearchSyntaxSpan(start, start + colon, SearchSyntaxKind.field));
                 out.add(new SearchSyntaxSpan(start + colon, start + colon + 1, SearchSyntaxKind.operator));
                 addLexicalValueSpans(out, start + colon + 1, word.substring(colon + 1), field);
@@ -204,7 +205,7 @@ public final class RecipeSearchHighlighter {
             }
         }
 
-        out.add(new SearchSyntaxSpan(start, index, SearchField.isKnownAlias(word) ? SearchSyntaxKind.field : SearchSyntaxKind.text));
+        out.add(new SearchSyntaxSpan(start, index, CirrusSearchFields.SET.isKnownAlias(word) ? SearchSyntaxKind.field : SearchSyntaxKind.text));
         return index;
     }
 

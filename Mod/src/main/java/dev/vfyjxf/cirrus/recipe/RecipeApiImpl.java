@@ -56,12 +56,26 @@ public class RecipeApiImpl implements RecipeApi {
         return instance;
     }
 
+    private static volatile long attachEpoch;
+
     public static void attach(RecipeApiImpl recipeApi) {
         if (canonicalInstance == null && recipeApi.systems.containsKey(Namespace.ofMc("crafting"))) {
             canonicalInstance = recipeApi;
         }
         Checks.checkNotNull(recipeApi, "recipeApi");
         instance = recipeApi;
+        attachEpoch++;
+    }
+
+    /**
+     * Monotonic counter bumped on every {@link #attach}. Mixed into derived
+     * cache fingerprints so entries built against a previous api instance can
+     * never be served after a re-attach (world join, datapack reload, or a
+     * test fixture swap — contexts where the JEI catalog version does not
+     * move).
+     */
+    public static long attachEpoch() {
+        return attachEpoch;
     }
 
     private final ImmutableMap<Namespace, RecipeSystem<?>> systems;

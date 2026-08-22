@@ -9,9 +9,14 @@ import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeRoutingHints;
 import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeUsePolicy;
 import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
 import dev.vfyjxf.cirrus.recipe.routing.planner.AssuredPlanner;
+import dev.vfyjxf.cirrus.recipe.routing.planner.AcyclicPlanner;
 import dev.vfyjxf.cirrus.recipe.routing.planner.PlannerContext;
+import dev.vfyjxf.cirrus.recipe.routing.planner.PlannerRequestCaches;
 import dev.vfyjxf.cirrus.recipe.routing.planner.RoutePlanner;
 import dev.vfyjxf.cirrus.recipe.routing.planner.StandardPlanner;
+import dev.vfyjxf.cirrus.recipe.routing.rule.BuiltInContextualRules;
+import dev.vfyjxf.cirrus.recipe.routing.topology.ConeStats;
+import dev.vfyjxf.cirrus.recipe.routing.topology.GraphTopology;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultRuleDefinitions;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.PolicyExplain;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleCollection;
@@ -31,6 +36,7 @@ import org.eclipse.collections.api.factory.Maps;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.map.MutableMap;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +44,7 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -86,6 +93,19 @@ public final class RoutingService {
     private final MutableMap<Namespace, RuleProfile> ruleProfiles = Maps.mutable.empty();
     private final RoutePlanner standardPlanner = new StandardPlanner();
     private final RoutePlanner assuredPlanner = new AssuredPlanner();
+    private final RoutePlanner acyclicPlanner = new AcyclicPlanner(standardPlanner);
+    private final Object coneCacheLock = new Object();
+    private final Map<ConeCacheKey, ConeStats> coneCache = new LinkedHashMap<>(16, 0.75f, true);
+    /**
+     * Continuation sessions: request-scoped planner caches (static producer
+     * shortlists, unit-cost oracle memos) kept alive across waves of the same
+     * logical request so a continuation wave never re-scans. Access-ordered LRU;
+     * sessions vanish on tag/version drift via fingerprint mismatch.
+     */
+    private final Object sessionLock = new Object();
+    private final Map<String, PlannerRequestCaches> planningSessions = new LinkedHashMap<>(16, 0.75f, true);
+    private static final int maxPlanningSessions = 8;
+    private volatile @Nullable GraphTopology topology;
 
     /**
      * Creates a new routing service backed by the given recipe graph.
@@ -107,6 +127,7 @@ public final class RoutingService {
         this.tagIndex = new TagIndex(catalog);
         this.userWorkspace = new UserTagWorkspace(tagIndex);
         this.allAllowedPolicyAnalysis = allAllowedPolicyAnalysis(catalog.size(), tagIndex.version());
+        BuiltInContextualRules.register();
         registerSourcePolicy(defaultSourcePolicy);
         registerRuleCollection(DefaultRuleDefinitions.defaultCollection());
     }
@@ -122,6 +143,26 @@ public final class RoutingService {
      * @return the routing outcome (never {@code null})
      */
     public RoutingOutcome route(RoutingRequest request) {
+        return routeInternal(request, null);
+    }
+
+    /**
+     * Continues a previous partial/budget-truncated route. The token identifies the
+     * planning session whose request-scoped caches (producer shortlists, unit-cost
+     * memos) are reused, so the follow-up wave only pays for the extra budget, not
+     * for re-scanning. A stale or mismatched token transparently degrades to a
+     * fresh {@link #route(RoutingRequest)}.
+     *
+     * @param continuationToken token from {@link RoutingOutcome#continuationToken()}
+     * @param request           the same logical request, typically with a larger budget
+     */
+    public RoutingOutcome routeContinuation(String continuationToken, RoutingRequest request) {
+        Checks.checkNotNull(continuationToken, "continuationToken");
+        Checks.checkNotNull(request, "request");
+        return routeInternal(request, continuationToken);
+    }
+
+    private RoutingOutcome routeInternal(RoutingRequest request, @Nullable String continuationToken) {
         Checks.checkNotNull(request, "request");
         long routeStartNanos = System.nanoTime();
         if (logger.isDebugEnabled()) {
@@ -181,7 +222,8 @@ public final class RoutingService {
                 recipeTarget,
                 profile,
                 sourceDecision,
-                snapshot
+                snapshot,
+                continuationToken
             );
         } else {
             RoutingRequest.OutputTarget outputTarget = (RoutingRequest.OutputTarget) request.target();
@@ -346,7 +388,8 @@ public final class RoutingService {
         RoutingRequest.RecipeTarget target,
         RuleProfile profile,
         SourcePolicyDecision sourceDecision,
-        TagSnapshot snapshot
+        TagSnapshot snapshot,
+        @Nullable String continuationToken
     ) {
         int targetIndex = catalog.indexOf(target.recipe());
         if (targetIndex < 0) {
@@ -354,6 +397,26 @@ public final class RoutingService {
         }
         if (!sourceDecision.allowedRecipes().get(targetIndex)) {
             return invalidFailure(request, RoutingFailureCode.noFeasibleSource, "cirrus.routing.target_filtered_out");
+        }
+
+        String sessionFingerprint = sessionFingerprint(request, target, snapshot);
+        PlannerRequestCaches caches = null;
+        int wave = 1;
+        if (continuationToken != null) {
+            int waveMarker = continuationToken.lastIndexOf("#w");
+            String tokenFingerprint = waveMarker > 0 ? continuationToken.substring(0, waveMarker) : continuationToken;
+            if (waveMarker > 0) {
+                try {
+                    wave = Integer.parseInt(continuationToken.substring(waveMarker + 2)) + 1;
+                } catch (NumberFormatException ignored) {
+                    wave = 1;
+                }
+            }
+            if (tokenFingerprint.equals(sessionFingerprint)) {
+                synchronized (sessionLock) {
+                    caches = planningSessions.get(sessionFingerprint);
+                }
+            }
         }
 
         PlannerContext context = new PlannerContext(
@@ -364,10 +427,42 @@ public final class RoutingService {
             profile,
             sourceDecision,
             snapshot,
+            caches != null ? caches : new PlannerRequestCaches(),
             new PlannerContext.Counters()
         );
-        RoutePlanner planner = choosePlanner(request.plannerMode());
-        return planner.plan(context);
+        RoutePlanner planner = choosePlanner(request, targetIndex, sourceDecision.allowedRecipes());
+        RoutingOutcome outcome = planner.plan(context);
+        if (outcome.partial() || outcome.metrics().budgetExhausted()) {
+            // Keep the request-scoped caches warm so a continuation wave with a
+            // larger budget resumes without re-scanning producers.
+            PlannerRequestCaches sessionCaches = context.caches();
+            synchronized (sessionLock) {
+                planningSessions.put(sessionFingerprint, sessionCaches);
+                if (planningSessions.size() > maxPlanningSessions) {
+                    var iterator = planningSessions.keySet().iterator();
+                    iterator.next();
+                    iterator.remove();
+                }
+            }
+            outcome = outcome.withContinuationToken(sessionFingerprint + "#w" + wave);
+        }
+        return outcome;
+    }
+
+    /**
+     * Session fingerprint covering everything the request-scoped caches depend on:
+     * the target, the static filter inputs (source policy, heuristic policy), the
+     * scoring setup (mode, profile) and the tag snapshot version.
+     */
+    private String sessionFingerprint(RoutingRequest request, RoutingRequest.RecipeTarget target, TagSnapshot snapshot) {
+        return String.valueOf(target.recipe().id())
+            + "|" + target.times()
+            + "|" + request.plannerMode()
+            + "|" + request.ruleProfileId()
+            + "|" + request.sourcePolicyId()
+            + "|" + snapshot.version()
+            + "|" + request.heuristicPolicy()
+            + "|" + request.loopPolicy();
     }
 
     private RoutingOutcome routeOutputTarget(
@@ -452,7 +547,7 @@ public final class RoutingService {
                 request.heuristicPolicy()
             );
 
-            RoutingOutcome outcome = routeRecipeTarget(subRequest, (RoutingRequest.RecipeTarget) subRequest.target(), profile, sourceDecision, snapshot);
+            RoutingOutcome outcome = routeRecipeTarget(subRequest, (RoutingRequest.RecipeTarget) subRequest.target(), profile, sourceDecision, snapshot, null);
             if (logger.isDebugEnabled()) {
                 logger.debug(
                     "producer.result index={} recipe={} status={} planActions={} issues={} elapsedMs={} expanded={} generated={} accepted={}",
@@ -540,6 +635,7 @@ public final class RoutingService {
             elapsedMs,
             expandedNodes,
             generatedCandidates,
+            original.scannedRefs(),
             acceptedCandidates,
             original.effectivePlannerMode(),
             original.effectiveInventorySensitivityProfile(),
@@ -685,11 +781,74 @@ public final class RoutingService {
         return node.inputCount();
     }
 
-    private RoutePlanner choosePlanner(PlannerMode mode) {
-        return switch (mode) {
+    /**
+     * Selects the planner for one request. {@link PlannerMode#auto} inspects
+     * the request cone: when the cone reachable from the target over allowed
+     * recipes contains no resource loop, the exact dynamic-programming planner
+     * runs; otherwise the bounded greedy planner handles the cyclic cone.
+     */
+    private RoutePlanner choosePlanner(RoutingRequest request, int targetIndex, BitSet allowedRecipes) {
+        return switch (request.plannerMode()) {
             case standard -> standardPlanner;
             case assuredBounded, assuredProven -> assuredPlanner;
+            case auto -> coneHasCycle(targetIndex, allowedRecipes) ? standardPlanner : acyclicPlanner;
         };
+    }
+
+    private static final int maxCachedConeAnalyses = 32;
+
+    private boolean coneHasCycle(int targetIndex, BitSet allowedRecipes) {
+        return coneStats(targetIndex, allowedRecipes).hasNontrivialCycle();
+    }
+
+    /**
+     * Cone shape statistics for budget sizing and planner dispatch, cached per
+     * (target, allowedRecipes) pair. The pass is a single backward reachability
+     * walk, cheap enough to run once per calculator request.
+     */
+    public ConeStats coneStats(int targetIndex, BitSet allowedRecipes) {
+        ConeCacheKey key = new ConeCacheKey(targetIndex, allowedRecipes);
+        synchronized (coneCacheLock) {
+            ConeStats cached = coneCache.get(key);
+            if (cached != null) {
+                return cached;
+            }
+        }
+        ConeStats result = topology().coneStats(targetIndex, allowedRecipes);
+        synchronized (coneCacheLock) {
+            coneCache.put(key, result);
+            if (coneCache.size() > maxCachedConeAnalyses) {
+                var iterator = coneCache.keySet().iterator();
+                iterator.next();
+                iterator.remove();
+            }
+        }
+        return result;
+    }
+
+    /**
+     * The resource-level topology of this service's graph, computed lazily on
+     * first use and shared by cone dispatch ({@link PlannerMode#auto}) and
+     * loop-aware candidate scoring.
+     */
+    public GraphTopology topology() {
+        GraphTopology current = topology;
+        if (current == null) {
+            current = GraphTopology.of(graph);
+            topology = current;
+        }
+        return current;
+    }
+
+    /**
+     * Cone-analysis cache key. {@code allowedRecipes} compares by value, so
+     * sub-requests of one route (which share the same decision bitset) hit the
+     * same entry, and identical decisions across routes reuse it too.
+     */
+    private record ConeCacheKey(int targetIndex, BitSet allowedRecipes) {
+        private ConeCacheKey {
+            allowedRecipes = (BitSet) allowedRecipes.clone();
+        }
     }
 
     private RoutingOutcome validateRequest(RoutingRequest request) {
@@ -719,6 +878,7 @@ public final class RoutingService {
             Maps.immutable.empty()
         );
         RoutingMetrics metrics = new RoutingMetrics(
+            0,
             0,
             0,
             0,

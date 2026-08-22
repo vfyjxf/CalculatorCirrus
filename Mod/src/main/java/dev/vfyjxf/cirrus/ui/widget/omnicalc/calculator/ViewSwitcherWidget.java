@@ -60,6 +60,8 @@ public class ViewSwitcherWidget extends CompositeWidget<Widget> {
     private final ActionButton materialButton;
     private final ActionButton homeButton;
     private final ActionButton expandButton;
+    private ActionButton deepenButton;
+    private boolean deepenAvailable;
     private final ActionButton executionPathButton;
 	//endregion
 
@@ -98,6 +100,10 @@ public class ViewSwitcherWidget extends CompositeWidget<Widget> {
 		expandButton = new ActionButton(ActionButtonKind.EXPAND, parentView::expandTreeViewAll);
 		addWidget(expandButton);
 
+		deepenButton = new ActionButton(ActionButtonKind.DEEPEN, parentView::deepenCalculation);
+		addWidget(deepenButton);
+		deepenButton.setVisible(false);
+
 		executionPathButton = new ActionButton(ActionButtonKind.EXECUTION_PATH, parentView::setCurrentPathAsExecutionTarget);
 		addWidget(executionPathButton);
 
@@ -127,7 +133,14 @@ public class ViewSwitcherWidget extends CompositeWidget<Widget> {
 		materialButton.setVisible(visible);
 		homeButton.setVisible(visible);
 		expandButton.setVisible(visible);
+		deepenButton.setVisible(visible && deepenAvailable);
 		executionPathButton.setVisible(visible);
+	}
+
+	/** Shows the deepen action only while the current plan has continuable pending inputs. */
+	public void setDeepenAvailable(boolean available) {
+		deepenAvailable = available;
+		deepenButton.setVisible(available);
 	}
 
 	int debugTreeActionCount() {
@@ -154,7 +167,7 @@ public class ViewSwitcherWidget extends CompositeWidget<Widget> {
 
 	private enum TabSlot {LEFT, MIDDLE, RIGHT}
 
-	private enum ActionButtonKind {MATERIAL, HOME, EXPAND, EXECUTION_PATH}
+	private enum ActionButtonKind {MATERIAL, HOME, EXPAND, DEEPEN, EXECUTION_PATH}
 
 	private class ViewTab extends Widget {
 
@@ -271,6 +284,7 @@ public class ViewSwitcherWidget extends CompositeWidget<Widget> {
 				case MATERIAL -> parentView.isTreeMaterialPanelVisible();
 				case HOME -> parentView.isTreeFocusedSubgraph();
 				case EXPAND -> parentView.isTreeForceExpanded();
+				case DEEPEN -> false;
 				case EXECUTION_PATH -> false;
 			};
 		}
@@ -280,6 +294,7 @@ public class ViewSwitcherWidget extends CompositeWidget<Widget> {
 				case MATERIAL -> buttonSelected() ? Icon.Calc.Summary.tabSelected : Icon.Calc.Summary.tabUnselected;
 				case HOME -> buttonSelected() || hovered() ? Icon.arrowUpSelected : Icon.arrowUp;
 				case EXPAND -> hovered() ? Icon.arrowDownSelected : Icon.arrowDown;
+				case DEEPEN -> hovered() ? Icon.Calc.Tree.tabSelected : Icon.Calc.Tree.tabUnselected;
 				case EXECUTION_PATH -> hovered() ? Icon.startPressed : Icon.start;
 			};
 		}
@@ -292,10 +307,14 @@ public class ViewSwitcherWidget extends CompositeWidget<Widget> {
 			case MATERIAL -> CirrusLangs.Calc.actionMaterials.component();
 			case HOME -> CirrusLangs.Calc.actionHome.component();
 			case EXPAND -> CirrusLangs.Calc.actionTreeExpand.component();
+			case DEEPEN -> CirrusLangs.Calc.actionDeepen.component();
 			case EXECUTION_PATH -> CirrusLangs.Calc.actionExecutionPath.component();
 		});
 		if (kind == ActionButtonKind.EXECUTION_PATH) {
 			tooltip.add(CirrusLangs.Calc.actionExecutionPathDesc.component());
+		}
+		if (kind == ActionButtonKind.DEEPEN) {
+			tooltip.add(CirrusLangs.Calc.actionDeepenDesc.component());
 		}
 		return tooltip;
 	}

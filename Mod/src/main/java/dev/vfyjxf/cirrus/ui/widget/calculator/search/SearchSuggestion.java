@@ -10,10 +10,15 @@ public record SearchSuggestion(
     String replacement,
     int replaceStart,
     int replaceEnd,
+    int count,
     @Nullable Component description
 ) {
     public SearchSuggestion(String token, String replacement, int replaceStart, int replaceEnd) {
-        this(token, replacement, replaceStart, replaceEnd, null);
+        this(token, replacement, replaceStart, replaceEnd, 0, null);
+    }
+
+    public SearchSuggestion(String token, String replacement, int replaceStart, int replaceEnd, int count) {
+        this(token, replacement, replaceStart, replaceEnd, count, null);
     }
 
     public SearchSuggestion {

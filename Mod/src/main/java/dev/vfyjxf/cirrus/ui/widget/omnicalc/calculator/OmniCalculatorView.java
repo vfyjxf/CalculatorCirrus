@@ -3,24 +3,32 @@ package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
+import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingStatus;
+import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.execution.ExecutionTargetRecipeState;
 import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
+import dev.vfyjxf.cirrus.api.recipe.routing.rule.ActiveRoutingRule;
+import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
+import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
 import dev.vfyjxf.cirrus.ui.CirrusUiAsync;
 import dev.vfyjxf.cirrus.ui.CirrusTextures.Background;
 import dev.vfyjxf.cirrus.ui.CirrusTextures.Icon;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.process.ProcessGraph;
+import dev.vfyjxf.cirrus.ui.process.CalculatorBuildResultCache;
 import dev.vfyjxf.cirrus.ui.process.CalculatorProcessGraphBuilder;
 import dev.vfyjxf.cirrus.ui.widget.calculator.CalculatorTargetRecipeState;
 import dev.vfyjxf.cirrus.ui.widget.calculator.page.CalculatorSettingsPage;
 import dev.vfyjxf.cirrus.ui.widget.calculator.page.DatabasePage;
+import dev.vfyjxf.cirrus.ui.widget.common.CirrusButtonWidget;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.ui.base.CompositeWidget;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
 import dev.vfyjxf.cloudlib.api.ui.effect.UIEffects;
+import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.util.ScreenUtil;
 import dev.vfyjxf.cloudlib.ui.widget.LabelWidget;
 import net.minecraft.world.item.ItemStack;
@@ -90,6 +98,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 	private final WidgetGroup<Widget> bodyArea;
 
 	private ViewSwitcherWidget viewSwitcher;
+	private boolean deepenActionAvailable;
 	private WidgetGroup<Widget> processViewArea;
 	private TreeViewWidget treeView;
     private MatrixViewWidget matrixView;
@@ -274,8 +283,15 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 				minWidth(0)
 		);
 
+		// Pending-input banner (budget-limited plans the user can deepen)
+		Widget pendingBanner = createPendingInputsBanner();
+		if (pendingBanner != null) {
+			leftArea.addWidget(pendingBanner);
+		}
+
 		// View switcher tabs
 		viewSwitcher = new ViewSwitcherWidget(this);
+		viewSwitcher.setDeepenAvailable(deepenActionAvailable);
 		leftArea.addWidget(viewSwitcher);
 
 		// Process view container
@@ -289,6 +305,51 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 
 		switchProcessView(viewToShow);
 		refreshHoverTooltipSoon();
+	}
+
+	/**
+	 * Banner shown above the process views when the routed plan left inputs
+	 * unresolved: reports how many inputs still lack a source and offers a
+	 * deepen button that re-runs the router (bypassing the build cache) with
+	 * the deepen budget waves forced on. A pending input counts as continuable
+	 * when its candidate set was never fully tried (or never enumerated).
+	 */
+	private @Nullable Widget createPendingInputsBanner() {
+		RoutingPlan plan = routingPlan;
+		if (plan == null) {
+			return null;
+		}
+		int pending = 0;
+		int continuable = 0;
+		for (PlanAction action : plan.actions()) {
+			if (action instanceof PlanAction.PendingInput pendingInput) {
+				pending++;
+				if (pendingInput.candidateCount() == 0 || pendingInput.attemptedCount() < pendingInput.candidateCount()) {
+					continuable++;
+				}
+			}
+		}
+		deepenActionAvailable = continuable > 0;
+		if (viewSwitcher != null) {
+			viewSwitcher.setDeepenAvailable(deepenActionAvailable);
+		}
+		if (pending == 0) {
+			return null;
+		}
+		// the deepen action lives on the view toolbar next to expand; the
+		// "have no source yet" text banner is intentionally gone
+		return null;
+	}
+
+	void deepenCalculation() {
+		if (pendingCalculation != null && !pendingCalculation.isDone()) {
+			return;
+		}
+		CalculatorTargetRecipeState.Selection selection = CalculatorTargetRecipeState.current();
+		if (selection == null) {
+			return;
+		}
+		startCalculatorSelectionGraph(selection, true);
 	}
 
 	void switchProcessView(ProcessView view) {
@@ -494,6 +555,10 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 	}
 
 	private void startCalculatorSelectionGraph(@Nullable CalculatorTargetRecipeState.Selection selection) {
+        startCalculatorSelectionGraph(selection, false);
+	}
+
+	private void startCalculatorSelectionGraph(@Nullable CalculatorTargetRecipeState.Selection selection, boolean forceDeepen) {
         observedCalculatorTargetVersion = CalculatorTargetRecipeState.currentVersion();
 		cancelPendingCalculation();
 		if (selection == null) {
@@ -534,12 +599,13 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
                 graphRouteMode
             );
             try {
-                CalculatorProcessGraphBuilder.BuildResult buildResult = CalculatorProcessGraphBuilder.buildResult(
+                CalculatorProcessGraphBuilder.BuildResult buildResult = buildResultCached(
                     recipe,
                     times,
                     stock,
                     preferences,
-                    requestedRouteMode
+                    requestedRouteMode,
+                    forceDeepen
                 );
                 logger.info(
                     "calculator.ui.worker.finish requestId={} target={} elapsedMs={} graphNodes={} planActions={} debug={}",
@@ -678,6 +744,74 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 			contentVariantPreferences,
 			graphRouteMode
 		);
+	}
+
+	/**
+	 * Runs the calculator build through the session result cache: reopening the
+	 * calculator screen or re-picking the same target replays the previous
+	 * result instead of rerunning the full routing pipeline. Calculations with
+	 * live stock bypass the cache — inventory mutates under the result, so a
+	 * replayed plan would be stale. {@code forceDeepen} (the pending-input
+	 * banner's deepen action) skips the cache read so the router re-runs with
+	 * deepen waves forced on, then stores the deeper result under the same key.
+	 */
+	private static CalculatorProcessGraphBuilder.BuildResult buildResultCached(
+		RecipeEntry<?> recipe,
+		int times,
+		Stock stock,
+		Map<String, String> preferences,
+		CalculatorProcessGraphBuilder.RouteMode routeMode,
+		boolean forceDeepen
+	) {
+		if (!stock.isEmpty()) {
+			return CalculatorProcessGraphBuilder.buildResult(recipe, times, stock, preferences, routeMode, forceDeepen);
+		}
+		CalculatorBuildResultCache.Key key = new CalculatorBuildResultCache.Key(
+			recipe,
+			times,
+			preferences,
+			routeMode,
+			calculatorSettingsFingerprint(recipe)
+		);
+		CalculatorProcessGraphBuilder.BuildResult cached = forceDeepen ? null : CalculatorBuildResultCache.get(key);
+		if (cached != null) {
+			logger.info(
+				"calculator.ui.worker.cacheHit target={} times={} mode={}",
+				describeRecipe(recipe),
+				times,
+				routeMode
+			);
+			return cached;
+		}
+		CalculatorProcessGraphBuilder.BuildResult result = CalculatorProcessGraphBuilder.buildResult(
+			recipe,
+			times,
+			stock,
+			preferences,
+			routeMode,
+			forceDeepen
+		);
+		CalculatorBuildResultCache.put(key, result);
+		return result;
+	}
+
+	/**
+	 * Fingerprint of every calculator input that is not part of the explicit
+	 * cache key: recipe-system catalog version, catalog content, rule
+	 * selection/content, planner mode, stock sensitivity and screening toggle.
+	 * Runs on worker threads — {@code calculatorCatalog} is cache-backed there.
+	 */
+	private static long calculatorSettingsFingerprint(RecipeEntry<?> target) {
+		long fingerprint = CirrusJeiPlugin.recipeSystemCatalogVersion();
+		fingerprint = 31L * fingerprint + RecipeApiImpl.attachEpoch();
+		fingerprint = 31L * fingerprint + RecipePathSettings.calculatorCatalog(target).fingerprint();
+		fingerprint = 31L * fingerprint + ExecutionOverlayClientConfig.calculatorRuleSelection().hashCode();
+		fingerprint = 31L * fingerprint + ActiveRoutingRule.version();
+		fingerprint = 31L * fingerprint + ExecutionOverlayClientConfig.calculatorPlannerMode().hashCode();
+		fingerprint = 31L * fingerprint + ExecutionOverlayClientConfig.calculatorInventorySensitivity().hashCode();
+		fingerprint = 31L * fingerprint + Boolean.hashCode(ExecutionOverlayClientConfig.calculatorRecipeScreeningEnabled());
+		fingerprint = 31L * fingerprint + Boolean.hashCode(ExecutionOverlayClientConfig.calculatorUseLiveStock());
+		return fingerprint;
 	}
 
 	private void completeFailedCalculation(@Nullable Throwable cause) {

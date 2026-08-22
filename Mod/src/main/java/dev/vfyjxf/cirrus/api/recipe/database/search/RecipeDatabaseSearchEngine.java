@@ -1,8 +1,9 @@
 package dev.vfyjxf.cirrus.api.recipe.database.search;
 
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseRecord;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseResult;
-import dev.vfyjxf.cirrus.api.recipe.search.*;
+import dev.vfyjxf.cloudlib.api.search.*;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -19,11 +20,12 @@ public final class RecipeDatabaseSearchEngine {
     private static final int parallelThreshold = 4096;
     private static final int textCandidateLimit = 2048;
     private static final int linearUniqueThreshold = 64;
+    private static final int parallelContainsTermsThreshold = 8192;
 
     private final List<RecipeDatabaseRecord> records;
     private final RecipeDatabaseSearchDocument[] documents;
     private final int[] allRecipeIds;
-    private final EnumMap<SearchField, FieldIndex> fields;
+    private final Map<SearchField, FieldIndex> fields;
     private final Map<Namespace, int[]> systems;
     private @Nullable List<RecipeDatabaseResult> allResults;
 
@@ -31,7 +33,7 @@ public final class RecipeDatabaseSearchEngine {
             List<RecipeDatabaseRecord> records,
             RecipeDatabaseSearchDocument[] documents,
             int[] allRecipeIds,
-            EnumMap<SearchField, FieldIndex> fields,
+            Map<SearchField, FieldIndex> fields,
             Map<Namespace, int[]> systems
     ) {
         this.records = records;
@@ -42,9 +44,8 @@ public final class RecipeDatabaseSearchEngine {
     }
 
     public static RecipeDatabaseSearchEngine empty() {
-        SearchField[] searchFields = SearchField.values();
-        EnumMap<SearchField, FieldIndex> fields = new EnumMap<>(SearchField.class);
-        for (SearchField field : searchFields) {
+        Map<SearchField, FieldIndex> fields = new HashMap<>();
+        for (SearchField field : CirrusSearchFields.SET.fields()) {
             fields.put(field, FieldIndex.empty());
         }
         return new RecipeDatabaseSearchEngine(List.of(), new RecipeDatabaseSearchDocument[0], emptyPosting, fields, Map.of());
@@ -57,13 +58,23 @@ public final class RecipeDatabaseSearchEngine {
         long startNanos = System.nanoTime();
         RecipeDatabaseSearchDocument[] documents = new RecipeDatabaseSearchDocument[records.size()];
         int[] all = new int[records.size()];
-        for (int recipeId = 0; recipeId < records.size(); recipeId++) {
-            all[recipeId] = recipeId;
-            documents[recipeId] = records.get(recipeId).searchDocument();
+        if (records.size() >= parallelThreshold) {
+            // the array fill is pointer-chase bound on large catalogs
+            parallelRanges(records.size(), "cirrus-db-docs-", (from, to) -> {
+                for (int recipeId = from; recipeId < to; recipeId++) {
+                    all[recipeId] = recipeId;
+                    documents[recipeId] = records.get(recipeId).searchDocument();
+                }
+            });
+        } else {
+            for (int recipeId = 0; recipeId < records.size(); recipeId++) {
+                all[recipeId] = recipeId;
+                documents[recipeId] = records.get(recipeId).searchDocument();
+            }
         }
         long documentsNanos = System.nanoTime();
 
-        SearchField[] searchFields = SearchField.values();
+        SearchField[] searchFields = CirrusSearchFields.SET.fields().toArray(new SearchField[0]);
         FieldIndex[] built = new FieldIndex[searchFields.length];
         ExecutorService sharedExecutor = null;
         int sharedWorkers = 0;
@@ -73,7 +84,7 @@ public final class RecipeDatabaseSearchEngine {
             try {
                 for (int index = 0; index < searchFields.length; index++) {
                     SearchField field = searchFields[index];
-                    if (FieldIndex.shouldBuildPostingIndex(field) || field == SearchField.contains) {
+                    if (FieldIndex.shouldBuildPostingIndex(field) || field == CirrusSearchFields.contains) {
                         long fieldStartNanos = System.nanoTime();
                         built[index] = FieldIndex.build(documents, field, sharedExecutor, sharedWorkers);
                         logFieldBuild(field, built[index], documents.length, fieldStartNanos);
@@ -87,7 +98,7 @@ public final class RecipeDatabaseSearchEngine {
             parallelRanges(searchFields.length, "cirrus-db-search-field-", (from, to) -> {
                 for (int index = from; index < to; index++) {
                     SearchField field = searchFields[index];
-                    if (FieldIndex.shouldBuildPostingIndex(field) || field == SearchField.contains) {
+                    if (FieldIndex.shouldBuildPostingIndex(field) || field == CirrusSearchFields.contains) {
                         long fieldStartNanos = System.nanoTime();
                         built[index] = FieldIndex.build(documents, field);
                         logFieldBuild(field, built[index], documents.length, fieldStartNanos);
@@ -96,12 +107,26 @@ public final class RecipeDatabaseSearchEngine {
             });
             buildScanOnlyFields(documents, searchFields, built, null, 0);
         }
-        EnumMap<SearchField, FieldIndex> fields = new EnumMap<>(SearchField.class);
+        Map<SearchField, FieldIndex> fields = new HashMap<>();
         for (SearchField field : searchFields) {
-            fields.put(field, built[field.ordinal()]);
+            fields.put(field, built[field.id()]);
         }
         Map<Namespace, int[]> systems = buildSystemPostings(records);
-        logBuildStats(records.size(), built, documentsNanos - startNanos, System.nanoTime() - documentsNanos, System.nanoTime() - startNanos);
+        if (documents.length >= parallelThreshold) {
+            // pre-warm token dictionaries for value completion on a daemon
+            // thread: ~3s of tokenization must not extend the index build,
+            // and suggestions fall back to textCandidates until it lands
+            FieldIndex[] warmTargets = built;
+            Thread warmer = new Thread(() -> parallelAll(warmTargets.length, "cirrus-db-tokens-", index -> {
+                FieldIndex field = warmTargets[index];
+                if (field != null && field.indexed()) {
+                    field.tokenDictionary();
+                }
+            }), "cirrus-db-token-warm");
+            warmer.setDaemon(true);
+            warmer.start();
+        }
+        logBuildStats(records.size(), searchFields, built, documentsNanos - startNanos, System.nanoTime() - documentsNanos, System.nanoTime() - startNanos);
         return new RecipeDatabaseSearchEngine(records, documents, all, fields, systems);
     }
 
@@ -114,7 +139,7 @@ public final class RecipeDatabaseSearchEngine {
     ) {
         int scanFieldCount = 0;
         for (SearchField field : searchFields) {
-            if (built[field.ordinal()] == null && !FieldIndex.shouldBuildPostingIndex(field) && field != SearchField.contains) {
+            if (built[field.id()] == null && !FieldIndex.shouldBuildPostingIndex(field) && field != CirrusSearchFields.contains) {
                 scanFieldCount++;
             }
         }
@@ -124,7 +149,7 @@ public final class RecipeDatabaseSearchEngine {
         SearchField[] scanFields = new SearchField[scanFieldCount];
         int scanCursor = 0;
         for (SearchField field : searchFields) {
-            if (built[field.ordinal()] == null && !FieldIndex.shouldBuildPostingIndex(field) && field != SearchField.contains) {
+            if (built[field.id()] == null && !FieldIndex.shouldBuildPostingIndex(field) && field != CirrusSearchFields.contains) {
                 scanFields[scanCursor++] = field;
             }
         }
@@ -136,7 +161,7 @@ public final class RecipeDatabaseSearchEngine {
         for (int recipeId = 0; recipeId < documents.length; recipeId++) {
             RecipeDatabaseSearchDocument document = documents[recipeId];
             for (SearchField field : scanFields) {
-                int ordinal = field.ordinal();
+                int ordinal = field.id();
                 if (document.present(field)) {
                     IntScratch records = recordsByField[ordinal];
                     if (records == null) {
@@ -148,7 +173,7 @@ public final class RecipeDatabaseSearchEngine {
             }
         }
         for (SearchField field : searchFields) {
-            int ordinal = field.ordinal();
+            int ordinal = field.id();
             if (built[ordinal] == null) {
                 IntScratch records = recordsByField[ordinal];
                 built[ordinal] = FieldIndex.scanOnly(records == null ? emptyPosting : records.toArray());
@@ -184,7 +209,7 @@ public final class RecipeDatabaseSearchEngine {
                         for (int recipeId = from; recipeId < to; recipeId++) {
                             RecipeDatabaseSearchDocument document = documents[recipeId];
                             for (SearchField field : scanFields) {
-                                int ordinal = field.ordinal();
+                                int ordinal = field.id();
                                 if (document.present(field)) {
                                     IntScratch records = recordsByField[ordinal];
                                     if (records == null) {
@@ -216,7 +241,7 @@ public final class RecipeDatabaseSearchEngine {
                 continue;
             }
             for (SearchField field : scanFields) {
-                int ordinal = field.ordinal();
+                int ordinal = field.id();
                 IntScratch records = local[ordinal];
                 if (records == null) {
                     continue;
@@ -230,7 +255,7 @@ public final class RecipeDatabaseSearchEngine {
             }
         }
         for (SearchField field : searchFields) {
-            int ordinal = field.ordinal();
+            int ordinal = field.id();
             if (built[ordinal] == null) {
                 IntScratch records = mergedByField[ordinal];
                 built[ordinal] = FieldIndex.scanOnly(records == null ? emptyPosting : records.toArray());
@@ -268,7 +293,7 @@ public final class RecipeDatabaseSearchEngine {
     }
 
     public List<String> textCandidates(SearchField field, int limit) {
-        if (field == SearchField.contains) {
+        if (field == CirrusSearchFields.contains) {
             LinkedHashSet<String> merged = new LinkedHashSet<>();
             for (SearchField sourceField : containsSourceFields()) {
                 for (String candidate : field(sourceField).textCandidates()) {
@@ -282,6 +307,39 @@ public final class RecipeDatabaseSearchEngine {
         }
         List<String> candidates = field(field).textCandidates();
         return candidates.size() <= limit ? candidates : List.copyOf(candidates.subList(0, limit));
+    }
+
+    /** Whole-word completion candidates for one field's dictionary, ranked by aggregate postings volume. */
+    public List<SearchSuggestionValue> tokenSuggestions(SearchField field, String prefix, int limit) {
+        if (prefix == null || prefix.isBlank() || limit <= 0) {
+            return List.of();
+        }
+        FieldIndex index = fields.get(field);
+        return index == null ? List.of() : index.tokenSuggestions(normalize(prefix), limit);
+    }
+
+    /** Whole-word completion candidates merged across the given fields (dedup by word, counts summed). */
+    public List<SearchSuggestionValue> tokenSuggestions(List<SearchField> fields, String prefix, int limit) {
+        if (prefix == null || prefix.isBlank() || limit <= 0 || fields.isEmpty()) {
+            return List.of();
+        }
+        String needle = normalize(prefix);
+        java.util.HashMap<String, Integer> merged = new java.util.HashMap<>();
+        for (SearchField field : fields) {
+            FieldIndex index = this.fields.get(field);
+            if (index == null) {
+                continue;
+            }
+            for (SearchSuggestionValue suggestion : index.tokenSuggestions(needle, 512)) {
+                merged.merge(suggestion.value(), suggestion.count(), Integer::sum);
+            }
+        }
+        ArrayList<SearchSuggestionValue> out = new ArrayList<>(merged.size());
+        for (java.util.Map.Entry<String, Integer> entry : merged.entrySet()) {
+            out.add(new SearchSuggestionValue(entry.getKey(), entry.getValue()));
+        }
+        out.sort(Comparator.comparingInt(SearchSuggestionValue::count).reversed());
+        return out.size() <= limit ? List.copyOf(out) : List.copyOf(out.subList(0, limit));
     }
 
     public List<RecipeDatabaseResult> search(SearchExpression expression, @Nullable Namespace system) {
@@ -440,7 +498,7 @@ public final class RecipeDatabaseSearchEngine {
     }
 
     private int @Nullable [] termCandidates(SearchTerm term) {
-        if (term.field() == SearchField.contains) {
+        if (term.field() == CirrusSearchFields.contains) {
             return containsTermCandidates(term);
         }
         FieldIndex field = field(term.field());
@@ -481,26 +539,65 @@ public final class RecipeDatabaseSearchEngine {
             return postings.toArray();
         }
         String needle = normalize(term.value());
-        PostingUnion postings = new PostingUnion();
-        for (SearchField sourceField : containsSourceFields()) {
-            FieldIndex field = field(sourceField);
-            int @Nullable [] posting = switch (operator) {
-                case contains -> withScanFallback(field, field.contains(needle));
-                case exact -> withScanFallback(field, field.exact(needle));
-                case wildcard -> {
-                    String literal = longestWildcardLiteral(term.value());
-                    yield literal.isBlank()
-                            ? field.fieldRecords()
-                            : field.indexed() ? withScanFallback(field, field.contains(normalize(literal))) : null;
+        String wildcardLiteral = operator == SearchOperator.wildcard ? longestWildcardLiteral(term.value()) : null;
+        SearchField[] sourceFields = containsSourceFields();
+        int totalTerms = 0;
+        boolean anyScanLikely = false;
+        for (SearchField sourceField : sourceFields) {
+            FieldIndex source = field(sourceField);
+            totalTerms += source.termCount();
+            if (!anyScanLikely && scanLikely(source, operator, needle, wildcardLiteral)) {
+                anyScanLikely = true;
+            }
+        }
+        if (anyScanLikely && totalTerms >= parallelContainsTermsThreshold) {
+            // the eight source-field scans are independent; broad first
+            // keystrokes dominate query latency, so fan them out
+            int[][] perField = new int[sourceFields.length][];
+            parallelAll(sourceFields.length, "cirrus-db-contains-", index ->
+                    perField[index] = containsSourcePosting(field(sourceFields[index]), term, needle, operator));
+            PostingUnion postings = new PostingUnion();
+            for (int[] posting : perField) {
+                if (posting == null) {
+                    return null;
                 }
-                default -> emptyPosting;
-            };
+                postings.add(posting);
+            }
+            return postings.toArray();
+        }
+        PostingUnion postings = new PostingUnion();
+        for (SearchField sourceField : sourceFields) {
+            int @Nullable [] posting = containsSourcePosting(field(sourceField), term, needle, operator);
             if (posting == null) {
                 return null;
             }
             postings.add(posting);
         }
         return postings.toArray();
+    }
+
+    /** Whether resolving this term against the field still needs a dictionary scan (vs a cache/dictionary hit). */
+    private static boolean scanLikely(FieldIndex field, SearchOperator operator, String needle, @Nullable String wildcardLiteral) {
+        return switch (operator) {
+            case contains -> field.indexed() && !field.containsCached(needle);
+            case wildcard -> wildcardLiteral != null && !wildcardLiteral.isBlank()
+                && field.indexed() && !field.containsCached(normalize(wildcardLiteral));
+            default -> false; // exact is a dictionary hit; exists/"*" read fieldRecords
+        };
+    }
+
+    private int @Nullable [] containsSourcePosting(FieldIndex field, SearchTerm term, String needle, SearchOperator operator) {
+        return switch (operator) {
+            case contains -> withScanFallback(field, field.contains(needle));
+            case exact -> withScanFallback(field, field.exact(needle));
+            case wildcard -> {
+                String literal = longestWildcardLiteral(term.value());
+                yield literal.isBlank()
+                        ? field.fieldRecords()
+                        : field.indexed() ? withScanFallback(field, field.contains(normalize(literal))) : null;
+            }
+            default -> emptyPosting;
+        };
     }
 
     private int @Nullable [] contentTextCandidates(FieldIndex field, SearchTerm term) {
@@ -589,7 +686,7 @@ public final class RecipeDatabaseSearchEngine {
 
     private SearchMatch matchTerm(SearchTerm term, int recipeId) {
         RecipeDatabaseSearchDocument document = documents[recipeId];
-        if (term.field() == SearchField.contains) {
+        if (term.field() == CirrusSearchFields.contains) {
             return matchContainsVirtual(document, term);
         }
         if (term.hasAmount()) {
@@ -691,7 +788,7 @@ public final class RecipeDatabaseSearchEngine {
         int best = 0;
         for (int index = 0; index < values.length; index++) {
             String value = values[index];
-            boolean matched = mode == TextMode.exact ? value.equals(needle) : value.contains(needle);
+            boolean matched = mode == TextMode.exact ? value.equals(needle) : SearchTexts.contains(value, needle);
             if (matched) {
                 SearchField scoreField = index < sourceFields.length ? sourceFields[index] : field;
                 best = Math.max(best, score(scoreField, value, needle));
@@ -746,7 +843,7 @@ public final class RecipeDatabaseSearchEngine {
     private static boolean matchesText(SearchOperator operator, String rawPattern, String value, String needle, boolean strict) {
         return switch (operator) {
             case exists -> true;
-            case contains -> value.contains(needle);
+            case contains -> SearchTexts.contains(value, needle);
             case exact -> value.equals(needle);
             case wildcard -> wildcardPattern(rawPattern, strict).matcher(value).find();
             default -> false;
@@ -784,7 +881,7 @@ public final class RecipeDatabaseSearchEngine {
             return null;
         }
         try {
-            return switch (field) {
+            return switch (field.spec().unit()) {
                 case time -> (double) UnitParser.parseTime(raw);
                 case energy -> (double) UnitParser.parseEnergy(raw);
                 case chance -> UnitParser.parseChance(raw);
@@ -803,33 +900,32 @@ public final class RecipeDatabaseSearchEngine {
         if (value.startsWith(needle)) {
             return score + 50;
         }
-        if (value.contains(":" + needle) || value.contains("_" + needle) || value.contains(" " + needle)) {
+        if (SearchTexts.contains(value, ":" + needle) || SearchTexts.contains(value, "_" + needle) || SearchTexts.contains(value, " " + needle)) {
             return score + 30;
         }
         return score + 10;
     }
 
     private FieldIndex field(SearchField field) {
-        return fields.get(field);
+        // fields registered after this engine's snapshot degrade to an empty
+        // index instead of throwing
+        return fields.getOrDefault(field, FieldIndex.empty());
     }
 
     private static boolean isContentField(SearchField field) {
-        return switch (field) {
-            case contains, in, in_id, out, out_id, cat, cat_id, byproduct, byproduct_id -> true;
-            default -> false;
-        };
+        return field.contentChannel();
     }
 
     private static SearchField[] containsSourceFields() {
         return new SearchField[]{
-                SearchField.in,
-                SearchField.in_id,
-                SearchField.out,
-                SearchField.out_id,
-                SearchField.cat,
-                SearchField.cat_id,
-                SearchField.byproduct,
-                SearchField.byproduct_id
+                CirrusSearchFields.in,
+                CirrusSearchFields.in_id,
+                CirrusSearchFields.out,
+                CirrusSearchFields.out_id,
+                CirrusSearchFields.cat,
+                CirrusSearchFields.cat_id,
+                CirrusSearchFields.byproduct,
+                CirrusSearchFields.byproduct_id
         };
     }
 
@@ -843,6 +939,7 @@ public final class RecipeDatabaseSearchEngine {
 
     private static void logBuildStats(
             int records,
+            SearchField[] searchFields,
             FieldIndex[] fields,
             long documentsNanos,
             long fieldsNanos,
@@ -885,10 +982,10 @@ public final class RecipeDatabaseSearchEngine {
                 nanosToMillis(totalNanos)
         );
         if (logger.isInfoEnabled()) {
-            SearchField[] searchFields = SearchField.values();
             StringBuilder detail = new StringBuilder("Recipe database search field stats:");
-            for (SearchField searchField : searchFields) {
-                FieldIndex field = fields[searchField.ordinal()];
+            for (int index = 0; index < fields.length; index++) {
+                SearchField searchField = index < searchFields.length ? searchFields[index] : null;
+                FieldIndex field = fields[index];
                 if (field == null || field.fieldRecords().length == 0 && field.termCount() == 0 && field.postingCount() == 0) {
                     continue;
                 }
@@ -1051,7 +1148,7 @@ public final class RecipeDatabaseSearchEngine {
     }
 
     private static String normalize(String value) {
-        return value == null ? "" : value.toLowerCase(Locale.ROOT);
+        return value == null ? "" : SearchTexts.normalize(value);
     }
 
     private static String longestWildcardLiteral(String pattern) {
@@ -1106,6 +1203,9 @@ public final class RecipeDatabaseSearchEngine {
         private final List<String> textCandidates;
         private final boolean indexed;
         private final int postingCount;
+        private final int recordCount;
+        private final @Nullable ContainsCache containsCache;
+        private volatile @Nullable TokenDictionary tokenDictionary;
 
         private FieldIndex(
                 int[] fieldRecords,
@@ -1117,6 +1217,20 @@ public final class RecipeDatabaseSearchEngine {
                 boolean indexed,
                 int postingCount
         ) {
+            this(fieldRecords, scanFallbackRecords, terms, termIds, postings, textCandidates, indexed, postingCount, 0);
+        }
+
+        private FieldIndex(
+                int[] fieldRecords,
+                int[] scanFallbackRecords,
+                String[] terms,
+                Map<String, Integer> termIds,
+                EncodedPostings postings,
+                List<String> textCandidates,
+                boolean indexed,
+                int postingCount,
+                int recordCount
+        ) {
             this.fieldRecords = fieldRecords;
             this.scanFallbackRecords = scanFallbackRecords;
             this.terms = terms;
@@ -1125,10 +1239,12 @@ public final class RecipeDatabaseSearchEngine {
             this.textCandidates = textCandidates;
             this.indexed = indexed;
             this.postingCount = postingCount;
+            this.recordCount = recordCount;
+            this.containsCache = indexed ? new ContainsCache() : null;
         }
 
         private static FieldIndex empty() {
-            return new FieldIndex(emptyPosting, emptyPosting, new String[0], Map.of(), EncodedPostings.empty, List.of(), false, 0);
+            return new FieldIndex(emptyPosting, emptyPosting, new String[0], Map.of(), EncodedPostings.empty, List.of(), false, 0, 0);
         }
 
         private static FieldIndex build(RecipeDatabaseSearchDocument[] documents, SearchField field) {
@@ -1141,7 +1257,7 @@ public final class RecipeDatabaseSearchEngine {
                 @Nullable ExecutorService sharedExecutor,
                 int sharedWorkers
         ) {
-            if (field == SearchField.contains) {
+            if (field == CirrusSearchFields.contains) {
                 return empty();
             }
             if (!shouldBuildPostingIndex(field)) {
@@ -1217,10 +1333,10 @@ public final class RecipeDatabaseSearchEngine {
                     executor.shutdown();
                 }
             }
-            return mergeLocals(locals, field);
+            return mergeLocals(locals, field, documents.length);
         }
 
-        private static FieldIndex mergeLocals(LocalFieldAccumulator[] locals, SearchField field) {
+        private static FieldIndex mergeLocals(LocalFieldAccumulator[] locals, SearchField field, int recordCount) {
             FieldDictionary dictionary = new FieldDictionary();
             LinkedHashSet<String> textCandidates = new LinkedHashSet<>();
             IntScratch fieldRecords = new IntScratch();
@@ -1270,7 +1386,8 @@ public final class RecipeDatabaseSearchEngine {
                     postings.freeze(),
                     List.copyOf(textCandidates),
                     true,
-                    postings.postingCount()
+                    postings.postingCount(),
+                    recordCount
             );
         }
 
@@ -1288,25 +1405,16 @@ public final class RecipeDatabaseSearchEngine {
             return new FieldIndex(fieldRecords, emptyPosting, new String[0], Map.of(), EncodedPostings.empty, List.of(), false, 0);
         }
 
+        private static final Set<SearchField> postingFields = Set.of(
+            // bare search-box words parse to `text`; without postings every
+            // keystroke linearly matched all records
+            CirrusSearchFields.mod, CirrusSearchFields.system, CirrusSearchFields.db, CirrusSearchFields.machine, CirrusSearchFields.text,
+            CirrusSearchFields.in, CirrusSearchFields.in_id, CirrusSearchFields.out, CirrusSearchFields.out_id,
+            CirrusSearchFields.cat, CirrusSearchFields.cat_id, CirrusSearchFields.byproduct, CirrusSearchFields.byproduct_id
+        );
+
         private static boolean shouldBuildPostingIndex(SearchField field) {
-            if (field.numeric()) {
-                return false;
-            }
-            return switch (field) {
-                case mod,
-                     system,
-                     db,
-                     machine,
-                     in,
-                     in_id,
-                     out,
-                     out_id,
-                     cat,
-                     cat_id,
-                     byproduct,
-                     byproduct_id -> true;
-                default -> false;
-            };
+            return !field.numeric() && postingFields.contains(field);
         }
 
         private int[] fieldRecords() {
@@ -1345,13 +1453,33 @@ public final class RecipeDatabaseSearchEngine {
             if (!indexed) {
                 return null;
             }
-            PostingUnion matches = new PostingUnion();
-            for (int termId = 0; termId < terms.length; termId++) {
-                if (terms[termId].contains(needle)) {
-                    postings.addToUnion(termId, matches);
+            return containsCache.getOrCompute(needle, terms, postings, recordCount);
+        }
+
+        private boolean containsCached(String needle) {
+            ContainsCache cache = containsCache;
+            return cache != null && cache.hasExactEntry(needle);
+        }
+
+        private TokenDictionary tokenDictionary() {
+            TokenDictionary dictionary = tokenDictionary;
+            if (dictionary == null) {
+                synchronized (this) {
+                    dictionary = tokenDictionary;
+                    if (dictionary == null) {
+                        dictionary = TokenDictionary.build(terms, postings);
+                        tokenDictionary = dictionary;
+                    }
                 }
             }
-            return matches.toArray();
+            return dictionary;
+        }
+
+        private List<SearchSuggestionValue> tokenSuggestions(String prefix, int limit) {
+            if (!indexed || prefix.isEmpty()) {
+                return List.of();
+            }
+            return tokenDictionary().suggest(prefix, limit);
         }
 
         private static int documentPostingBudget(int documentCount) {
@@ -1359,6 +1487,153 @@ public final class RecipeDatabaseSearchEngine {
         }
 
     }
+
+    /**
+     * Per-field word dictionary for value completion: distinct tokens of the
+     * field's terms with aggregate postings volume, plus a sorted token array
+     * for prefix ranges. Built lazily (or pre-warmed at index build).
+     */
+    private static final class TokenDictionary {
+        private final String[] sortedTokens;
+        private final int[] counts;
+
+        private TokenDictionary(String[] sortedTokens, int[] counts) {
+            this.sortedTokens = sortedTokens;
+            this.counts = counts;
+        }
+
+        private static boolean isCjk(char c) {
+            return c >= 0x2E80 && c <= 0x9FFF || c >= 0x3400 && c <= 0x4DBF || c >= 0xF900 && c <= 0xFAFF;
+        }
+
+        private static TokenDictionary build(String[] terms, EncodedPostings postings) {
+            HashMap<String, Integer> tokenCounts = new HashMap<>();
+            for (int termId = 0; termId < terms.length; termId++) {
+                int volume = postings.volume(termId);
+                if (volume <= 0) {
+                    continue;
+                }
+                for (String token : SearchTexts.tokenize(terms[termId])) {
+                    if (token.length() < 2 && !isCjk(token.charAt(0))) {
+                        continue; // single latin letters flood completion
+                    }
+                    tokenCounts.merge(token, volume, Integer::sum);
+                }
+            }
+            String[] sortedTokens = tokenCounts.keySet().toArray(new String[0]);
+            Arrays.sort(sortedTokens);
+            int[] counts = new int[sortedTokens.length];
+            for (int index = 0; index < sortedTokens.length; index++) {
+                counts[index] = tokenCounts.get(sortedTokens[index]);
+            }
+            return new TokenDictionary(sortedTokens, counts);
+        }
+
+        private List<SearchSuggestionValue> suggest(String prefix, int limit) {
+            int low = Arrays.binarySearch(sortedTokens, prefix);
+            int start = low >= 0 ? low : -(low + 1);
+            ArrayList<SearchSuggestionValue> matches = new ArrayList<>();
+            for (int index = start; index < sortedTokens.length; index++) {
+                if (!sortedTokens[index].startsWith(prefix)) {
+                    break;
+                }
+                matches.add(new SearchSuggestionValue(sortedTokens[index], counts[index]));
+            }
+            if (matches.size() > limit) {
+                matches.sort(Comparator.comparingInt(SearchSuggestionValue::count).reversed());
+                matches.subList(limit, matches.size()).clear();
+            }
+            return List.copyOf(matches);
+        }
+    }
+
+    /**
+     * Per-field LRU for {@code contains} lookups. Typing extends needles one
+     * character at a time, and every term containing a longer needle also
+     * contains its prefix, so a cached prefix entry narrows the dictionary
+     * scan to its own term subset: forward typing becomes incremental and
+     * backspacing hits the exact entry. Broad single characters carry
+     * near-full postings, so the cache is bounded by cached int payload as
+     * well as entry count.
+     */
+    private static final class ContainsCache {
+        private static final int entryLimit = 64;
+        // every indexed field owns one cache; keep the aggregate ceiling sane
+        // (~72 MiB across 12 fields) while still holding a full typing chain
+        private static final long intsBudget = 1_500_000L;
+
+        private final LinkedHashMap<String, CachedContains> entries = new LinkedHashMap<>(16, 0.75f, true);
+        private long cachedInts;
+
+        private synchronized boolean hasExactEntry(String needle) {
+            return entries.get(needle) != null;
+        }
+
+        private synchronized int[] getOrCompute(String needle, String[] terms, EncodedPostings postings, int recordCount) {
+            boolean accelerated = SearchTexts.accelerated();
+            if (accelerated) {
+                CachedContains hit = entries.get(needle);
+                if (hit != null) {
+                    return hit.posting();
+                }
+            }
+            // with a custom text matcher installed (e.g. pinyin matching),
+            // containment is not substring semantics: prefix narrowing and
+            // caching would be unsound, so fall back to a full scan
+            int[] prefixTermIds = accelerated ? longestCachedPrefixTermIds(needle) : null;
+            IntScratch matchedTermIds = new IntScratch();
+            // inverted set instead of pairwise posting merges: a broad needle
+            // touches thousands of slices whose incremental union would copy
+            // gigabytes; setting bits and emitting in id order is O(slices)
+            BitSet matchedRecords = new BitSet(recordCount);
+            if (prefixTermIds == null) {
+                for (int termId = 0; termId < terms.length; termId++) {
+                    if (SearchTexts.contains(terms[termId], needle)) {
+                        matchedTermIds.add(termId);
+                        postings.setBits(termId, matchedRecords);
+                    }
+                }
+            } else {
+                for (int index = 0; index < prefixTermIds.length; index++) {
+                    int termId = prefixTermIds[index];
+                    if (SearchTexts.contains(terms[termId], needle)) {
+                        matchedTermIds.add(termId);
+                        postings.setBits(termId, matchedRecords);
+                    }
+                }
+            }
+            int[] posting = new int[matchedRecords.cardinality()];
+            int out = 0;
+            for (int recipeId = matchedRecords.nextSetBit(0); recipeId >= 0; recipeId = matchedRecords.nextSetBit(recipeId + 1)) {
+                posting[out++] = recipeId;
+            }
+            if (!accelerated) {
+                return posting;
+            }
+            int[] termIds = matchedTermIds.toArray();
+            entries.put(needle, new CachedContains(termIds, posting));
+            cachedInts += termIds.length + posting.length;
+            while (entries.size() > entryLimit || cachedInts > intsBudget && entries.size() > 1) {
+                var eldest = entries.values().iterator();
+                CachedContains evicted = eldest.next();
+                eldest.remove();
+                cachedInts -= evicted.termIds().length + evicted.posting().length;
+            }
+            return posting;
+        }
+
+        private int @Nullable [] longestCachedPrefixTermIds(String needle) {
+            for (int length = needle.length() - 1; length > 0; length--) {
+                CachedContains candidate = entries.get(needle.substring(0, length));
+                if (candidate != null) {
+                    return candidate.termIds();
+                }
+            }
+            return null;
+        }
+    }
+
+    private record CachedContains(int[] termIds, int[] posting) {}
 
     private static final class FieldAccumulator {
         private final FieldDictionary dictionary = new FieldDictionary();
@@ -1425,7 +1700,8 @@ public final class RecipeDatabaseSearchEngine {
                     postings.freeze(),
                     List.copyOf(textCandidates),
                     true,
-                    postings.postingCount()
+                    postings.postingCount(),
+                    documents.length
             );
         }
 
@@ -1696,6 +1972,22 @@ public final class RecipeDatabaseSearchEngine {
             }
             union.add(data, offsets[termId], offsets[termId + 1]);
         }
+
+        private int volume(int termId) {
+            if (termId < 0 || termId + 1 >= offsets.length) {
+                return 0;
+            }
+            return offsets[termId + 1] - offsets[termId];
+        }
+
+        private void setBits(int termId, BitSet bits) {
+            if (termId < 0 || termId + 1 >= offsets.length) {
+                return;
+            }
+            for (int index = offsets[termId]; index < offsets[termId + 1]; index++) {
+                bits.set(data[index]);
+            }
+        }
     }
 
     private static final class PostingUnion {
@@ -1811,6 +2103,43 @@ public final class RecipeDatabaseSearchEngine {
     @FunctionalInterface
     private interface RangeTask {
         void run(int fromInclusive, int toExclusive);
+    }
+
+    @FunctionalInterface
+    private interface IndexTask {
+        void run(int index);
+    }
+
+    /** Runs one task per index on a short-lived worker pool, unlike {@link #parallelRanges} without its {@code total >= workers * 2} fallback. */
+    private static void parallelAll(int count, String namePrefix, IndexTask task) {
+        if (count <= 0) {
+            return;
+        }
+        int workers = Math.min(count, Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
+        if (workers <= 1) {
+            for (int index = 0; index < count; index++) {
+                task.run(index);
+            }
+            return;
+        }
+        ExecutorService executor = Executors.newFixedThreadPool(workers, daemonThreadFactory(namePrefix));
+        try {
+            ArrayList<Future<?>> futures = new ArrayList<>(count);
+            for (int index = 0; index < count; index++) {
+                int taskIndex = index;
+                futures.add(executor.submit(() -> task.run(taskIndex)));
+            }
+            for (Future<?> future : futures) {
+                future.get();
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while scanning recipe database contains fields", exception);
+        } catch (ExecutionException exception) {
+            throw new IllegalStateException("Failed to scan recipe database contains fields", exception.getCause());
+        } finally {
+            executor.shutdown();
+        }
     }
 
     private static void parallelRanges(int total, String namePrefix, RangeTask task) {

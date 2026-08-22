@@ -78,6 +78,7 @@ public final class SearchSuggestions {
                 entry.replacement,
                 token.completionStart(),
                 token.end(),
+                0,
                 entry.description().component()
             ));
         }

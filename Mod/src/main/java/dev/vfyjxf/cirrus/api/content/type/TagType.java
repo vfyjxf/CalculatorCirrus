@@ -12,6 +12,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
+import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.set.MutableSet;
 import org.eclipse.collections.impl.collector.Collectors2;
@@ -29,6 +30,7 @@ public record TagType<T>(
 ) {
     private static final Map<CacheKey, MutableSet<TagKey<?>>> allTagsCache = new ConcurrentHashMap<>();
     private static final Map<ResourceLocation, Registry<?>> registryCache = new ConcurrentHashMap<>();
+    private static final Map<TagValuesKey, ImmutableList<?>> tagValuesCache = new ConcurrentHashMap<>();
 
     public static <T> TagType<T> fromRegistry(
             String id,
@@ -101,19 +103,35 @@ public record TagType<T>(
     }
 
     public MutableSet<T> getTagValues(TagKey<T> tagKey) {
-        return registry().getTag(tagKey)
-                         .stream()
-                         .flatMap(HolderSet.Named::stream)
-                         .map(Holder::value)
-                         .collect(Collectors2.toSet());
+        return this.cachedTagValues(tagKey).toSet();
+    }
+
+    /**
+     * The tag's values as an immutable list, memoized per registry session.
+     * Resolving a tag walks the registry holder set and used to rerun on
+     * every {@code TagStackContent} construction (recipe graph and database
+     * builds create them by the hundred thousand); prefer this method on
+     * hot paths. Invalidated together with the other tag caches by
+     * {@link #clearAllTagsCache()} (client unload / world switch).
+     */
+    public ImmutableList<T> getTagValuesList(TagKey<T> tagKey) {
+        return this.cachedTagValues(tagKey);
     }
 
     public MutableList<T> getSequencedTagValues(TagKey<T> tagKey) {
-        return registry().getTag(tagKey)
-                         .stream()
-                         .flatMap(HolderSet.Named::stream)
-                         .map(Holder::value)
-                         .collect(Collectors2.toList());
+        return this.cachedTagValues(tagKey).toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private ImmutableList<T> cachedTagValues(TagKey<T> tagKey) {
+        return (ImmutableList<T>) tagValuesCache.computeIfAbsent(
+                new TagValuesKey(registryKey.location(), tagKey.location()),
+                ignored -> registry().getTag(tagKey)
+                                     .stream()
+                                     .flatMap(HolderSet.Named::stream)
+                                     .map(Holder::value)
+                                     .collect(Collectors2.toImmutableList())
+        );
     }
 
     public <S> MutableSet<S> getAsStacks(TagKey<T> tagKey, StackType<T, S> stackType) {
@@ -134,6 +152,7 @@ public record TagType<T>(
     public static void clearAllTagsCache() {
         allTagsCache.clear();
         registryCache.clear();
+        tagValuesCache.clear();
         TagHelper.clearCaches();
     }
 
@@ -156,4 +175,6 @@ public record TagType<T>(
     }
 
     private record CacheKey(Namespace typeId, ResourceLocation registryLocation) {}
+
+    private record TagValuesKey(ResourceLocation registryLocation, ResourceLocation tagLocation) {}
 }

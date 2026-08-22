@@ -27,7 +27,7 @@ public final class TagStackContent<T> implements InputContent {
         this.type = type;
         this.contentType = type.contentType();
         this.tagKey = tagKey;
-        this.values = type.getTagValues(tagKey).toImmutableList();
+        this.values = type.getTagValuesList(tagKey);
         var contentApi = ContentApi.instance();
         var hasStackType = contentApi.hasStackType(contentType);
         this.amount = hasStackType ? contentApi.getStackType(contentType).quantity() : 1;
@@ -39,7 +39,7 @@ public final class TagStackContent<T> implements InputContent {
         this.type = type;
         this.contentType = type.contentType();
         this.tagKey = tagKey;
-        this.values = type.getTagValues(tagKey).toImmutableList();
+        this.values = type.getTagValuesList(tagKey);
         this.amount = amount;
         this.chance = chance;
     }

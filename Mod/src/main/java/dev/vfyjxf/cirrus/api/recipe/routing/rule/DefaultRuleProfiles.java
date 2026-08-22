@@ -63,9 +63,10 @@ public final class DefaultRuleProfiles {
     public static RuleProfile standardDefault() {
         return new RuleProfile(
             standardDefaultId,
-            Lists.immutable.of("craft", "inventoryShortage", "depth", "amplification"),
+            Lists.immutable.of("subtreeCost", "craft", "inventoryShortage", "depth", "amplification"),
             Lists.immutable.of(DefaultRuleProfiles::rejectProbabilistic),
             Lists.immutable.of(
+                (context, acc) -> acc.add("subtreeCost", context.estimatedSubtreeCost()),
                 (context, acc) -> acc.add("craft", context.craftTimes()),
                 (context, acc) -> acc.add("inventoryShortage", 1.0d - context.availableCoverage()),
                 (context, acc) -> acc.add("depth", context.depth()),
@@ -93,9 +94,10 @@ public final class DefaultRuleProfiles {
     public static RuleProfile standardExecution() {
         return new RuleProfile(
             standardExecutionId,
-            Lists.immutable.of("craft", "inventoryShortage", "depth", "amplification"),
+            Lists.immutable.of("subtreeCost", "craft", "inventoryShortage", "depth", "amplification"),
             Lists.immutable.of(DefaultRuleProfiles::rejectProbabilistic),
             Lists.immutable.of(
+                (context, acc) -> acc.add("subtreeCost", context.estimatedSubtreeCost()),
                 (context, acc) -> acc.add("craft", context.craftTimes()),
                 (context, acc) -> acc.add("inventoryShortage", 1.0d - context.availableCoverage()),
                 (context, acc) -> acc.add("depth", context.depth()),
@@ -133,9 +135,10 @@ public final class DefaultRuleProfiles {
     public static RuleProfile assuredBoundedDefault() {
         return new RuleProfile(
             assuredBoundedDefaultId,
-            Lists.immutable.of("craft", "inventoryShortage", "depth", "amplification"),
+            Lists.immutable.of("subtreeCost", "craft", "inventoryShortage", "depth", "amplification"),
             Lists.immutable.of(DefaultRuleProfiles::rejectProbabilistic),
             Lists.immutable.of(
+                (context, acc) -> acc.add("subtreeCost", context.estimatedSubtreeCost()),
                 (context, acc) -> acc.add("craft", context.craftTimes()),
                 (context, acc) -> acc.add("inventoryShortage", 1.0d - context.availableCoverage()),
                 (context, acc) -> acc.add("depth", context.depth() * 0.8),
@@ -173,9 +176,10 @@ public final class DefaultRuleProfiles {
     public static RuleProfile assuredProvenCompat() {
         return new RuleProfile(
             assuredProvenCompatId,
-            Lists.immutable.of("craft", "inventoryShortage", "depth", "amplification"),
+            Lists.immutable.of("subtreeCost", "craft", "inventoryShortage", "depth", "amplification"),
             Lists.immutable.of(DefaultRuleProfiles::rejectProbabilistic),
             Lists.immutable.of(
+                (context, acc) -> acc.add("subtreeCost", context.estimatedSubtreeCost()),
                 (context, acc) -> acc.add("craft", context.craftTimes()),
                 (context, acc) -> acc.add("inventoryShortage", 1.0d - context.availableCoverage()),
                 (context, acc) -> acc.add("depth", context.depth()),

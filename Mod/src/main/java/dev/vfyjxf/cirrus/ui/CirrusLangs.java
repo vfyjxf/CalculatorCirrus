@@ -52,6 +52,9 @@ public final class CirrusLangs {
         public static final LangEntry actionExecutionPathDesc = ui("calc.action.execution_path.desc");
         public static final LangEntry actionSettings = ui("calc.action.settings");
         public static final LangEntry actionSettingsDesc = ui("calc.action.settings.desc");
+        public static final LangEntry actionDeepen = ui("calc.action.deepen");
+        public static final LangEntry actionDeepenDesc = ui("calc.action.deepen.desc");
+        public static final LangEntry pendingBanner = ui("calc.pending_banner");
 
         private Calc() {
         }
@@ -290,6 +293,8 @@ public final class CirrusLangs {
             public static final LangEntry shortcutDefaultClick = ui("calculator.database.shortcut.default_click");
             public static final LangEntry shortcutSetCalculatorTarget = ui("calculator.database.shortcut.set_calculator_target");
             public static final LangEntry shortcutOpenCalculator = ui("calculator.database.shortcut.open_calculator");
+            public static final LangEntry screeningExcluded = ui("calculator.database.screening.excluded");
+            public static final LangEntry screeningAdvisory = ui("calculator.database.screening.advisory");
             public static final LangEntry detailInputs = ui("calculator.database.detail.inputs");
             public static final LangEntry detailOutputs = ui("calculator.database.detail.outputs");
             public static final LangEntry contentsMore = ui("calculator.database.contents.more");
@@ -466,8 +471,6 @@ public final class CirrusLangs {
             public static final LangEntry databaseAutoRefreshDesc = ui("calculator.settings.database_auto_refresh.desc");
             public static final LangEntry projectionUsesGlobalDatabase = ui("calculator.settings.projection_uses_global_database");
             public static final LangEntry projectionUsesGlobalDatabaseDesc = ui("calculator.settings.projection_uses_global_database.desc");
-            public static final LangEntry databaseLimit = ui("calculator.settings.database_limit");
-            public static final LangEntry databaseLimitDesc = ui("calculator.settings.database_limit.desc");
             public static final LangEntry readOtherWorlds = ui("calculator.settings.read_other_worlds");
             public static final LangEntry readOtherWorldsDesc = ui("calculator.settings.read_other_worlds.desc");
             public static final LangEntry calculatorRule = ui("calculator.settings.calculator_rule");
@@ -480,10 +483,13 @@ public final class CirrusLangs {
             public static final LangEntry plannerMode = ui("calculator.settings.planner_mode");
             public static final LangEntry plannerModeDesc = ui("calculator.settings.planner_mode.desc");
             public static final LangEntry plannerModeStandard = ui("calculator.settings.planner_mode.standard");
+            public static final LangEntry plannerModeAuto = ui("calculator.settings.planner_mode.auto");
             public static final LangEntry plannerModeAssuredBounded = ui("calculator.settings.planner_mode.assured_bounded");
             public static final LangEntry plannerModeAssuredProven = ui("calculator.settings.planner_mode.assured_proven");
             public static final LangEntry useLiveStock = ui("calculator.settings.use_live_stock");
             public static final LangEntry useLiveStockDesc = ui("calculator.settings.use_live_stock.desc");
+            public static final LangEntry recipeScreening = ui("calculator.settings.recipe_screening");
+            public static final LangEntry recipeScreeningDesc = ui("calculator.settings.recipe_screening.desc");
             public static final LangEntry inventorySensitivity = ui("calculator.settings.inventory_sensitivity");
             public static final LangEntry inventorySensitivityDesc = ui("calculator.settings.inventory_sensitivity.desc");
             public static final LangEntry inventorySensitivityHigh = ui("calculator.settings.inventory_sensitivity.high");
@@ -671,6 +677,9 @@ public final class CirrusLangs {
                 Calc.actionExecutionPathDesc,
                 Calc.actionSettings,
                 Calc.actionSettingsDesc,
+                Calc.actionDeepen,
+                Calc.actionDeepenDesc,
+                Calc.pendingBanner,
                 Calc.View.tree,
                 Calc.View.matrix,
                 Calc.View.milestones,
@@ -840,6 +849,8 @@ public final class CirrusLangs {
                 Calculator.Database.shortcutDefaultClick,
                 Calculator.Database.shortcutSetCalculatorTarget,
                 Calculator.Database.shortcutOpenCalculator,
+                Calculator.Database.screeningExcluded,
+                Calculator.Database.screeningAdvisory,
                 Calculator.Database.detailInputs,
                 Calculator.Database.detailOutputs,
                 Calculator.Database.contentsMore,
@@ -982,8 +993,6 @@ public final class CirrusLangs {
                 Calculator.Settings.databaseAutoRefreshDesc,
                 Calculator.Settings.projectionUsesGlobalDatabase,
                 Calculator.Settings.projectionUsesGlobalDatabaseDesc,
-                Calculator.Settings.databaseLimit,
-                Calculator.Settings.databaseLimitDesc,
                 Calculator.Settings.readOtherWorlds,
                 Calculator.Settings.readOtherWorldsDesc,
                 Calculator.Settings.calculatorRule,
@@ -995,6 +1004,8 @@ public final class CirrusLangs {
                 Calculator.Settings.calculatorRuleAssured,
                 Calculator.Settings.useLiveStock,
                 Calculator.Settings.useLiveStockDesc,
+                Calculator.Settings.recipeScreening,
+                Calculator.Settings.recipeScreeningDesc,
                 Calculator.Settings.inventorySensitivity,
                 Calculator.Settings.inventorySensitivityDesc,
                 Calculator.Settings.inventorySensitivityHigh,

@@ -5,6 +5,13 @@ package dev.vfyjxf.cirrus.api.recipe.routing.service;
  *
  */
 public enum PlannerMode {
+    /**
+     * Topology-aware default: analyzes the request cone first, then dispatches
+     * to an exact dynamic-programming planner when the cone is acyclic, or to
+     * the bounded greedy planner when the cone contains resource loops.
+     * Internally distinguished, but callers get one unified entry point.
+     */
+    auto,
     /** Responsiveness-first greedy DFS planner. Fastest, no optimality guarantees. */
     standard,
     /**

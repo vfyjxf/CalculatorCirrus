@@ -70,8 +70,34 @@ public final class PlanBuilder {
      * planner cannot resolve a source.
      */
     public PlanAction.PendingInput addPendingInput(InputContent input, long amount) {
+        return addPendingInput(input, amount, 0, 0);
+    }
+
+    /**
+     * Appends a pending-input action that keeps the original input semantics when the
+     * planner cannot resolve a source, recording how many producer candidates existed
+     * and how many were tried so continuation runs can tell whether retrying with a
+     * larger budget could still resolve this input.
+     */
+    public PlanAction.PendingInput addPendingInput(InputContent input, long amount, int candidateCount, int attemptedCount) {
+        return addPendingInput(input, amount, candidateCount, attemptedCount, false, PlanAction.PendingReason.TRUE_NO_SOURCE);
+    }
+
+    /**
+     * Appends a pending-input action with the truncation analysis: {@code truncated}
+     * marks pendings that a deeper continuation wave could still resolve, and
+     * {@code reason} records why the input went pending.
+     */
+    public PlanAction.PendingInput addPendingInput(
+        InputContent input,
+        long amount,
+        int candidateCount,
+        int attemptedCount,
+        boolean truncated,
+        PlanAction.PendingReason reason
+    ) {
         int index = actions.size();
-        var action = new PlanAction.PendingInput(nextActionId++, index, false, input, amount);
+        var action = new PlanAction.PendingInput(nextActionId++, index, false, input, amount, candidateCount, attemptedCount, truncated, reason);
         actions.add(action);
         return action;
     }

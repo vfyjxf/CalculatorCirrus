@@ -1,9 +1,10 @@
 package dev.vfyjxf.cirrus.ui.widget.calculator.page;
 
-import dev.vfyjxf.cirrus.api.recipe.search.SearchExpression;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchField;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchParseException;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchParser;
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
+import dev.vfyjxf.cloudlib.api.search.SearchExpression;
+import dev.vfyjxf.cloudlib.api.search.SearchField;
+import dev.vfyjxf.cloudlib.api.search.SearchParseException;
+import dev.vfyjxf.cloudlib.api.search.SearchParser;
 import dev.vfyjxf.cirrus.ui.widget.calculator.search.SearchHighlightKind;
 import dev.vfyjxf.cirrus.ui.widget.calculator.search.SearchHighlightSegment;
 import dev.vfyjxf.cirrus.ui.widget.calculator.search.SearchSuggestion;
@@ -11,19 +12,19 @@ import dev.vfyjxf.cirrus.ui.widget.calculator.search.SearchSuggestionSource;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.EnumSet;
+import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 
 final class RuleMaterialSearch {
-    private static final EnumSet<SearchField> supportedFields = EnumSet.of(
-        SearchField.contains,
-        SearchField.text,
-        SearchField.mod,
-        SearchField.tag,
-        SearchField.name,
-        SearchField.id
+    private static final Set<SearchField> supportedFields = Set.of(
+        CirrusSearchFields.contains,
+        CirrusSearchFields.text,
+        CirrusSearchFields.mod,
+        CirrusSearchFields.tag,
+        CirrusSearchFields.name,
+        CirrusSearchFields.id
     );
     private static final List<SyntaxEntry> syntaxEntries = List.of(
         new SyntaxEntry("id", "id:"),
@@ -44,7 +45,7 @@ final class RuleMaterialSearch {
             return new SearchExpression.All();
         }
         try {
-            SearchExpression expression = new SearchParser().parse(query);
+            SearchExpression expression = CirrusSearchFields.parser().parse(query);
             return supports(expression) ? expression : null;
         } catch (SearchParseException ignored) {
             return null;
@@ -102,7 +103,7 @@ final class RuleMaterialSearch {
             }
         }
         char prefix = input.charAt(cursor);
-        SearchField prefixed = SearchField.fromJeiPrefix(prefix);
+        SearchField prefixed = CirrusSearchFields.SET.byJeiPrefix(prefix);
         if (prefixed != null && supportedFields.contains(prefixed)) {
             add(out, input, cursor, cursor + 1, SearchHighlightKind.prefix);
             add(out, input, cursor + 1, end, SearchHighlightKind.text);
@@ -111,7 +112,7 @@ final class RuleMaterialSearch {
         int colon = input.indexOf(':', cursor);
         if (colon > cursor && colon < end) {
             String alias = input.substring(cursor, colon);
-            SearchField field = SearchField.isKnownAlias(alias) ? SearchField.fromAlias(alias) : null;
+            SearchField field = CirrusSearchFields.SET.isKnownAlias(alias) ? CirrusSearchFields.SET.byAlias(alias) : null;
             if (field != null && supportedFields.contains(field)) {
                 add(out, input, cursor, colon, SearchHighlightKind.field);
                 add(out, input, colon, colon + 1, SearchHighlightKind.operator);
@@ -188,7 +189,7 @@ final class RuleMaterialSearch {
 
         private void addGeneralValues(ArrayList<SearchSuggestion> out, List<RuleIngredientCatalog.Entry> candidates, Token token, int limit) {
             String valuePrefix = token.body().toLowerCase(Locale.ROOT);
-            for (String value : values(candidates, SearchField.id, limit * 2)) {
+            for (String value : values(candidates, CirrusSearchFields.id, limit * 2)) {
                 if (value.toLowerCase(Locale.ROOT).contains(valuePrefix)) {
                     String replacement = token.leading() + value;
                     out.add(new SearchSuggestion(replacement, replacement, token.start(), token.end()));
@@ -197,7 +198,7 @@ final class RuleMaterialSearch {
                     return;
                 }
             }
-            for (String value : values(candidates, SearchField.name, limit * 2)) {
+            for (String value : values(candidates, CirrusSearchFields.name, limit * 2)) {
                 if (value.indexOf(' ') >= 0 || !value.toLowerCase(Locale.ROOT).contains(valuePrefix)) {
                     continue;
                 }
@@ -220,13 +221,14 @@ final class RuleMaterialSearch {
         private static List<String> values(List<RuleIngredientCatalog.Entry> candidates, SearchField field, int limit) {
             LinkedHashSet<String> values = new LinkedHashSet<>();
             for (RuleIngredientCatalog.Entry entry : candidates) {
-                switch (field) {
-                    case id -> values.add(entry.material());
-                    case name, text, contains -> values.add(entry.label());
-                    case mod -> values.add(entry.namespace());
-                    case tag -> values.addAll(entry.tags());
-                    default -> {
-                    }
+                if (field == CirrusSearchFields.id) {
+                    values.add(entry.material());
+                } else if (field == CirrusSearchFields.name || field == CirrusSearchFields.text || field == CirrusSearchFields.contains) {
+                    values.add(entry.label());
+                } else if (field == CirrusSearchFields.mod) {
+                    values.add(entry.namespace());
+                } else if (field == CirrusSearchFields.tag) {
+                    values.addAll(entry.tags());
                 }
                 if (values.size() >= limit) {
                     break;
@@ -238,7 +240,7 @@ final class RuleMaterialSearch {
         private static SearchField context(Token token) {
             String body = token.body();
             if (body.length() > 1) {
-                SearchField prefixed = SearchField.fromJeiPrefix(body.charAt(0));
+                SearchField prefixed = CirrusSearchFields.SET.byJeiPrefix(body.charAt(0));
                 if (prefixed != null && supportedFields.contains(prefixed)) {
                     return prefixed;
                 }
@@ -246,7 +248,7 @@ final class RuleMaterialSearch {
             int colon = body.indexOf(':');
             if (colon > 0) {
                 String alias = body.substring(0, colon);
-                SearchField field = SearchField.isKnownAlias(alias) ? SearchField.fromAlias(alias) : null;
+                SearchField field = CirrusSearchFields.SET.isKnownAlias(alias) ? CirrusSearchFields.SET.byAlias(alias) : null;
                 if (field != null && supportedFields.contains(field)) {
                     return field;
                 }
@@ -290,7 +292,7 @@ final class RuleMaterialSearch {
             int colon = body.indexOf(':');
             if (colon >= 0) {
                 valueStart = start + negationLength + colon + 1;
-            } else if (!body.isEmpty() && SearchField.fromJeiPrefix(body.charAt(0)) != null) {
+            } else if (!body.isEmpty() && CirrusSearchFields.SET.byJeiPrefix(body.charAt(0)) != null) {
                 valueStart = start + negationLength + 1;
             }
             return new Token(start, end, text, negationLength, Math.min(end, valueStart));

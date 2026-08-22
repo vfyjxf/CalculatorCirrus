@@ -7,7 +7,6 @@ import dev.vfyjxf.cirrus.config.CalculatorRuleSelection;
 import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayUi;
-import dev.vfyjxf.cirrus.ui.widget.NumberInputWidget;
 import dev.vfyjxf.cirrus.ui.widget.common.CirrusChoiceBoxWidget;
 import dev.vfyjxf.cirrus.ui.widget.common.CirrusFittedTextWidget;
 import dev.vfyjxf.cirrus.ui.widget.common.CirrusScrollablePageWidget;
@@ -23,8 +22,6 @@ import net.minecraft.network.chat.Component;
 
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
-import java.util.function.LongConsumer;
-import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.textPrimary;
@@ -56,7 +53,6 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
     private static final int rowPaddingHorizontal = 5;
     private static final int labelPaddingLeft = 2;
     private static final int labelPaddingRight = 3;
-    private static final int numberInputWidth = 58;
 
     public CalculatorSettingsPage() {
         CirrusSectionWidget planning = settingsSection(CirrusLangs.Calculator.Settings.categoryPlanning);
@@ -72,6 +68,12 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
             CirrusLangs.Calculator.Settings.useLiveStockDesc,
             ExecutionOverlayClientConfig::calculatorUseLiveStock,
             ExecutionOverlayClientConfig::setCalculatorUseLiveStock
+        ));
+        planning.addContent(switchRow(
+            CirrusLangs.Calculator.Settings.recipeScreening,
+            CirrusLangs.Calculator.Settings.recipeScreeningDesc,
+            ExecutionOverlayClientConfig::calculatorRecipeScreeningEnabled,
+            ExecutionOverlayClientConfig::setCalculatorRecipeScreeningEnabled
         ));
         planning.addContent(inventorySensitivityRow());
         addWidget(planning);
@@ -111,14 +113,6 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
             ExecutionOverlayClientConfig::calculatorDatabaseAutoRefresh,
             ExecutionOverlayClientConfig::setCalculatorDatabaseAutoRefresh
         ));
-        database.addContent(numberRow(
-            CirrusLangs.Calculator.Settings.databaseLimit,
-            CirrusLangs.Calculator.Settings.databaseLimitDesc,
-            ExecutionOverlayClientConfig::calculatorDatabaseLimit,
-            ExecutionOverlayClientConfig::setCalculatorDatabaseLimit,
-            ExecutionOverlayClientConfig.calculatorDatabaseLimitMin,
-            ExecutionOverlayClientConfig.calculatorDatabaseLimitMax
-        ));
         database.addContent(switchRow(
             CirrusLangs.Calculator.Settings.projectionUsesGlobalDatabase,
             CirrusLangs.Calculator.Settings.projectionUsesGlobalDatabaseDesc,
@@ -144,20 +138,6 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
     private static Widget switchRow(LangEntry label, LangEntry description, BooleanSupplier value, Consumer<Boolean> setter) {
         Supplier<Tooltip> tooltip = () -> switchTooltip(label, description, value);
         return styleSettingsRow(CirrusSwitchRowWidget.create(label, value, setter, tooltip), tooltip);
-    }
-
-    private static Widget numberRow(LangEntry label, LangEntry description, LongSupplier value, LongConsumer setter, long min, long max) {
-        WidgetGroup<Widget> row = baseRow();
-        row.addWidget(rowLabel(label));
-        NumberInputWidget input = NumberInputWidget.create(value.getAsLong())
-            .setRange(min, max)
-            .setScrollStep(10)
-            .onValueChanged(setter);
-        Supplier<Tooltip> tooltip = () -> numberTooltip(label, description, input.getValue(), min, max);
-        input.tooltip(tooltip);
-        input.useStyle(sizeOf(numberInputWidth, CirrusChoiceBoxWidget.controlHeight()), flexShrink(0));
-        row.addWidget(input);
-        return styleSettingsRow(row, tooltip);
     }
 
     private static Widget policyRow() {
@@ -276,10 +256,6 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
         return labelPaddingRight;
     }
 
-    public static int settingsNumberInputWidth() {
-        return numberInputWidth;
-    }
-
     private static Widget ruleRow() {
         WidgetGroup<Widget> row = baseRow();
         row.addWidget(rowLabel(CirrusLangs.Calculator.Settings.calculatorRule));
@@ -337,6 +313,7 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
         WidgetGroup<Widget> row = baseRow();
         row.addWidget(rowLabel(label));
         CirrusChoiceBoxWidget<PlannerMode> value = new CirrusChoiceBoxWidget<PlannerMode>(plannerChoiceWidth)
+            .option(PlannerMode.auto, CirrusLangs.Calculator.Settings.plannerModeAuto)
             .option(PlannerMode.standard, CirrusLangs.Calculator.Settings.plannerModeStandard)
             .option(PlannerMode.assuredBounded, CirrusLangs.Calculator.Settings.plannerModeAssuredBounded)
             .option(PlannerMode.assuredProven, CirrusLangs.Calculator.Settings.plannerModeAssuredProven)
@@ -364,13 +341,6 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
                     : CirrusLangs.Calculator.Settings.switchOff).string()
             )
         ));
-        return tooltip;
-    }
-
-    private static Tooltip numberTooltip(LangEntry label, LangEntry description, long value, long min, long max) {
-        Tooltip tooltip = settingTooltip(label, description);
-        tooltip.add(ExecutionOverlayUi.tooltipAccentText(CirrusLangs.Calculator.Settings.currentValue.string(value)));
-        tooltip.add(ExecutionOverlayUi.tooltipBody(CirrusLangs.Calculator.Settings.range, min, max));
         return tooltip;
     }
 
@@ -427,6 +397,7 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
 
     private static LangEntry plannerModeLabel(PlannerMode value) {
         return switch (value) {
+            case auto -> CirrusLangs.Calculator.Settings.plannerModeAuto;
             case standard -> CirrusLangs.Calculator.Settings.plannerModeStandard;
             case assuredBounded -> CirrusLangs.Calculator.Settings.plannerModeAssuredBounded;
             case assuredProven -> CirrusLangs.Calculator.Settings.plannerModeAssuredProven;

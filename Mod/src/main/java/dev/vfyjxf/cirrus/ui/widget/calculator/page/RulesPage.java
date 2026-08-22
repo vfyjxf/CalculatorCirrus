@@ -22,7 +22,7 @@ import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicyAction;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicyRuleSpec;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.TagExpr;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.UnresolvedInputMode;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchExpression;
+import dev.vfyjxf.cloudlib.api.search.SearchExpression;
 import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.content.renderer.ItemStackRenderer;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;

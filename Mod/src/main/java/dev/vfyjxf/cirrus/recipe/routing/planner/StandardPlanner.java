@@ -24,6 +24,8 @@ import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanBuilder;
 import dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.CandidateContext;
+import dev.vfyjxf.cirrus.api.recipe.routing.rule.ContextualRecipeRules;
+import dev.vfyjxf.cirrus.api.recipe.routing.rule.ContextualRuleContext;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultRuleProfiles;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.ExplorePolicy;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.HardRule;
@@ -48,6 +50,9 @@ import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingTrace;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingVariantKeys;
 import dev.vfyjxf.cirrus.api.recipe.routing.state.CycleGuard;
 import dev.vfyjxf.cirrus.api.recipe.routing.state.ResourceLedger;
+import dev.vfyjxf.cirrus.recipe.classify.ClassifyViewFactory;
+import dev.vfyjxf.cirrus.recipe.routing.cost.UnitCostOracle;
+import dev.vfyjxf.cirrus.recipe.routing.topology.GraphTopology;
 import it.unimi.dsi.fastutil.ints.Int2ByteOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
@@ -122,6 +127,22 @@ public final class StandardPlanner implements RoutePlanner {
     private static final int candidatePreShortlistMultiplier = 64;
     private static final int candidatePreShortlistVariantRetentionLimit = 512;
     private static final double indirectActiveDemandCyclePenalty = 1_000_000.0d;
+    private static final double intraLoopConversionPenalty = 100_000.0d;
+    /**
+     * Soft penalty for closing an equal-amount round-trip pair (compress↔decompress)
+     * under loop policies that do not hard-forbid it; matches the intra-loop
+     * conversion penalty magnitude.
+     */
+    private static final double roundTripPenalty = 100_000.0d;
+    /**
+     * Minimum producer refs evaluated per input before a budget gate may cut
+     * enumeration: a {@code candidateCount == 0} pending must never be caused by
+     * the budget running out before this input's producers were even visited.
+     */
+    private static final int minEvalFloorCap = 8;
+    /** Experiments/toggles: disable impurity scoring or round-trip filtering. */
+    private static final boolean impurityEnabled = Boolean.parseBoolean(System.getProperty("cirrus.exp.impurity", "true"));
+    private static final boolean roundTripEnabled = Boolean.parseBoolean(System.getProperty("cirrus.exp.roundtrip", "true"));
     private static final ContentVariant[] emptyVariants = new ContentVariant[0];
     private static final ActiveDemandSnapshot emptyActiveDemandSnapshot =
         new ActiveDemandSnapshot(new InputContent[0], 1);
@@ -130,6 +151,9 @@ public final class StandardPlanner implements RoutePlanner {
     public RoutingOutcome plan(PlannerContext context) {
         long startNanos = System.nanoTime();
         PlannerContext.Counters counters = context.counters();
+        counters.wallDeadlineNanos = context.request().budget().maxWallTimeMs() <= 0
+            ? Long.MAX_VALUE
+            : startNanos + context.request().budget().maxWallTimeMs() * 1_000_000L;
 
         RoutingRequest request = context.request();
         if (!(request.target() instanceof RoutingRequest.RecipeTarget(RecipeEntry<?> recipe, int times))) {
@@ -220,6 +244,7 @@ public final class StandardPlanner implements RoutePlanner {
             elapsedMs,
             counters.expandedNodes,
             counters.generatedCandidates,
+            counters.scannedRefs,
             counters.acceptedCandidates,
             PlannerMode.standard,
             request.inventorySensitivityProfile(),
@@ -297,16 +322,44 @@ public final class StandardPlanner implements RoutePlanner {
         ArrayDeque<InputContent> activeDemands = new ArrayDeque<>();
 
         while (!stack.isEmpty()) {
+            if (System.nanoTime() >= counters.wallDeadlineNanos && !counters.budgetExhausted) {
+                // Wall clock passed: flag exhaustion and let the frame machine wind
+                // down through its regular budget paths (entering -> isBudgetExceeded,
+                // candidate generation -> candidateBudgetReached). Those paths roll
+                // back in-flight candidate branches in LIFO order and degrade the
+                // frontier into pending inputs, so work already committed survives as
+                // a partial plan — exactly like a size-budget stop. A hard
+                // rollback-everything abort here would discard completed actions and
+                // flip the outcome to failed depending on which statement the
+                // deadline happened to land on, making results machine-speed
+                // dependent.
+                counters.budgetExhausted = true;
+                counters.budgetStopReason = "maxWallTimeMs";
+                recordBudgetCulprit(context, stack, stack.get(stack.size() - 1), activePath);
+            }
             PlanningFrame frame = stack.get(stack.size() - 1);
             switch (frame.state) {
                 case entering -> {
                     if (isBudgetExceeded(context, counters)) {
+                        // The target frame has no parent frame to degrade it into a
+                        // pending input, so failing it here throws the whole plan away
+                        // and reports zero actions. Only the wall clock can trip this
+                        // early (the size limits cannot be met before the first
+                        // expansion), and it can: the deadline is armed before the
+                        // loop, so a stop-the-world pause landing right there — or a
+                        // deliberately tiny wall budget — pushes it past the deadline
+                        // before any work happens. Enter the target anyway; its inputs
+                        // then take the budget-limited unresolved-input path and become
+                        // pending inputs, so the user gets "craft this, supply these"
+                        // instead of nothing at all.
+                        boolean targetFrame = stack.size() == 1;
                         recordBudgetCulprit(context, stack, frame, activePath);
                         if (debugLog.enabled()) {
                             debugLog.debug(
-                                "planner.budget recipe={} depth={} expanded={} budgetUsed={} budgetLimit={} generated={} reason={} culpritRecipe={} culpritInput={} culpritRemaining={} culpritCycle={}",
+                                "planner.budget recipe={} depth={} target={} expanded={} budgetUsed={} budgetLimit={} generated={} reason={} culpritRecipe={} culpritInput={} culpritRemaining={} culpritCycle={}",
                                 () -> describeRecipe(frame.recipeNode.recipe()),
                                 () -> frame.depth,
+                                () -> targetFrame,
                                 () -> counters.expandedNodes,
                                 () -> counters.budgetUsed,
                                 () -> context.request().budget().maxExpandedNodes(),
@@ -322,16 +375,20 @@ public final class StandardPlanner implements RoutePlanner {
                             issues,
                             issueSeq,
                             RoutingFailureCode.budgetExhausted,
-                            RoutingIssue.Severity.error,
-                            true,
+                            // Non-blocking on the target frame: the plan survives as a
+                            // degraded one, matching how a per-root-input cut reports.
+                            targetFrame ? RoutingIssue.Severity.warning : RoutingIssue.Severity.error,
+                            !targetFrame,
                             "cirrus.routing.budget.exhausted",
                             budgetIssuePayload(counters)
                         );
-                        Boolean completed = completeFrame(stack, false, activePath, cycleGuard);
-                        if (completed != null) {
-                            return completed;
+                        if (!targetFrame) {
+                            Boolean completed = completeFrame(stack, false, activePath, cycleGuard);
+                            if (completed != null) {
+                                return completed;
+                            }
+                            continue;
                         }
-                        continue;
                     }
 
                     boolean cycleReentry = isActive(activePath, frame.recipeIndex);
@@ -490,7 +547,13 @@ public final class StandardPlanner implements RoutePlanner {
                             ledger,
                             planBuilder,
                             issues,
-                            issueSeq
+                            issueSeq,
+                            variantCache,
+                            frame,
+                            0,
+                            0,
+                            evaluation.truncatedByBudget(),
+                            null
                         )) {
                             if (evaluation.hasActiveCycleCandidate()
                                 && context.request().loopPolicy() == LoopPolicy.forbidAmplification) {
@@ -567,6 +630,7 @@ public final class StandardPlanner implements RoutePlanner {
                         evaluation.hasActiveCycleCandidate(),
                         rootInput
                     );
+                    frame.fullCandidateCount = evaluation.candidates().size();
                     List<CandidateScore> loggedCandidates = candidates;
                     if (debugLog.enabled()) {
                         debugLog.debug(
@@ -583,7 +647,11 @@ public final class StandardPlanner implements RoutePlanner {
                 }
                 case tryingCandidates -> {
                     InputContent input = frame.activeInput();
-                    if (frame.rootInput && rootInputBudgetExceeded(context, counters)) {
+                    // Once the cut has been applied (rootInputBudgetCut), do not re-enter
+                    // this branch: the exceeded condition stays true for the rest of the
+                    // root input and would spin forever without ever reaching the
+                    // exhaustion handling below.
+                    if (frame.rootInput && !frame.rootInputBudgetCut && rootInputBudgetExceeded(context, counters)) {
                         recordBudgetCulprit(context, frame.recipeNode, input, frame.remaining, frame.depth + 1, frame.candidateSetHasActiveCycleCandidate);
                         counters.budgetExhausted = true;
                         counters.budgetStopReason = "maxRootInputBudget";
@@ -592,6 +660,17 @@ public final class StandardPlanner implements RoutePlanner {
                         continue;
                     }
                     if (frame.candidateAttemptIndex >= frame.candidateAttemptLimit) {
+                        if (frame.bestCandidateIndex >= 0 && !frame.recommittingBest && !frame.rootInputBudgetCut
+                            && !counters.budgetExhausted) {
+                            // Every probe left pending inputs behind; re-run the branch
+                            // with the lowest pending cost and commit it for real this
+                            // time (deterministic, so the subtree replays identically).
+                            // Skipped once a budget is exhausted: the re-run would fail
+                            // on entry, so go straight to the exhaustion path instead.
+                            frame.candidateAttemptIndex = frame.bestCandidateIndex;
+                            frame.recommittingBest = true;
+                            continue;
+                        }
                         if (debugLog.enabled()) {
                             debugLog.debug(
                                 "planner.unresolved.exhausted parent={} input={} remaining={} attempted={} candidates={} candidateIssues={}",
@@ -614,7 +693,13 @@ public final class StandardPlanner implements RoutePlanner {
                             ledger,
                             planBuilder,
                             issues,
-                            issueSeq
+                            issueSeq,
+                            variantCache,
+                            frame,
+                            frame.candidates().size(),
+                            frame.candidatesTried,
+                            false,
+                            frame.fullCandidateCount
                         )) {
                             if (frame.rootInputBudgetCut) {
                                 addIssue(
@@ -695,6 +780,7 @@ public final class StandardPlanner implements RoutePlanner {
                         counters.explorationBudgetUsed++;
                     }
                     frame.candidateAttemptIndex++;
+                    frame.candidatesTried++;
 
                     if (candidate.cycleCandidate()
                         && context.request().loopPolicy() == LoopPolicy.forbidAmplification) {
@@ -722,7 +808,8 @@ public final class StandardPlanner implements RoutePlanner {
                         planBuilder.actionCount(),
                         planBuilder.nextActionId(),
                         issues.size(),
-                        traceStages.size()
+                        traceStages.size(),
+                        frame.pendingCost
                     );
                     frame.rollback = rollback;
                     frame.state = FrameState.awaitingChildResult;
@@ -743,19 +830,60 @@ public final class StandardPlanner implements RoutePlanner {
                         }
                         captureIssuesSince(issues, rollback.issueCount(), frame.candidateIssues, visibleIssueRecipe(context, frame.recipeNode.recipe()));
                         rollback.restore(ledger, planBuilder, issues, traceStages);
+                        frame.pendingCost = rollback.pendingCostAtMark();
                         frame.rollback = null;
+                        if (frame.recommittingBest) {
+                            // The previously-best candidate no longer succeeds (budget
+                            // cut mid-retry); force the exhaustion path instead of
+                            // looping back onto the same candidate.
+                            frame.candidateAttemptIndex = frame.candidateAttemptLimit;
+                        }
                         frame.state = FrameState.tryingCandidates;
                         continue;
                     }
 
                     frame.rollback = null;
                     int childIssueStart = rollback.issueCount();
+                    double subtreePendingCost = frame.pendingCost - rollback.pendingCostAtMark();
+                    if (!frame.recommittingBest && subtreePendingCost > 0 && !counters.budgetExhausted) {
+                        // Soft failure: the candidate resolved but left pending inputs
+                        // behind. Track the lowest-pending-cost branch, roll back and
+                        // probe the next candidate while candidates, the exploration
+                        // budget and the near-tie band last; otherwise hand over to the
+                        // exhaustion path, which re-commits the recorded best. Once any
+                        // budget is exhausted the planner is winding down: keep the
+                        // incumbent instead of rolling it back for probes whose re-run
+                        // would be cut off anyway.
+                        if (subtreePendingCost < frame.bestPendingCost) {
+                            frame.bestPendingCost = subtreePendingCost;
+                            frame.bestCandidateIndex = frame.candidateAttemptIndex - 1;
+                        }
+                        boolean canProbeMore = frame.candidateAttemptIndex < frame.candidateAttemptLimit
+                            && !explorationBudgetExhausted(context, counters)
+                            && nextProbeWithinTieBand(context, frame);
+                        if (canProbeMore) {
+                            rollback.restore(ledger, planBuilder, issues, traceStages);
+                            frame.pendingCost = rollback.pendingCostAtMark();
+                            frame.state = FrameState.tryingCandidates;
+                            continue;
+                        }
+                        if (frame.bestCandidateIndex != frame.candidateAttemptIndex - 1) {
+                            rollback.restore(ledger, planBuilder, issues, traceStages);
+                            frame.pendingCost = rollback.pendingCostAtMark();
+                            frame.candidateAttemptIndex = frame.candidateAttemptLimit;
+                            frame.state = FrameState.tryingCandidates;
+                            continue;
+                        }
+                        // The current candidate is the best so far and no more probes are
+                        // possible: fall through and commit it directly, saving a re-run.
+                    }
                     boolean liftedToParentFallback = false;
                     boolean rollbackRestoredForParentFallback = false;
                     if (context.ruleProfile().liftMultiSemanticChildShortages()
                         && preservesOriginalInputShortage(input, variantCache)
                         && hasOnlyNonBlockingShortages(issues, childIssueStart)) {
                         rollback.restore(ledger, planBuilder, issues, traceStages);
+                        frame.pendingCost = rollback.pendingCostAtMark();
                         rollbackRestoredForParentFallback = true;
                         if (resolveUnresolvedInput(
                             context,
@@ -768,7 +896,11 @@ public final class StandardPlanner implements RoutePlanner {
                             ledger,
                             planBuilder,
                             issues,
-                            issueSeq
+                            issueSeq,
+                            variantCache,
+                            frame,
+                            frame.candidates().size(),
+                            frame.candidatesTried
                         )) {
                             frame.remaining = 0;
                             liftedToParentFallback = true;
@@ -800,6 +932,7 @@ public final class StandardPlanner implements RoutePlanner {
                             variantCache
                         );
                     }
+                    frame.resetBestExploration();
                     if (frame.remaining <= 0) {
                         if (debugLog.enabled()) {
                             debugLog.debug(
@@ -865,7 +998,8 @@ public final class StandardPlanner implements RoutePlanner {
         InputVariantCache variantCache
     ) {
         int variantCount = enumerableVariantCount(input, variantCache);
-        BitSet allowed = context.sourcePolicyDecision().allowedRecipes();
+        int demandLoopScc = loopSccOfInput(context, input);
+        String targetResourceId = targetResourceIdOf(context);
         CandidateShortlist candidates = new CandidateShortlist(
             candidateShortlistLimit(context),
             candidateComparator(context.ruleProfile()),
@@ -875,6 +1009,10 @@ public final class StandardPlanner implements RoutePlanner {
         ActiveDemandDependencyScratch dependencyScratch = new ActiveDemandDependencyScratch(variantCache);
         ActiveDemandSnapshot activeDemandSnapshot = dependencyScratch.snapshot(activeDemands);
         CandidateAvailabilityScratch availabilityScratch = new CandidateAvailabilityScratch(ledger, variantCache);
+        // Eval floor: the budget gate may only cut producer enumeration after at
+        // least this many refs were visited, so a candidateCount==0 pending can
+        // never be a "budget ran out before this input was reached" artifact.
+        int evalFloor = minEvalFloor(context, input, variantCache);
         if (useCandidatePreShortlist(context)) {
             CandidatePreShortlist preCandidates = new CandidatePreShortlist(
                 candidatePreShortlistLimit(context, variantCount),
@@ -882,57 +1020,26 @@ public final class StandardPlanner implements RoutePlanner {
                 variantCount
             );
             ScoringScratch preScoringScratch = new ScoringScratch(context.ruleProfile());
-            if (!requiresCandidateScanFallback(input)) {
-                ProducerRefIterator producerRefs = indexedProducerRefs(context.graph(), input, variantCache);
-                while (producerRefs.next()) {
-                    if (candidateBudgetReached(context, parentNode, input, remaining, depth, rootInput)) {
-                        break;
-                    }
-                    int recipeIndex = producerRefs.recipeIndex();
-                    if (!allowed.get(recipeIndex)) {
-                        continue;
-                    }
-                    RecipeGraph.Node node = context.catalog().nodeAt(recipeIndex);
-                    addCandidateSeedIfAccepted(
-                        context,
-                        input,
-                        remaining,
-                        depth,
-                        activePath,
-                        ledger,
-                        node,
-                        recipeIndex,
-                        node.outputAt(producerRefs.outputIndex()),
-                        producerRefs.matchedVariantIndex(),
-                        preCandidates,
-                        preScoringScratch,
-                        availabilityScratch,
-                        variantCache
-                    );
+            int visited = 0;
+            boolean truncated = false;
+            for (PlannerRequestCaches.CachedProducer producer : filteredProducersFor(context, input, variantCache)) {
+                if (visited >= evalFloor && candidateBudgetReached(context, parentNode, input, remaining, depth, rootInput)) {
+                    truncated = true;
+                    break;
                 }
-            } else {
-                for (int recipeIndex = allowed.nextSetBit(0); recipeIndex >= 0; recipeIndex = allowed.nextSetBit(recipeIndex + 1)) {
-                    if (candidateBudgetReached(context, parentNode, input, remaining, depth, rootInput)) {
-                        break;
-                    }
-                    RecipeGraph.Node node = context.catalog().nodeAt(recipeIndex);
-                    addCandidateSeedIfAccepted(
-                        context,
-                        input,
-                        remaining,
-                        depth,
-                        activePath,
-                        ledger,
-                        node,
-                        recipeIndex,
-                        findMatchedOutput(node, input),
-                        -1,
-                        preCandidates,
-                        preScoringScratch,
-                        availabilityScratch,
-                        variantCache
-                    );
-                }
+                visited++;
+                addCandidateSeedIfAccepted(
+                    context,
+                    input,
+                    remaining,
+                    depth,
+                    activePath,
+                    producer,
+                    preCandidates,
+                    preScoringScratch,
+                    availabilityScratch,
+                    variantCache
+                );
             }
 
             for (CandidateSeed seed : preCandidates.toCandidates()) {
@@ -947,6 +1054,8 @@ public final class StandardPlanner implements RoutePlanner {
                     seed.recipeIndex(),
                     seed.matchedOutput(),
                     seed.matchedVariantIndex(),
+                    demandLoopScc,
+                    targetResourceId,
                     candidates,
                     scoringScratch,
                     dependencyScratch,
@@ -956,49 +1065,17 @@ public final class StandardPlanner implements RoutePlanner {
                     false
                 );
             }
-            return candidates.toEvaluation();
+            return candidates.toEvaluation(truncated, visited);
         }
 
-        if (!requiresCandidateScanFallback(input)) {
-            ProducerRefIterator producerRefs = indexedProducerRefs(context.graph(), input, variantCache);
-            while (producerRefs.next()) {
-                if (candidateBudgetReached(context, parentNode, input, remaining, depth, rootInput)) {
-                    break;
-                }
-                int recipeIndex = producerRefs.recipeIndex();
-                if (!allowed.get(recipeIndex)) {
-                    continue;
-                }
-                RecipeGraph.Node node = context.catalog().nodeAt(recipeIndex);
-                addCandidateIfAccepted(
-                    context,
-                    input,
-                    remaining,
-                    depth,
-                    debugLog,
-                    activePath,
-                    node,
-                    recipeIndex,
-                    node.outputAt(producerRefs.outputIndex()),
-                    producerRefs.matchedVariantIndex(),
-                    candidates,
-                    scoringScratch,
-                    dependencyScratch,
-                    activeDemandSnapshot,
-                    availabilityScratch,
-                    variantCache,
-                    true
-                );
-            }
-            return candidates.toEvaluation();
-        }
-
-        for (int recipeIndex = allowed.nextSetBit(0); recipeIndex >= 0; recipeIndex = allowed.nextSetBit(recipeIndex + 1)) {
-            if (candidateBudgetReached(context, parentNode, input, remaining, depth, rootInput)) {
+        int visited = 0;
+        boolean truncated = false;
+        for (PlannerRequestCaches.CachedProducer producer : filteredProducersFor(context, input, variantCache)) {
+            if (visited >= evalFloor && candidateBudgetReached(context, parentNode, input, remaining, depth, rootInput)) {
+                truncated = true;
                 break;
             }
-            RecipeGraph.Node node = context.catalog().nodeAt(recipeIndex);
-            OutputContent matchedOutput = findMatchedOutput(node, input);
+            visited++;
             addCandidateIfAccepted(
                 context,
                 input,
@@ -1006,10 +1083,12 @@ public final class StandardPlanner implements RoutePlanner {
                 depth,
                 debugLog,
                 activePath,
-                node,
-                recipeIndex,
-                matchedOutput,
-                -1,
+                producer.node(),
+                producer.recipeIndex(),
+                producer.matchedOutput(),
+                producer.matchedVariantIndex(),
+                demandLoopScc,
+                targetResourceId,
                 candidates,
                 scoringScratch,
                 dependencyScratch,
@@ -1019,7 +1098,210 @@ public final class StandardPlanner implements RoutePlanner {
                 true
             );
         }
-        return candidates.toEvaluation();
+        return candidates.toEvaluation(truncated, visited);
+    }
+
+    /**
+     * Minimum producer refs evaluated per input before budget gates may cut
+     * enumeration: {@code max(1, min(minEvalFloorCap, producerScanLimit / 4))}.
+     */
+    private int minEvalFloor(PlannerContext context, InputContent input, InputVariantCache variantCache) {
+        int scan = producerScanLimit(context, input, variantCache);
+        return Math.max(1, Math.min(minEvalFloorCap, scan / 4));
+    }
+
+    /**
+     * The per-request unit-cost oracle. Its producer provider is the same
+     * request-static, scan-capped filter pipeline the planner uses, so cost
+     * estimation never explores producers the planner itself would reject.
+     */
+    /** Cost multiplier for free-resource generators: above any real chain, below unsourced. */
+    private static final double generationCostPenalty = 1_000.0d;
+    /** Mild deprioritization for the soft advisory tags. */
+    private static final double advisoryCostPenalty = 4.0d;
+
+    private UnitCostOracle unitCostOracle(PlannerContext context, InputVariantCache variantCache) {
+        return context.caches().unitCostOracle(() -> new UnitCostOracle(
+            context.catalog(),
+            input -> filteredProducersFor(context, input, variantCache),
+            advisoryPenalty(context)
+        ));
+    }
+
+    /**
+     * Implements the advisory screening semantics inside the cost oracle:
+     * generation recipes (produce without consuming — cobblegen, drills,
+     * void/resource generators) have raw cost 1 and would otherwise always
+     * win; the multiplier sinks them below real chains while keeping them
+     * usable when they are the only source.
+     */
+    private static @Nullable java.util.function.IntToDoubleFunction advisoryPenalty(PlannerContext context) {
+        java.util.BitSet generation = context.tagSnapshot().recipesForTag(dev.vfyjxf.cirrus.api.recipe.classify.ClassificationTags.GENERATION);
+        java.util.BitSet soft = new java.util.BitSet();
+        for (String tag : new String[]{
+            dev.vfyjxf.cirrus.api.recipe.classify.ClassificationTags.RECYCLING,
+            dev.vfyjxf.cirrus.api.recipe.classify.ClassificationTags.EXCHANGE,
+            dev.vfyjxf.cirrus.api.recipe.classify.ClassificationTags.RECOLOR
+        }) {
+            java.util.BitSet bits = context.tagSnapshot().recipesForTag(tag);
+            if (bits != null && !bits.isEmpty()) {
+                soft.or(bits);
+            }
+        }
+        if ((generation == null || generation.isEmpty()) && soft.isEmpty()) {
+            return null;
+        }
+        java.util.BitSet generationBits = generation == null ? new java.util.BitSet() : generation;
+        return recipeIndex -> generationBits.get(recipeIndex)
+            ? generationCostPenalty
+            : soft.get(recipeIndex) ? advisoryCostPenalty : 1.0d;
+    }
+
+    /**
+     * The request-static producer list for this input: the full producer scan
+     * runs once per demand key and is cached on the request; later occurrences
+     * of the same demand reuse it and only redo the dynamic scoring.
+     */
+    private List<PlannerRequestCaches.CachedProducer> filteredProducersFor(
+        PlannerContext context,
+        InputContent input,
+        InputVariantCache variantCache
+    ) {
+        String cacheKey = context.caches().producerCacheKey(input, StandardPlanner::producerCacheKey);
+        if (cacheKey != null) {
+            List<PlannerRequestCaches.CachedProducer> cached = context.caches().filteredProducers(cacheKey);
+            if (cached != null) {
+                return cached;
+            }
+        }
+        List<PlannerRequestCaches.CachedProducer> scanned = scanFilteredProducers(context, input, variantCache);
+        if (cacheKey != null) {
+            context.caches().putFilteredProducers(cacheKey, scanned);
+        }
+        return scanned;
+    }
+
+    /**
+     * Full producer-index scan applying only request-static gates (allowed
+     * recipe, non-empty matched output, heuristic policy, variant resolution).
+     * Bounded by {@link #producerScanLimit} so inputs with thousands of
+     * producers cannot dominate the whole planning budget; the deterministic
+     * index order keeps the truncation reproducible.
+     */
+    private List<PlannerRequestCaches.CachedProducer> scanFilteredProducers(
+        PlannerContext context,
+        InputContent input,
+        InputVariantCache variantCache
+    ) {
+        BitSet allowed = context.sourcePolicyDecision().allowedRecipes();
+        PlannerContext.Counters counters = context.counters();
+        List<PlannerRequestCaches.CachedProducer> producers = new ArrayList<>();
+        if (!requiresCandidateScanFallback(input)) {
+            int scanLimit = producerScanLimit(context, input, variantCache);
+            int visited = 0;
+            ProducerRefIterator producerRefs = indexedProducerRefs(context.graph(), input, variantCache);
+            while (producerRefs.next()) {
+                if (visited >= scanLimit) {
+                    break;
+                }
+                visited++;
+                counters.scannedRefs++;
+                int recipeIndex = producerRefs.recipeIndex();
+                if (!allowed.get(recipeIndex)) {
+                    continue;
+                }
+                RecipeGraph.Node node = context.catalog().nodeAt(recipeIndex);
+                PlannerRequestCaches.CachedProducer producer = staticallyFilterProducer(
+                    context,
+                    input,
+                    node,
+                    recipeIndex,
+                    node.outputAt(producerRefs.outputIndex()),
+                    producerRefs.matchedVariantIndex(),
+                    variantCache
+                );
+                if (producer != null) {
+                    producers.add(producer);
+                }
+            }
+            return producers;
+        }
+
+        // Complex-content fallback: no index exists, so the whole allowed set is
+        // scanned. Keep the historical unbounded scan here — complex inputs are
+        // rare and truncating could drop the only matching producer.
+        for (int recipeIndex = allowed.nextSetBit(0); recipeIndex >= 0; recipeIndex = allowed.nextSetBit(recipeIndex + 1)) {
+            counters.scannedRefs++;
+            RecipeGraph.Node node = context.catalog().nodeAt(recipeIndex);
+            PlannerRequestCaches.CachedProducer producer = staticallyFilterProducer(
+                context,
+                input,
+                node,
+                recipeIndex,
+                findMatchedOutput(node, input),
+                -1,
+                variantCache
+            );
+            if (producer != null) {
+                producers.add(producer);
+            }
+        }
+        return producers;
+    }
+
+    /**
+     * Request-static candidate gates; returns {@code null} when the producer is
+     * unusable regardless of the dynamic planning state.
+     */
+    private @Nullable PlannerRequestCaches.CachedProducer staticallyFilterProducer(
+        PlannerContext context,
+        InputContent input,
+        RecipeGraph.Node node,
+        int recipeIndex,
+        @Nullable OutputContent matchedOutput,
+        int knownMatchedVariantIndex,
+        InputVariantCache variantCache
+    ) {
+        if (matchedOutput == null || matchedOutput.amount() <= 0) {
+            return null;
+        }
+        if (!heuristicAllowsCandidate(context.request(), node)) {
+            return null;
+        }
+        int matchedVariantIndex = knownMatchedVariantIndex >= 0
+            ? knownMatchedVariantIndex
+            : resolveMatchedVariantIndex(input, matchedOutput, variantCache);
+        if (matchedVariantIndex < 0) {
+            return null;
+        }
+        return new PlannerRequestCaches.CachedProducer(recipeIndex, node, matchedOutput, matchedVariantIndex);
+    }
+
+    /**
+     * Per-input cap on producer refs visited during a full scan: proportional
+     * to the shortlist size with a floor, so fat tag inputs (thousands of
+     * producers) cannot starve the rest of the plan.
+     */
+    private int producerScanLimit(PlannerContext context, InputContent input, InputVariantCache variantCache) {
+        int shortlistBased = candidateShortlistLimit(context) * 8;
+        int variantBased = enumerableVariantCount(input, variantCache) * 2;
+        return Math.max(256, Math.max(shortlistBased, variantBased));
+    }
+
+    /**
+     * Cache key for the per-request producer filter cache: the demand key plus
+     * the full tag key for tag inputs, so an item tag and a fluid tag with the
+     * same location never share an entry.
+     */
+    private static @Nullable String producerCacheKey(InputContent input) {
+        String key = ClassifyViewFactory.demandKey(input);
+        if (key == null) {
+            return null;
+        }
+        if (input instanceof TagStackContent<?> tag) {
+            return key + "|" + tag.tagKey();
+        }
+        return key;
     }
 
     private boolean candidateBudgetReached(
@@ -1030,13 +1312,19 @@ public final class StandardPlanner implements RoutePlanner {
         int depth
     ) {
         PlannerContext.Counters counters = context.counters();
-        if (counters.generatedCandidates < context.request().budget().maxGeneratedCandidates()) {
-            return false;
+        if (counters.generatedCandidates >= context.request().budget().maxGeneratedCandidates()) {
+            counters.budgetExhausted = true;
+            counters.budgetStopReason = "maxGeneratedCandidates";
+            recordBudgetCulprit(context, parentNode, input, remaining, depth, false);
+            return true;
         }
-        counters.budgetExhausted = true;
-        counters.budgetStopReason = "maxGeneratedCandidates";
-        recordBudgetCulprit(context, parentNode, input, remaining, depth, false);
-        return true;
+        if (System.nanoTime() >= counters.wallDeadlineNanos) {
+            counters.budgetExhausted = true;
+            counters.budgetStopReason = "maxWallTimeMs";
+            recordBudgetCulprit(context, parentNode, input, remaining, depth, false);
+            return true;
+        }
+        return false;
     }
 
     private boolean candidateBudgetReached(
@@ -1063,34 +1351,32 @@ public final class StandardPlanner implements RoutePlanner {
         long remaining,
         int depth,
         Int2IntOpenHashMap activePath,
-        ResourceLedger ledger,
-        RecipeGraph.Node node,
-        int recipeIndex,
-        @Nullable OutputContent matchedOutput,
-        int knownMatchedVariantIndex,
+        PlannerRequestCaches.CachedProducer producer,
         CandidatePreShortlist candidates,
         ScoringScratch scoringScratch,
         CandidateAvailabilityScratch availabilityScratch,
         InputVariantCache variantCache
     ) {
-        if (matchedOutput == null || matchedOutput.amount() <= 0) {
-            return;
-        }
-        if (!heuristicAllowsCandidate(context.request(), node)) {
-            return;
-        }
-        int matchedVariantIndex = knownMatchedVariantIndex >= 0
-            ? knownMatchedVariantIndex
-            : resolveMatchedVariantIndex(input, matchedOutput, variantCache);
-        if (matchedVariantIndex < 0) {
-            return;
-        }
+        RecipeGraph.Node node = producer.node();
+        OutputContent matchedOutput = producer.matchedOutput();
         int craftTimes = (int) Math.ceil((double) remaining / matchedOutput.amount());
-        context.counters().generatedCandidates++;
+        double estimatedSubtreeCost = unitCostOracle(context, variantCache).subtreeCost(node, craftTimes);
+        // Impurity on the candidate's own primary ranking axis: when the demand
+        // has a pure sibling producer, impure (multi-guaranteed-output) recipes
+        // must lose the first axis instead of tying on base cost and winning on
+        // the stable tiebreak. When the impure recipe is the only kind of
+        // producer for this demand, the factor is waived (sole-source exemption)
+        // so last-resort sources stay reachable.
+        double impurity = impurityFactorFor(context, input, node, matchedOutput, variantCache);
+        if (impurity > 1.0d) {
+            estimatedSubtreeCost *= impurity;
+        }
+        // Round-trip filtering happens in the full addCandidateIfAccepted pass
+        // (seeds carry no debug log / cycle marking here); seeds only carry the
+        // impurity signal, and hard filtering is applied before any try.
 
         RuleProfile profile = context.ruleProfile();
-        boolean cycleCandidate = isActive(activePath, recipeIndex);
-        markCandidateBudgetIfReached(context, node, input, remaining, depth, cycleCandidate, context.counters().activeRootInputIndex >= 0);
+        boolean cycleCandidate = isActive(activePath, producer.recipeIndex());
         double amplificationRisk = estimateAmplificationRisk(cycleCandidate, depth);
         double availableCoverage = estimateCandidateAvailableCoverage(node, craftTimes, availabilityScratch);
         boolean fastScoring = useFastScoring(context, profile);
@@ -1099,7 +1385,7 @@ public final class StandardPlanner implements RoutePlanner {
             if (!fastHardRulesAccept(node)) {
                 return;
             }
-            applyFastScore(profile.fastScoringPreset(), node, craftTimes, depth, amplificationRisk, availableCoverage, score);
+            applyFastScore(profile.fastScoringPreset(), node, craftTimes, depth, amplificationRisk, availableCoverage, estimatedSubtreeCost, score);
         } else {
             CandidateContext candidateContext = new CandidateContext(
                 node,
@@ -1109,7 +1395,8 @@ public final class StandardPlanner implements RoutePlanner {
                 depth,
                 cycleCandidate,
                 amplificationRisk,
-                availableCoverage
+                availableCoverage,
+                estimatedSubtreeCost
             );
             HardRuleResult hardResult = evaluateHardRules(profile.hardRules(), candidateContext);
             if (!hardResult.accepted()) {
@@ -1121,14 +1408,19 @@ public final class StandardPlanner implements RoutePlanner {
             }
             applyHeuristicScore(node.routingHints(), accumulator);
         }
+        // Count only candidates that survived the hard gates: the generation
+        // budget measures real evaluation work, not refs discarded by the
+        // static filters or hard rules.
+        context.counters().generatedCandidates++;
+        markCandidateBudgetIfReached(context, node, input, remaining, depth, cycleCandidate, context.counters().activeRootInputIndex >= 0);
         candidates.add(
-            recipeIndex,
+            producer.recipeIndex(),
             node,
             matchedOutput,
             craftTimes,
-            matchedVariantIndex,
+            producer.matchedVariantIndex(),
             score,
-            context.catalog().stableRecipeKey(recipeIndex)
+            context.catalog().stableRecipeKey(producer.recipeIndex())
         );
     }
 
@@ -1143,6 +1435,8 @@ public final class StandardPlanner implements RoutePlanner {
         int recipeIndex,
         @Nullable OutputContent matchedOutput,
         int knownMatchedVariantIndex,
+        int demandLoopScc,
+        @Nullable String targetResourceId,
         CandidateShortlist candidates,
         ScoringScratch scoringScratch,
         ActiveDemandDependencyScratch dependencyScratch,
@@ -1214,15 +1508,65 @@ public final class StandardPlanner implements RoutePlanner {
                 );
             }
         }
+        // SCC-aware loop guard: when the demanded resource belongs to a looping
+        // family (e.g. the 16 concrete colors), candidates that consume another
+        // member of the same family are conversion steps that can ping-pong;
+        // penalize them so direct "exit the family" crafts win the scoring.
+        // Tag/list demands have no concrete resource id; fall back to the
+        // matched output's family so the guard still fires there.
+        int effectiveDemandLoopScc = demandLoopScc >= 0 ? demandLoopScc : loopSccOfOutput(context, matchedOutput);
+        boolean intraLoopConversion = effectiveDemandLoopScc >= 0 && candidateConvertsWithinLoop(context, node, effectiveDemandLoopScc);
+        if (intraLoopConversion) {
+            candidates.markActiveCycleCandidate();
+            if (debugLog.enabled()) {
+                debugLog.debug(
+                    "planner.candidate.penalized reason=intraLoopConversion recipe={} input={} depth={}",
+                    () -> describeRecipe(node.recipe()),
+                    () -> describeInput(input),
+                    () -> depth
+                );
+            }
+        }
+        // Contextual screening: request-scoped rules (target family, machine
+        // ownership) add their penalties on top of the static classification.
+        double contextualPenalty = contextualPenalty(context, node, input, targetResourceId, depth);
+        if (contextualPenalty > 0.0d && debugLog.enabled()) {
+            debugLog.debug(
+                "planner.candidate.penalized reason=contextual recipe={} input={} depth={} penalty={}",
+                () -> describeRecipe(node.recipe()),
+                () -> describeInput(input),
+                () -> depth,
+                () -> contextualPenalty
+            );
+        }
 
         RuleProfile profile = context.ruleProfile();
         boolean cycleCandidate = isActive(activePath, recipeIndex);
-        if (countGenerated) {
-            context.counters().generatedCandidates++;
-            markCandidateBudgetIfReached(context, node, input, remaining, depth, cycleCandidate, context.counters().activeRootInputIndex >= 0);
-        }
         double amplificationRisk = estimateAmplificationRisk(cycleCandidate, depth);
         double availableCoverage = estimateCandidateAvailableCoverage(node, craftTimes, availabilityScratch);
+        double estimatedSubtreeCost = unitCostOracle(context, variantCache).subtreeCost(node, craftTimes);
+        // Same impurity/round-trip handling as the seed path: primary-axis
+        // impurity (waived when no pure sibling exists) and hard round-trip
+        // filtering under forbidAmplification / soft penalty otherwise.
+        double impurity = impurityFactorFor(context, input, node, matchedOutput, variantCache);
+        if (impurity > 1.0d) {
+            estimatedSubtreeCost *= impurity;
+        }
+        boolean roundTripWithActive = hasActiveRoundTripPartner(context, recipeIndex, activePath);
+        if (roundTripWithActive) {
+            if (context.request().loopPolicy() == LoopPolicy.forbidAmplification) {
+                candidates.markActiveCycleCandidate();
+                if (debugLog.enabled()) {
+                    debugLog.debug(
+                        "planner.candidate.filtered reason=roundTrip recipe={} input={} depth={}",
+                        () -> describeRecipe(node.recipe()),
+                        () -> describeInput(input),
+                        () -> depth
+                    );
+                }
+                return;
+            }
+        }
         boolean fastScoring = useFastScoring(context, profile);
         double[] score = scoringScratch.clear();
         CandidateContext candidateContext = null;
@@ -1241,8 +1585,13 @@ public final class StandardPlanner implements RoutePlanner {
                 }
                 return;
             }
-            applyFastScore(profile.fastScoringPreset(), node, craftTimes, depth, amplificationRisk, availableCoverage, score);
+            applyFastScore(profile.fastScoringPreset(), node, craftTimes, depth, amplificationRisk, availableCoverage, estimatedSubtreeCost, score);
             applyIndirectActiveDemandCyclePenalty(indirectActiveDemandCycle, score);
+            applyIntraLoopConversionPenalty(intraLoopConversion, score);
+            applyRoundTripPenalty(roundTripWithActive, score);
+            if (contextualPenalty > 0.0d && score.length > 0) {
+                score[0] += contextualPenalty;
+            }
         } else {
             candidateContext = new CandidateContext(
                 node,
@@ -1252,7 +1601,8 @@ public final class StandardPlanner implements RoutePlanner {
                 depth,
                 cycleCandidate,
                 amplificationRisk,
-                availableCoverage
+                availableCoverage,
+                estimatedSubtreeCost
             );
             HardRuleResult hardResult = evaluateHardRules(profile.hardRules(), candidateContext);
             if (!hardResult.accepted()) {
@@ -1275,6 +1625,18 @@ public final class StandardPlanner implements RoutePlanner {
             }
             applyHeuristicScore(node.routingHints(), accumulator);
             applyIndirectActiveDemandCyclePenalty(indirectActiveDemandCycle, accumulator);
+            applyIntraLoopConversionPenalty(intraLoopConversion, accumulator);
+            applyRoundTripPenalty(roundTripWithActive, accumulator);
+            if (contextualPenalty > 0.0d) {
+                accumulator.add("contextual", contextualPenalty);
+            }
+        }
+        // Count only candidates that survived the hard gates: the generation
+        // budget measures real evaluation work, not refs discarded by the
+        // static filters or hard rules.
+        if (countGenerated) {
+            context.counters().generatedCandidates++;
+            markCandidateBudgetIfReached(context, node, input, remaining, depth, cycleCandidate, context.counters().activeRootInputIndex >= 0);
         }
         context.counters().acceptedCandidates++;
         candidates.add(
@@ -1310,6 +1672,12 @@ public final class StandardPlanner implements RoutePlanner {
         return true;
     }
 
+    /**
+     * Writes the preset score vector. Profiles whose first axis is the
+     * unit-cost estimate (the default profiles) carry one leading slot; custom
+     * 4-axis profiles keep the legacy layout, so all writes go through
+     * {@code offset = score.length - 4}.
+     */
     private void applyFastScore(
         @Nullable FastScoringPreset preset,
         RecipeGraph.Node node,
@@ -1317,27 +1685,211 @@ public final class StandardPlanner implements RoutePlanner {
         int depth,
         double amplificationRisk,
         double availableCoverage,
+        double estimatedSubtreeCost,
         double[] score
     ) {
         if (score.length < 4) {
             return;
         }
+        int offset = score.length - 4;
+        if (offset > 0) {
+            score[0] = estimatedSubtreeCost;
+        }
         double craftScore = craftTimes + heuristicCraftPenalty(node.routingHints());
-        score[0] = craftScore;
-        score[1] = 1.0d - availableCoverage;
+        score[offset] = craftScore;
+        score[offset + 1] = 1.0d - availableCoverage;
         if (preset == FastScoringPreset.assuredBounded) {
-            score[2] = depth * 0.8d;
-            score[3] = amplificationRisk * 1.2d;
+            score[offset + 2] = depth * 0.8d;
+            score[offset + 3] = amplificationRisk * 1.2d;
             return;
         }
-        score[2] = depth;
-        score[3] = amplificationRisk;
+        score[offset + 2] = depth;
+        score[offset + 3] = amplificationRisk;
     }
 
     private void applyIndirectActiveDemandCyclePenalty(boolean indirectActiveDemandCycle, double[] score) {
         if (indirectActiveDemandCycle && score.length > 0) {
             score[0] += indirectActiveDemandCyclePenalty;
         }
+    }
+
+    private void applyIntraLoopConversionPenalty(boolean intraLoopConversion, double[] score) {
+        if (intraLoopConversion && score.length > 0) {
+            score[0] += intraLoopConversionPenalty;
+        }
+    }
+
+    /** Soft round-trip penalty for loop policies that do not hard-forbid no-op pairs. */
+    private void applyRoundTripPenalty(boolean roundTripWithActive, double[] score) {
+        if (roundTripWithActive && score.length > 0) {
+            score[0] += roundTripPenalty;
+        }
+    }
+
+    private void applyRoundTripPenalty(
+        boolean roundTripWithActive,
+        dev.vfyjxf.cirrus.api.recipe.routing.rule.ScoreAccumulator accumulator
+    ) {
+        if (roundTripWithActive) {
+            accumulator.add("roundTrip", roundTripPenalty);
+        }
+    }
+
+    /**
+     * Whether any round-trip partner (equal-amount inverse recipe — compress↔
+     * decompress, revert↔_revert) of the candidate is already on the active
+     * path: accepting the candidate would close a net-zero loop.
+     */
+    private boolean hasActiveRoundTripPartner(PlannerContext context, int recipeIndex, Int2IntOpenHashMap activePath) {
+        if (!roundTripEnabled) {
+            return false;
+        }
+        int[] partners = context.service().topology().roundTripPartnerOf(recipeIndex);
+        if (partners.length == 0) {
+            return false;
+        }
+        for (int partner : partners) {
+            if (isActive(activePath, partner)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Primary-axis impurity factor for one (demand, candidate) pair: the
+     * candidate's guaranteed byproduct count relative to the demanded output,
+     * waived entirely when no pure producer exists for this demand (sole-source
+     * exemption keeps impure last-resort sources reachable).
+     */
+    private double impurityFactorFor(
+        PlannerContext context,
+        InputContent input,
+        RecipeGraph.Node node,
+        dev.vfyjxf.cirrus.api.recipe.content.OutputContent matchedOutput,
+        InputVariantCache variantCache
+    ) {
+        if (!impurityEnabled) {
+            return 1.0d;
+        }
+        UnitCostOracle oracle = unitCostOracle(context, variantCache);
+        if (oracle.impurityFactor(node, matchedOutput) <= 1.0d) {
+            return 1.0d;
+        }
+        // Sole-source exemption: scan the same filtered producer set the planner
+        // uses; if any producer is pure for this demand, the impure candidate is
+        // fairly penalized, otherwise it is the only kind of source and stays.
+        // (The impure candidate itself never counts as the pure sibling.)
+        for (PlannerRequestCaches.CachedProducer producer : filteredProducersFor(context, input, variantCache)) {
+            if (producer.node() != node && oracle.impurityFactor(producer.node(), producer.matchedOutput()) <= 1.0d) {
+                return oracle.impurityFactor(node, matchedOutput);
+            }
+        }
+        return 1.0d;
+    }
+
+    private void applyIntraLoopConversionPenalty(
+        boolean intraLoopConversion,
+        dev.vfyjxf.cirrus.api.recipe.routing.rule.ScoreAccumulator accumulator
+    ) {
+        if (intraLoopConversion) {
+            accumulator.add("craft", intraLoopConversionPenalty);
+        }
+    }
+
+    /**
+     * The looping SCC of the demanded input's resource, or -1 when the input
+     * is not a concrete stack or its resource belongs to no loop family.
+     */
+    private int loopSccOfInput(PlannerContext context, InputContent input) {
+        String resourceId = ClassifyViewFactory.resourceIdOf(input);
+        if (resourceId == null) {
+            return -1;
+        }
+        return context.service().topology().loopingSccIdOf(resourceId);
+    }
+
+    /**
+     * The looping SCC of a matched output's resource, or -1. Used as the
+     * demand-family fallback for tag/list demands, where the input slot has
+     * no single resource id but the producing candidate's output does.
+     */
+    private int loopSccOfOutput(PlannerContext context, @Nullable OutputContent output) {
+        String resourceId = ClassifyViewFactory.resourceIdOf(output);
+        if (resourceId == null) {
+            return -1;
+        }
+        return context.service().topology().loopingSccIdOf(resourceId);
+    }
+
+    /**
+     * The concrete resource id of the request target's primary output, or
+     * null when the target has no concrete-stack output. Derived per demand
+     * evaluation; both the catalog lookup and the output scan are O(1)-ish.
+     */
+    private @Nullable String targetResourceIdOf(PlannerContext context) {
+        if (!(context.request().target() instanceof RoutingRequest.RecipeTarget(RecipeEntry<?> recipe, int ignored))) {
+            return null;
+        }
+        int targetIndex = context.catalog().indexOf(recipe);
+        if (targetIndex < 0) {
+            return null;
+        }
+        RecipeGraph.Node targetNode = context.catalog().nodeAt(targetIndex);
+        for (int outputIndex = 0; outputIndex < targetNode.outputCount(); outputIndex++) {
+            String resourceId = ClassifyViewFactory.resourceIdOf(targetNode.outputAt(outputIndex));
+            if (resourceId != null) {
+                return resourceId;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Total contextual screening penalty for the candidate, or 0 when
+     * screening is disabled, no contextual rules are registered, or no rule
+     * has an opinion on this candidate.
+     */
+    private double contextualPenalty(
+        PlannerContext context,
+        RecipeGraph.Node node,
+        InputContent input,
+        @Nullable String targetResourceId,
+        int depth
+    ) {
+        if (!dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig.calculatorRecipeScreeningEnabled()
+            || ContextualRecipeRules.isEmpty()) {
+            return 0.0d;
+        }
+        return ContextualRecipeRules.totalPenalty(new ContextualRuleContext(
+            context.service(),
+            context.request(),
+            node,
+            input,
+            ClassifyViewFactory.resourceIdOf(input),
+            targetResourceId,
+            depth
+        ));
+    }
+
+    /**
+     * Whether the candidate recipe consumes another member of the demanded
+     * resource's loop family — the recolor/exchange pattern that can ping-pong
+     * (white -&gt; red -&gt; blue -&gt; white) when no direct craft wins.
+     */
+    private boolean candidateConvertsWithinLoop(PlannerContext context, RecipeGraph.Node node, int demandLoopScc) {
+        GraphTopology topology = context.service().topology();
+        for (int inputIndex = 0; inputIndex < node.inputCount(); inputIndex++) {
+            InputContent candidateInput = node.inputAt(inputIndex);
+            if (candidateInput.isEmpty() || candidateInput.notConsumed()) {
+                continue;
+            }
+            String id = ClassifyViewFactory.resourceIdOf(candidateInput);
+            if (id != null && topology.sccIdOf(id) == demandLoopScc) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void applyIndirectActiveDemandCyclePenalty(
@@ -1629,7 +2181,37 @@ public final class StandardPlanner implements RoutePlanner {
         ResourceLedger ledger,
         PlanBuilder planBuilder,
         MutableList<RoutingIssue> issues,
-        AtomicInteger issueSeq
+        AtomicInteger issueSeq,
+        InputVariantCache variantCache,
+        PlanningFrame frame,
+        int candidateCount,
+        int attemptedCount
+    ) {
+        return resolveUnresolvedInput(
+            context, recipe, input, amount, phase, activeCycleCandidate, budgetLimited,
+            ledger, planBuilder, issues, issueSeq, variantCache, frame,
+            candidateCount, attemptedCount, false, null
+        );
+    }
+
+    private boolean resolveUnresolvedInput(
+        PlannerContext context,
+        RecipeEntry<?> recipe,
+        InputContent input,
+        long amount,
+        UnresolvedInputContext.Phase phase,
+        boolean activeCycleCandidate,
+        boolean budgetLimited,
+        ResourceLedger ledger,
+        PlanBuilder planBuilder,
+        MutableList<RoutingIssue> issues,
+        AtomicInteger issueSeq,
+        InputVariantCache variantCache,
+        PlanningFrame frame,
+        int candidateCount,
+        int attemptedCount,
+        boolean truncatedByBudget,
+        @Nullable Integer fullCandidateCount
     ) {
         UnresolvedInputRule.Resolution resolution = context.ruleProfile().unresolvedInputRule().resolve(
             new UnresolvedInputContext(recipe, input, amount, phase, activeCycleCandidate, budgetLimited)
@@ -1638,9 +2220,36 @@ public final class StandardPlanner implements RoutePlanner {
             return false;
         }
 
+        // Truncation analysis: separate pendings a deeper wave could still
+        // resolve (budget/ranking cut) from genuinely unreachable demands, so
+        // continuation runs and audits stop conflating the two.
+        boolean truncated;
+        PlanAction.PendingReason reason;
+        if (phase == UnresolvedInputContext.Phase.noSource) {
+            if (truncatedByBudget) {
+                truncated = true;
+                reason = PlanAction.PendingReason.BUDGET_TRUNCATED;
+            } else {
+                truncated = false;
+                reason = PlanAction.PendingReason.TRUE_NO_SOURCE;
+            }
+        } else {
+            if (budgetLimited) {
+                truncated = true;
+                reason = PlanAction.PendingReason.BUDGET_TRUNCATED;
+            } else if (fullCandidateCount != null && fullCandidateCount > candidateCount) {
+                truncated = true;
+                reason = PlanAction.PendingReason.RANK_TRUNCATED;
+            } else {
+                truncated = false;
+                reason = PlanAction.PendingReason.CASCADE_EXHAUSTED;
+            }
+        }
+
         // Execution-oriented fallback: preserve the original input semantics instead
         // of collapsing tags/lists into a planner-chosen concrete stack.
-        ledger.recordPendingInput(input, amount, planBuilder);
+        ledger.recordPendingInput(input, amount, planBuilder, candidateCount, attemptedCount, truncated, reason);
+        frame.pendingCost += amount * unitCostOracle(context, variantCache).unitCost(input);
         addIssue(
             issues,
             issueSeq,
@@ -1651,6 +2260,44 @@ public final class StandardPlanner implements RoutePlanner {
             inputIssuePayload(context, recipe, input, amount)
         );
         return true;
+    }
+
+    /**
+     * Exploration (re-trying candidates after soft or hard failures) shares the
+     * generated-candidate budget: at most {@code explorationBudgetShare} of it may
+     * be spent on branches beyond the first attempt.
+     */
+    private boolean explorationBudgetExhausted(PlannerContext context, PlannerContext.Counters counters) {
+        double share = context.request().budget().explorationBudgetShare();
+        if (share <= 0) {
+            return true;
+        }
+        long limit = Math.max(1L, (long) (context.request().budget().maxGeneratedCandidates() * share));
+        return counters.explorationBudgetUsed >= limit;
+    }
+
+    /**
+     * Soft-failure probes are only worth their budget while the next candidate is
+     * a near-tie of the greedy first choice on the leading score axis (predicted
+     * subtree cost): once candidates leave the band, the heuristic ordering is
+     * trusted and the recorded best is recommitted instead. Ungated probing on fat
+     * filtered catalogs burns the whole per-root budget on clearly-worse branches
+     * (e.g. decompress ping-pong chains) and leaves the input pending with nothing
+     * committed.
+     */
+    private boolean nextProbeWithinTieBand(PlannerContext context, PlanningFrame frame) {
+        List<CandidateScore> candidates = frame.candidates();
+        if (candidates.isEmpty() || frame.candidateAttemptIndex >= candidates.size()) {
+            return false;
+        }
+        double[] first = candidates.getFirst().score();
+        double[] next = candidates.get(frame.candidateAttemptIndex).score();
+        if (first.length == 0 || next.length == 0) {
+            return true;
+        }
+        double epsilon = Math.max(0.0d, context.ruleProfile().nearTieEpsilon());
+        double reference = Math.max(1.0d, Math.abs(first[0]));
+        return next[0] <= first[0] + epsilon * reference;
     }
 
     private RoutingFailureCode unresolvedInputFailureCode(UnresolvedInputContext.Phase phase) {
@@ -1677,7 +2324,7 @@ public final class StandardPlanner implements RoutePlanner {
         int boundedWindow = Math.max(shortlist, rollbackWindow);
         int modeWindow = switch (context.request().plannerMode()) {
             case standard -> Math.min(shortlist, rollbackWindow);
-            case assuredBounded, assuredProven -> boundedWindow;
+            case auto, assuredBounded, assuredProven -> boundedWindow;
         };
         return Math.min(candidateCount, Math.max(1, modeWindow));
     }
@@ -1688,7 +2335,7 @@ public final class StandardPlanner implements RoutePlanner {
         int rollbackWindow = Math.max(1, profile.rollbackWidth() + 1);
         return switch (context.request().plannerMode()) {
             case standard -> Math.min(shortlist, rollbackWindow);
-            case assuredBounded, assuredProven -> Math.max(shortlist, rollbackWindow);
+            case auto, assuredBounded, assuredProven -> Math.max(shortlist, rollbackWindow);
         };
     }
 
@@ -2219,8 +2866,6 @@ public final class StandardPlanner implements RoutePlanner {
         private static final byte stateSeen = 1;
 
         private final InputVariantCache variantCache;
-        private final OverlapMemo overlapMemo;
-        private final HashMap<ActiveReachKey, Boolean> reachesActiveDemand = new HashMap<>();
         private final Int2ByteOpenHashMap stateByRecipe = new Int2ByteOpenHashMap();
         private int[] stack = new int[32];
         private int stackSize;
@@ -2229,12 +2874,11 @@ public final class StandardPlanner implements RoutePlanner {
 
         private ActiveDemandDependencyScratch(InputVariantCache variantCache) {
             this.variantCache = variantCache;
-            this.overlapMemo = new OverlapMemo(variantCache);
             stateByRecipe.defaultReturnValue(stateUnknown);
         }
 
         private boolean inputOverlapsDemand(StandardPlanner planner, InputContent input, InputContent demand) {
-            return overlapMemo.inputOverlapsDemand(planner, input, demand);
+            return variantCache.overlapMemo.inputOverlapsDemand(planner, input, demand);
         }
 
         private ActiveDemandSnapshot snapshot(ArrayDeque<InputContent> activeDemands) {
@@ -2256,6 +2900,7 @@ public final class StandardPlanner implements RoutePlanner {
             ActiveDemandSnapshot activeDemandSnapshot
         ) {
             ActiveReachKey key = new ActiveReachKey(input, activeDemandSnapshot);
+            HashMap<ActiveReachKey, Boolean> reachesActiveDemand = variantCache.reachesActiveDemand;
             Boolean cached = reachesActiveDemand.get(key);
             if (cached != null) {
                 return cached;
@@ -2304,6 +2949,28 @@ public final class StandardPlanner implements RoutePlanner {
         InputContent[] demands,
         int identityHash
     ) {
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof ActiveDemandSnapshot other)
+                || identityHash != other.identityHash
+                || demands.length != other.demands.length) {
+                return false;
+            }
+            for (int i = 0; i < demands.length; i++) {
+                if (demands[i] != other.demands[i]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        @Override
+        public int hashCode() {
+            return identityHash;
+        }
     }
 
     private static final class ActiveReachKey {
@@ -2321,7 +2988,7 @@ public final class StandardPlanner implements RoutePlanner {
         public boolean equals(Object obj) {
             return obj instanceof ActiveReachKey other
                 && input == other.input
-                && activeDemandSnapshot == other.activeDemandSnapshot;
+                && activeDemandSnapshot.equals(other.activeDemandSnapshot);
         }
 
         @Override
@@ -2423,6 +3090,11 @@ public final class StandardPlanner implements RoutePlanner {
         if (counters.expandedNodes >= context.request().budget().maxExpandedNodes()) {
             counters.budgetExhausted = true;
             counters.budgetStopReason = "maxExpandedNodes";
+            return true;
+        }
+        if (System.nanoTime() >= counters.wallDeadlineNanos) {
+            counters.budgetExhausted = true;
+            counters.budgetStopReason = "maxWallTimeMs";
             return true;
         }
         if (rootInputBudgetExceeded(context, counters)) {
@@ -2533,6 +3205,7 @@ public final class StandardPlanner implements RoutePlanner {
         }
         PlanningFrame parent = stack.get(stack.size() - 1);
         parent.lastChildSucceeded = success;
+        parent.pendingCost += frame.pendingCost;
         return null;
     }
 
@@ -2580,6 +3253,7 @@ public final class StandardPlanner implements RoutePlanner {
             (System.nanoTime() - startNanos) / 1_000_000L,
             context.counters().expandedNodes,
             context.counters().generatedCandidates,
+            context.counters().scannedRefs,
             context.counters().acceptedCandidates,
             PlannerMode.standard,
             context.request().inventorySensitivityProfile(),
@@ -2706,7 +3380,9 @@ public final class StandardPlanner implements RoutePlanner {
 
     private record CandidateEvaluation(
         List<CandidateScore> candidates,
-        boolean hasActiveCycleCandidate
+        boolean hasActiveCycleCandidate,
+        boolean truncatedByBudget,
+        int producersVisited
     ) {
     }
 
@@ -2849,6 +3525,18 @@ public final class StandardPlanner implements RoutePlanner {
     private static final class InputVariantCache {
         private final IdentityHashMap<InputContent, ContentVariant[]> variantsByInput = new IdentityHashMap<>();
         private final IdentityHashMap<InputContent, ProducerRefSnapshot> producerRefsByInput = new IdentityHashMap<>();
+        /**
+         * Plan-scoped overlap memo. {@code inputOverlapsDemand} is a pure function
+         * of the two input contents, so results stay valid for the whole plan run;
+         * keeping the memo here (instead of inside the per-evaluation
+         * {@link ActiveDemandDependencyScratch}) lets sibling and retried
+         * evaluations reuse it — it is the dominant candidate-evaluation cost on
+         * large filtered catalogs.
+         */
+        private final OverlapMemo overlapMemo = new OverlapMemo(this);
+        /** Plan-scoped memo for {@code inputCanReachActiveDemand}; pure per
+         * (input, active-demand-set) within a plan, see {@link #overlapMemo}. */
+        private final HashMap<ActiveReachKey, Boolean> reachesActiveDemand = new HashMap<>();
 
         private ContentVariant[] variants(InputContent input) {
             if (!input.isEnumerable()) {
@@ -3050,7 +3738,7 @@ public final class StandardPlanner implements RoutePlanner {
             hasActiveCycleCandidate = true;
         }
 
-        private CandidateEvaluation toEvaluation() {
+        private CandidateEvaluation toEvaluation(boolean truncatedByBudget, int producersVisited) {
             if (bestByVariant != null) {
                 for (CandidateScore candidate : bestByVariant) {
                     if (candidate != null) {
@@ -3058,11 +3746,10 @@ public final class StandardPlanner implements RoutePlanner {
                     }
                 }
             }
-            if (candidates.size() <= 1) {
-                return new CandidateEvaluation(candidates, hasActiveCycleCandidate);
+            if (candidates.size() > 1) {
+                candidates.sort(comparator);
             }
-            candidates.sort(comparator);
-            return new CandidateEvaluation(candidates, hasActiveCycleCandidate);
+            return new CandidateEvaluation(candidates, hasActiveCycleCandidate, truncatedByBudget, producersVisited);
         }
 
         private void addRetainedVariantCandidate(CandidateScore candidate) {
@@ -3324,6 +4011,8 @@ public final class StandardPlanner implements RoutePlanner {
         private int activeInputIndex = -1;
         private long remaining;
         private List<CandidateScore> candidates = List.of();
+        /** Candidates before the top-K attempt window trimmed the list; ranking-truncation signal. */
+        private int fullCandidateCount;
         private int candidateAttemptLimit;
         private int candidateAttemptIndex;
         private boolean candidateSetHasActiveCycleCandidate;
@@ -3332,6 +4021,18 @@ public final class StandardPlanner implements RoutePlanner {
         private MutableList<RoutingIssue> candidateIssues = Lists.mutable.empty();
         private @Nullable CandidateRollbackState rollback;
         private boolean lastChildSucceeded;
+        /**
+         * Accumulated estimated cost ({@code Σ amount × oracle.unitCost}) of pending
+         * leaves produced by this subtree, including completed children. Drives the
+         * soft-failure exploration in {@code awaitingChildResult}.
+         */
+        private double pendingCost;
+        private int bestCandidateIndex = -1;
+        private double bestPendingCost = Double.MAX_VALUE;
+        private boolean recommittingBest;
+        /** Candidates actually dispatched for the active input (unlike
+         * {@code candidateAttemptIndex}, which is also force-set by budget cuts). */
+        private int candidatesTried;
 
         private PlanningFrame(RecipeGraph.Node recipeNode, int recipeIndex, int times, int depth) {
             this.recipeNode = recipeNode;
@@ -3361,6 +4062,7 @@ public final class StandardPlanner implements RoutePlanner {
             this.candidateIssues = Lists.mutable.empty();
             this.rollback = null;
             this.lastChildSucceeded = false;
+            resetBestExploration();
         }
 
         private void clearCandidateResolution() {
@@ -3368,6 +4070,7 @@ public final class StandardPlanner implements RoutePlanner {
             activeInputIndex = -1;
             remaining = 0;
             candidates = List.of();
+            fullCandidateCount = 0;
             candidateAttemptLimit = 0;
             candidateAttemptIndex = 0;
             candidateSetHasActiveCycleCandidate = false;
@@ -3376,6 +4079,14 @@ public final class StandardPlanner implements RoutePlanner {
             candidateIssues = Lists.mutable.empty();
             rollback = null;
             lastChildSucceeded = false;
+            resetBestExploration();
+        }
+
+        private void resetBestExploration() {
+            bestCandidateIndex = -1;
+            bestPendingCost = Double.MAX_VALUE;
+            recommittingBest = false;
+            candidatesTried = 0;
         }
 
         private InputContent activeInput() {
@@ -3436,7 +4147,8 @@ public final class StandardPlanner implements RoutePlanner {
         int planActionCount,
         int planNextActionId,
         int issueCount,
-        int traceCount
+        int traceCount,
+        double pendingCostAtMark
     ) {
         private void restore(
             ResourceLedger currentLedger,

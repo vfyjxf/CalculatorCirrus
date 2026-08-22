@@ -11,6 +11,8 @@ import dev.vfyjxf.cloudlib.api.math.FloatPos;
 import dev.vfyjxf.cloudlib.api.ui.base.CompositeWidget;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
+import dev.vfyjxf.cloudlib.api.ui.base.CoordinateSpace;
+import dev.vfyjxf.cloudlib.api.ui.base.SceneLayer;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.api.ui.effect.UIEffects;
 import dev.vfyjxf.cloudlib.api.ui.scroll.ScrollState;
@@ -50,6 +52,10 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.paddingHorizontal;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.paddingVertical;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeFull;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.widthOf;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.positionAbsolute;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.zIndexOf;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.boxSizingBorderBox;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.padding;
 
 /**
  * Tree diagram view with overlay controls
@@ -81,6 +87,7 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
 	private final WidgetGroup<Widget> bottomPanel;
 	private int activeLayer = 0;
 	private int maxLayers = 0;
+	private @Nullable LayerNodesPopup layerNodesPopup;
 
 	// Separate scroll states for path and trace rows
 	private float pathScrollX = 0, pathScrollTargetX = 0;
@@ -140,6 +147,13 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
 		layerNavContainer.onRenderPost((canvas, mx, my, pt, self, ctx) -> renderLayerScrollIndicators(canvas, self));
 		layerNavContainer.addWidget(new LayerHeaderWidget());
 
+		// quick layer up/down focus buttons at the top of the layer column
+		var layerStepHeader = new WidgetGroup<>();
+		layerStepHeader.useStyle(flexRow(), alignSelfStretch(), flexShrink(0), paddingHorizontal(2), paddingVertical(2));
+		layerStepHeader.addWidget(new LayerStepButton(Icon.arrowUpSelected, -1));
+		layerStepHeader.addWidget(new LayerStepButton(Icon.arrowDownSelected, 1));
+		layerNavContainer.addWidget(layerStepHeader);
+
 		layerButtonsContainer = new WidgetGroup<>();
 		layerButtonsContainer.useStyle(
 				flexColumn(),
@@ -156,6 +170,7 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
 									  .viewportInset(0);
 		layerButtonsContainer.useEffect(UIEffects.scrollable(layerScrollState));
 		layerNavContainer.addWidget(layerButtonsContainer);
+
 		mainArea.addWidget(layerNavContainer);
 
 		// Canvas (TreeCanvasWidget — dark theme, no MC textures)
@@ -773,6 +788,308 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
 	}
 	//endregion
 
+	// ═══════════════════ Layer nodes hover popup ═══════════════════
+
+	private void openLayerNodesPopup(LayerButton button, int mouseX, int mouseY) {
+		if (layerNodesPopup != null && layerNodesPopup.layer == button.layer && layerNodesPopup.lifecycle().mounted()) {
+			layerNodesPopup.keepOpen();
+			return;
+		}
+		closeLayerNodesPopup();
+		if (!lifecycle().mounted() || scene() == null) {
+			return;
+		}
+		LayerNodesPopup next = new LayerNodesPopup(button, mouseX, mouseY);
+		next.setClickGroup(button);
+		addRootPopupWidget(scene().root(), next);
+		layerNodesPopup = next;
+	}
+
+	private void closeLayerNodesPopup() {
+		LayerNodesPopup active = layerNodesPopup;
+		layerNodesPopup = null;
+		if (active != null && active.parent() instanceof WidgetGroup<?> group) {
+			group.remove(active);
+		}
+	}
+
+	@SuppressWarnings({"rawtypes", "unchecked"})
+	private static void addRootPopupWidget(WidgetGroup<?> root, Widget widget) {
+		((WidgetGroup) root).addWidget(widget);
+	}
+
+	/**
+	 * Horizontally scrolling strip of one layer's nodes, anchored next to the
+	 * hovered layer button; starts at the first node visible in the canvas
+	 * viewport; clicking an item focuses (expands + centers) that node.
+	 */
+	/**
+	 * Simplified layer cards in a light container, anchored near the mouse:
+	 * {@code <card [card] card>} — side arrows scroll the strip, the hovered
+	 * card carries a cursor marker, a scrollbar sits below, and hovering a
+	 * card shows the node's full recipe tooltip.
+	 */
+	private final class LayerNodesPopup extends Widget {
+		private static final int popupWidth = 226;
+		private static final int popupHeight = 58;
+		private static final int cardSize = 20;
+		private static final int cardGap = 2;
+		private static final int stripX = 17;
+		private static final int stripY = 19;
+		private static final int arrowButtonSize = 12;
+		private static final int trackY = 48;
+		private static final int closeDelayTicks = 12;
+		private static final int cursorColor = 0xFF2E86C1;
+
+		private final int layer;
+		private final LayerButton anchor;
+		private final int anchorMouseX;
+		private final int anchorMouseY;
+		private final List<TreeCanvasWidget.LayerNodeView> nodes;
+		private final List<dev.vfyjxf.cirrus.api.content.value.ContentStack<?, ?>> stacks;
+		private final int[] counts;
+		private float scrollX;
+		private float targetScrollX;
+		private int maxScrollX;
+		private int closeCountdown = closeDelayTicks;
+		private int hoveredIndex = -1;
+
+		private LayerNodesPopup(LayerButton button, int mouseX, int mouseY) {
+			this.layer = button.layer;
+			this.anchor = button;
+			this.anchorMouseX = mouseX;
+			this.anchorMouseY = mouseY;
+			this.nodes = stepsWidget.getLayerNodeViewsByX(layer);
+			this.stacks = new ArrayList<>(nodes.size());
+			this.counts = new int[nodes.size()];
+			for (int index = 0; index < nodes.size(); index++) {
+				String pathId = nodes.get(index).pathId();
+				stacks.add(stepsWidget.layerNodePrimaryStack(pathId));
+				counts[index] = stepsWidget.layerNodePrimaryCount(pathId);
+			}
+			setCoordinateSpace(CoordinateSpace.scene);
+			setSceneLayer(SceneLayer.floating);
+			useStyle(positionAbsolute(), zIndexOf(2400), boxSizingBorderBox());
+			onLayout((widget, scope) -> {
+				// anchorMouseX/Y are scene-absolute (widget render callback
+				// mouse params); position near the mouse, flip and clamp into
+				// this view's scene bounds
+				dev.vfyjxf.cloudlib.api.math.Pos base = TreeViewWidget.this.absolutePos();
+				int x = anchorMouseX + 16;
+				int y = anchorMouseY - popupHeight / 2;
+				if (x + popupWidth > base.x() + TreeViewWidget.this.width() - 2) {
+					x = anchorMouseX - popupWidth - 8;
+				}
+				x = Math.max(base.x() + 2, Math.min(x, base.x() + Math.max(2, TreeViewWidget.this.width() - popupWidth - 2)));
+				y = Math.max(base.y() + 2, Math.min(y, base.y() + Math.max(2, TreeViewWidget.this.height() - popupHeight - 2)));
+				scope.setBounds(x, y, popupWidth, popupHeight);
+			});
+			onHoverTooltip((mouseX1, mouseY1) -> {
+				int index = itemIndexAt(mouseX1, mouseY1);
+				return index >= 0 && index < nodes.size() ? stepsWidget.buildNodeTooltipForPath(nodes.get(index).pathId()) : null;
+			});
+			onClickOutside(context -> closeLayerNodesPopup());
+			onMouseScrolled((mouseX1, mouseY1, scrollX1, scrollY1, context) -> {
+				if (maxScrollX <= 0 || scrollY1 == 0) {
+					return EventDispatch.pass;
+				}
+				targetScrollX = clampScroll(targetScrollX - (float) Math.signum(scrollY1) * (cardSize + cardGap) * 2);
+				return EventDispatch.consumed;
+			});
+			onMouseClick((input, clickCount, context) -> {
+				int mx = (int) input.mouseX();
+				int my = (int) input.mouseY();
+				int index = itemIndexAt(mx, my);
+				if (index >= 0 && index < nodes.size()) {
+					stepsWidget.scrollToLayerNode(nodes.get(index).pathId());
+					Minecraft.getInstance().getSoundManager()
+							 .play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1f));
+					closeLayerNodesPopup();
+					return EventDispatch.consumed;
+				}
+				int step = arrowStepAt(mx, my);
+				if (step != 0) {
+					targetScrollX = clampScroll(targetScrollX + step * visibleCards() * (cardSize + cardGap));
+					return EventDispatch.consumed;
+				}
+				return EventDispatch.pass;
+			});
+			// start at the first node currently visible in the canvas viewport
+			int firstVisible = stepsWidget.firstVisibleLayerNodeIndex(layer);
+			targetScrollX = firstVisible * (cardSize + cardGap);
+			scrollX = targetScrollX;
+			maxScrollX = Math.max(0, nodes.size() * (cardSize + cardGap) - cardGap - stripWidth());
+			targetScrollX = clampScroll(targetScrollX);
+		}
+
+		private int stripWidth() {
+			return popupWidth - stripX * 2 - arrowButtonSize;
+		}
+
+		private int visibleCards() {
+			return Math.max(1, stripWidth() / (cardSize + cardGap));
+		}
+
+		private void keepOpen() {
+			closeCountdown = closeDelayTicks;
+		}
+
+		private float clampScroll(float value) {
+			return Math.max(0, Math.min(maxScrollX, value));
+		}
+
+		@Override
+		public void tick() {
+			super.tick();
+			if (!anchor.hovered() && !hovered()) {
+				if (--closeCountdown <= 0) {
+					closeLayerNodesPopup();
+				}
+			} else {
+				closeCountdown = closeDelayTicks;
+			}
+			scrollX += (targetScrollX - scrollX) * 0.35f;
+			if (Math.abs(targetScrollX - scrollX) < 0.5f) {
+				scrollX = targetScrollX;
+			}
+		}
+
+		@Override
+		protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
+			// canvas draws in LOCAL coordinates; mouse params are scene-absolute
+			hoveredIndex = itemIndexAt(mouseX, mouseY);
+			// flat nine-slice container from the shared design system
+			canvas.texture(Background.Outlined.flat, 0, 0, popupWidth, popupHeight);
+			Font font = Minecraft.getInstance().font;
+			canvas.drawString("LAYER " + layer + " · " + nodes.size(), stripX, 4, textPrimary, false);
+			canvas.fill(4, 15, popupWidth - 8, 1, borderMain);
+
+			// < card [card] card > strip with real button chrome on the arrows
+			int stripY = this.stripY;
+			int cardsX = stripX;
+			int cardsW = popupWidth - stripX * 2 - arrowButtonSize;
+			boolean canScrollLeft = scrollX > 1;
+			boolean canScrollRight = scrollX < maxScrollX - 1;
+			int leftArrowX = 2;
+			int rightArrowX = popupWidth - arrowButtonSize - 2;
+			int arrowY = stripY + cardSize / 2 - arrowButtonSize / 2;
+			boolean leftHovered = canScrollLeft && arrowHovered(mouseX, mouseY, leftArrowX);
+			boolean rightHovered = canScrollRight && arrowHovered(mouseX, mouseY, rightArrowX);
+			dev.vfyjxf.cirrus.ui.widget.common.CirrusControlChrome.renderButtonBackground(canvas, leftArrowX, arrowY, arrowButtonSize, arrowButtonSize, false, leftHovered, canScrollLeft);
+			dev.vfyjxf.cirrus.ui.widget.common.CirrusControlChrome.renderButtonBackground(canvas, rightArrowX, arrowY, arrowButtonSize, arrowButtonSize, false, rightHovered, canScrollRight);
+			if (canScrollLeft) {
+				canvas.texture(Icon.Small.arrowLeft, leftArrowX + (arrowButtonSize - 5) / 2, arrowY + (arrowButtonSize - 6) / 2, 5, 6);
+			}
+			if (canScrollRight) {
+				canvas.texture(Icon.Small.arrowRight, rightArrowX + (arrowButtonSize - 5) / 2, arrowY + (arrowButtonSize - 6) / 2, 5, 6);
+			}
+			canvas.withClip(cardsX, stripY, cardsW, cardSize, () -> {
+				for (int index = 0; index < nodes.size(); index++) {
+					int cardX = Math.round(cardsX - scrollX + (float) index * (cardSize + cardGap));
+					if (cardX + cardSize < cardsX || cardX > cardsX + cardsW) {
+						continue;
+					}
+					boolean hoveredCard = index == hoveredIndex;
+					// simplified card: light slot + primary output + count
+					canvas.texture(Background.Slot.base, cardX, stripY, cardSize, cardSize);
+					dev.vfyjxf.cirrus.api.content.value.ContentStack<?, ?> stack = stacks.get(index);
+					if (stack != null && stack.isItem()) {
+						net.minecraft.world.item.ItemStack itemStack = (net.minecraft.world.item.ItemStack) stack.value();
+						canvas.renderItem(itemStack, cardX + 2, stripY + 2);
+						if (counts[index] > 1) {
+							canvas.renderItemDecorations(itemStack, cardX + 2, stripY + 2, String.valueOf(Math.min(99, counts[index])));
+						}
+					}
+					if (hoveredCard) {
+						// cursor marker: bracket ticks flanking the card
+						canvas.fill(cardX - 1, stripY, 1, cardSize, cursorColor);
+						canvas.fill(cardX + cardSize, stripY, 1, cardSize, cursorColor);
+						canvas.fill(cardX - 1, stripY - 1, 2, 1, cursorColor);
+						canvas.fill(cardX - 1, stripY + cardSize, 2, 1, cursorColor);
+						canvas.fill(cardX + cardSize - 1, stripY - 1, 2, 1, cursorColor);
+						canvas.fill(cardX + cardSize - 1, stripY + cardSize, 2, 1, cursorColor);
+					}
+				}
+			});
+
+			// scrollbar below the strip: same track/thumb textures as the breadcrumbs
+			if (maxScrollX > 0) {
+				int trackW = popupWidth - stripX * 2;
+				canvas.texture(Background.Slot.dark, stripX, trackY + 1, trackW, 4);
+				int thumbW = Math.max(8, trackW * stripWidth() / (stripWidth() + maxScrollX));
+				int thumbX = stripX + (int) ((trackW - thumbW) * (scrollX / (float) maxScrollX));
+				canvas.texture(Icon.scrollBarVertical, thumbX, trackY, thumbW, 6);
+			}
+		}
+
+		private boolean arrowHovered(int sceneMouseX, int sceneMouseY, int arrowX) {
+			int x = localX(sceneMouseX);
+			int y = localY(sceneMouseY);
+			int arrowY = stripY + cardSize / 2 - arrowButtonSize / 2;
+			return x >= arrowX && x < arrowX + arrowButtonSize && y >= arrowY && y < arrowY + arrowButtonSize;
+		}
+
+		/** Mouse parameters are scene-absolute; the popup layout is local. */
+		private int localX(int sceneMouseX) {
+			return sceneMouseX - absolutePos().x();
+		}
+
+		private int localY(int sceneMouseY) {
+			return sceneMouseY - absolutePos().y();
+		}
+
+		private int itemIndexAt(int sceneMouseX, int sceneMouseY) {
+			int x = localX(sceneMouseX);
+			int y = localY(sceneMouseY);
+			if (y < stripY || y >= stripY + cardSize) {
+				return -1;
+			}
+			int cardsX = stripX;
+			int cardsW = popupWidth - stripX * 2 - arrowButtonSize;
+			if (x < cardsX || x >= cardsX + cardsW) {
+				return -1;
+			}
+			int relative = Math.round(x - cardsX + scrollX);
+			int per = cardSize + cardGap;
+			int index = relative / per;
+			return index >= 0 && index < nodes.size() && relative - index * per < cardSize ? index : -1;
+		}
+
+		private int arrowStepAt(int sceneMouseX, int sceneMouseY) {
+			if (arrowHovered(sceneMouseX, sceneMouseY, 2)) {
+				return scrollX > 1 ? -1 : 0;
+			}
+			if (arrowHovered(sceneMouseX, sceneMouseY, popupWidth - arrowButtonSize - 2)) {
+				return scrollX < maxScrollX - 1 ? 1 : 0;
+			}
+			return 0;
+		}
+	}
+
+	/** Small icon button that focuses the nearest node one layer up/down. */
+	private final class LayerStepButton extends Widget {
+		private final int direction;
+		private final dev.vfyjxf.cloudlib.api.ui.texture.ImageTexture icon;
+
+		private LayerStepButton(dev.vfyjxf.cloudlib.api.ui.texture.ImageTexture icon, int direction) {
+			this.icon = icon;
+			this.direction = direction;
+			useStyle(flexGrow(1), heightOf(16), minHeight(16), alignSelfStretch());
+			setTooltip(singleLineTooltip(direction < 0 ? "聚焦上一层节点" : "聚焦下一层节点"));
+			onMouseClick((input, clickCount, context) -> {
+				stepsWidget.navigateLayers(direction);
+				Minecraft.getInstance().getSoundManager()
+						 .play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1f));
+				return EventDispatch.consumed;
+			});
+			onRender((canvas, mouseX, mouseY, partialTicks, self, context) -> {
+				int w = width(), h = height();
+				canvas.texture(hovered() ? Background.Outlined.flat : Background.flat, 0, 0, w, h);
+				canvas.texture(icon, (w - 10) / 2, (h - 10) / 2, 10, 10);
+			});
+		}
+	}
+
 	// ═══════════════════ LayerButton ═══════════════════
 
 	private class LayerButton extends CompositeWidget<Widget> {
@@ -811,6 +1128,12 @@ public class TreeViewWidget extends CompositeWidget<Widget> {
 				Minecraft.getInstance().getSoundManager()
 						 .play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1f));
 				return EventDispatch.consumed;
+			});
+
+			onRender((canvas, mouseX, mouseY, partialTicks, self, context) -> {
+				if (hovered()) {
+					openLayerNodesPopup(this, mouseX, mouseY);
+				}
 			});
 		}
 

@@ -18,6 +18,10 @@ import org.jetbrains.annotations.Nullable;
  * @param issues  list of issues encountered during routing (may be empty on success)
  * @param metrics observability metrics for this run
  * @param trace   optional diagnostic trace (present only when diagnostics are enabled)
+ * @param continuationToken optional session token for continuation runs; non-null when
+ *                          this route stopped early (partial plan or exhausted budget)
+ *                          and a follow-up wave with a larger budget may resolve more.
+ *                          Pass it to {@link RoutingService#routeContinuation(String, RoutingRequest)}
  * @see RoutingService
  */
 public record RoutingOutcome(
@@ -25,12 +29,29 @@ public record RoutingOutcome(
     @Nullable RoutingPlan plan,
     ImmutableList<RoutingIssue> issues,
     RoutingMetrics metrics,
-    @Nullable RoutingTrace trace
+    @Nullable RoutingTrace trace,
+    @Nullable String continuationToken
 ) {
     public RoutingOutcome {
         Checks.checkNotNull(status, "status");
         Checks.checkNotNull(issues, "issues");
         Checks.checkNotNull(metrics, "metrics");
+    }
+
+    /** Backwards-compatible constructor without a continuation token. */
+    public RoutingOutcome(
+        RoutingStatus status,
+        @Nullable RoutingPlan plan,
+        ImmutableList<RoutingIssue> issues,
+        RoutingMetrics metrics,
+        @Nullable RoutingTrace trace
+    ) {
+        this(status, plan, issues, metrics, trace, null);
+    }
+
+    /** Returns a copy of this outcome carrying the given continuation token. */
+    public RoutingOutcome withContinuationToken(String token) {
+        return new RoutingOutcome(status, plan, issues, metrics, trace, token);
     }
 
     /** Returns {@code true} if routing produced a complete plan. */

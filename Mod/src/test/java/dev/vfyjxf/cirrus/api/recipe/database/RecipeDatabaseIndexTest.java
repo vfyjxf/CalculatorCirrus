@@ -1,11 +1,12 @@
 package dev.vfyjxf.cirrus.api.recipe.database;
 
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchField;
+import dev.vfyjxf.cloudlib.api.search.SearchField;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -68,9 +69,9 @@ class RecipeDatabaseIndexTest {
         assertEquals("primary", index.records().getFirst().database().id());
         assertEquals(1, index.search("id:craft_oak_planks").size());
         assertEquals(1, index.search("in.id:test:oak_log out.id:test:oak_planks out.id:test:oak_planks * >=4").size());
-        assertTrue(index.textCandidates(SearchField.out_id, 8).stream()
+        assertTrue(index.textCandidates(CirrusSearchFields.out_id, 8).stream()
             .anyMatch(value -> value.contains("oak_planks")));
-        assertEquals(1, index.textCandidateMap(8).get(SearchField.mod).size());
+        assertEquals(1, index.textCandidateMap(8).get(CirrusSearchFields.mod).size());
     }
 
     @Test

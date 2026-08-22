@@ -109,6 +109,33 @@ public final class TagIndex {
     }
 
     /**
+     * Bulk-merges externally computed tag memberships into this index.
+     *
+     * <p>Used to seed the index with recipe classification results after
+     * graph construction. Bits are OR-ed into existing tag sets; indices refer
+     * to catalog positions (aligned with the classification result).
+     *
+     * @param tags tag -&gt; recipe-index bitset map
+     */
+    public synchronized void populate(java.util.Map<String, BitSet> tags) {
+        Checks.checkNotNull(tags, "tags");
+        boolean changed = false;
+        for (java.util.Map.Entry<String, BitSet> entry : tags.entrySet()) {
+            BitSet bits = entry.getValue();
+            if (entry.getKey() == null || bits == null || bits.isEmpty()) {
+                continue;
+            }
+            BitSet target = tagToRecipes.getIfAbsentPut(entry.getKey(), () -> new BitSet(catalog.size()));
+            target.or(bits);
+            changed = true;
+        }
+        if (changed) {
+            version++;
+            cachedSnapshot = null;
+        }
+    }
+
+    /**
      * Takes a point-in-time snapshot of the entire tag index.
      *
      * <p>The returned {@link TagSnapshot} is immutable and safe to pass to

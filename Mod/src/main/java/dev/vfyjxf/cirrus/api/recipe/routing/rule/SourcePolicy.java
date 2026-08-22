@@ -15,8 +15,8 @@ import org.eclipse.collections.api.list.ImmutableList;
  * {@link SourcePolicyRuleSpec} entries. Each rule matches recipes using a
  * {@link TagExpr} and applies a {@link SourcePolicyAction}.
  *
- * <p>The default policy excludes recipes tagged {@code cirrus:quality/junk}
- * or {@code cirrus:intent/debug}.
+ * <p>The default policy excludes recipes tagged {@code cirrus:quality/junk},
+ * {@code cirrus:quality/duplicate} or {@code cirrus:intent/debug}.
  *
  * @param policyId unique identifier for this policy
  * @param version  monotonic version for staleness detection
@@ -43,7 +43,8 @@ public record SourcePolicy(
     }
 
     /**
-     * Returns the default source policy that excludes junk and debug recipes.
+     * Returns the default source policy that excludes junk, duplicate and
+     * debug recipes.
      *
      * @return the default policy instance
      */
@@ -56,6 +57,13 @@ public record SourcePolicy(
                     Namespace.of("cirrus", "routing/source_policy_rule/exclude_junk"),
                     true,
                     TagExpr.has("cirrus:quality/junk"),
+                    SourcePolicyAction.excludeMatch,
+                    false
+                ),
+                new SourcePolicyRuleSpec(
+                    Namespace.of("cirrus", "routing/source_policy_rule/exclude_duplicate"),
+                    true,
+                    TagExpr.has("cirrus:quality/duplicate"),
                     SourcePolicyAction.excludeMatch,
                     false
                 ),

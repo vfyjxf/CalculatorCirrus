@@ -1,9 +1,11 @@
 package dev.vfyjxf.cirrus.ui.widget.calculator.page;
 
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationTags;
 import dev.vfyjxf.cirrus.api.recipe.content.BatchableRecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
@@ -50,8 +52,12 @@ import dev.vfyjxf.cirrus.api.recipe.projection.effect.SchemaEffect;
 import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridIndex;
 import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridSize;
 import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemaKey;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchField;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchParseException;
+import dev.vfyjxf.cloudlib.api.search.SearchField;
+import dev.vfyjxf.cloudlib.api.search.SearchExpression;
+import dev.vfyjxf.cloudlib.api.search.SearchOperator;
+import dev.vfyjxf.cloudlib.api.search.SearchParser;
+import dev.vfyjxf.cloudlib.api.search.SearchTerm;
+import dev.vfyjxf.cloudlib.api.search.SearchParseException;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.recipe.execution.ExecutionTargetRecipeState;
@@ -121,6 +127,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -353,6 +360,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
     private String indexProgressStatusText = "";
     private long queryRequestId;
     private @Nullable CompletableFuture<QueryBuildResult> pendingQueryBuild;
+    private @Nullable QueryBuildResult lastAppliedResult;
     private boolean preserveScrollOnNextApply;
     private boolean restoreSavedScrollOnNextApply;
     private @Nullable ScrollSnapshot pendingScrollRestore;
@@ -1540,30 +1548,18 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         }
         try {
             List<RecipeDatabaseResult> matches = sort(index.search(query), sortMode, sortDirection);
-            List<RecipeDatabaseResult> visibleMatches = limitResults(matches, ExecutionOverlayClientConfig.calculatorDatabaseLimit());
             return QueryBuildResult.results(
                 requestId,
                 query,
                 sortMode,
                 sortDirection,
-                visibleMatches.size(),
-                buildResultBuckets(visibleMatches, sortMode),
+                matches.size(),
+                buildResultBuckets(matches, sortMode),
                 scrollToRestore
             );
         } catch (SearchParseException ex) {
             return QueryBuildResult.invalid(requestId, query, sortMode, sortDirection, scrollToRestore);
         }
-    }
-
-    private static List<RecipeDatabaseResult> limitResults(List<RecipeDatabaseResult> matches, int limit) {
-        if (matches.isEmpty()) {
-            return List.of();
-        }
-        int safeLimit = Math.max(1, limit);
-        if (matches.size() <= safeLimit) {
-            return matches;
-        }
-        return List.copyOf(matches.subList(0, safeLimit));
     }
 
     private static boolean shouldWaitForMoreSearchInput(String query) {
@@ -1584,18 +1580,18 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         if (body.isBlank()) {
             return true;
         }
-        SearchField prefixField = body.length() == 1 ? SearchField.fromJeiPrefix(body.charAt(0)) : null;
+        SearchField prefixField = body.length() == 1 ? CirrusSearchFields.SET.byJeiPrefix(body.charAt(0)) : null;
         if (prefixField != null) {
             return true;
         }
-        if (SearchField.isKnownAlias(body) && query.charAt(query.length() - 1) != ' ') {
+        if (CirrusSearchFields.SET.isKnownAlias(body) && query.charAt(query.length() - 1) != ' ') {
             return true;
         }
         int colon = body.indexOf(':');
-        if (colon > 0 && colon == body.length() - 1 && SearchField.isKnownAlias(body.substring(0, colon))) {
+        if (colon > 0 && colon == body.length() - 1 && CirrusSearchFields.SET.isKnownAlias(body.substring(0, colon))) {
             return true;
         }
-        if (colon > 0 && SearchField.isKnownAlias(body.substring(0, colon))) {
+        if (colon > 0 && CirrusSearchFields.SET.isKnownAlias(body.substring(0, colon))) {
             String value = body.substring(colon + 1);
             if (shouldWaitForSearchValue(value)) {
                 return true;
@@ -1614,7 +1610,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         if (body.isBlank()) {
             return true;
         }
-        if (body.length() == 1 && SearchField.fromJeiPrefix(body.charAt(0)) != null) {
+        if (body.length() == 1 && CirrusSearchFields.SET.byJeiPrefix(body.charAt(0)) != null) {
             return true;
         }
         return switch (body) {
@@ -1703,6 +1699,61 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         applyQueryResult(result);
     }
 
+    // saturated theme orange: the result cards are light-background with
+    // dark text, so the match color must out-contrast both plus the blue
+    // selection fill used elsewhere
+    private static final int matchHighlightColor = dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.orange;
+    private List<String> matchNeedles = List.of();
+    private int matchNeedlesVersion;
+
+    /** Positive text needles of the current query, used to highlight matches in result labels. */
+    private static List<String> extractMatchNeedles(String query) {
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+        SearchExpression expression;
+        try {
+            expression = CirrusSearchFields.parser().parse(query);
+        } catch (RuntimeException ignored) {
+            return List.of();
+        }
+        LinkedHashSet<String> needles = new LinkedHashSet<>();
+        collectMatchNeedles(expression, needles);
+        return List.copyOf(needles);
+    }
+
+    private static void collectMatchNeedles(SearchExpression expression, LinkedHashSet<String> needles) {
+        switch (expression) {
+            case SearchExpression.Term term -> {
+                SearchTerm search = term.term();
+                if (search.operator() != SearchOperator.contains && search.operator() != SearchOperator.exact) {
+                    return;
+                }
+                SearchField field = search.field();
+                if (field.numeric() || field == CirrusSearchFields.mod || field == CirrusSearchFields.system
+                    || field == CirrusSearchFields.db || field == CirrusSearchFields.profile || field == CirrusSearchFields.plan) {
+                    return;
+                }
+                String value = search.value();
+                if (!value.isBlank() && value.indexOf('*') < 0 && value.indexOf('?') < 0) {
+                    needles.add(value.toLowerCase(Locale.ROOT));
+                }
+            }
+            case SearchExpression.And and -> {
+                for (SearchExpression child : and.terms()) {
+                    collectMatchNeedles(child, needles);
+                }
+            }
+            case SearchExpression.Or or -> {
+                for (SearchExpression child : or.terms()) {
+                    collectMatchNeedles(child, needles);
+                }
+            }
+            default -> {
+            }
+        }
+    }
+
     private void applyQueryResult(QueryBuildResult result) {
         applyQueryResult(result, true);
     }
@@ -1719,6 +1770,9 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         }
         clearPendingScrollRestore();
         clearResults();
+        lastAppliedResult = null;
+        matchNeedles = result.invalidQuery() ? List.of() : extractMatchNeedles(result.query());
+        matchNeedlesVersion++;
         if (resetScrollPosition) {
             resetScroll();
         }
@@ -1743,6 +1797,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             return;
         }
         addResultBuckets(result.buckets());
+        lastAppliedResult = result;
         restoreScroll(result.scrollToRestore());
     }
 
@@ -3776,10 +3831,10 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                     PlannedCard visible = plan.card(i);
                     ResultCard card = visible.card();
                     if (viewMode == ViewMode.grid) {
-                        drawVisibleText(text, font, plan.clip(), card.fittedShortLabel(font, visible.textWidth()), visible.textX(), visible.y() + 8, visible.textWidth(), textPrimary);
+                        drawHighlightedText(text, font, plan.clip(), card, card.fittedShortLabel(font, visible.textWidth()), visible.textX(), visible.y() + 8, visible.textWidth());
                         drawVisibleText(text, font, plan.clip(), card.fittedSystemLabel(font, visible.textWidth()), visible.textX(), visible.y() + 22, visible.textWidth(), textMuted);
                     } else {
-                        drawVisibleText(text, font, plan.clip(), card.fittedShortLabel(font, visible.textWidth()), visible.textX(), visible.y() + 5, visible.textWidth(), textPrimary);
+                        drawHighlightedText(text, font, plan.clip(), card, card.fittedShortLabel(font, visible.textWidth()), visible.textX(), visible.y() + 5, visible.textWidth());
                         drawVisibleText(text, font, plan.clip(), card.fittedRecipeIdLabel(font, visible.textWidth()), visible.textX(), visible.y() + 17, visible.textWidth(), textMuted);
                     }
                     drawSlotOverflow(text, font, visible, plan.clip());
@@ -3939,6 +3994,49 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             }
         }
 
+        /** Draws the primary label with matched needle ranges emphasized. */
+        private void drawHighlightedText(SceneCanvas.TextBatch text, Font font, LocalClip clip, ResultCard card, String label, int x, int y, int maxWidth) {
+            if (!intersects(clip, y, font.lineHeight)) {
+                return;
+            }
+            List<int[]> ranges = card.highlightRangesFor(label);
+            if (ranges.isEmpty()) {
+                text.drawStringClipped(label, x, y, maxWidth, textPrimary, false);
+                return;
+            }
+            int cursor = 0;
+            int drawX = x;
+            int budget = maxWidth;
+            for (int[] range : ranges) {
+                if (range[0] > cursor) {
+                    String before = label.substring(cursor, range[0]);
+                    drawX = drawClippedSegment(text, font, before, drawX, y, budget, textPrimary);
+                    budget -= font.width(before);
+                    if (budget <= 0) {
+                        return;
+                    }
+                }
+                String matched = label.substring(range[0], range[1]);
+                drawX = drawClippedSegment(text, font, matched, drawX, y, budget, matchHighlightColor);
+                budget -= font.width(matched);
+                if (budget <= 0) {
+                    return;
+                }
+                cursor = range[1];
+            }
+            if (cursor < label.length()) {
+                drawClippedSegment(text, font, label.substring(cursor), drawX, y, budget, textPrimary);
+            }
+        }
+
+        private int drawClippedSegment(SceneCanvas.TextBatch text, Font font, String segment, int x, int y, int maxWidth, int color) {
+            if (maxWidth <= 0 || segment.isEmpty()) {
+                return x;
+            }
+            text.drawStringClipped(segment, x, y, maxWidth, color, false);
+            return x + Math.min(maxWidth, font.width(segment));
+        }
+
         private void renderActions(SceneCanvas canvas, PlannedCard card, int mouseX, int mouseY) {
             int globalIndex = card.category().globalOffset() + card.localIndex();
             for (ResultCardAction action : ResultCardAction.buttons()) {
@@ -4055,14 +4153,31 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             restoreSavedScrollOnNextApply = false;
             clearPendingScrollRestore();
             long requestId = ++queryRequestId;
-            QueryBuildResult queryResult = buildQueryResult(
-                requestId,
-                index,
-                searchBox.text(),
-                sortMode,
-                sortDirection,
-                anchor
-            );
+            // Collapsing is view-only state: when the last applied result still
+            // matches the current query, rebuild the sections widget from its
+            // buckets instead of re-running search + sort over every record.
+            QueryBuildResult last = lastAppliedResult;
+            QueryBuildResult queryResult = last != null
+                && last.query().equals(searchBox.text())
+                && last.sortMode() == sortMode
+                && last.sortDirection() == sortDirection
+                ? QueryBuildResult.results(
+                    requestId,
+                    last.query(),
+                    last.sortMode(),
+                    last.sortDirection(),
+                    last.visibleResultCount(),
+                    last.buckets(),
+                    anchor
+                )
+                : buildQueryResult(
+                    requestId,
+                    index,
+                    searchBox.text(),
+                    sortMode,
+                    sortDirection,
+                    anchor
+                );
             applyQueryResult(queryResult, false);
         }
 
@@ -4625,6 +4740,9 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             private String fittedRecipeIdLabel = "";
             private int fittedSystemLabelWidth = Integer.MIN_VALUE;
             private String fittedSystemLabel = "";
+            private int highlightVersion = Integer.MIN_VALUE;
+            private String highlightSource;
+            private List<int[]> highlightRanges = List.of();
 
             private ResultCard(int index, RecipeDatabaseRecord record) {
                 this.index = index;
@@ -4731,6 +4849,52 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                 }
                 return fittedSystemLabel;
             }
+
+            /** Case-insensitive match ranges of the current query needles within a fitted label, cached per label. */
+            private List<int[]> highlightRangesFor(String fittedLabel) {
+                int version = matchNeedlesVersion;
+                if (highlightVersion != version || highlightSource != fittedLabel) {
+                    highlightVersion = version;
+                    highlightSource = fittedLabel;
+                    highlightRanges = computeHighlightRanges(fittedLabel, matchNeedles);
+                }
+                return highlightRanges;
+            }
+        }
+
+        private static List<int[]> computeHighlightRanges(String label, List<String> needles) {
+            if (needles.isEmpty() || label == null || label.isEmpty()) {
+                return List.of();
+            }
+            boolean[] hits = new boolean[label.length()];
+            for (String needle : needles) {
+                // regionMatches against the ORIGINAL label: case folding can
+                // change string length, so ranges computed on a lowered copy
+                // would not align with the rendered label
+                int index = 0;
+                while (index <= label.length() - needle.length()) {
+                    if (label.regionMatches(true, index, needle, 0, needle.length())) {
+                        java.util.Arrays.fill(hits, index, index + needle.length(), true);
+                        index += needle.length();
+                    } else {
+                        index++;
+                    }
+                }
+            }
+            ArrayList<int[]> ranges = new ArrayList<>();
+            int start = -1;
+            for (int index = 0; index < hits.length; index++) {
+                if (hits[index] && start < 0) {
+                    start = index;
+                } else if (!hits[index] && start >= 0) {
+                    ranges.add(new int[]{start, index});
+                    start = -1;
+                }
+            }
+            if (start >= 0) {
+                ranges.add(new int[]{start, hits.length});
+            }
+            return ranges;
         }
 
         private record GridCell(int x, int y, int width) {
@@ -5082,12 +5246,38 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         if (preview != null) {
             tooltip.add(preview);
         }
+        appendScreeningMarker(tooltip, record);
         tooltip.add(Component.empty());
         tooltip.add(keyUsage(
             null,
             CirrusLangs.Calculator.Database.shortcutDefaultClick.component()
         ));
         return tooltip;
+    }
+
+    /**
+     * Marks recipes that the recipe screening classified: exclusion tags mean
+     * "kept for browsing, excluded from planning", advisory tags mean
+     * "deprioritized during planning".
+     */
+    private static void appendScreeningMarker(Tooltip tooltip, RecipeDatabaseRecord record) {
+        boolean excluded = false;
+        boolean advisory = false;
+        for (String tag : record.searchDocument().rawText(CirrusSearchFields.tag)) {
+            if (ClassificationTags.isExclusionTag(tag)) {
+                excluded = true;
+            } else if (ClassificationTags.RECOLOR.equals(tag)
+                || ClassificationTags.EXCHANGE.equals(tag)
+                || ClassificationTags.RECYCLING.equals(tag)
+                || ClassificationTags.GENERATION.equals(tag)) {
+                advisory = true;
+            }
+        }
+        if (excluded) {
+            tooltip.add(ExecutionOverlayUi.tooltipBody(CirrusLangs.Calculator.Database.screeningExcluded));
+        } else if (advisory) {
+            tooltip.add(ExecutionOverlayUi.tooltipBody(CirrusLangs.Calculator.Database.screeningAdvisory));
+        }
     }
 
     private static MutableComponent keyUsage(@Nullable KeyMapping keyMapping, Component usage) {
@@ -5171,23 +5361,49 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
     }
 
     private static List<RecipeDatabaseResult> sort(List<RecipeDatabaseResult> matches, SortMode sortMode, SortDirection sortDirection) {
-        Comparator<RecipeDatabaseResult> comparator = switch (sortMode) {
+        int size = matches.size();
+        if (size < 2) {
+            return matches;
+        }
+        // Sort keys are extracted once per record (recipe id resolution can be
+        // expensive) instead of once per comparison.
+        record SortKeys(RecipeDatabaseResult result, int matchScore, String k1, @Nullable String k2, @Nullable String k3) {
+        }
+        SortKeys[] decorated = new SortKeys[size];
+        // key extraction (label lowercasing) is per-record independent: fan it
+        // out on the shared compute pool for the large uncapped result sets
+        CirrusUiAsync.parallelFor(size, index -> {
+            RecipeDatabaseResult result = matches.get(index);
+            RecipeDatabaseRecord record = result.record();
+            decorated[index] = switch (sortMode) {
+                case relevance -> new SortKeys(result, result.matchScore(), recipeLabel(record).toLowerCase(Locale.ROOT), null, null);
+                case name -> new SortKeys(result, 0, recipeLabel(record).toLowerCase(Locale.ROOT), null, null);
+                case database -> new SortKeys(result, 0, record.database().name().toLowerCase(Locale.ROOT), recipeLabel(record).toLowerCase(Locale.ROOT), null);
+                case system -> new SortKeys(result, 0, systemGroupKey(record), systemLabel(record), recipeLabel(record).toLowerCase(Locale.ROOT));
+            };
+        });
+        Comparator<SortKeys> comparator = switch (sortMode) {
             case relevance -> Comparator
-                .comparingInt(RecipeDatabaseResult::matchScore).reversed()
-                .thenComparing(result -> recipeLabel(result.record()).toLowerCase(Locale.ROOT));
-            case name -> Comparator.comparing(result -> recipeLabel(result.record()).toLowerCase(Locale.ROOT));
+                .comparingInt(SortKeys::matchScore).reversed()
+                .thenComparing(SortKeys::k1);
+            case name -> Comparator.comparing(SortKeys::k1);
             case database -> Comparator
-                .comparing((RecipeDatabaseResult result) -> result.record().database().name().toLowerCase(Locale.ROOT))
-                .thenComparing(result -> recipeLabel(result.record()).toLowerCase(Locale.ROOT));
+                .comparing(SortKeys::k1)
+                .thenComparing(SortKeys::k2);
             case system -> Comparator
-                .comparing((RecipeDatabaseResult result) -> systemGroupKey(result.record()))
-                .thenComparing(result -> systemLabel(result.record()))
-                .thenComparing(result -> recipeLabel(result.record()).toLowerCase(Locale.ROOT));
+                .comparing(SortKeys::k1)
+                .thenComparing(SortKeys::k2)
+                .thenComparing(SortKeys::k3);
         };
         if (sortDirection == SortDirection.descending) {
             comparator = comparator.reversed();
         }
-        return matches.stream().sorted(comparator).toList();
+        Arrays.sort(decorated, comparator);
+        ArrayList<RecipeDatabaseResult> sorted = new ArrayList<>(size);
+        for (SortKeys keys : decorated) {
+            sorted.add(keys.result());
+        }
+        return List.copyOf(sorted);
     }
 
     private void toggleViewMode() {
@@ -6743,6 +6959,46 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         );
         progress.update(RecipeDatabaseIndex.BuildPhase.BUILDING_ACTIVE, 1, 1);
         return derived;
+    }
+
+    /**
+     * Builds the system-catalog index in the background so the first page open
+     * does not pay the full resolve cost. Scheduled by the client runtime after
+     * the routing graph prewarm finishes; a later page open reuses the cached
+     * catalog via {@link RecipeDatabaseCatalogCache}.
+     */
+    public static void prewarmSystemCatalogIndex(String reason) {
+        try {
+            RecipeApi api = RecipeApi.instance();
+            List<RecipeSystem<?>> systems = new ArrayList<>();
+            Map<Namespace, List<Namespace>> systemTags = new HashMap<>();
+            for (RecipeSystem<?> system : api.allSystems()) {
+                systems.add(system);
+                ArrayList<Namespace> tags = new ArrayList<>();
+                api.getSystemTags(system.systemId()).forEach(tags::add);
+                if (!tags.isEmpty()) {
+                    systemTags.put(system.systemId(), List.copyOf(tags));
+                }
+            }
+            CirrusUiAsync.databaseIndexTask(() -> {
+                long startNanos = System.nanoTime();
+                RecipeDatabaseIndex index = RecipeDatabaseCatalogCache.getOrBuild(
+                    systems,
+                    systemTags,
+                    RecipeDatabaseIndex.BuildProgress.none(),
+                    RecipeDatabaseFailureRegistry.shared()
+                );
+                logger.info(
+                    "database.index.prewarm.finish reason={} elapsedMs={} records={}",
+                    reason,
+                    (System.nanoTime() - startNanos) / 1_000_000L,
+                    index.records().size()
+                );
+                return null;
+            });
+        } catch (RuntimeException exception) {
+            logger.warn("database.index.prewarm.failed reason={} cause={}", reason, exception.toString());
+        }
     }
 
     private static RecipeDatabaseIndex buildSystemCatalogIndex(

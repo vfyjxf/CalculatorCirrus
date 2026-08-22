@@ -23,14 +23,16 @@ public final class ExecutionOverlayClientConfig {
     public static final boolean jeiTargetButtonAutoCloseDefault = true;
     public static final boolean calculatorDatabaseAutoRefreshDefault = true;
     public static final boolean calculatorProjectionUsesGlobalDatabaseDefault = false;
-    public static final int calculatorDatabaseLimitMin = 10;
-    public static final int calculatorDatabaseLimitMax = 500;
-    public static final int calculatorDatabaseLimitDefault = 500;
     public static final boolean calculatorRulesReadOtherWorldsDefault = false;
     public static final boolean calculatorUseLiveStockDefault = false;
-    public static final PlannerMode calculatorPlannerModeDefault = PlannerMode.standard;
+    public static final boolean calculatorRecipeScreeningEnabledDefault = true;
+    public static final PlannerMode calculatorPlannerModeDefault = PlannerMode.auto;
     public static final InventorySensitivityProfile calculatorInventorySensitivityDefault = InventorySensitivityProfile.balanced;
     public static final CalculatorRuleSelection calculatorRuleSelectionDefault = CalculatorRuleSelection.preview;
+    public static final boolean calculatorAutoDeepenEnabledDefault = true;
+    public static final int calculatorDeepenMaxGeneratedDefault = 240_000;
+    public static final int calculatorDeepenMaxGeneratedMin = 60_000;
+    public static final int calculatorDeepenMaxGeneratedMax = 960_000;
     public static final boolean executionUsesCalculatorPathSettingsDefault = true;
     public static final PlannerMode executionPlannerModeDefault = PlannerMode.standard;
 
@@ -42,12 +44,14 @@ public final class ExecutionOverlayClientConfig {
     private static final ModConfigSpec.BooleanValue jeiTargetButtonAutoCloseValue;
     private static final ModConfigSpec.BooleanValue calculatorDatabaseAutoRefreshValue;
     private static final ModConfigSpec.BooleanValue calculatorProjectionUsesGlobalDatabaseValue;
-    private static final ModConfigSpec.IntValue calculatorDatabaseLimitValue;
     private static final ModConfigSpec.BooleanValue calculatorRulesReadOtherWorldsValue;
     private static final ModConfigSpec.BooleanValue calculatorUseLiveStockValue;
+    private static final ModConfigSpec.BooleanValue calculatorRecipeScreeningEnabledValue;
     private static final ModConfigSpec.EnumValue<PlannerMode> calculatorPlannerModeValue;
     private static final ModConfigSpec.EnumValue<InventorySensitivityProfile> calculatorInventorySensitivityValue;
     private static final ModConfigSpec.EnumValue<CalculatorRuleSelection> calculatorRuleSelectionValue;
+    private static final ModConfigSpec.BooleanValue calculatorAutoDeepenEnabledValue;
+    private static final ModConfigSpec.IntValue calculatorDeepenMaxGeneratedValue;
     private static final ModConfigSpec.BooleanValue executionUsesCalculatorPathSettingsValue;
     private static final ModConfigSpec.EnumValue<PlannerMode> executionPlannerModeValue;
     public static final ModConfigSpec SPEC;
@@ -58,12 +62,14 @@ public final class ExecutionOverlayClientConfig {
     private static volatile boolean jeiTargetButtonAutoClose = jeiTargetButtonAutoCloseDefault;
     private static volatile boolean calculatorDatabaseAutoRefresh = calculatorDatabaseAutoRefreshDefault;
     private static volatile boolean calculatorProjectionUsesGlobalDatabase = calculatorProjectionUsesGlobalDatabaseDefault;
-    private static volatile int calculatorDatabaseLimit = calculatorDatabaseLimitDefault;
     private static volatile boolean calculatorRulesReadOtherWorlds = calculatorRulesReadOtherWorldsDefault;
     private static volatile boolean calculatorUseLiveStock = calculatorUseLiveStockDefault;
+    private static volatile boolean calculatorRecipeScreeningEnabled = calculatorRecipeScreeningEnabledDefault;
     private static volatile PlannerMode calculatorPlannerMode = calculatorPlannerModeDefault;
     private static volatile InventorySensitivityProfile calculatorInventorySensitivity = calculatorInventorySensitivityDefault;
     private static volatile CalculatorRuleSelection calculatorRuleSelection = calculatorRuleSelectionDefault;
+    private static volatile boolean calculatorAutoDeepenEnabled = calculatorAutoDeepenEnabledDefault;
+    private static volatile int calculatorDeepenMaxGenerated = calculatorDeepenMaxGeneratedDefault;
     private static volatile boolean executionUsesCalculatorPathSettings = executionUsesCalculatorPathSettingsDefault;
     private static volatile PlannerMode executionPlannerMode = executionPlannerModeDefault;
 
@@ -101,9 +107,6 @@ public final class ExecutionOverlayClientConfig {
         calculatorProjectionUsesGlobalDatabaseValue = builder
             .comment("Whether projection details opened from the calculator use the saved global recipe database context. Disabled keeps projection details local to the current calculator recipe.")
             .define("projection_uses_global_database", calculatorProjectionUsesGlobalDatabaseDefault);
-        calculatorDatabaseLimitValue = builder
-            .comment("Maximum number of recipe database search results shown by the calculator page.")
-            .defineInRange("result_limit", calculatorDatabaseLimitDefault, calculatorDatabaseLimitMin, calculatorDatabaseLimitMax);
         builder.pop();
         builder.push("rules");
         calculatorRulesReadOtherWorldsValue = builder
@@ -117,12 +120,21 @@ public final class ExecutionOverlayClientConfig {
         calculatorUseLiveStockValue = builder
             .comment("Whether calculator previews read the player's current inventory as routing stock.")
             .define("use_live_stock", calculatorUseLiveStockDefault);
+        calculatorRecipeScreeningEnabledValue = builder
+            .comment("Whether recipe screening filters junk/duplicate recipes out of planning and marks them in the database browser.")
+            .define("recipe_screening_enabled", calculatorRecipeScreeningEnabledDefault);
         calculatorPlannerModeValue = builder
             .comment("Planner mode used by the calculator process graph.")
             .defineEnum("planner_mode", calculatorPlannerModeDefault);
         calculatorInventorySensitivityValue = builder
             .comment("How strongly calculator previews should prefer current stock when live stock is enabled.")
             .defineEnum("inventory_sensitivity", calculatorInventorySensitivityDefault);
+        calculatorAutoDeepenEnabledValue = builder
+            .comment("Whether the calculator automatically continues planning with a larger budget when the first wave stops on budget limits with pending inputs.")
+            .define("auto_deepen", calculatorAutoDeepenEnabledDefault);
+        calculatorDeepenMaxGeneratedValue = builder
+            .comment("Upper bound on generated candidates across all auto-deepen waves of one calculator request.")
+            .defineInRange("deepen_max_generated", calculatorDeepenMaxGeneratedDefault, calculatorDeepenMaxGeneratedMin, calculatorDeepenMaxGeneratedMax);
         builder.pop();
         builder.pop();
         builder.pop();
@@ -193,17 +205,6 @@ public final class ExecutionOverlayClientConfig {
         calculatorProjectionUsesGlobalDatabaseValue.save();
     }
 
-    public static int calculatorDatabaseLimit() {
-        return calculatorDatabaseLimit;
-    }
-
-    public static void setCalculatorDatabaseLimit(long value) {
-        int clamped = clampDatabaseLimit(value);
-        calculatorDatabaseLimit = clamped;
-        calculatorDatabaseLimitValue.set(clamped);
-        calculatorDatabaseLimitValue.save();
-    }
-
     public static boolean calculatorRulesReadOtherWorlds() {
         return calculatorRulesReadOtherWorlds;
     }
@@ -222,6 +223,16 @@ public final class ExecutionOverlayClientConfig {
         calculatorUseLiveStock = enabled;
         calculatorUseLiveStockValue.set(enabled);
         calculatorUseLiveStockValue.save();
+    }
+
+    public static boolean calculatorRecipeScreeningEnabled() {
+        return calculatorRecipeScreeningEnabled;
+    }
+
+    public static void setCalculatorRecipeScreeningEnabled(boolean enabled) {
+        calculatorRecipeScreeningEnabled = enabled;
+        calculatorRecipeScreeningEnabledValue.set(enabled);
+        calculatorRecipeScreeningEnabledValue.save();
     }
 
     public static PlannerMode calculatorPlannerMode() {
@@ -246,6 +257,27 @@ public final class ExecutionOverlayClientConfig {
 
     public static CalculatorRuleSelection calculatorRuleSelection() {
         return calculatorRuleSelection;
+    }
+
+    public static boolean calculatorAutoDeepenEnabled() {
+        return calculatorAutoDeepenEnabled;
+    }
+
+    public static void setCalculatorAutoDeepenEnabled(boolean enabled) {
+        calculatorAutoDeepenEnabled = enabled;
+        calculatorAutoDeepenEnabledValue.set(enabled);
+        calculatorAutoDeepenEnabledValue.save();
+    }
+
+    public static int calculatorDeepenMaxGenerated() {
+        return calculatorDeepenMaxGenerated;
+    }
+
+    public static void setCalculatorDeepenMaxGenerated(int value) {
+        int clamped = Math.max(calculatorDeepenMaxGeneratedMin, Math.min(calculatorDeepenMaxGeneratedMax, value));
+        calculatorDeepenMaxGenerated = clamped;
+        calculatorDeepenMaxGeneratedValue.set(clamped);
+        calculatorDeepenMaxGeneratedValue.save();
     }
 
     public static void setCalculatorRuleSelection(CalculatorRuleSelection selection) {
@@ -293,22 +325,20 @@ public final class ExecutionOverlayClientConfig {
         jeiTargetButtonAutoClose = jeiTargetButtonAutoCloseValue.get();
         calculatorDatabaseAutoRefresh = calculatorDatabaseAutoRefreshValue.get();
         calculatorProjectionUsesGlobalDatabase = calculatorProjectionUsesGlobalDatabaseValue.get();
-        calculatorDatabaseLimit = clampDatabaseLimit(calculatorDatabaseLimitValue.get());
         calculatorRulesReadOtherWorlds = calculatorRulesReadOtherWorldsValue.get();
         calculatorUseLiveStock = calculatorUseLiveStockValue.get();
+        calculatorRecipeScreeningEnabled = calculatorRecipeScreeningEnabledValue.get();
         calculatorPlannerMode = calculatorPlannerModeValue.get();
         calculatorInventorySensitivity = calculatorInventorySensitivityValue.get();
         calculatorRuleSelection = calculatorRuleSelectionValue.get();
+        calculatorAutoDeepenEnabled = calculatorAutoDeepenEnabledValue.get();
+        calculatorDeepenMaxGenerated = calculatorDeepenMaxGeneratedValue.get();
         executionUsesCalculatorPathSettings = executionUsesCalculatorPathSettingsValue.get();
         executionPlannerMode = executionPlannerModeValue.get();
     }
 
     private static int clamp(int value) {
         return Math.max(overlayRateMin, Math.min(overlayRateMax, value));
-    }
-
-    private static int clampDatabaseLimit(long value) {
-        return (int) Math.max(calculatorDatabaseLimitMin, Math.min(calculatorDatabaseLimitMax, value));
     }
 
 }

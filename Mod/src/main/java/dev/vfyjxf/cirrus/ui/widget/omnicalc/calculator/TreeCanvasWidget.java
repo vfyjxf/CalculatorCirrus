@@ -952,6 +952,24 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
             if (showMaterialPanel && handleMaterialPanelScrollKey(key)) {
                 return EventDispatch.consumed;
             }
+            if (key == GLFW.GLFW_KEY_LEFT) {
+                navigateWithinLayer(-1);
+                return EventDispatch.consumed;
+            }
+            if (key == GLFW.GLFW_KEY_RIGHT) {
+                navigateWithinLayer(1);
+                return EventDispatch.consumed;
+            }
+            if (!showMaterialPanel && !matSearchActive) {
+                if (key == GLFW.GLFW_KEY_UP) {
+                    navigateLayers(-1);
+                    return EventDispatch.consumed;
+                }
+                if (key == GLFW.GLFW_KEY_DOWN) {
+                    navigateLayers(1);
+                    return EventDispatch.consumed;
+                }
+            }
             if (!matSearchActive) return EventDispatch.pass;
             if (key == GLFW.GLFW_KEY_ESCAPE) {
                 matSearchActive = false; matFilterText = ""; updateFilteredContentH();
@@ -1375,6 +1393,149 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
 
     /** Get the maximum tree depth (layer count - 1). */
     public int getMaxDepth() { return maxDepth; }
+
+    // ═════════════ Layer navigation ═════════════
+
+    /** A node of one layer, ordered left-to-right by canvas position. */
+    public record LayerNodeView(String pathId, int x, int y) {
+    }
+
+    private @Nullable String lastNavigatedPathId;
+
+    /** Nodes of the layer sorted by canvas X (left to right). */
+    public List<LayerNodeView> getLayerNodeViewsByX(int layer) {
+        List<LayoutNode> nodes = layerNodesByX.get(layer);
+        if (nodes == null || nodes.isEmpty()) {
+            return List.of();
+        }
+        ArrayList<LayerNodeView> views = new ArrayList<>(nodes.size());
+        for (LayoutNode node : nodes) {
+            views.add(new LayerNodeView(node.pathId, node.x, node.y));
+        }
+        return List.copyOf(views);
+    }
+
+    /** Index of the first node of the layer (X order) at or right of the viewport's left edge. */
+    public int firstVisibleLayerNodeIndex(int layer) {
+        List<LayoutNode> nodes = layerNodesByX.get(layer);
+        if (nodes == null || nodes.isEmpty()) {
+            return 0;
+        }
+        double viewportMinX = panX;
+        for (int index = 0; index < nodes.size(); index++) {
+            if (nodes.get(index).x + nodeW >= viewportMinX) {
+                return index;
+            }
+        }
+        return nodes.size() - 1;
+    }
+
+    /** Display name of a node (primary output material name, else node label). */
+    public @Nullable String layerNodeDisplayName(String pathId) {
+        LayoutNode node = layoutNodeByPath.get(pathId);
+        return node == null || node.processNode == null ? null : primaryName(node.processNode);
+    }
+
+    /** The node's primary visual variant for popup rendering, or null. */
+    public @Nullable dev.vfyjxf.cirrus.api.content.value.ContentStack<?, ?> layerNodePrimaryStack(String pathId) {
+        LayoutNode node = layoutNodeByPath.get(pathId);
+        if (node == null) {
+            return null;
+        }
+        NodeRenderModel model = renderModel(node);
+        SlotVisual primaryVisual = model.primaryVisual();
+        if (primaryVisual == null) {
+            return null;
+        }
+        dev.vfyjxf.cirrus.api.recipe.content.RecipeContentVisual visual = primaryVisual.visual();
+        return visual.isEmpty() ? null : visual.currentStack();
+    }
+
+    /** Stack count of the node's primary output (for simplified layer cards). */
+    public int layerNodePrimaryCount(String pathId) {
+        LayoutNode node = layoutNodeByPath.get(pathId);
+        if (node == null) {
+            return 0;
+        }
+        SlotVisual primaryVisual = renderModel(node).primaryVisual();
+        return primaryVisual == null ? 0 : primaryVisual.count();
+    }
+
+    /** Focus (expand ancestors + center + track) a node by path id. */
+    public void scrollToLayerNode(String pathId) {
+        scrollToNode(pathId);
+        lastNavigatedPathId = pathId;
+    }
+
+    /** Moves focus to the previous/next node within the current layer (X order). */
+    public void navigateWithinLayer(int direction) {
+        int layer = navigationLayer();
+        List<LayoutNode> nodes = layerNodesByX.get(layer);
+        if (nodes == null || nodes.isEmpty()) {
+            return;
+        }
+        int target = Math.max(0, Math.min(nodes.size() - 1, navigationIndex(nodes) + direction));
+        scrollToLayerNode(nodes.get(target).pathId);
+    }
+
+    /** Moves focus to the closest node (by X) one layer up/down; skips empty layers. */
+    public void navigateLayers(int direction) {
+        int layer = navigationLayer();
+        int referenceX = navigationReferenceX();
+        int step = direction >= 0 ? 1 : -1;
+        for (int candidate = layer + step; candidate >= 0 && candidate <= maxDepth; candidate += step) {
+            LayoutNode best = null;
+            int bestDistance = Integer.MAX_VALUE;
+            for (LayoutNode node : layerNodesByX.getOrDefault(candidate, List.of())) {
+                int distance = Math.abs(node.x + nodeW / 2 - referenceX);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = node;
+                }
+            }
+            if (best != null) {
+                scrollToLayerNode(best.pathId);
+                return;
+            }
+        }
+    }
+
+    private int navigationLayer() {
+        String tracked = lastNavigatedPathId != null ? lastNavigatedPathId : trackedNodeId;
+        LayoutNode node = tracked == null ? null : layoutNodeByPath.get(tracked);
+        return node != null ? node.depth : getViewportCenterLayer();
+    }
+
+    private int navigationIndex(List<LayoutNode> nodes) {
+        String tracked = lastNavigatedPathId != null ? lastNavigatedPathId : trackedNodeId;
+        if (tracked != null) {
+            for (int index = 0; index < nodes.size(); index++) {
+                if (nodes.get(index).pathId.equals(tracked)) {
+                    return index;
+                }
+            }
+        }
+        int centerX = (int) (panX + (viewportW() / zoom) * 0.5);
+        int best = 0;
+        int bestDistance = Integer.MAX_VALUE;
+        for (int index = 0; index < nodes.size(); index++) {
+            int distance = Math.abs(nodes.get(index).x + nodeW / 2 - centerX);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = index;
+            }
+        }
+        return best;
+    }
+
+    private int navigationReferenceX() {
+        String tracked = lastNavigatedPathId != null ? lastNavigatedPathId : trackedNodeId;
+        LayoutNode node = tracked == null ? null : layoutNodeByPath.get(tracked);
+        if (node != null) {
+            return node.x + nodeW / 2;
+        }
+        return (int) (panX + (viewportW() / zoom) * 0.5);
+    }
 
     /** Layer index at current viewport center (for layer-nav tracking). */
     public int getViewportCenterLayer() {

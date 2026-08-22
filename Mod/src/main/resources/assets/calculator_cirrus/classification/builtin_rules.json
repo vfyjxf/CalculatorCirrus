@@ -1,0 +1,122 @@
+{
+  "version": 2,
+  "comment": "Built-in recipe classification rules derived from analysis of 15 modpack exports (2026-08), tightened by a 4203-plan multi-pack routing audit (14 packs x 3 complexity tiers, 2026-08-22): quest-reward / villager-trade / JER-display JEI categories were being executed as production steps. Patterns must survive the test-mod mimic namespace, where 'jei:category/x' becomes 'cirrus_test:jei__category/x' — hence the '(jei:|jei__)category/' form instead of a '^jei:' anchor. Exclusion tags (quality/junk, quality/duplicate) remove recipes from routing via the default source policy; advisory tags (pattern/*, intent/*) only influence scoring/topology. Keep exclusion rules conservative.",
+  "rules": [
+    {
+      "id": "cirrus:quests",
+      "systemPattern": "(?i)(jei:|jei__)category/(ftbquests|quests?)/",
+      "tags": ["cirrus:quality/junk"]
+    },
+    {
+      "id": "cirrus:archaeology",
+      "systemPattern": "(?i)(jearchaeology|/archaeology|archeolog)",
+      "tags": ["cirrus:quality/junk"]
+    },
+    {
+      "id": "cirrus:query_displays",
+      "systemPattern": "(?i)(attachment_query|/query$)",
+      "tags": ["cirrus:quality/junk"]
+    },
+    {
+      "id": "cirrus:trades",
+      "systemPattern": "(?i)(queen_trades|queen_color_randomizer_trades|amadron_trade|spirit_trade|villager_trades|/trades$|farmingforblockheads/market)",
+      "tags": ["cirrus:quality/junk"]
+    },
+    {
+      "id": "cirrus:villager_trade_displays",
+      "systemPattern": "(?i)(jei:|jei__)category/[^/]+/(potential_)?villager(_trade)?s?$",
+      "tags": ["cirrus:quality/junk"]
+    },
+    {
+      "id": "cirrus:jeresources_displays",
+      "systemPattern": "(?i)(jei:|jei__)category/[^/]+/(plant|mob|fluid|dungeon|ore)$",
+      "tags": ["cirrus:quality/junk"]
+    },
+    {
+      "id": "cirrus:market_npc_trades",
+      "systemPattern": "(?i)(jei:|jei__)category/[^/]+/(amadron(/spirit_trade)?|spirit_trade)$",
+      "tags": ["cirrus:quality/junk"]
+    },
+    {
+      "id": "cirrus:machine_produce_displays",
+      "systemPattern": "(?i)(jei:|jei__)category/industrialforegoing/machine_produce$",
+      "tags": ["cirrus:quality/junk"]
+    },
+    {
+      "id": "cirrus:synthetic_anvil_duplicates",
+      "systemPattern": "(?i)(jei:|jei__)category/minecraft/anvil$",
+      "recipePathPattern": "(?i)enchantment\\._\\d+",
+      "tags": ["cirrus:quality/junk"]
+    },
+    {
+      "id": "cirrus:breeding_displays",
+      "systemPattern": "(?i)^jei:category/(easy_villagers|justenoughbreeding)/",
+      "tags": ["cirrus:quality/junk"]
+    },
+    {
+      "id": "cirrus:loot_displays",
+      "systemPattern": "(?i)(hostilenetworks/(loot_fabricator|sim_chamber)|/loot_(table|fabricator)|locate_structure)",
+      "tags": ["cirrus:quality/junk"]
+    },
+    {
+      "id": "cirrus:colony_views",
+      "systemPattern": "(?i)^jei:category/minecolonies/",
+      "tags": ["cirrus:quality/duplicate"]
+    },
+    {
+      "id": "cirrus:jei_vanilla_mirrors",
+      "systemPattern": "^jei:category/minecraft/(crafting|smelting|blasting|smoking|campfire_cooking|stonecutting|smithing|brewing)$",
+      "tags": ["cirrus:quality/duplicate"]
+    },
+    {
+      "id": "cirrus:recolor_systems",
+      "systemPattern": "(?i)(/coloring$|/painting$|/dyer$)",
+      "tags": ["cirrus:pattern/recolor"]
+    },
+    {
+      "id": "cirrus:recolor_recipes",
+      "recipePathPattern": "(?i)(redying|recolor)",
+      "tags": ["cirrus:pattern/recolor"]
+    },
+    {
+      "id": "cirrus:chisel_systems",
+      "systemPattern": "(?i)(/chiseling$|^jei:category/chipped/|/mystery_conversion$)",
+      "tags": ["cirrus:pattern/exchange"]
+    },
+    {
+      "id": "cirrus:reinforced_swaps",
+      "systemPattern": "(?i)securitycraft/(vanilla_to_securitycraft|securitycraft_to_vanilla)",
+      "tags": ["cirrus:pattern/exchange"]
+    },
+    {
+      "id": "cirrus:recycling_recipes",
+      "recipePathPattern": "(?i)(^|/|_)(recycling|recycle|salvage|salvaging|disassembly|disassembling|uncrafting|uncraft)(/|_|$)",
+      "tags": ["cirrus:intent/recycling"]
+    },
+    {
+      "id": "cirrus:recycling_systems",
+      "systemPattern": "(?i)(/salvaging$|/scrapping$|/disassembly)",
+      "tags": ["cirrus:intent/recycling"]
+    },
+    {
+      "id": "cirrus:mass_valorization",
+      "systemPattern": "(?i)(composter|composting|nutritional_liquifier|canning_machine)",
+      "tags": ["cirrus:intent/recycling"]
+    },
+    {
+      "id": "cirrus:resource_generators",
+      "systemPattern": "(?i)(blockgen|cobblegen|laser_ore|ore_to_resource|/quarry|oil_drilling|pollination|/fruiting$|botanypots/crop)",
+      "tags": ["cirrus:intent/generation"]
+    },
+    {
+      "id": "cirrus:living_matter_predictions",
+      "recipePathPattern": "(?i)((^|/|_)living_?matter(/|_|$)|_prediction$|/predictions?/)",
+      "tags": ["cirrus:intent/recycling"]
+    },
+    {
+      "id": "cirrus:giant_block_conversions",
+      "recipePathPattern": "(?i)(^|/)giant_\\w+_to_",
+      "tags": ["cirrus:pattern/exchange"]
+    }
+  ]
+}

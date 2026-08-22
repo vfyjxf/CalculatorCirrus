@@ -14,7 +14,8 @@ import org.jetbrains.annotations.Nullable;
  *
  * @param elapsedMs                             wall-clock time spent planning (milliseconds)
  * @param expandedNodes                         number of recipe nodes visited
- * @param generatedCandidates                   total candidates generated
+ * @param generatedCandidates                   total candidates that entered evaluation (static gates passed)
+ * @param scannedRefs                           raw producer refs visited during full producer scans
  * @param acceptedCandidates                    candidates that passed hard rules
  * @param effectivePlannerMode                  the planner mode actually used
  * @param effectiveInventorySensitivityProfile   the inventory sensitivity that was applied
@@ -45,6 +46,7 @@ public record RoutingMetrics(
     long elapsedMs,
     int expandedNodes,
     int generatedCandidates,
+    int scannedRefs,
     int acceptedCandidates,
     PlannerMode effectivePlannerMode,
     InventorySensitivityProfile effectiveInventorySensitivityProfile,
@@ -75,6 +77,7 @@ public record RoutingMetrics(
         Checks.checkArgument(elapsedMs >= 0, "elapsedMs must be non-negative");
         Checks.checkArgument(expandedNodes >= 0, "expandedNodes must be non-negative");
         Checks.checkArgument(generatedCandidates >= 0, "generatedCandidates must be non-negative");
+        Checks.checkArgument(scannedRefs >= 0, "scannedRefs must be non-negative");
         Checks.checkArgument(acceptedCandidates >= 0, "acceptedCandidates must be non-negative");
         Checks.checkNotNull(effectivePlannerMode, "effectivePlannerMode");
         Checks.checkNotNull(effectiveInventorySensitivityProfile, "effectiveInventorySensitivityProfile");
@@ -105,6 +108,7 @@ public record RoutingMetrics(
         LoopPolicy loopPolicy
     ) {
         return new RoutingMetrics(
+            0,
             0,
             0,
             0,

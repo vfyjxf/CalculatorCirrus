@@ -131,7 +131,9 @@ final class ExecutionTranslatorFixtures {
             // Keep this tag-shaped on purpose: translator tests assert that execution
             // still sees a semantic input instead of an arbitrary concrete plank stack.
             InputContent.fromItemTag(ItemTags.PLANKS, amount),
-            amount
+            amount,
+            0,
+            0
         );
     }
 

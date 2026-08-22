@@ -48,7 +48,10 @@ class CalculatorRealisticScenarioTimingTest {
         );
 
         assertHealthySingleCalculation(sample);
-        assertTrue(sample.metrics().generatedCandidates() >= 1024, sample::diagnosticLine);
+        // Producer scans are capped per input (deterministic truncation), so the
+        // broad pool is exercised up to the scan-cap floor rather than in full.
+        assertTrue(sample.metrics().scannedRefs() >= 256, sample::diagnosticLine);
+        assertTrue(sample.metrics().generatedCandidates() >= 100, sample::diagnosticLine);
     }
 
     private static void assertHealthySingleCalculation(CalculatorSyntheticScenario.ProbeSample sample) {

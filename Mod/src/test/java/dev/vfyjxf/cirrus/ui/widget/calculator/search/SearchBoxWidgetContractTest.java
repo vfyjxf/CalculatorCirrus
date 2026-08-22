@@ -15,6 +15,7 @@ import org.lwjgl.glfw.GLFW;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -222,17 +223,7 @@ class SearchBoxWidgetContractTest {
 
     @Test
     void suggestionRowsCommitOnMousePressBeforeFocusCanClosePopup() throws Exception {
-        Path sourcePath = Path.of("src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/search/SearchBoxWidget.java");
-        if (!Files.exists(sourcePath)) {
-            sourcePath = Path.of("Mod/src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/search/SearchBoxWidget.java");
-        }
-        if (!Files.exists(sourcePath)) {
-            sourcePath = Path.of("CalculatorCirrus/Mod/src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/search/SearchBoxWidget.java");
-        }
-        if (!Files.exists(sourcePath)) {
-            sourcePath = Path.of("D:/ProjectDir/CloudMods/CalculatorCirrus/Mod/src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/search/SearchBoxWidget.java");
-        }
-        String source = Files.readString(sourcePath);
+        String source = Files.readString(resolveModSource("src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/search/SearchBoxWidget.java"));
 
         assertTrue(source.contains("onMouseClicked((input, context) ->"));
         assertTrue(source.contains("commitSuggestion(index);"));
@@ -240,23 +231,11 @@ class SearchBoxWidgetContractTest {
 
     @Test
     void calculatorSearchBoxesUseScrollableViewportAsPopupBoundary() throws Exception {
-        Path databasePagePath = Path.of("src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/page/DatabasePage.java");
-        Path rulesPagePath = Path.of("src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/page/RulesPage.java");
-        if (!Files.exists(databasePagePath)) {
-            databasePagePath = Path.of("Mod/src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/page/DatabasePage.java");
-            rulesPagePath = Path.of("Mod/src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/page/RulesPage.java");
-        }
-        if (!Files.exists(databasePagePath)) {
-            databasePagePath = Path.of("CalculatorCirrus/Mod/src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/page/DatabasePage.java");
-            rulesPagePath = Path.of("CalculatorCirrus/Mod/src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/page/RulesPage.java");
-        }
-        if (!Files.exists(databasePagePath)) {
-            databasePagePath = Path.of("D:/ProjectDir/CloudMods/CalculatorCirrus/Mod/src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/page/DatabasePage.java");
-            rulesPagePath = Path.of("D:/ProjectDir/CloudMods/CalculatorCirrus/Mod/src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/page/RulesPage.java");
-        }
+        String databasePageSource = Files.readString(resolveModSource("src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/page/DatabasePage.java"));
+        String rulesPageSource = Files.readString(resolveModSource("src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/page/RulesPage.java"));
 
-        assertTrue(Files.readString(databasePagePath).contains(".suggestionViewport(this::scrollViewportSceneBounds)"));
-        assertTrue(Files.readString(rulesPagePath).contains(".suggestionViewport(this::scrollViewportSceneBounds)"));
+        assertTrue(databasePageSource.contains(".suggestionViewport(this::scrollViewportSceneBounds)"));
+        assertTrue(rulesPageSource.contains(".suggestionViewport(this::scrollViewportSceneBounds)"));
     }
 
     @Test
@@ -267,6 +246,28 @@ class SearchBoxWidgetContractTest {
         assertEquals(0xFF6D3FB1, SearchBoxWidget.highlightColorFor(SearchHighlightKind.keyword));
         assertEquals(0xFFB3261E, SearchBoxWidget.highlightColorFor(SearchHighlightKind.negation));
         assertEquals(0xFFD11F2A, SearchBoxWidget.highlightColorFor(SearchHighlightKind.error));
+    }
+
+    /**
+     * Resolves a main-sourceset file without depending on the test working
+     * directory. The {@code moddevmcp.project.root} system property is injected
+     * by the Gradle test task; the relative candidates keep IDE runs working.
+     */
+    private static Path resolveModSource(String relativePath) {
+        List<Path> candidates = new ArrayList<>();
+        String projectRoot = System.getProperty("moddevmcp.project.root");
+        if (projectRoot != null) {
+            candidates.add(Path.of(projectRoot, "Mod", relativePath));
+        }
+        candidates.add(Path.of(relativePath));
+        candidates.add(Path.of("Mod", relativePath));
+        candidates.add(Path.of("CalculatorCirrus", "Mod", relativePath));
+        for (Path candidate : candidates) {
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
+        }
+        return candidates.get(0);
     }
 
     private static SceneHost testSceneHost() {

@@ -303,12 +303,12 @@ public record RoutingRequest(
             Checks.checkNotNull(target, "target");
             Namespace resolvedRuleProfile = ruleProfileId != null ? ruleProfileId : switch (plannerMode) {
                 case standard -> DefaultRuleProfiles.standardDefaultId;
-                case assuredBounded -> DefaultRuleProfiles.assuredBoundedDefaultId;
+                case auto, assuredBounded -> DefaultRuleProfiles.assuredBoundedDefaultId;
                 case assuredProven -> DefaultRuleProfiles.assuredProvenCompatId;
             };
             RoutingBudget resolvedBudget = budget != null ? budget : switch (plannerMode) {
                 case standard -> RoutingBudget.standardDefault();
-                case assuredBounded, assuredProven -> RoutingBudget.assuredDefault();
+                case auto, assuredBounded, assuredProven -> RoutingBudget.assuredDefault();
             };
             LoopBudget resolvedLoopBudget = loopBudget != null ? loopBudget : resolvedBudget.loopBudget();
             InventorySensitivityProfile resolvedInventoryProfile = inventorySensitivityProfile != null

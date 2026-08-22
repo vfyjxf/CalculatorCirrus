@@ -38,16 +38,20 @@ public final class RecipeDatabaseCatalogCache {
         RecipeDatabaseIndex.BuildProgress progress,
         RecipeDatabaseFailureRegistry failureRegistry
     ) {
-        CatalogKey key = CatalogKey.create(
-            systems,
-            systemTags,
-            failureRegistry == null ? -1L : failureRegistry.version()
-        );
-        if (key.sources().isEmpty()) {
-            return RecipeDatabaseIndex.ofRecords(List.of());
-        }
         long now = System.nanoTime();
         synchronized (RecipeDatabaseCatalogCache.class) {
+            // the key is computed under the lock: the registry version only moves
+            // while a catalog build (which holds this lock) runs, so a caller that
+            // waited on a concurrent build sees the post-build version and hits
+            // the freshly stored entry instead of building a second time
+            CatalogKey key = CatalogKey.create(
+                systems,
+                systemTags,
+                failureRegistry == null ? -1L : failureRegistry.version()
+            );
+            if (key.sources().isEmpty()) {
+                return RecipeDatabaseIndex.ofRecords(List.of());
+            }
             CacheEntry current = cached;
             if (current != null && current.key().equals(key) && now - current.createdNanos() <= ttlNanos) {
                 logger.info(
@@ -60,7 +64,13 @@ public final class RecipeDatabaseCatalogCache {
                 return current.index();
             }
             RecipeDatabaseIndex index = buildCatalog(key.sources(), systems, systemTags, progress, failureRegistry);
-            cached = new CacheEntry(key, index, System.nanoTime());
+            // the build records new failures/unsupported into the registry, which
+            // bumps its version; store the entry under the post-build key so the
+            // next lookup actually hits instead of rebuilding the whole catalog
+            CatalogKey storedKey = failureRegistry == null
+                ? key
+                : CatalogKey.create(systems, systemTags, failureRegistry.version());
+            cached = new CacheEntry(storedKey, index, System.nanoTime());
             return index;
         }
     }

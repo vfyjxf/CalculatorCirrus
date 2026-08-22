@@ -27,6 +27,7 @@ import dev.vfyjxf.cloudlib.util.Checks;
  * @param ruleProfile          the rule profile governing candidate evaluation
  * @param sourcePolicyDecision the pre-computed source-policy decision (allowed recipes bitset)
  * @param tagSnapshot          the frozen tag-to-recipe assignments
+ * @param caches               request-scoped memoization for the candidate pipeline
  * @param counters             mutable telemetry counters updated during planning
  * @see RoutePlanner
  */
@@ -38,6 +39,7 @@ public record PlannerContext(
     RuleProfile ruleProfile,
     SourcePolicyDecision sourcePolicyDecision,
     TagSnapshot tagSnapshot,
+    PlannerRequestCaches caches,
     Counters counters
 ) {
     public PlannerContext {
@@ -48,6 +50,7 @@ public record PlannerContext(
         Checks.checkNotNull(ruleProfile, "ruleProfile");
         Checks.checkNotNull(sourcePolicyDecision, "sourcePolicyDecision");
         Checks.checkNotNull(tagSnapshot, "tagSnapshot");
+        Checks.checkNotNull(caches, "caches");
         Checks.checkNotNull(counters, "counters");
     }
 
@@ -60,6 +63,7 @@ public record PlannerContext(
             ruleProfile,
             sourcePolicyDecision,
             tagSnapshot,
+            caches,
             counters
         );
     }
@@ -73,8 +77,17 @@ public record PlannerContext(
     public static final class Counters {
         /** Number of recipe nodes expanded (visited) during search. */
         public int expandedNodes;
-        /** Total number of candidate recipes generated for evaluation. */
+        /**
+         * Total number of candidate recipes that entered evaluation (passed the
+         * static gates and were scored). Budget limits are measured against this.
+         */
         public int generatedCandidates;
+        /**
+         * Raw producer refs visited during full producer scans (cache misses).
+         * Diagnostic only — shows how much work the request-scoped producer
+         * filter cache and the per-input scan cap avoided bounding.
+         */
+        public int scannedRefs;
         /** Number of candidates that passed all hard rules. */
         public int acceptedCandidates;
         /** Number of output-target adapter attempts (producer candidates tried). */
@@ -107,6 +120,12 @@ public record PlannerContext(
         public int activeRootInputIndex = -1;
         /** Description of the root input currently being resolved. */
         public String activeRootInput = "none";
+        /**
+         * Wall-clock deadline for this run, computed from
+         * {@code budget.maxWallTimeMs()} at plan start. {@code Long.MAX_VALUE}
+         * disables the check (never set by the planner entry points).
+         */
+        public long wallDeadlineNanos = Long.MAX_VALUE;
 
         public void recordBudgetCulprit(
             String recipe,

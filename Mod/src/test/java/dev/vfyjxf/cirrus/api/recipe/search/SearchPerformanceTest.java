@@ -1,5 +1,8 @@
 package dev.vfyjxf.cirrus.api.recipe.search;
 
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
+import dev.vfyjxf.cloudlib.api.search.*;
+
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
@@ -313,18 +316,18 @@ class SearchPerformanceTest {
     }
 
     @Test void searchMatcher_micro() {
-        SearchDocument doc = SearchDocument.builder()
-            .searchableText(SearchField.name, "Iron Ingot")
-            .searchableText(SearchField.in, "minecraft:ore_iron")
-            .searchableText(SearchField.out, "minecraft:ingot_iron")
-            .text(SearchField.mod, "minecraft")
-            .text(SearchField.tag, "forge:ingots/iron")
-            .text(SearchField.tag, "forge:ingots")
-            .number(SearchField.time, 240)
-            .number(SearchField.energy, 3200)
+        SearchDocument doc = SearchDocument.builder(CirrusSearchFields.SET, CirrusSearchFields.text)
+            .searchableText(CirrusSearchFields.name, "Iron Ingot")
+            .searchableText(CirrusSearchFields.in, "minecraft:ore_iron")
+            .searchableText(CirrusSearchFields.out, "minecraft:ingot_iron")
+            .text(CirrusSearchFields.mod, "minecraft")
+            .text(CirrusSearchFields.tag, "forge:ingots/iron")
+            .text(CirrusSearchFields.tag, "forge:ingots")
+            .number(CirrusSearchFields.time, 240)
+            .number(CirrusSearchFields.energy, 3200)
             .build();
 
-        SearchParser p = new SearchParser();
+        SearchParser p = CirrusSearchFields.parser();
         SearchExpression[] exprs = {
             p.parse("iron"),p.parse("Iron Ingot"),p.parse("iron ingot"),
             p.parse("@minecraft"),p.parse("$forge:ingots/iron"),

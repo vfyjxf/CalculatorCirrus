@@ -146,6 +146,7 @@ class RuleSerializationRepositoryTest {
             0,
             false,
             0,
+            1,
             1
         );
         var profile = customRule("score").toProfile();
@@ -156,7 +157,9 @@ class RuleSerializationRepositoryTest {
             rule.contribute(context, accumulator);
         }
 
-        assertEquals(1.5d, score[0], 0.0001d);
+        int craftAxis = profile.scoreKeys().indexOf("craft");
+        assertTrue(craftAxis >= 0, "craft axis should exist");
+        assertEquals(1.5d, score[craftAxis], 0.0001d);
     }
 
     private static RuleDefinition customRule(String suffix) {

@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.api.recipe.database;
 
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
@@ -16,16 +17,19 @@ import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchDocument
 import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchEngine;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchExpression;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchField;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchMatch;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchOperator;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchParser;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchTerm;
+import dev.vfyjxf.cloudlib.api.search.SearchExpression;
+import dev.vfyjxf.cloudlib.api.search.SearchField;
+import dev.vfyjxf.cloudlib.api.search.SearchMatch;
+import dev.vfyjxf.cloudlib.api.search.SearchOperator;
+import dev.vfyjxf.cloudlib.api.search.SearchParser;
+import dev.vfyjxf.cloudlib.api.search.SearchSuggestionValue;
+import dev.vfyjxf.cloudlib.api.search.SearchTerm;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveError;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
+import dev.vfyjxf.cirrus.recipe.classify.ClassifyViewFactory;
+import dev.vfyjxf.cirrus.recipe.classify.RecipeClassificationService;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -61,7 +65,9 @@ public final class RecipeDatabaseIndex {
     private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Database");
     private static final int parallelFlushBatch = 256;
     private static final int recordBuildChunk = 64;
-    private static final int stackSearchCacheLimit = 8192;
+    // entry cap for the build-scoped stack string cache; large packs hold tens
+    // of thousands of distinct stacks (ATM10 ~62k) that recur across recipes
+    private static final int stackSearchCacheLimit = 1 << 20;
     private static final int statsTopLimit = 8;
     private static final RecipeDatabaseIndex empty = new RecipeDatabaseIndex(List.of(), RecipeDatabaseSearchEngine.empty(), null, new int[0], Map.of());
     private final List<RecipeDatabaseRecord> records;
@@ -391,6 +397,21 @@ public final class RecipeDatabaseIndex {
         );
     }
 
+    private static final List<SearchField> suggestionTokenFields = List.of(
+        CirrusSearchFields.text, CirrusSearchFields.out, CirrusSearchFields.out_id, CirrusSearchFields.in, CirrusSearchFields.in_id,
+        CirrusSearchFields.cat, CirrusSearchFields.cat_id, CirrusSearchFields.mod, CirrusSearchFields.system, CirrusSearchFields.db
+    );
+
+    /** Whole-word completion for one field's dictionary, ranked by postings volume. */
+    public List<SearchSuggestionValue> tokenSuggestions(SearchField field, String prefix, int limit) {
+        return searchEngine.tokenSuggestions(field, prefix, limit);
+    }
+
+    /** Whole-word completion merged across the suggestion-relevant fields. */
+    public List<SearchSuggestionValue> tokenSuggestions(String prefix, int limit) {
+        return searchEngine.tokenSuggestions(suggestionTokenFields, prefix, limit);
+    }
+
     public List<String> textCandidates(SearchField field, int limit) {
         int max = Math.max(0, limit);
         return max == 0 ? List.of() : searchEngine.textCandidates(field, max);
@@ -402,7 +423,7 @@ public final class RecipeDatabaseIndex {
             return List.of();
         }
         Set<String> values = new LinkedHashSet<>();
-        if (field == SearchField.contains) {
+        if (field == CirrusSearchFields.contains) {
             for (SearchField sourceField : containsSourceFields()) {
                 collectNumberCandidates(values, sourceField, max);
                 if (values.size() >= max) {
@@ -427,8 +448,8 @@ public final class RecipeDatabaseIndex {
     }
 
     public Map<SearchField, List<String>> textCandidateMap(int perFieldLimit) {
-        EnumMap<SearchField, List<String>> out = new EnumMap<>(SearchField.class);
-        for (SearchField field : SearchField.values()) {
+        HashMap<SearchField, List<String>> out = new HashMap<>();
+        for (SearchField field : CirrusSearchFields.SET.fields()) {
             if (!hasTextCandidates(field)) {
                 continue;
             }
@@ -440,32 +461,33 @@ public final class RecipeDatabaseIndex {
         return Map.copyOf(out);
     }
 
+    private static final Set<SearchField> noTextCandidateFields = Set.of(
+        CirrusSearchFields.text, CirrusSearchFields.time, CirrusSearchFields.energy, CirrusSearchFields.chance, CirrusSearchFields.tier, CirrusSearchFields.level
+    );
+
     private static boolean hasTextCandidates(SearchField field) {
-        return switch (field) {
-            case text, time, energy, chance, tier, level -> false;
-            default -> true;
-        };
+        return !noTextCandidateFields.contains(field);
     }
 
     private static SearchField[] containsSourceFields() {
         return new SearchField[] {
-            SearchField.in,
-            SearchField.in_id,
-            SearchField.out,
-            SearchField.out_id,
-            SearchField.cat,
-            SearchField.cat_id,
-            SearchField.byproduct,
-            SearchField.byproduct_id
+            CirrusSearchFields.in,
+            CirrusSearchFields.in_id,
+            CirrusSearchFields.out,
+            CirrusSearchFields.out_id,
+            CirrusSearchFields.cat,
+            CirrusSearchFields.cat_id,
+            CirrusSearchFields.byproduct,
+            CirrusSearchFields.byproduct_id
         };
     }
 
     public List<RecipeDatabaseResult> search(String query) {
-        return search(new SearchParser().parse(query));
+        return search(CirrusSearchFields.parser().parse(query));
     }
 
     public List<RecipeDatabaseResult> search(String query, Namespace system) {
-        return search(new SearchParser().parse(query), system);
+        return search(CirrusSearchFields.parser().parse(query), system);
     }
 
     public List<RecipeDatabaseResult> search(SearchExpression expression) {
@@ -598,12 +620,12 @@ public final class RecipeDatabaseIndex {
     }
 
     private static boolean isDerivedOnlyField(SearchField field) {
-        return field == SearchField.db || field == SearchField.profile;
+        return field == CirrusSearchFields.db || field == CirrusSearchFields.profile;
     }
 
     private static SearchMatch matchDatabaseTerm(SearchTerm term, DatabaseDefinition database) {
         ArrayList<String> values = new ArrayList<>(3);
-        if (term.field() == SearchField.profile) {
+        if (term.field() == CirrusSearchFields.profile) {
             values.add(database.kind().name());
         } else {
             values.add(database.id());
@@ -718,9 +740,9 @@ public final class RecipeDatabaseIndex {
         int[] resolveOrder = interleavedResolveOrder(items);
         long resolveStartNanos = System.nanoTime();
         progress.update(BuildPhase.RESOLVING_RECORDS, 0, items.size());
+        StackSearchCache stackSearchCache = new StackSearchCache(stackSearchCacheLimit);
         parallelChunks(items.size(), recordBuildChunk, "cirrus-database-record-", (from, to) -> {
             ArrayList<RecipeDatabaseFailureRegistry.Failure> capturedFailures = new ArrayList<>(1);
-            StackSearchCache stackSearchCache = new StackSearchCache(stackSearchCacheLimit);
             int pendingProgress = 0;
             for (int cursor = from; cursor < to; cursor++) {
                 int index = resolveOrder == null ? cursor : resolveOrder[cursor];
@@ -989,39 +1011,58 @@ public final class RecipeDatabaseIndex {
         }
     }
 
+    /**
+     * Build-scoped memo for the three searchable strings of a stack. One
+     * shared map keyed by stack identity feeds all resolve chunks (stacks
+     * recur across recipes far beyond a single chunk), and a single holder
+     * per key serves display name, content id and type string, so each stack
+     * occurrence hashes its key once instead of three times.
+     */
     private static final class StackSearchCache {
         private final int limit;
-        private final HashMap<StackKey, String> displayNames = new HashMap<>();
-        private final HashMap<StackKey, String> contentIds = new HashMap<>();
+        private final ConcurrentHashMap<StackKey, CachedStackStrings> cache = new ConcurrentHashMap<>();
 
         private StackSearchCache(int limit) {
             this.limit = Math.max(1, limit);
         }
 
-        private <T, S> String displayName(ContentStack<T, S> stack) {
+        private CachedStackStrings strings(ContentStack<?, ?> stack) {
             StackKey key = StackKey.of(stack);
-            String cached = displayNames.get(key);
+            CachedStackStrings cached = cache.get(key);
             if (cached != null) {
                 return cached;
             }
-            String value = RecipeDatabaseIndex.displayName(stack);
-            if (displayNames.size() < limit) {
-                displayNames.putIfAbsent(key, value);
+            if (cache.size() >= limit) {
+                return new CachedStackStrings();
             }
-            return value;
+            return cache.computeIfAbsent(key, ignored -> new CachedStackStrings());
+        }
+    }
+
+    private static final class CachedStackStrings {
+        private String displayName;
+        private String contentId;
+        private String typeString;
+
+        private synchronized <T, S> String displayName(ContentStack<T, S> stack) {
+            if (displayName == null) {
+                displayName = RecipeDatabaseIndex.displayName(stack);
+            }
+            return displayName;
         }
 
-        private <T, S> String contentId(ContentStack<T, S> stack) {
-            StackKey key = StackKey.of(stack);
-            String cached = contentIds.get(key);
-            if (cached != null) {
-                return cached;
+        private synchronized <T, S> String contentId(ContentStack<T, S> stack) {
+            if (contentId == null) {
+                contentId = RecipeDatabaseIndex.contentId(stack);
             }
-            String value = RecipeDatabaseIndex.contentId(stack);
-            if (contentIds.size() < limit) {
-                contentIds.putIfAbsent(key, value);
+            return contentId;
+        }
+
+        private synchronized <T, S> String typeString(ContentStack<T, S> stack) {
+            if (typeString == null) {
+                typeString = stack.type().toString(stack.value());
             }
-            return value;
+            return typeString;
         }
     }
 
@@ -1193,23 +1234,29 @@ public final class RecipeDatabaseIndex {
     ) {
         RecipeDatabaseSearchDocument.Builder builder = RecipeDatabaseSearchDocument.builder();
         ResourceLocation id = entry.id();
-        builder.searchableText(SearchField.id, id == null ? entry.toString() : id.toString());
+        builder.searchableText(CirrusSearchFields.id, id == null ? entry.toString() : id.toString());
         if (id != null) {
-            builder.searchableText(SearchField.name, id.getPath());
-            builder.text(SearchField.mod, id.getNamespace());
+            builder.searchableText(CirrusSearchFields.name, id.getPath());
+            builder.text(CirrusSearchFields.mod, id.getNamespace());
         }
-        builder.searchableText(SearchField.system, entry.systemId().toString());
-        builder.text(SearchField.db, database.id());
-        builder.searchableText(SearchField.db, database.name());
-        builder.text(SearchField.profile, database.kind().name());
-        builder.text(SearchField.mod, entry.systemId().root());
-        builder.text(SearchField.context, entry.systemId().toString());
-        builder.text(SearchField.context, database.kind().name());
+        builder.searchableText(CirrusSearchFields.system, entry.systemId().toString());
+        builder.text(CirrusSearchFields.db, database.id());
+        builder.searchableText(CirrusSearchFields.db, database.name());
+        builder.text(CirrusSearchFields.profile, database.kind().name());
+        builder.text(CirrusSearchFields.mod, entry.systemId().root());
+        builder.text(CirrusSearchFields.context, entry.systemId().toString());
+        builder.text(CirrusSearchFields.context, database.kind().name());
         for (Namespace tag : systemTags) {
-            builder.searchableText(SearchField.system, tag.toString());
-            builder.text(SearchField.tag, tag.toString());
-            builder.text(SearchField.profile, tag.toString());
-            builder.text(SearchField.context, tag.toString());
+            builder.searchableText(CirrusSearchFields.system, tag.toString());
+            builder.text(CirrusSearchFields.tag, tag.toString());
+            builder.text(CirrusSearchFields.profile, tag.toString());
+            builder.text(CirrusSearchFields.context, tag.toString());
+        }
+        // recipe screening tags (junk/duplicate/recolor/...): filtered recipes
+        // stay browsable here but carry their marker on the tag channel
+        for (String classificationTag : RecipeClassificationService.classifier()
+            .classifyLocal(ClassifyViewFactory.fromProjection(entry, projection))) {
+            builder.text(CirrusSearchFields.tag, classificationTag);
         }
         if (projection != null) {
             addProjection(builder, projection, cache);
@@ -1219,15 +1266,15 @@ public final class RecipeDatabaseIndex {
 
     private static void addProjection(RecipeDatabaseSearchDocument.Builder builder, RecipeProjection projection, StackSearchCache cache) {
         for (ClausedContent<InputContent> input : projection.inputs()) {
-            addContent(builder, SearchField.in, input.content(), cache);
+            addContent(builder, CirrusSearchFields.in, input.content(), cache);
             if (input.content().notConsumed()) {
-                addContent(builder, SearchField.cat, input.content(), cache);
+                addContent(builder, CirrusSearchFields.cat, input.content(), cache);
             }
         }
         for (ClausedContent<OutputContent> output : projection.outputs()) {
-            addContent(builder, SearchField.out, output.content(), cache);
+            addContent(builder, CirrusSearchFields.out, output.content(), cache);
             if (output.content().chance() < RecipeContent.MAX_CHANCE) {
-                addContent(builder, SearchField.byproduct, output.content(), cache);
+                addContent(builder, CirrusSearchFields.byproduct, output.content(), cache);
             }
         }
     }
@@ -1237,7 +1284,7 @@ public final class RecipeDatabaseIndex {
             return;
         }
         builder.number(field, content.amount());
-        builder.number(SearchField.chance, content.chance());
+        builder.number(CirrusSearchFields.chance, content.chance());
         switch (content) {
             case StackContent<?, ?> stack -> addStack(builder, field, stack.content(), content.amount(), cache);
             case StackListContent list -> {
@@ -1252,7 +1299,7 @@ public final class RecipeDatabaseIndex {
             }
             case TagStackContent<?> tag -> {
                 builder.searchableContent(idField(field), tag.tagKey().location().toString(), content.amount(), ContentKind.tagId);
-                builder.text(SearchField.tag, tag.tagKey().location().toString());
+                builder.text(CirrusSearchFields.tag, tag.tagKey().location().toString());
             }
             case ValueContent<?> value -> addValue(builder, field, value.content(), content.amount());
             default -> {
@@ -1270,15 +1317,16 @@ public final class RecipeDatabaseIndex {
         if (stack == null || stack.isEmpty()) {
             return;
         }
+        CachedStackStrings strings = cache.strings(stack);
         ContentKind nameKind = stack.isFluid() ? ContentKind.fluidName : stack.isItem() ? ContentKind.itemName : ContentKind.otherName;
         ContentKind idKind = stack.isFluid() ? ContentKind.fluidId : stack.isItem() ? ContentKind.itemId : ContentKind.otherId;
         if (stack.isItem() || stack.isFluid()) {
-            builder.searchableContent(field, cache.displayName(stack), amount, nameKind);
+            builder.searchableContent(field, strings.displayName(stack), amount, nameKind);
         } else {
-            builder.searchableContent(field, stack.type().toString(stack.value()), amount, nameKind);
+            builder.searchableContent(field, strings.typeString(stack), amount, nameKind);
         }
-        builder.searchableContent(idField(field), cache.contentId(stack), amount, idKind);
-        builder.searchableContent(idField(field), stack.type().toString(stack.value()), amount, idKind);
+        builder.searchableContent(idField(field), strings.contentId(stack), amount, idKind);
+        builder.searchableContent(idField(field), strings.typeString(stack), amount, idKind);
     }
 
     private static <T> void addValue(
@@ -1294,21 +1342,19 @@ public final class RecipeDatabaseIndex {
         builder.searchableContent(idField(field), value.type().typeId().toString(), amount, ContentKind.otherId);
         builder.number(field, value.value());
         if (value.type().typeId().path().contains("time")) {
-            builder.number(SearchField.time, value.value());
+            builder.number(CirrusSearchFields.time, value.value());
         }
         if (value.type().typeId().path().contains("energy")) {
-            builder.number(SearchField.energy, value.value());
+            builder.number(CirrusSearchFields.energy, value.value());
         }
     }
 
     private static SearchField idField(SearchField field) {
-        return switch (field) {
-            case in -> SearchField.in_id;
-            case out -> SearchField.out_id;
-            case cat -> SearchField.cat_id;
-            case byproduct -> SearchField.byproduct_id;
-            default -> field;
-        };
+        if (field == CirrusSearchFields.in) return CirrusSearchFields.in_id;
+        if (field == CirrusSearchFields.out) return CirrusSearchFields.out_id;
+        if (field == CirrusSearchFields.cat) return CirrusSearchFields.cat_id;
+        if (field == CirrusSearchFields.byproduct) return CirrusSearchFields.byproduct_id;
+        return field;
     }
 
     private static <T, S> String displayName(ContentStack<T, S> stack) {

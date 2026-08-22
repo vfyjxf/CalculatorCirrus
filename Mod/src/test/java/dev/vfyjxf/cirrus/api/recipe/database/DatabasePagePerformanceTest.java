@@ -1,11 +1,12 @@
 package dev.vfyjxf.cirrus.api.recipe.database;
 
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchField;
+import dev.vfyjxf.cloudlib.api.search.SearchField;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -288,9 +289,9 @@ class DatabasePagePerformanceTest {
 
         for (int w = 0; w < Math.max(3, iters/4); w++) {
             idx.textCandidateMap(24);
-            for (var f : SearchField.values()) {
-                if (f == SearchField.text || f == SearchField.time || f == SearchField.energy
-                    || f == SearchField.chance || f == SearchField.tier || f == SearchField.level) continue;
+            for (var f : CirrusSearchFields.SET.fields()) {
+                if (f == CirrusSearchFields.text || f == CirrusSearchFields.time || f == CirrusSearchFields.energy
+                    || f == CirrusSearchFields.chance || f == CirrusSearchFields.tier || f == CirrusSearchFields.level) continue;
                 idx.textCandidates(f, 16);
             }
         }
@@ -303,9 +304,9 @@ class DatabasePagePerformanceTest {
         }
         System.out.printf("[suggest_%dk] textCandidateMap: %.1f us%n", count/1000, mapNs/1_000.0/iters);
 
-        for (var f : SearchField.values()) {
-            if (f == SearchField.text || f == SearchField.time || f == SearchField.energy
-                || f == SearchField.chance || f == SearchField.tier || f == SearchField.level) continue;
+        for (var f : CirrusSearchFields.SET.fields()) {
+            if (f == CirrusSearchFields.text || f == CirrusSearchFields.time || f == CirrusSearchFields.energy
+                || f == CirrusSearchFields.chance || f == CirrusSearchFields.tier || f == CirrusSearchFields.level) continue;
             long fNs = 0;
             int fi = Math.max(5, iters/2);
             for (int i = 0; i < fi; i++) {
@@ -316,6 +317,64 @@ class DatabasePagePerformanceTest {
             System.out.printf("[suggest_%dk] textCandidates(%s): %.1f us%n",
                 count/1000, f, fNs/1_000.0/fi);
         }
+    }
+
+    @Test void uncappedQueryPipeline_10k() { measureUncappedPipeline(10_000, 400L); }
+    @Test void uncappedQueryPipeline_50k() { measureUncappedPipeline(50_000, 401L); }
+    @Test void uncappedQueryPipeline_100k() { measureUncappedPipeline(100_000, 402L); }
+
+    /**
+     * Replicates the full DatabasePage query pipeline with no result cap:
+     * search("") (matches everything) -> relevance sort -> category bucketing.
+     * Guards the uncapped full-list rendering path from regressing past interactive budgets.
+     */
+    private void measureUncappedPipeline(int count, long seed) {
+        Dataset ds = generate(count, seed);
+        RecipeDatabaseIndex idx = RecipeDatabaseIndex.build(dbsFor(ds),
+            Lists.immutable.ofAll(ds.systems()), Map.of());
+        int recordCount = idx.records().size();
+
+        int iters = 10;
+        for (int w = 0; w < 3; w++) {
+            idx.search("");
+        }
+
+        long searchNs = 0, sortNs = 0, bucketNs = 0;
+        int matched = 0, bucketCount = 0;
+        for (int i = 0; i < iters; i++) {
+            long t0 = System.nanoTime();
+            List<RecipeDatabaseResult> matches = idx.search("");
+            long t1 = System.nanoTime();
+            List<RecipeDatabaseResult> sorted = matches.stream()
+                .sorted(Comparator
+                    .comparingInt(RecipeDatabaseResult::matchScore).reversed()
+                    .thenComparing(r -> r.record().recipe().systemId().toString().toLowerCase(Locale.ROOT)))
+                .toList();
+            long t2 = System.nanoTime();
+            LinkedHashMap<String, List<RecipeDatabaseResult>> groups = new LinkedHashMap<>();
+            for (RecipeDatabaseResult result : sorted) {
+                RecipeDatabaseRecord record = result.record();
+                String key = record.systemTags().isEmpty()
+                    ? record.recipe().systemId().root()
+                    : record.systemTags().getFirst().toString();
+                groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(result);
+            }
+            long t3 = System.nanoTime();
+            searchNs += t1 - t0;
+            sortNs += t2 - t1;
+            bucketNs += t3 - t2;
+            matched = sorted.size();
+            bucketCount = groups.size();
+        }
+
+        assertEquals(recordCount, matched, "empty query must return every record uncapped");
+        assertTrue(bucketCount > 0);
+        System.out.printf("[uncapped_%dk] records=%d buckets=%d search=%.2f ms sort=%.2f ms bucket=%.2f ms total=%.2f ms%n",
+            count / 1000, matched, bucketCount,
+            searchNs / 1_000_000.0 / iters,
+            sortNs / 1_000_000.0 / iters,
+            bucketNs / 1_000_000.0 / iters,
+            (searchNs + sortNs + bucketNs) / 1_000_000.0 / iters);
     }
 }
 

@@ -31,6 +31,7 @@ import org.lwjgl.glfw.GLFW;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -811,19 +812,31 @@ class CirrusCommonWidgetContractTest {
         assertEquals("", delete.text());
     }
 
+    /**
+     * Resolves a main-sourceset file without depending on the test working
+     * directory. The {@code moddevmcp.project.root} system property is injected
+     * by the Gradle test task; the relative candidates keep IDE runs working.
+     */
+    private static Path resolveModSource(String relativePath) {
+        List<Path> candidates = new ArrayList<>();
+        String projectRoot = System.getProperty("moddevmcp.project.root");
+        if (projectRoot != null) {
+            candidates.add(Path.of(projectRoot, "Mod", relativePath));
+        }
+        candidates.add(Path.of(relativePath));
+        candidates.add(Path.of("Mod", relativePath));
+        candidates.add(Path.of("CalculatorCirrus", "Mod", relativePath));
+        for (Path candidate : candidates) {
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
+        }
+        return candidates.get(0);
+    }
+
     @Test
     void treeCanvasUsesNamedMiddleMouseConstant() throws Exception {
-        Path sourcePath = Path.of("src/main/java/dev/vfyjxf/cirrus/ui/widget/omnicalc/calculator/TreeCanvasWidget.java");
-        if (!Files.exists(sourcePath)) {
-            sourcePath = Path.of("Mod/src/main/java/dev/vfyjxf/cirrus/ui/widget/omnicalc/calculator/TreeCanvasWidget.java");
-        }
-        if (!Files.exists(sourcePath)) {
-            sourcePath = Path.of("CalculatorCirrus/Mod/src/main/java/dev/vfyjxf/cirrus/ui/widget/omnicalc/calculator/TreeCanvasWidget.java");
-        }
-        if (!Files.exists(sourcePath)) {
-            sourcePath = Path.of("D:/ProjectDir/CloudMods/CalculatorCirrus/Mod/src/main/java/dev/vfyjxf/cirrus/ui/widget/omnicalc/calculator/TreeCanvasWidget.java");
-        }
-        String source = Files.readString(sourcePath);
+        String source = Files.readString(resolveModSource("src/main/java/dev/vfyjxf/cirrus/ui/widget/omnicalc/calculator/TreeCanvasWidget.java"));
 
         assertTrue(source.contains("GLFW.GLFW_MOUSE_BUTTON_MIDDLE"));
         assertFalse(source.matches("(?s).*input\\.key\\(\\)\\.getValue\\(\\)\\s*==\\s*\\d+.*"));
@@ -1129,11 +1142,12 @@ class CirrusCommonWidgetContractTest {
         CirrusSectionWidget database = (CirrusSectionWidget) page.children().get(2);
         WidgetGroup<?> ruleRow = (WidgetGroup<?>) planning.body().children().getFirst();
         WidgetGroup<?> plannerRow = (WidgetGroup<?>) planning.body().children().get(1);
-        WidgetGroup<?> sensitivityRow = (WidgetGroup<?>) planning.body().children().get(3);
+        WidgetGroup<?> liveStockRow = (WidgetGroup<?>) planning.body().children().get(2);
+        WidgetGroup<?> screeningRow = (WidgetGroup<?>) planning.body().children().get(3);
+        WidgetGroup<?> sensitivityRow = (WidgetGroup<?>) planning.body().children().get(4);
         WidgetGroup<?> autoCloseRow = (WidgetGroup<?>) execution.body().children().get(1);
         WidgetGroup<?> policyRow = (WidgetGroup<?>) execution.body().children().get(2);
         WidgetGroup<?> executionPlannerRow = (WidgetGroup<?>) execution.body().children().get(4);
-        WidgetGroup<?> limitRow = (WidgetGroup<?>) database.body().children().get(1);
 
         assertEquals(CirrusSectionWidget.Chrome.outlinedFlat, planning.chrome());
         assertEquals(CirrusSectionWidget.Chrome.outlinedFlat, execution.chrome());
@@ -1143,11 +1157,12 @@ class CirrusCommonWidgetContractTest {
         assertTrue(ruleRow.children().get(1) instanceof CirrusChoiceBoxWidget<?>);
         assertTrue(plannerRow.children().get(1) instanceof CirrusChoiceBoxWidget<?>);
         assertTrue(sensitivityRow.children().get(1) instanceof CirrusChoiceBoxWidget<?>);
+        assertTrue(liveStockRow.children().get(1) instanceof Slide);
+        assertTrue(screeningRow.children().get(1) instanceof Slide);
         assertTrue(autoCloseRow.children().get(1) instanceof Slide);
         assertTrue(policyRow.children().getFirst() instanceof CirrusFittedTextWidget);
         assertTrue(policyRow.children().get(1) instanceof CirrusChoiceBoxWidget<?>);
         assertTrue(executionPlannerRow.children().get(1) instanceof CirrusChoiceBoxWidget<?>);
-        assertTrue(limitRow.children().get(1) instanceof NumberInputWidget);
         assertEquals(CalculatorSettingsPage.settingsLabelPaddingLeft(), ((CirrusFittedTextWidget) ruleRow.children().getFirst()).textPaddingLeft());
         assertEquals(CalculatorSettingsPage.settingsLabelPaddingRight(), ((CirrusFittedTextWidget) ruleRow.children().getFirst()).textPaddingRight());
         assertEquals(104, CalculatorSettingsPage.ruleChoiceWidth());
@@ -1159,18 +1174,13 @@ class CirrusCommonWidgetContractTest {
         assertEquals(3, CalculatorSettingsPage.settingsBodyGap());
         assertEquals(22, CalculatorSettingsPage.settingsRowHeight());
         assertEquals(6, CalculatorSettingsPage.settingsRowGap());
-        assertEquals(58, CalculatorSettingsPage.settingsNumberInputWidth());
         assertEquals(104, ((CirrusChoiceBoxWidget<?>) ruleRow.children().get(1)).controlWidth());
         assertEquals(5, ((CirrusChoiceBoxWidget<?>) ruleRow.children().get(1)).optionCount());
         assertEquals(92, ((CirrusChoiceBoxWidget<?>) plannerRow.children().get(1)).controlWidth());
-        assertEquals(3, ((CirrusChoiceBoxWidget<?>) plannerRow.children().get(1)).optionCount());
+        assertEquals(4, ((CirrusChoiceBoxWidget<?>) plannerRow.children().get(1)).optionCount());
         assertEquals(82, ((CirrusChoiceBoxWidget<?>) sensitivityRow.children().get(1)).controlWidth());
         assertEquals(84, ((CirrusChoiceBoxWidget<?>) policyRow.children().get(1)).controlWidth());
         assertEquals(92, ((CirrusChoiceBoxWidget<?>) executionPlannerRow.children().get(1)).controlWidth());
-        NumberInputWidget limitInput = (NumberInputWidget) limitRow.children().get(1);
-        assertEquals(10, limitInput.minValue());
-        assertEquals(500, limitInput.maxValue());
-        assertTrue(DatabasePage.debugTooltipLines(limitInput.hoverTooltip(0, 0)).size() >= 3);
         assertTrue(DatabasePage.debugTooltipLines(((CirrusChoiceBoxWidget<?>) ruleRow.children().get(1)).hoverTooltip(0, 0)).size() >= 3);
     }
 

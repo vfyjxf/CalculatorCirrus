@@ -1,9 +1,10 @@
 package dev.vfyjxf.cirrus.ui.widget.calculator.page;
 
-import dev.vfyjxf.cirrus.api.recipe.search.SearchDocument;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchExpression;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchField;
-import dev.vfyjxf.cirrus.api.recipe.search.SearchMatcher;
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
+import dev.vfyjxf.cloudlib.api.search.SearchDocument;
+import dev.vfyjxf.cloudlib.api.search.SearchExpression;
+import dev.vfyjxf.cloudlib.api.search.SearchField;
+import dev.vfyjxf.cloudlib.api.search.SearchMatcher;
 import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.runtime.IIngredientManager;
@@ -136,18 +137,18 @@ final class RuleIngredientCatalog {
         }
 
         private static SearchDocument searchDocument(String material, String label, List<String> tags) {
-            SearchDocument.Builder builder = SearchDocument.builder()
-                .searchableText(SearchField.id, material)
-                .searchableText(SearchField.name, label)
-                .searchableText(SearchField.text, material)
-                .searchableText(SearchField.text, label);
+            SearchDocument.Builder builder = SearchDocument.builder(CirrusSearchFields.SET, CirrusSearchFields.text)
+                .searchableText(CirrusSearchFields.id, material)
+                .searchableText(CirrusSearchFields.name, label)
+                .searchableText(CirrusSearchFields.text, material)
+                .searchableText(CirrusSearchFields.text, label);
             int separator = material == null ? -1 : material.indexOf(':');
             if (separator > 0) {
-                builder.searchableText(SearchField.mod, material.substring(0, separator));
-                builder.searchableText(SearchField.text, material.substring(separator + 1));
+                builder.searchableText(CirrusSearchFields.mod, material.substring(0, separator));
+                builder.searchableText(CirrusSearchFields.text, material.substring(separator + 1));
             }
             for (String tag : tags) {
-                builder.searchableText(SearchField.tag, tag);
+                builder.searchableText(CirrusSearchFields.tag, tag);
             }
             return builder.build();
         }

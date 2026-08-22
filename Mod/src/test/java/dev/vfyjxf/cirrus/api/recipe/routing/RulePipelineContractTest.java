@@ -34,6 +34,7 @@ class RulePipelineContractTest {
             0,
             false,
             0.1,
+            1.0,
             1.0
         );
 
@@ -47,7 +48,8 @@ class RulePipelineContractTest {
         for (var scoreRule : profile.scoreRules()) {
             scoreRule.contribute(context, accumulator);
         }
-        assertTrue(score[0] > 0, "craft score should be populated");
+        int craftAxis = profile.scoreKeys().indexOf("craft");
+        assertTrue(craftAxis >= 0 && score[craftAxis] > 0, "craft score should be populated");
     }
 
     @Test
@@ -77,8 +79,8 @@ class RulePipelineContractTest {
         assertNotNull(n2);
 
         RuleProfile profile = DefaultRuleProfiles.standardDefault();
-        CandidateContext c1 = new CandidateContext(n1, RoutingTestFixtures.in(Items.OAK_LOG, 1), 1, 1, 0, false, 0.1, 1.0);
-        CandidateContext c2 = new CandidateContext(n2, RoutingTestFixtures.in(Items.OAK_LOG, 1), 1, 1, 0, false, 0.1, 1.0);
+        CandidateContext c1 = new CandidateContext(n1, RoutingTestFixtures.in(Items.OAK_LOG, 1), 1, 1, 0, false, 0.1, 1.0, 1.0);
+        CandidateContext c2 = new CandidateContext(n2, RoutingTestFixtures.in(Items.OAK_LOG, 1), 1, 1, 0, false, 0.1, 1.0, 1.0);
         double[] s1 = profile.newScoreVector();
         double[] s2 = profile.newScoreVector();
 

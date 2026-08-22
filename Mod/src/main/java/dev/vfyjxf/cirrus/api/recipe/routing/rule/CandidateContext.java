@@ -25,6 +25,11 @@ import dev.vfyjxf.cloudlib.util.Checks;
  *                          dangerous cycles
  * @param availableCoverage how much of this candidate's own inputs can be
  *                          satisfied immediately from current stock/byproducts
+ * @param estimatedSubtreeCost estimated total crafting cost of this candidate's
+ *                          input subtree from the unit-cost oracle
+ *                          ({@code craftTimes × (1 + Σ input × h)}); large
+ *                          values mark chains that dead-end into rare or
+ *                          unsourced resources
  */
 public record CandidateContext(
     RecipeGraph.Node recipe,
@@ -34,7 +39,8 @@ public record CandidateContext(
     int depth,
     boolean cycleCandidate,
     double amplificationRisk,
-    double availableCoverage
+    double availableCoverage,
+    double estimatedSubtreeCost
 ) {
     public CandidateContext {
         Checks.checkNotNull(recipe, "recipe");
@@ -44,6 +50,7 @@ public record CandidateContext(
         Checks.checkArgument(depth >= 0, "depth must be non-negative");
         Checks.checkArgument(amplificationRisk >= 0, "amplificationRisk must be non-negative");
         Checks.checkArgument(availableCoverage >= 0, "availableCoverage must be non-negative");
+        Checks.checkArgument(estimatedSubtreeCost >= 0, "estimatedSubtreeCost must be non-negative");
     }
 }
 

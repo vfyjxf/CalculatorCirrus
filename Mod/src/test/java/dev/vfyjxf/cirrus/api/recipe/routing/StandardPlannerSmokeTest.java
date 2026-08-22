@@ -26,6 +26,8 @@ import net.neoforged.testframework.junit.EphemeralTestServerProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.time.Duration;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 @ExtendWith(EphemeralTestServerProvider.class)
@@ -509,6 +511,144 @@ class StandardPlannerSmokeTest {
         ), () -> describePlan(outcome.plan()));
     }
 
+    /**
+     * Regression: when the per-root-input budget trips while the root frame is
+     * mid-candidate-trying (here: the first sand craft committed, but a second one
+     * is still required), the cut branch must not re-evaluate the still-true
+     * exceeded condition forever. Pre-fix this spun the state machine on the
+     * {@code tryingCandidates} state without ever reaching the exhaustion path,
+     * and no budget check (including the wall clock) could interrupt the spin.
+     */
+    @Test
+    void rootInputBudgetCutDuringCandidateTryingTerminates(MinecraftServer server) {
+        var deepA = new RoutingTestFixtures.FakeRecipe(
+            "spin_deep_a",
+            java.util.List.of(RoutingTestFixtures.in(Items.COBBLESTONE, 1)),
+            java.util.List.of(RoutingTestFixtures.out(Items.DIRT, 1))
+        );
+        var deepB = new RoutingTestFixtures.FakeRecipe(
+            "spin_deep_b",
+            java.util.List.of(RoutingTestFixtures.in(Items.DIRT, 1)),
+            java.util.List.of(RoutingTestFixtures.out(Items.GRAVEL, 1))
+        );
+        var deepC = new RoutingTestFixtures.FakeRecipe(
+            "spin_deep_c",
+            java.util.List.of(RoutingTestFixtures.in(Items.GRAVEL, 1)),
+            java.util.List.of(RoutingTestFixtures.out(Items.SAND, 1))
+        );
+        var makeStick = new RoutingTestFixtures.FakeRecipe(
+            "spin_make_stick",
+            java.util.List.of(RoutingTestFixtures.in(Items.OAK_PLANKS, 2)),
+            java.util.List.of(RoutingTestFixtures.out(Items.STICK, 4))
+        );
+        var makePlanks = new RoutingTestFixtures.FakeRecipe(
+            "spin_make_planks",
+            java.util.List.of(RoutingTestFixtures.in(Items.OAK_LOG, 1)),
+            java.util.List.of(RoutingTestFixtures.out(Items.OAK_PLANKS, 4))
+        );
+        // Two units of sand: the first craft burns the per-root expanded budget in
+        // the deep chain, the second attempt re-enters tryingCandidates with the
+        // exceeded condition already true.
+        var makeTarget = new RoutingTestFixtures.FakeRecipe(
+            "spin_budget_target",
+            java.util.List.of(
+                RoutingTestFixtures.in(Items.SAND, 2),
+                RoutingTestFixtures.in(Items.STICK, 1)
+            ),
+            java.util.List.of(RoutingTestFixtures.out(Items.DIAMOND, 1))
+        );
+        RoutingService service = RoutingTestFixtures.service(deepA, deepB, deepC, makeStick, makePlanks, makeTarget);
+        var target = RoutingTestFixtures.findRecipeById(service.graph(), "spin_budget_target");
+        assertNotNull(target);
+
+        Stock stock = Stock.empty();
+        stock.add(ContentStack.fromStack(new ItemStack(Items.OAK_LOG, 1)));
+
+        var request = RoutingRequest.builder()
+            .plannerMode(PlannerMode.standard)
+            .ruleProfileId(DefaultRuleDefinitions.calculatorPreviewProfileId)
+            .budget(new dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingBudget(
+                64,
+                256,
+                30_000,
+                128,
+                2,
+                16,
+                0.05,
+                LoopBudget.standardDefault()
+            ))
+            .stock(stock)
+            .targetRecipe(target, 1)
+            .build();
+        var outcome = assertTimeoutPreemptively(Duration.ofSeconds(15), () -> service.route(request),
+            "planner must terminate after a mid-trying root input budget cut");
+
+        assertTrue(outcome.success() || outcome.partial(), () -> describeIssues(outcome));
+        assertNotNull(outcome.plan(), () -> describeIssues(outcome));
+        assertTrue(outcome.metrics().budgetExhausted(), "root input branch budget should be recorded");
+        assertEquals("maxRootInputBudget", outcome.metrics().budgetStopReason());
+        assertTrue(outcome.plan().actions().anySatisfy(action -> action instanceof PlanAction.PendingInput),
+            () -> describePlan(outcome.plan()));
+        assertTrue(outcome.plan().actions().anySatisfy(action ->
+            action instanceof PlanAction.ExecuteRecipe exec
+                && exec.recipe().id() != null
+                && "spin_make_stick".equals(exec.recipe().id().getPath())
+        ), () -> describePlan(outcome.plan()));
+    }
+
+    /**
+     * Regression: when the wall clock expires mid-dive (here: deep into the first
+     * root input's chain, before anything has committed), the planner must wind
+     * down through its regular budget paths and keep the committed prefix as a
+     * partial plan. Pre-fix the main loop did a hard rollback-everything abort,
+     * which produced {@code failed} with zero actions whenever the deadline landed
+     * between frame transitions — making the outcome depend on machine speed.
+     */
+    @Test
+    void wallClockStopDuringFirstDiveKeepsPartialPlan(MinecraftServer server) {
+        var items = net.minecraft.core.registries.BuiltInRegistries.ITEM.stream()
+            .filter(item -> item != net.minecraft.world.item.Items.AIR)
+            .limit(810)
+            .toList();
+        var recipes = new java.util.ArrayList<RoutingTestFixtures.FakeRecipe>();
+        for (int i = 0; i + 1 < items.size(); i++) {
+            recipes.add(new RoutingTestFixtures.FakeRecipe(
+                "wall_chain_" + i,
+                java.util.List.of(RoutingTestFixtures.in(items.get(i + 1), 1)),
+                java.util.List.of(RoutingTestFixtures.out(items.get(i), 1))
+            ));
+        }
+        RoutingService service = RoutingTestFixtures.service(recipes.toArray(new RoutingTestFixtures.FakeRecipe[0]));
+        var target = RoutingTestFixtures.findRecipeById(service.graph(), "wall_chain_0");
+        assertNotNull(target);
+
+        var request = RoutingRequest.builder()
+            .plannerMode(PlannerMode.standard)
+            .ruleProfileId(DefaultRuleDefinitions.calculatorPreviewProfileId)
+            .budget(new dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingBudget(
+                100_000,
+                1_000_000,
+                1,
+                100_000,
+                0,
+                0,
+                0.05,
+                LoopBudget.standardDefault()
+            ))
+            .stock(Stock.empty())
+            .targetRecipe(target, 1)
+            .build();
+        var outcome = assertTimeoutPreemptively(Duration.ofSeconds(20), () -> service.route(request),
+            "planner must terminate after a wall-clock stop");
+
+        assertTrue(outcome.success() || outcome.partial(), () -> describeIssues(outcome));
+        assertNotNull(outcome.plan(), () -> describeIssues(outcome));
+        assertTrue(outcome.metrics().budgetExhausted(), "wall clock stop should be recorded");
+        assertEquals("maxWallTimeMs", outcome.metrics().budgetStopReason());
+        assertTrue(outcome.plan().actions().anySatisfy(action -> action instanceof PlanAction.PendingInput),
+            () -> describePlan(outcome.plan()));
+    }
+
     @Test
     void boundedRecipeCycleStopsAtRecipeLoopBudget(MinecraftServer server) {
         var echoStick = new RoutingTestFixtures.FakeRecipe(
@@ -744,6 +884,143 @@ class StandardPlannerSmokeTest {
             .getFirst();
         assertNotNull(furnaceAction.recipe().id());
         assertEquals("make_furnace_from_cobble", furnaceAction.recipe().id().getPath());
+    }
+
+    @Test
+    void softFailureExplorationRecommitsLowestPendingCostCandidate(MinecraftServer server) {
+        var planksFromOak = new RoutingTestFixtures.FakeRecipe(
+            "planks_from_oak",
+            java.util.List.of(RoutingTestFixtures.in(Items.OAK_LOG, 1)),
+            java.util.List.of(RoutingTestFixtures.out(Items.OAK_PLANKS, 4))
+        );
+        var planksFromBirch = new RoutingTestFixtures.FakeRecipe(
+            "planks_from_birch",
+            java.util.List.of(RoutingTestFixtures.in(Items.BIRCH_LOG, 1)),
+            java.util.List.of(RoutingTestFixtures.out(Items.OAK_PLANKS, 4))
+        );
+        var makeStick = new RoutingTestFixtures.FakeRecipe(
+            "make_stick",
+            java.util.List.of(RoutingTestFixtures.in(Items.OAK_PLANKS, 2)),
+            java.util.List.of(RoutingTestFixtures.out(Items.STICK, 4))
+        );
+        RoutingService service = RoutingTestFixtures.service(planksFromOak, planksFromBirch, makeStick);
+        var target = RoutingTestFixtures.findRecipeById(service.graph(), "make_stick");
+        assertNotNull(target);
+
+        var outcome = service.route(RoutingRequest.builder()
+            .plannerMode(PlannerMode.standard)
+            .ruleProfileId(DefaultRuleDefinitions.calculatorPreviewProfileId)
+            .stock(Stock.empty())
+            .targetRecipe(target, 1)
+            .build());
+
+        // Both log inputs are unsourced with equal predicted subtree cost (one
+        // unsourced leaf each), so the probe is inside the near-tie band: the
+        // first candidate in sorted order (stable tie-break picks birch) is tried
+        // first and leaves 1 birch log pending, the oak probe leaves 1 oak log
+        // pending (not cheaper), and the planner rolls back and re-commits the
+        // recorded best (birch) instead of keeping the last candidate.
+        assertTrue(outcome.partial() || outcome.success(), () -> describeIssues(outcome));
+        assertTrue(outcome.metrics().explorationBranchesExpanded() > 0,
+            "pending subtree should trigger candidate exploration");
+        var pendingActions = outcome.plan().actions().selectInstancesOf(PlanAction.PendingInput.class);
+        assertEquals(1, pendingActions.size(), () -> describePlan(outcome.plan()));
+        assertEquals(1L, pendingActions.getFirst().amount(), () -> describePlan(outcome.plan()));
+        assertEquals(0, pendingActions.getFirst().candidateCount());
+        assertEquals(0, pendingActions.getFirst().attemptedCount());
+        assertTrue(outcome.plan().actions().anySatisfy(action ->
+            action instanceof PlanAction.ExecuteRecipe exec
+                && exec.recipe().id() != null
+                && "planks_from_birch".equals(exec.recipe().id().getPath())
+        ), () -> describePlan(outcome.plan()));
+        assertFalse(outcome.plan().actions().anySatisfy(action ->
+            action instanceof PlanAction.ExecuteRecipe exec
+                && exec.recipe().id() != null
+                && "planks_from_oak".equals(exec.recipe().id().getPath())
+        ), () -> describePlan(outcome.plan()));
+    }
+
+    /**
+     * The near-tie gate: a candidate whose predicted subtree cost is clearly
+     * worse than the greedy first choice must not be probed — the incumbent is
+     * committed directly, preserving the per-input budget for its own subtree.
+     */
+    @Test
+    void softFailureExplorationSkipsClearlyWorseCandidates(MinecraftServer server) {
+        var planksFromOak = new RoutingTestFixtures.FakeRecipe(
+            "gated_planks_from_oak",
+            java.util.List.of(RoutingTestFixtures.in(Items.OAK_LOG, 1)),
+            java.util.List.of(RoutingTestFixtures.out(Items.OAK_PLANKS, 4))
+        );
+        var planksFromBirch = new RoutingTestFixtures.FakeRecipe(
+            "gated_planks_from_birch",
+            java.util.List.of(RoutingTestFixtures.in(Items.BIRCH_LOG, 3)),
+            java.util.List.of(RoutingTestFixtures.out(Items.OAK_PLANKS, 4))
+        );
+        var makeStick = new RoutingTestFixtures.FakeRecipe(
+            "gated_make_stick",
+            java.util.List.of(RoutingTestFixtures.in(Items.OAK_PLANKS, 2)),
+            java.util.List.of(RoutingTestFixtures.out(Items.STICK, 4))
+        );
+        RoutingService service = RoutingTestFixtures.service(planksFromOak, planksFromBirch, makeStick);
+        var target = RoutingTestFixtures.findRecipeById(service.graph(), "gated_make_stick");
+        assertNotNull(target);
+
+        var outcome = service.route(RoutingRequest.builder()
+            .plannerMode(PlannerMode.standard)
+            .ruleProfileId(DefaultRuleDefinitions.calculatorPreviewProfileId)
+            .stock(Stock.empty())
+            .targetRecipe(target, 1)
+            .build());
+
+        // The birch branch predicts 3 unsourced leaves vs the oak branch's 1 —
+        // far outside the near-tie band, so no probe is dispatched.
+        assertTrue(outcome.partial() || outcome.success(), () -> describeIssues(outcome));
+        assertEquals(0, outcome.metrics().explorationBranchesExpanded(),
+            "clearly-worse candidate must not be probed");
+        var pendingActions = outcome.plan().actions().selectInstancesOf(PlanAction.PendingInput.class);
+        assertEquals(1, pendingActions.size(), () -> describePlan(outcome.plan()));
+        assertTrue(outcome.plan().actions().anySatisfy(action ->
+            action instanceof PlanAction.ExecuteRecipe exec
+                && exec.recipe().id() != null
+                && "gated_planks_from_oak".equals(exec.recipe().id().getPath())
+        ), () -> describePlan(outcome.plan()));
+    }
+
+    @Test
+    void pendingInputRecordsCandidateExplorationMetadata(MinecraftServer server) {
+        var makeLog = new RoutingTestFixtures.FakeRecipe(
+            "metadata_make_log",
+            java.util.List.of(RoutingTestFixtures.in(Items.OAK_PLANKS, 1)),
+            java.util.List.of(RoutingTestFixtures.out(Items.OAK_LOG, 1))
+        );
+        var makePlanks = new RoutingTestFixtures.FakeRecipe(
+            "metadata_make_planks",
+            java.util.List.of(RoutingTestFixtures.in(Items.OAK_LOG, 1)),
+            java.util.List.of(RoutingTestFixtures.out(Items.OAK_PLANKS, 4))
+        );
+        RoutingService service = RoutingTestFixtures.service(makeLog, makePlanks);
+        var target = RoutingTestFixtures.findRecipeById(service.graph(), "metadata_make_log");
+        assertNotNull(target);
+
+        var outcome = service.route(RoutingRequest.builder()
+            .plannerMode(PlannerMode.standard)
+            .ruleProfileId(DefaultRuleDefinitions.calculatorPreviewProfileId)
+            .stock(Stock.empty())
+            .targetRecipe(target, 1)
+            .build());
+
+        // make_log is dropped from the oak_log candidate window by the
+        // active-demand filter before the attempt loop, so oak_log goes pending
+        // with an empty exploration window (0 known candidates, 0 tried) — the
+        // metadata continuation runs key off when deciding whether a deeper wave
+        // with a wider scan window is worthwhile.
+        assertTrue(outcome.partial() || outcome.success(), () -> describeIssues(outcome));
+        assertTrue(outcome.plan().actions().anySatisfy(action ->
+            action instanceof PlanAction.PendingInput pending
+                && pending.candidateCount() == 0
+                && pending.attemptedCount() == 0
+        ), () -> describePlan(outcome.plan()));
     }
 
     private static String describeIssues(RoutingOutcome outcome) {

@@ -254,10 +254,36 @@ public final class ResourceLedger {
      * {@code input} into an arbitrary concrete resource.
      */
     public void recordPendingInput(InputContent input, long amount, PlanBuilder planBuilder) {
+        recordPendingInput(input, amount, planBuilder, 0, 0);
+    }
+
+    /**
+     * Records an unresolved demand as a pending external input, keeping the candidate
+     * exploration metadata ({@code candidateCount}/{@code attemptedCount}) that
+     * continuation runs use to decide whether a deeper wave could resolve it.
+     */
+    public void recordPendingInput(InputContent input, long amount, PlanBuilder planBuilder, int candidateCount, int attemptedCount) {
+        recordPendingInput(input, amount, planBuilder, candidateCount, attemptedCount, false, PlanAction.PendingReason.TRUE_NO_SOURCE);
+    }
+
+    /**
+     * Records an unresolved demand as a pending external input with the truncation
+     * analysis — {@code truncated}/{@code reason} distinguish budget/ranking artifacts
+     * (resolvable by a deeper wave) from genuinely unreachable demands.
+     */
+    public void recordPendingInput(
+        InputContent input,
+        long amount,
+        PlanBuilder planBuilder,
+        int candidateCount,
+        int attemptedCount,
+        boolean truncated,
+        PlanAction.PendingReason reason
+    ) {
         if (amount <= 0) {
             return;
         }
-        planBuilder.addPendingInput(input, amount);
+        planBuilder.addPendingInput(input, amount, candidateCount, attemptedCount, truncated, reason);
     }
 
     /**
