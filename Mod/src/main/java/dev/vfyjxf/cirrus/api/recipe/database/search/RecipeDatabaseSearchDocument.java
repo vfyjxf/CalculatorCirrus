@@ -19,9 +19,14 @@ public final class RecipeDatabaseSearchDocument {
     private static final ContentTerm[] emptyContent = new ContentTerm[0];
     private static final double[] emptyNumbers = new double[0];
     private static final byte[] emptyIds = new byte[0];
+    private static final int[] emptyNormalizedIds = new int[0];
 
     private final String[][] rawText;
-    private final String[][] normalizedText;
+    // normalized text as ids into the document's dictionary; the shared
+    // catalog dictionary collapses equal normalized strings across all
+    // documents onto one canonical instance
+    private final int[][] normalizedTextIds;
+    private final NormalizedTextDictionary normalizedDictionary;
     // per-field entry ordinals of the scoring source fields, parallel to the
     // raw/normalized channels; a null slot means the field has no entries.
     // Stored as bytes instead of SearchField references: the ~354k tiny enum
@@ -36,7 +41,8 @@ public final class RecipeDatabaseSearchDocument {
     private RecipeDatabaseSearchDocument(
         SearchFieldSet fieldSet,
         String[][] rawText,
-        String[][] normalizedText,
+        int[][] normalizedTextIds,
+        NormalizedTextDictionary normalizedDictionary,
         byte[][] textSourceFieldIds,
         ContentTerm[][] contentTerms,
         double[][] numbers,
@@ -44,7 +50,8 @@ public final class RecipeDatabaseSearchDocument {
     ) {
         this.fieldSet = fieldSet;
         this.rawText = rawText;
-        this.normalizedText = normalizedText;
+        this.normalizedTextIds = normalizedTextIds;
+        this.normalizedDictionary = normalizedDictionary;
         this.textSourceFieldIds = textSourceFieldIds;
         this.contentTerms = contentTerms;
         this.numbers = numbers;
@@ -52,7 +59,12 @@ public final class RecipeDatabaseSearchDocument {
     }
 
     public static Builder builder() {
-        return new Builder();
+        return new Builder(new NormalizedTextDictionary());
+    }
+
+    /** Builds with a shared catalog-scope dictionary for cross-document interning. */
+    public static Builder builder(NormalizedTextDictionary sharedDictionary) {
+        return new Builder(java.util.Objects.requireNonNull(sharedDictionary, "sharedDictionary"));
     }
 
     /** The registry snapshot this document's arrays are indexed against. */
@@ -81,9 +93,15 @@ public final class RecipeDatabaseSearchDocument {
         return id < rawText.length && rawText[id] != null ? rawText[id] : emptyStrings;
     }
 
-    public String[] normalizedText(SearchField field) {
+    /** Per-entry normalized-text ids into {@link #normalizedDictionary()}, parallel to {@link #rawText(SearchField)}. */
+    public int[] normalizedTextIds(SearchField field) {
         int id = field.id();
-        return id < normalizedText.length && normalizedText[id] != null ? normalizedText[id] : emptyStrings;
+        return id < normalizedTextIds.length && normalizedTextIds[id] != null ? normalizedTextIds[id] : emptyNormalizedIds;
+    }
+
+    /** Dictionary backing {@link #normalizedTextIds(SearchField)}; sealed once indexed. */
+    public NormalizedTextDictionary normalizedDictionary() {
+        return normalizedDictionary;
     }
 
     /** Per-entry source-field ids, parallel to {@link #rawText(SearchField)}. */
@@ -129,12 +147,19 @@ public final class RecipeDatabaseSearchDocument {
 
     public static final class Builder {
         private final SearchFieldSet fieldSet = CirrusSearchFields.SET;
+        private final NormalizedTextDictionary dictionary;
         private final ArrayList<String>[] rawText = stringLists();
+        // build-scope scratch for the normalized channel; canonical spellings
+        // are interned on add and converted to ids in build()
         private final ArrayList<String>[] normalizedText = stringLists();
         private final ArrayList<SearchField>[] textSourceFields = fieldLists();
         private final HashSet<String>[] textDedupSets = stringSets();
         private final LinkedHashMap<ContentKey, MergedContent>[] content = contentMaps();
         private final ArrayList<Double>[] numbers = numberLists();
+
+        private Builder(NormalizedTextDictionary dictionary) {
+            this.dictionary = dictionary;
+        }
 
         public Builder text(SearchField field, String value) {
             textOnly(field, value, field);
@@ -209,6 +234,9 @@ public final class RecipeDatabaseSearchDocument {
             if (field == CirrusSearchFields.contains) {
                 return this;
             }
+            // dedup and storage use the dictionary's canonical spelling so
+            // equal entries share one instance and hit the identity fast path
+            String canonicalValue = dictionary.canonicalize(normalizedValue);
             int index = field.id();
             ArrayList<String> existing = normalizedText[index];
             if (existing != null) {
@@ -220,19 +248,19 @@ public final class RecipeDatabaseSearchDocument {
                     textDedupSets[index] = dedup;
                 }
                 if (dedup != null) {
-                    if (!dedup.add(normalizedValue)) {
+                    if (!dedup.add(canonicalValue)) {
                         return this;
                     }
                 } else {
                     for (String candidate : existing) {
-                        if (candidate.equals(normalizedValue)) {
+                        if (candidate.equals(canonicalValue)) {
                             return this;
                         }
                     }
                 }
             }
             list(rawText, index).add(value);
-            list(normalizedText, index).add(normalizedValue);
+            list(normalizedText, index).add(canonicalValue);
             list(textSourceFields, index).add(sourceField);
             return this;
         }
@@ -258,7 +286,7 @@ public final class RecipeDatabaseSearchDocument {
             flushMergedContent();
 
             String[][] raw = new String[fieldSet.size()][];
-            String[][] normalized = new String[fieldSet.size()][];
+            int[][] normalizedIds = new int[fieldSet.size()][];
             byte[][] sourceIds = new byte[fieldSet.size()][];
             ContentTerm[][] contentArrays = new ContentTerm[fieldSet.size()][];
             double[][] numberArrays = new double[fieldSet.size()][];
@@ -267,7 +295,7 @@ public final class RecipeDatabaseSearchDocument {
             for (SearchField field : fieldSet.fields()) {
                 int ordinal = field.id();
                 raw[ordinal] = stringArray(rawText[ordinal]);
-                normalized[ordinal] = stringArray(normalizedText[ordinal]);
+                normalizedIds[ordinal] = normalizedIdArray(normalizedText[ordinal]);
                 sourceIds[ordinal] = sourceIdArray(textSourceFields[ordinal]);
                 contentArrays[ordinal] = contentArray(content[ordinal]);
                 numberArrays[ordinal] = numberArray(numbers[ordinal]);
@@ -277,7 +305,7 @@ public final class RecipeDatabaseSearchDocument {
                     present[ordinal] = 1;
                 }
             }
-            return new RecipeDatabaseSearchDocument(fieldSet, raw, normalized, sourceIds, contentArrays, numberArrays, present);
+            return new RecipeDatabaseSearchDocument(fieldSet, raw, normalizedIds, dictionary, sourceIds, contentArrays, numberArrays, present);
         }
 
         private void flushMergedContent() {
@@ -315,7 +343,19 @@ public final class RecipeDatabaseSearchDocument {
             return out;
         }
 
-        private static ContentTerm[] contentArray(LinkedHashMap<ContentKey, MergedContent> values) {
+        // entries were interned on add, so this re-hits the map without growth
+        private int[] normalizedIdArray(ArrayList<String> values) {
+            if (values == null || values.isEmpty()) {
+                return null;
+            }
+            int[] out = new int[values.size()];
+            for (int index = 0; index < out.length; index++) {
+                out[index] = dictionary.intern(values.get(index));
+            }
+            return out;
+        }
+
+        private ContentTerm[] contentArray(LinkedHashMap<ContentKey, MergedContent> values) {
             if (values == null || values.isEmpty()) {
                 return emptyContent;
             }
@@ -323,7 +363,9 @@ public final class RecipeDatabaseSearchDocument {
             int index = 0;
             for (Map.Entry<ContentKey, MergedContent> entry : values.entrySet()) {
                 MergedContent content = entry.getValue();
-                out[index++] = new ContentTerm(content.value(), content.normalizedValue(), content.amount(), content.kind());
+                // normalize to the shared spelling too: content terms would
+                // otherwise pin one duplicate instance per document
+                out[index++] = new ContentTerm(content.value(), dictionary.canonicalize(content.normalizedValue()), content.amount(), content.kind());
             }
             return out;
         }
