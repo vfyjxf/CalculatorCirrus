@@ -5,6 +5,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationResult;
+import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.database.CustomRecipeDatabase;
 import dev.vfyjxf.cirrus.api.recipe.database.DatabaseRecipeRef;
 import dev.vfyjxf.cirrus.api.recipe.database.FileRecipeDatabaseRepository;
@@ -87,6 +88,7 @@ public final class RecipePathSettings {
             routingCacheGeneration++;
         }
         ComponentCanonicalizer.clear();
+        InputContent.clearIngredientMemo();
     }
 
     static int cachedCatalogCountForTests() {
@@ -169,6 +171,7 @@ public final class RecipePathSettings {
         int clearedRouting;
         int clearedInFlight;
         ComponentCanonicalizer.clear();
+        InputContent.clearIngredientMemo();
         synchronized (workspaceCacheLock) {
             if (workspaceCache != null) {
                 clearedWorkspace = 1;
