@@ -40,7 +40,8 @@ public final class RecipeClassificationService {
 
     /**
      * Drops classification memos that outlive a world session: the shared
-     * classifier's per-recipe local tags and the tag member sets held by
+     * classifier's per-recipe local tags, the per-recipe tag memo held by
+     * {@link ClassificationHeuristics}, and the tag member sets held by
      * {@link ClassifyViewFactory}. Called on client unload.
      */
     public static void clearRuntimeCaches() {
@@ -48,6 +49,7 @@ public final class RecipeClassificationService {
         if (current != null) {
             current.clearLocalTagsCache();
         }
+        ClassificationHeuristics.clearTagsCache();
         ClassifyViewFactory.clearTagMemberCache();
     }
 

@@ -1,0 +1,244 @@
+[
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "dev.vfyjxf.cirrus.performance.RecipeGraphBuildBenchmark.buildWideGraph",
+        "mode" : "avgt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/vfyjxf/Library/Java/JavaVirtualMachines/jbr-21.0.11/Contents/Home/bin/java",
+        "jvmArgs" : [
+            "-Xms4g",
+            "-Xmx4g",
+            "-Dfile.encoding=UTF-8",
+            "-Duser.country=CN",
+            "-Duser.language=zh",
+            "-Duser.variant"
+        ],
+        "jdkVersion" : "21.0.11",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.11+10-b1163.116",
+        "warmupIterations" : 2,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "competingRecipes" : "4096"
+        },
+        "primaryMetric" : {
+            "score" : 0.8019546505917997,
+            "scoreError" : 0.231310597122201,
+            "scoreConfidence" : [
+                0.5706440534695987,
+                1.0332652477140007
+            ],
+            "scorePercentiles" : {
+                "0.0" : 0.7552049887471868,
+                "50.0" : 0.7955507750397456,
+                "90.0" : 0.9037274914182475,
+                "95.0" : 0.9037274914182475,
+                "99.0" : 0.9037274914182475,
+                "99.9" : 0.9037274914182475,
+                "99.99" : 0.9037274914182475,
+                "99.999" : 0.9037274914182475,
+                "99.9999" : 0.9037274914182475,
+                "100.0" : 0.9037274914182475
+            },
+            "scoreUnit" : "ms/op",
+            "rawData" : [
+                [
+                    0.7959172619047619,
+                    0.7955507750397456,
+                    0.7593727358490566,
+                    0.9037274914182475,
+                    0.7552049887471868
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "dev.vfyjxf.cirrus.performance.RecipeGraphBuildBenchmark.buildWideGraph",
+        "mode" : "avgt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/vfyjxf/Library/Java/JavaVirtualMachines/jbr-21.0.11/Contents/Home/bin/java",
+        "jvmArgs" : [
+            "-Xms4g",
+            "-Xmx4g",
+            "-Dfile.encoding=UTF-8",
+            "-Duser.country=CN",
+            "-Duser.language=zh",
+            "-Duser.variant"
+        ],
+        "jdkVersion" : "21.0.11",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.11+10-b1163.116",
+        "warmupIterations" : 2,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "competingRecipes" : "16384"
+        },
+        "primaryMetric" : {
+            "score" : 2.1316212712303497,
+            "scoreError" : 0.6000262806594004,
+            "scoreConfidence" : [
+                1.5315949905709494,
+                2.73164755188975
+            ],
+            "scorePercentiles" : {
+                "0.0" : 1.9854951326732673,
+                "50.0" : 2.0688209359504133,
+                "90.0" : 2.3660328014184397,
+                "95.0" : 2.3660328014184397,
+                "99.0" : 2.3660328014184397,
+                "99.9" : 2.3660328014184397,
+                "99.99" : 2.3660328014184397,
+                "99.999" : 2.3660328014184397,
+                "99.9999" : 2.3660328014184397,
+                "100.0" : 2.3660328014184397
+            },
+            "scoreUnit" : "ms/op",
+            "rawData" : [
+                [
+                    2.2098605607064017,
+                    1.9854951326732673,
+                    2.0278969254032257,
+                    2.3660328014184397,
+                    2.0688209359504133
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "dev.vfyjxf.cirrus.performance.RecipeGraphBuildBenchmark.buildWideGraph",
+        "mode" : "avgt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/vfyjxf/Library/Java/JavaVirtualMachines/jbr-21.0.11/Contents/Home/bin/java",
+        "jvmArgs" : [
+            "-Xms4g",
+            "-Xmx4g",
+            "-Dfile.encoding=UTF-8",
+            "-Duser.country=CN",
+            "-Duser.language=zh",
+            "-Duser.variant"
+        ],
+        "jdkVersion" : "21.0.11",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.11+10-b1163.116",
+        "warmupIterations" : 2,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "competingRecipes" : "65536"
+        },
+        "primaryMetric" : {
+            "score" : 13.585692342506121,
+            "scoreError" : 5.027556905663874,
+            "scoreConfidence" : [
+                8.558135436842246,
+                18.613249248169996
+            ],
+            "scorePercentiles" : {
+                "0.0" : 11.972654411764706,
+                "50.0" : 13.127534623376624,
+                "90.0" : 15.23970896969697,
+                "95.0" : 15.23970896969697,
+                "99.0" : 15.23970896969697,
+                "99.9" : 15.23970896969697,
+                "99.99" : 15.23970896969697,
+                "99.999" : 15.23970896969697,
+                "99.9999" : 15.23970896969697,
+                "100.0" : 15.23970896969697
+            },
+            "scoreUnit" : "ms/op",
+            "rawData" : [
+                [
+                    14.5637619,
+                    13.127534623376624,
+                    13.024801807692308,
+                    15.23970896969697,
+                    11.972654411764706
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    },
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "dev.vfyjxf.cirrus.performance.RecipeGraphBuildBenchmark.retainedWideGraphNodeCount",
+        "mode" : "avgt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/vfyjxf/Library/Java/JavaVirtualMachines/jbr-21.0.11/Contents/Home/bin/java",
+        "jvmArgs" : [
+            "-Xms4g",
+            "-Xmx4g",
+            "-Dfile.encoding=UTF-8",
+            "-Duser.country=CN",
+            "-Duser.language=zh",
+            "-Duser.variant"
+        ],
+        "jdkVersion" : "21.0.11",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.11+10-b1163.116",
+        "warmupIterations" : 2,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 5,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "competingRecipes" : "65536"
+        },
+        "primaryMetric" : {
+            "score" : 54.025127621052626,
+            "scoreError" : 1.7848543576194245,
+            "scoreConfidence" : [
+                52.2402732634332,
+                55.80998197867205
+            ],
+            "scorePercentiles" : {
+                "0.0" : 53.65525,
+                "50.0" : 53.93655042105263,
+                "90.0" : 54.788199526315786,
+                "95.0" : 54.788199526315786,
+                "99.0" : 54.788199526315786,
+                "99.9" : 54.788199526315786,
+                "99.99" : 54.788199526315786,
+                "99.999" : 54.788199526315786,
+                "99.9999" : 54.788199526315786,
+                "100.0" : 54.788199526315786
+            },
+            "scoreUnit" : "ms/op",
+            "rawData" : [
+                [
+                    54.080276315789476,
+                    54.788199526315786,
+                    53.65525,
+                    53.66536184210526,
+                    53.93655042105263
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    }
+]
+
+
