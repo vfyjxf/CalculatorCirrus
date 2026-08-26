@@ -135,9 +135,14 @@ public final class RecipeDatabaseSearchDocument {
         }
 
         public Builder searchableText(SearchField field, String value) {
-            textOnly(field, value, field);
-            if (field != CirrusSearchFields.text && field != CirrusSearchFields.contains) {
-                textOnly(CirrusSearchFields.text, value, field);
+            // normalize once for both target fields; textOnly guards stay in
+            // textOnlyNormalized so the contains/text field rules are unchanged
+            if (value != null && !value.isBlank()) {
+                String normalizedValue = normalize(value);
+                textOnlyNormalized(field, value, field, normalizedValue);
+                if (field != CirrusSearchFields.text && field != CirrusSearchFields.contains) {
+                    textOnlyNormalized(CirrusSearchFields.text, value, field, normalizedValue);
+                }
             }
             return this;
         }
@@ -150,11 +155,9 @@ public final class RecipeDatabaseSearchDocument {
             if (!validContent(field, value, amount)) {
                 return this;
             }
-            mergeContent(field, value, amount, kind);
-            textOnly(field, value, field);
-            if (!kind.idChannel()) {
-                textOnly(CirrusSearchFields.text, value, field);
-            }
+            // one normalization serves the content merge and both text channels;
+            // previously each of the three steps re-normalized the same string
+            searchableContentNormalized(field, value, amount, kind, normalize(value));
             return this;
         }
 
@@ -168,8 +171,9 @@ public final class RecipeDatabaseSearchDocument {
                     uniqueAliases.putIfAbsent(normalize(value), value);
                 }
             }
-            for (String value : uniqueAliases.values()) {
-                searchableContent(field, value, amount, kind);
+            for (Map.Entry<String, String> alias : uniqueAliases.entrySet()) {
+                // the alias dedup key already is the normalized form
+                searchableContentNormalized(field, alias.getValue(), amount, kind, alias.getKey());
             }
             return this;
         }
@@ -179,11 +183,25 @@ public final class RecipeDatabaseSearchDocument {
             return this;
         }
 
+        private void searchableContentNormalized(SearchField field, String value, double amount, ContentKind kind, String normalizedValue) {
+            mergeContent(field, value, amount, kind, normalizedValue);
+            textOnlyNormalized(field, value, field, normalizedValue);
+            if (!kind.idChannel()) {
+                textOnlyNormalized(CirrusSearchFields.text, value, field, normalizedValue);
+            }
+        }
+
         private Builder textOnly(SearchField field, String value, SearchField sourceField) {
             if (field == CirrusSearchFields.contains || value == null || value.isBlank()) {
                 return this;
             }
-            String normalizedValue = normalize(value);
+            return textOnlyNormalized(field, value, sourceField, normalize(value));
+        }
+
+        private Builder textOnlyNormalized(SearchField field, String value, SearchField sourceField, String normalizedValue) {
+            if (field == CirrusSearchFields.contains) {
+                return this;
+            }
             int index = field.id();
             ArrayList<String> existing = normalizedText[index];
             if (existing != null) {
@@ -219,8 +237,7 @@ public final class RecipeDatabaseSearchDocument {
             return this;
         }
 
-        private void mergeContent(SearchField field, String value, double amount, ContentKind kind) {
-            String normalizedValue = normalize(value);
+        private void mergeContent(SearchField field, String value, double amount, ContentKind kind, String normalizedValue) {
             ContentKey normalized = new ContentKey(kind, normalizedValue);
             LinkedHashMap<ContentKey, MergedContent> fieldContent = map(content, field.id());
             MergedContent existing = fieldContent.get(normalized);
