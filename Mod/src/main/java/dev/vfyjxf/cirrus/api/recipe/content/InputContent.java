@@ -338,6 +338,14 @@ public sealed interface InputContent
 
     static InputContent fromItemIngredient(Ingredient ingredient) {
         if (ingredient.isEmpty()) return empty;
+        if (!ingredient.isCustom()) {
+            Ingredient.Value[] values = ingredient.getValues();
+            if (values.length == 1 && values[0] instanceof Ingredient.TagValue) {
+                // a lone tag value wraps into TagStackContent directly — that is
+                // cheaper than hashing the ingredient for the memo probe
+                return fromItemIngredient(ingredient, 1, MAX_CHANCE);
+            }
+        }
         InputContent cached = INGREDIENT_MEMO.get(ingredient);
         if (cached != null) return cached;
         InputContent expanded = fromItemIngredient(ingredient, 1, MAX_CHANCE);
