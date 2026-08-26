@@ -156,6 +156,12 @@ public final class RecipeGraph {
 
         @Override
         public boolean equals(RecipeContent left, RecipeContent right) {
+            // identity short-circuit: memoized/shared content instances make
+            // left == right the common hit, and the deep comparisons below
+            // (satisfy / mergeable) are reflexive, so this is semantics-safe
+            if (left == right) {
+                return true;
+            }
             return switch (left) {
                 case EmptyRecipeContent empty -> empty == right;
                 case StackContent<?, ?> stack when right instanceof StackContent<?, ?> stack2 ->
@@ -210,6 +216,9 @@ public final class RecipeGraph {
 
         @Override
         public boolean equals(OutputContent left, OutputContent right) {
+            if (left == right) {
+                return true;
+            }
             return switch (left) {
                 case StackContent<?, ?> stack when right instanceof StackContent<?, ?> stack2 ->
                         stack.content().matches(stack2.content());
@@ -1635,6 +1644,13 @@ public final class RecipeGraph {
 
         private static @Nullable Object compactSmallRawInputs(Collection<? extends InputContent> contents) {
             InputContent[] merged = new InputContent[contents.size()];
+            // strategy hashes cached per slot: the merge scan is O(n^2) with
+            // n <= smallRawMergeThreshold, and the deep strategy equals
+            // (satisfy/mergeable, walks components) dominated it in profiles.
+            // Equal contents always share a strategy hash (the big-path
+            // lookup caches already rely on that), so a hash mismatch rejects
+            // without the deep comparison.
+            int[] hashes = new int[merged.length];
             int count = 0;
             boolean mergedDuplicate = false;
             nextContent:
@@ -1643,21 +1659,25 @@ public final class RecipeGraph {
                 if (content.isEmpty()) {
                     continue;
                 }
+                int hash = inputHashStrategy.hashCode(content);
                 for (int i = 0; i < count; i++) {
                     InputContent existing = merged[i];
-                    if (inputHashStrategy.equals(existing, content)) {
+                    if (hashes[i] == hash && inputHashStrategy.equals(existing, content)) {
                         merged[i] = (InputContent) existing.copyWithAmount(existing.amount() + content.amount());
                         mergedDuplicate = true;
                         continue nextContent;
                     }
                 }
-                merged[count++] = content;
+                merged[count] = content;
+                hashes[count] = hash;
+                count++;
             }
             return compactSortedArray(merged, count, !mergedDuplicate && count == merged.length);
         }
 
         private static @Nullable Object compactSmallRawOutputs(Collection<? extends OutputContent> contents) {
             OutputContent[] merged = new OutputContent[contents.size()];
+            int[] hashes = new int[merged.length];
             int count = 0;
             boolean mergedDuplicate = false;
             nextContent:
@@ -1666,15 +1686,18 @@ public final class RecipeGraph {
                 if (content.isEmpty()) {
                     continue;
                 }
+                int hash = outputHashStrategy.hashCode(content);
                 for (int i = 0; i < count; i++) {
                     OutputContent existing = merged[i];
-                    if (outputHashStrategy.equals(existing, content)) {
+                    if (hashes[i] == hash && outputHashStrategy.equals(existing, content)) {
                         merged[i] = (OutputContent) existing.copyWithAmount(existing.amount() + content.amount());
                         mergedDuplicate = true;
                         continue nextContent;
                     }
                 }
-                merged[count++] = content;
+                merged[count] = content;
+                hashes[count] = hash;
+                count++;
             }
             return compactSortedArray(merged, count, !mergedDuplicate && count == merged.length);
         }
