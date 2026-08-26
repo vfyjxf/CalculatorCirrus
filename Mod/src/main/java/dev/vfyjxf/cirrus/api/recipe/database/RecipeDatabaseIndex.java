@@ -14,6 +14,7 @@ import dev.vfyjxf.cirrus.api.recipe.content.TypedStackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
 import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchDocument.ContentKind;
 import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchDocument;
+import dev.vfyjxf.cirrus.api.recipe.database.search.NormalizedTextDictionary;
 import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchEngine;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
@@ -295,13 +296,17 @@ public final class RecipeDatabaseIndex {
         long recordsStartNanos = System.nanoTime();
         ConcurrentLinkedQueue<RecipeDatabaseFailureRegistry.Failure> failures = new ConcurrentLinkedQueue<>();
         ConcurrentLinkedQueue<RecipeDatabaseFailureRegistry.Unsupported> unsupported = new ConcurrentLinkedQueue<>();
+        // one dictionary shared by every record chunk: equal normalized text
+        // across the whole catalog interns to a single canonical instance
+        NormalizedTextDictionary normalizedTexts = new NormalizedTextDictionary();
         List<RecipeDatabaseRecord> records = buildRecords(
             items,
             reporter,
             knownFailedRecipes,
             knownUnsupportedRecipes,
             failures,
-            unsupported
+            unsupported,
+            normalizedTexts
         );
         if (failureRegistry != null && !failures.isEmpty()) {
             failureRegistry.recordFailures(failures);
@@ -715,7 +720,8 @@ public final class RecipeDatabaseIndex {
         Set<DatabaseRecipeRef> knownFailedRecipes,
         Set<DatabaseRecipeRef> knownUnsupportedRecipes,
         Queue<RecipeDatabaseFailureRegistry.Failure> failures,
-        Queue<RecipeDatabaseFailureRegistry.Unsupported> unsupported
+        Queue<RecipeDatabaseFailureRegistry.Unsupported> unsupported,
+        NormalizedTextDictionary normalizedTexts
     ) {
         if (items == null || items.isEmpty()) {
             progress.update(BuildPhase.RESOLVING_RECORDS, 0, 0);
@@ -767,7 +773,7 @@ public final class RecipeDatabaseIndex {
                         ref,
                         item.recipeClass(),
                         capturedFailures::add,
-                        () -> recordForEntry(item.database(), item.entry(), item.tags(), stackSearchCache)
+                        () -> recordForEntry(item.database(), item.entry(), item.tags(), stackSearchCache, normalizedTexts)
                     );
                     if (!capturedFailures.isEmpty()) {
                         failedCount.incrementAndGet();
@@ -1093,7 +1099,8 @@ public final class RecipeDatabaseIndex {
         DatabaseDefinition database,
         RecipeEntry<?> entry,
         List<Namespace> systemTags,
-        StackSearchCache cache
+        StackSearchCache cache,
+        NormalizedTextDictionary normalizedTexts
     ) {
         if (entry == null) {
             return RecordBuildResult.empty(ResolveError.unsupported);
@@ -1103,7 +1110,7 @@ public final class RecipeDatabaseIndex {
             return RecordBuildResult.empty(result.error());
         }
         RecipeProjection projection = snapshotProjection(result.projection());
-        RecipeDatabaseSearchDocument searchDocument = document(database, entry, systemTags, projection, cache);
+        RecipeDatabaseSearchDocument searchDocument = document(database, entry, systemTags, projection, cache, normalizedTexts);
         return RecordBuildResult.resolved(new RecipeDatabaseRecord(
             entry,
             database,
@@ -1243,9 +1250,10 @@ public final class RecipeDatabaseIndex {
         RecipeEntry<?> entry,
         List<Namespace> systemTags,
         @Nullable RecipeProjection projection,
-        StackSearchCache cache
+        StackSearchCache cache,
+        NormalizedTextDictionary normalizedTexts
     ) {
-        RecipeDatabaseSearchDocument.Builder builder = RecipeDatabaseSearchDocument.builder();
+        RecipeDatabaseSearchDocument.Builder builder = RecipeDatabaseSearchDocument.builder(normalizedTexts);
         ResourceLocation id = entry.id();
         builder.searchableText(CirrusSearchFields.id, id == null ? entry.toString() : id.toString());
         if (id != null) {

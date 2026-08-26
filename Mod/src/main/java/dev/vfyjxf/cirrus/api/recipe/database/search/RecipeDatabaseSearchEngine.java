@@ -73,6 +73,11 @@ public final class RecipeDatabaseSearchEngine {
             }
         }
         long documentsNanos = System.nanoTime();
+        // documents are final here: switch every backing dictionary to flat
+        // array reads so the search paths below resolve ids without boxing
+        for (RecipeDatabaseSearchDocument document : documents) {
+            document.normalizedDictionary().seal();
+        }
 
         SearchField[] searchFields = CirrusSearchFields.SET.fields().toArray(new SearchField[0]);
         FieldIndex[] built = new FieldIndex[searchFields.length];
@@ -783,14 +788,19 @@ public final class RecipeDatabaseSearchEngine {
         if (needle.isBlank()) {
             return SearchMatch.YES;
         }
-        String[] values = strict ? document.rawText(field) : document.normalizedText(field);
-        SearchField[] sourceFields = document.textSourceFields(field);
+        String[] values = strict ? document.rawText(field) : null;
+        byte[] sourceFieldIds = document.textSourceFieldIds(field);
+        // non-strict reads go through the normalized channel: ids resolved via
+        // the document's sealed dictionary instead of a String[] per call
+        int[] normalizedIds = strict ? null : document.normalizedTextIds(field);
+        NormalizedTextDictionary dictionary = strict ? null : document.normalizedDictionary();
         int best = 0;
-        for (int index = 0; index < values.length; index++) {
-            String value = values[index];
+        int entryCount = strict ? values.length : normalizedIds.length;
+        for (int index = 0; index < entryCount; index++) {
+            String value = strict ? values[index] : dictionary.value(normalizedIds[index]);
             boolean matched = mode == TextMode.exact ? value.equals(needle) : SearchTexts.contains(value, needle);
             if (matched) {
-                SearchField scoreField = index < sourceFields.length ? sourceFields[index] : field;
+                SearchField scoreField = index < sourceFieldIds.length ? CirrusSearchFields.SET.field(sourceFieldIds[index]) : field;
                 best = Math.max(best, score(scoreField, value, needle));
             }
         }
@@ -1649,21 +1659,22 @@ public final class RecipeDatabaseSearchEngine {
         }
 
         private void addDocument(int recipeId, RecipeDatabaseSearchDocument document, SearchField field) {
-            String[] normalized = document.normalizedText(field);
-            if (normalized.length > 0) {
+            int[] normalizedIds = document.normalizedTextIds(field);
+            if (normalizedIds.length > 0) {
                 String[] raw = document.rawText(field);
-                if (usesScanFallback(recipeId, raw, normalized)) {
+                NormalizedTextDictionary docTexts = document.normalizedDictionary();
+                if (usesScanFallback(recipeId, raw, normalizedIds.length)) {
                     if (document.present(field)) {
                         fieldRecords.add(recipeId);
                     }
                     return;
                 }
                 IntScratch unique = new IntScratch();
-                for (int index = 0; index < normalized.length; index++) {
+                for (int index = 0; index < normalizedIds.length; index++) {
                     if (textCandidates.size() < textCandidateLimit) {
                         textCandidates.add(raw[index]);
                     }
-                    unique.addIfAbsent(dictionary.idFor(normalized[index]));
+                    unique.addIfAbsent(dictionary.idFor(docTexts.value(normalizedIds[index])));
                 }
                 for (int index = 0; index < unique.size(); index++) {
                     postings.increment(unique.get(index));
@@ -1674,8 +1685,8 @@ public final class RecipeDatabaseSearchEngine {
             }
         }
 
-        private boolean usesScanFallback(int recipeId, String[] raw, String[] normalized) {
-            if (normalized.length <= documentPostingBudget) {
+        private boolean usesScanFallback(int recipeId, String[] raw, int normalizedCount) {
+            if (normalizedCount <= documentPostingBudget) {
                 return false;
             }
             for (int index = 0; index < raw.length && textCandidates.size() < textCandidateLimit; index++) {
@@ -1709,13 +1720,14 @@ public final class RecipeDatabaseSearchEngine {
             if (scanFallbackDocuments.get(recipeId)) {
                 return;
             }
-            String[] normalized = document.normalizedText(field);
-            if (normalized.length == 0) {
+            int[] normalizedIds = document.normalizedTextIds(field);
+            if (normalizedIds.length == 0) {
                 return;
             }
+            NormalizedTextDictionary docTexts = document.normalizedDictionary();
             IntScratch unique = new IntScratch();
-            for (String term : normalized) {
-                unique.addIfAbsent(dictionary.existingId(term));
+            for (int id : normalizedIds) {
+                unique.addIfAbsent(dictionary.existingId(docTexts.value(id)));
             }
             for (int index = 0; index < unique.size(); index++) {
                 postings.add(unique.get(index), recipeId);
@@ -1735,24 +1747,25 @@ public final class RecipeDatabaseSearchEngine {
         }
 
         private void addDocument(int recipeId, RecipeDatabaseSearchDocument document, SearchField field) {
-            String[] normalized = document.normalizedText(field);
-            if (normalized.length > 0) {
+            int[] normalizedIds = document.normalizedTextIds(field);
+            if (normalizedIds.length > 0) {
                 String[] raw = document.rawText(field);
-                if (usesScanFallback(recipeId, raw, normalized)) {
+                NormalizedTextDictionary docTexts = document.normalizedDictionary();
+                if (usesScanFallback(recipeId, raw, normalizedIds.length)) {
                     if (document.present(field)) {
                         fieldRecords.add(recipeId);
                     }
                     return;
                 }
-                addTerms(recipeId, raw, normalized);
+                addTerms(recipeId, raw, normalizedIds, docTexts);
             }
             if (document.present(field)) {
                 fieldRecords.add(recipeId);
             }
         }
 
-        private boolean usesScanFallback(int recipeId, String[] raw, String[] normalized) {
-            if (normalized.length <= documentPostingBudget) {
+        private boolean usesScanFallback(int recipeId, String[] raw, int normalizedCount) {
+            if (normalizedCount <= documentPostingBudget) {
                 return false;
             }
             for (int index = 0; index < raw.length && textCandidates.size() < textCandidateLimit; index++) {
@@ -1762,11 +1775,11 @@ public final class RecipeDatabaseSearchEngine {
             return true;
         }
 
-        private void addTerms(int recipeId, String[] raw, String[] normalized) {
-            if (normalized.length <= linearUniqueThreshold) {
-                ArrayList<String> uniqueTerms = new ArrayList<>(Math.min(normalized.length, linearUniqueThreshold));
-                for (int index = 0; index < normalized.length; index++) {
-                    String term = normalized[index];
+        private void addTerms(int recipeId, String[] raw, int[] normalizedIds, NormalizedTextDictionary docTexts) {
+            if (normalizedIds.length <= linearUniqueThreshold) {
+                ArrayList<String> uniqueTerms = new ArrayList<>(Math.min(normalizedIds.length, linearUniqueThreshold));
+                for (int index = 0; index < normalizedIds.length; index++) {
+                    String term = docTexts.value(normalizedIds[index]);
                     if (term == null || term.isBlank() || contains(uniqueTerms, term)) {
                         continue;
                     }
@@ -1777,9 +1790,9 @@ public final class RecipeDatabaseSearchEngine {
                 return;
             }
 
-            HashSet<String> uniqueTerms = new HashSet<>(normalized.length * 2);
-            for (int index = 0; index < normalized.length; index++) {
-                String term = normalized[index];
+            HashSet<String> uniqueTerms = new HashSet<>(normalizedIds.length * 2);
+            for (int index = 0; index < normalizedIds.length; index++) {
+                String term = docTexts.value(normalizedIds[index]);
                 if (term == null || term.isBlank() || !uniqueTerms.add(term)) {
                     continue;
                 }
