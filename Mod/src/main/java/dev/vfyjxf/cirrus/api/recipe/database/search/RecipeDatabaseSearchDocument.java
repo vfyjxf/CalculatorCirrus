@@ -20,6 +20,10 @@ public final class RecipeDatabaseSearchDocument {
     private static final double[] emptyNumbers = new double[0];
     private static final byte[] emptyIds = new byte[0];
     private static final int[] emptyNormalizedIds = new int[0];
+    // canonical read-only instances for length-1/2 textSourceFieldIds; the
+    // key spaces are bounded by the field id vocabulary (≤26 ids today)
+    private static final java.util.concurrent.ConcurrentHashMap<Integer, byte[]> singleSourceIds = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<Integer, byte[]> pairedSourceIds = new java.util.concurrent.ConcurrentHashMap<>();
 
     private final String[][] rawText;
     // normalized text as ids into the document's dictionary; the shared
@@ -104,7 +108,7 @@ public final class RecipeDatabaseSearchDocument {
         return normalizedDictionary;
     }
 
-    /** Per-entry source-field ids, parallel to {@link #rawText(SearchField)}. */
+    /** Per-entry source-field ids, parallel to {@link #rawText(SearchField)}. Treat the result as read-only; instances may be shared. */
     public byte[] textSourceFieldIds(SearchField field) {
         int id = field.id();
         return id < textSourceFieldIds.length && textSourceFieldIds[id] != null ? textSourceFieldIds[id] : emptyIds;
@@ -336,9 +340,21 @@ public final class RecipeDatabaseSearchDocument {
             if (values == null || values.isEmpty()) {
                 return null;
             }
-            byte[] out = new byte[values.size()];
-            for (int index = 0; index < out.length; index++) {
+            int size = values.size();
+            byte[] out = new byte[size];
+            for (int index = 0; index < size; index++) {
                 out[index] = (byte) values.get(index).id();
+            }
+            // a plain byte[] barely beats the old SearchField[] for these
+            // tiny arrays, so share canonical read-only instances for the
+            // length ≤ 2 patterns that dominate the population (bounded by
+            // the id vocabulary); callers never mutate the returned array
+            if (size == 1) {
+                return singleSourceIds.computeIfAbsent(out[0] & 0xFF, ignored -> out);
+            }
+            if (size == 2) {
+                int pair = (out[0] & 0xFF) | ((out[1] & 0xFF) << 8);
+                return pairedSourceIds.computeIfAbsent(pair, ignored -> out);
             }
             return out;
         }
