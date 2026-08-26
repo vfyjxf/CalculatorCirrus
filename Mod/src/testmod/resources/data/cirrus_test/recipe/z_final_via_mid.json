@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [{"item": "cirrus_test:chain_mid"}],
+  "result": {"id": "cirrus_test:dummy_final", "count": 1}
+}

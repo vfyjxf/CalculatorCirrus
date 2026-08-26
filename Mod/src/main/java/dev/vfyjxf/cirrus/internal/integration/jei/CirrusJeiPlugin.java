@@ -29,6 +29,7 @@ public class CirrusJeiPlugin implements IModPlugin {
     private static final JeiSystemCatalog systemCatalog = new JeiSystemCatalog();
     private static IRecipeManager recipeManager;
     private static IIngredientManager ingredientManager;
+    private static volatile IJeiRuntime jeiRuntime;
     private static volatile List<RecipeType<?>> knownRecipeTypes = List.of();
 
     public static IFocusFactory focusFactory;
@@ -57,6 +58,10 @@ public class CirrusJeiPlugin implements IModPlugin {
         return ingredientManager;
     }
 
+    public static @Nullable IJeiRuntime jeiRuntimeOrNull() {
+        return jeiRuntime;
+    }
+
     public static List<RecipeSystem<?>> recipeSystems() {
         return systemCatalog.systems();
     }
@@ -83,10 +88,11 @@ public class CirrusJeiPlugin implements IModPlugin {
     }
 
     @Override
-    public void onRuntimeAvailable(IJeiRuntime jeiRuntime) {
-        CirrusJeiPlugin.recipeManager = jeiRuntime.getRecipeManager();
-        CirrusJeiPlugin.ingredientManager = jeiRuntime.getIngredientManager();
-        IJeiHelpers helpers = jeiRuntime.getJeiHelpers();
+    public void onRuntimeAvailable(IJeiRuntime runtime) {
+        CirrusJeiPlugin.jeiRuntime = runtime;
+        CirrusJeiPlugin.recipeManager = runtime.getRecipeManager();
+        CirrusJeiPlugin.ingredientManager = runtime.getIngredientManager();
+        IJeiHelpers helpers = runtime.getJeiHelpers();
         CirrusJeiPlugin.focusFactory = helpers == null ? null : helpers.getFocusFactory();
         updateKnownRecipeTypes(recipeTypesOrEmpty(helpers));
         JeiRecipeTooltipComponent.clearLayoutCache();

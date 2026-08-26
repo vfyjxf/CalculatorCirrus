@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [{"item": "cirrus_test:dummy_block_red"}],
+  "result": {"id": "cirrus_test:dummy_block_blue", "count": 1}
+}

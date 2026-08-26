@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.ui.execution.tooltip;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
 import dev.vfyjxf.cirrus.recipe.system.jei.JeiCategoryRecipeSystem;
 import dev.vfyjxf.cirrus.recipe.system.jei.JeiRecipeLayoutResolver;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
@@ -12,7 +13,6 @@ import mezz.jei.api.recipe.IFocusFactory;
 import mezz.jei.api.recipe.IRecipeManager;
 import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.recipe.category.IRecipeCategory;
-import mezz.jei.common.Internal;
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -210,15 +210,12 @@ public record JeiRecipeTooltipComponent(
     }
 
     private static @Nullable LayoutContext layoutContextOrNull() {
-        try {
-            var jeiRuntime = Internal.getJeiRuntime();
-            return new LayoutContext(
-                    jeiRuntime.getRecipeManager(),
-                    jeiRuntime.getJeiHelpers().getFocusFactory()
-            );
-        } catch (RuntimeException | LinkageError ignored) {
+        IRecipeManager manager = CirrusJeiPlugin.recipeManagerOrNull();
+        IFocusFactory focusFactory = CirrusJeiPlugin.focusFactoryOrNull();
+        if (manager == null || focusFactory == null) {
             return null;
         }
+        return new LayoutContext(manager, focusFactory);
     }
 
     public static void tickLayoutOncePerClientTick(IRecipeLayoutDrawable<?> layout) {

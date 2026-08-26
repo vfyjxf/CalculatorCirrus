@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.ui.execution.widget;
 
 import com.mojang.datafixers.util.Either;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
 import dev.vfyjxf.cirrus.ui.execution.tooltip.JeiRecipeTooltipComponent;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
@@ -13,7 +14,6 @@ import mezz.jei.api.gui.inputs.RecipeSlotUnderMouse;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.runtime.IJeiKeyMapping;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
-import mezz.jei.common.Internal;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
@@ -257,7 +257,7 @@ public final class JeiRecipePreviewWidget extends Widget {
                 return;
             }
             try {
-                Internal.getJeiRuntime()
+                CirrusJeiPlugin.jeiRuntimeOrNull()
                     .getJeiHelpers()
                     .getModIdHelper()
                     .getModNameForTooltip(typedIngredient)

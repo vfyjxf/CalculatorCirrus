@@ -6,6 +6,8 @@ import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.content.ClientContentApiImpl;
 import dev.vfyjxf.cirrus.content.ClientContentRegistryBuilder;
 import dev.vfyjxf.cirrus.content.ContentApiImpl;
+import dev.vfyjxf.cirrus.event.EventListeners;
+import dev.vfyjxf.cirrus.internal.integration.jei.JeiBookmarkOverlayButtons;
 import dev.vfyjxf.cirrus.internal.integration.jei.JeiFallbackRecipeSystemPlugin;
 import dev.vfyjxf.cirrus.internal.lifecycle.CirrusClientRuntime;
 import dev.vfyjxf.cirrus.internal.lifecycle.CirrusLifecycleSources;
@@ -28,6 +30,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.event.RegisterClientTooltipComponentFactoriesEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
 import org.eclipse.collections.api.list.MutableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +48,13 @@ public final class CirrusClient extends Cirrus {
         clientPlugins = PluginLoader.loadAndDispatcher(logger, "Client Cirrus Plugin", AnnotationPluginLookup.of(ClientCirrusPlugin.class), pluginExecutor);
         modBus.addListener(this::registerTooltipFactories);
         modBus.addListener(this::registerKeyMappings);
+        registerJeiBookmarkOverlayButtons();
+    }
+
+    private void registerJeiBookmarkOverlayButtons() {
+        EventListeners.register(ScreenEvent.Render.Post.class, JeiBookmarkOverlayButtons::render);
+        EventListeners.register(ScreenEvent.MouseButtonPressed.Pre.class, JeiBookmarkOverlayButtons::mousePressed);
+        EventListeners.register(ScreenEvent.MouseButtonReleased.Pre.class, JeiBookmarkOverlayButtons::mouseReleased);
     }
 
     private void registerLifecycleDriver(IEventBus modBus) {

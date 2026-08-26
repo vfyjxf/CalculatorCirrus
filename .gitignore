@@ -28,4 +28,4 @@ repo
 
 #agent
 .codex
-.vscode\
+.vscode/

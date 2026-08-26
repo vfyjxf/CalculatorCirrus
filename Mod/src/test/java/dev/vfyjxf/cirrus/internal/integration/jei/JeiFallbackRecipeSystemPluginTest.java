@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Proxy;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -66,15 +67,20 @@ class JeiFallbackRecipeSystemPluginTest {
 
     @Test
     void excludesJeiTagInformationRecipeTypes() {
-        RecipeType<Object> itemTags = RecipeType.create("minecraft", "item_tag_information", Object.class);
-        RecipeType<Object> fluidTags = RecipeType.create("minecraft", "fluid_tag_information", Object.class);
+        // JEI 19.28+ registers per-registry tag info as "<ns>:tag_recipes/<registry>"
+        RecipeType<Object> itemTags = RecipeType.create("minecraft", "tag_recipes/item", Object.class);
+        RecipeType<Object> fluidTags = RecipeType.create("minecraft", "tag_recipes/fluid", Object.class);
+        // older JEI versions used "<ns>:*_tag_information" paths
+        RecipeType<Object> legacyItemTags = RecipeType.create("minecraft", "item_tag_information", Object.class);
         RecipeType<Object> genericTagInfo = RecipeType.create("minecraft", "tag_information", Object.class);
+        // a modded category that merely mentions "tag" must stay included
         RecipeType<Object> normalTagRecipe = RecipeType.create("example", "tag_pressing", Object.class);
 
         assertTrue(JeiRecipeCategoryFilter.excluded(itemTags));
         assertTrue(JeiRecipeCategoryFilter.excluded(fluidTags));
+        assertTrue(JeiRecipeCategoryFilter.excluded(legacyItemTags));
         assertTrue(JeiRecipeCategoryFilter.excluded(genericTagInfo));
-        assertTrue(JeiRecipeCategoryFilter.excluded(normalTagRecipe));
+        assertFalse(JeiRecipeCategoryFilter.excluded(normalTagRecipe));
     }
 
     @Test

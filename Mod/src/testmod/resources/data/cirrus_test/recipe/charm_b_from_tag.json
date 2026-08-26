@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [{"tag": "cirrus_test:charms"}],
+  "result": {"id": "cirrus_test:dummy_charm_b", "count": 1}
+}

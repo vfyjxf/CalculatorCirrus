@@ -14,7 +14,6 @@ allprojects {
         mavenCentral()
         maven { url = "https://maven.quiltmc.org/repository/release/" }
         maven { url = "https://jitpack.io" }
-        maven { url = "https://dvs1.progwml6.com/files/maven/" }
         maven { url = "https://maven.blamejared.com/" }
         maven { url = "https://modmaven.dev" }
         maven { url = "https://maven.parchmentmc.org" }
