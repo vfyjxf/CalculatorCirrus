@@ -98,6 +98,9 @@ public class CirrusJeiPlugin implements IModPlugin {
         JeiRecipeTooltipComponent.clearLayoutCache();
         JeiRecipeLayoutResolver.clearIgnoredLayouts();
         systemCatalog.rebuild(CirrusJeiPlugin.recipeManager);
+        // the system catalog is final here; release anything that waited for the
+        // full set (e.g. the client-lifecycle database index prewarm)
+        JeiIntegration.markSystemsReady();
     }
 
     @Override

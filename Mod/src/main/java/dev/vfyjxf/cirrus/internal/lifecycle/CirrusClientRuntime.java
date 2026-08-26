@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.internal.lifecycle;
 
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseCatalogCache;
+import dev.vfyjxf.cirrus.internal.integration.jei.JeiIntegration;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.classify.RecipeClassificationService;
 import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
@@ -20,7 +21,27 @@ public final class CirrusClientRuntime {
         // the database index build starts only after the routing graph prewarm
         // finishes so the two big builds never compete for cpu/heap
         RecipePathSettings.prewarmCalculatorRoutingGraph("clientLifecycleLoad")
-            .thenRun(() -> DatabasePage.prewarmSystemCatalogIndex("clientLifecycleLoad"));
+            .thenRun(CirrusClientRuntime::prewarmDatabaseIndexWhenSystemsReady);
+    }
+
+    /**
+     * The catalog's system set is only complete once JEI hands us its runtime:
+     * JeiFallbackRecipeSystemPlugin registers the vanilla basics at plugin load,
+     * but the pack-specific categories only exist after JEI's
+     * {@code onRuntimeAvailable} fills {@code knownRecipeTypes}. Prewarming
+     * earlier builds an index over a partial system set whose cache key never
+     * matches the full set, so the first user-facing database open pays the
+     * full rebuild anyway (measured: 10,629 prewarmed vs 27,758 needed on
+     * atm10-lite). With JEI present, wait for its runtime; without JEI the
+     * plugin-loaded set is already final and we can build immediately.
+     */
+    private static void prewarmDatabaseIndexWhenSystemsReady() {
+        if (JeiIntegration.systemsReady() || JeiIntegration.jeiAbsent()) {
+            DatabasePage.prewarmSystemCatalogIndex("clientLifecycleLoad");
+            return;
+        }
+        JeiIntegration.onSystemsReady(() ->
+            DatabasePage.prewarmSystemCatalogIndex("clientLifecycleLoad"));
     }
 
     public static void beforeUnload() {
