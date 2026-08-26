@@ -1032,37 +1032,50 @@ public final class RecipeDatabaseIndex {
             if (cached != null) {
                 return cached;
             }
+            // same probe as the old limit path, but the computed value still lands in
+            // a second-chance map so repeat occurrences stay shared instead of every
+            // chunk re-deriving the strings past the cap
             if (cache.size() >= limit) {
-                return new CachedStackStrings();
+                return overflow.computeIfAbsent(key, ignored -> new CachedStackStrings());
             }
             return cache.computeIfAbsent(key, ignored -> new CachedStackStrings());
         }
+
+        private final ConcurrentHashMap<StackKey, CachedStackStrings> overflow = new ConcurrentHashMap<>();
     }
 
     private static final class CachedStackStrings {
-        private String displayName;
-        private String contentId;
-        private String typeString;
+        private volatile String displayName;
+        private volatile String contentId;
+        private volatile String typeString;
 
-        private synchronized <T, S> String displayName(ContentStack<T, S> stack) {
-            if (displayName == null) {
-                displayName = RecipeDatabaseIndex.displayName(stack);
+        // racy single-flight: several workers may compute the same string once, but
+        // the cost is a cheap derivation and this stays lock-free on the hot path
+        private <T, S> String displayName(ContentStack<T, S> stack) {
+            String value = displayName;
+            if (value == null) {
+                value = RecipeDatabaseIndex.displayName(stack);
+                displayName = value;
             }
-            return displayName;
+            return value;
         }
 
-        private synchronized <T, S> String contentId(ContentStack<T, S> stack) {
-            if (contentId == null) {
-                contentId = RecipeDatabaseIndex.contentId(stack);
+        private <T, S> String contentId(ContentStack<T, S> stack) {
+            String value = contentId;
+            if (value == null) {
+                value = RecipeDatabaseIndex.contentId(stack);
+                contentId = value;
             }
-            return contentId;
+            return value;
         }
 
-        private synchronized <T, S> String typeString(ContentStack<T, S> stack) {
-            if (typeString == null) {
-                typeString = stack.type().toString(stack.value());
+        private <T, S> String typeString(ContentStack<T, S> stack) {
+            String value = typeString;
+            if (value == null) {
+                value = stack.type().toString(stack.value());
+                typeString = value;
             }
-            return typeString;
+            return value;
         }
     }
 
