@@ -238,3 +238,37 @@ tasks.named('jmhJar', Jar).configure {
         attributes 'Multi-Release': 'true'
     }
 }
+
+// Property-driven JMH runner that keeps the default jmh task untouched:
+//   ./gradlew :Mod:jmhRun -PcirrusJmhInclude=<benchmark regex> -PcirrusJmhResult=<json path>
+//   [-PcirrusJmhExtra="-f 1 -wi 0 -i 1 -r 1s -w 1s"]
+// cirrusJmhInclude is passed as the positional JMH regex; cirrusJmhResult becomes
+// '-rf json -rff <path>' (relative paths resolve against the repo root); cirrusJmhExtra
+// is split on whitespace and appended so fork/warmup/measurement annotations can be
+// overridden. perf/run-bench.sh wraps this with a score summary.
+tasks.register('jmhRun', JavaExec) {
+    group = 'verification'
+    description = 'Runs the JMH benchmarks matching -PcirrusJmhInclude=<regex>, writing JSON to -PcirrusJmhResult=<path>.'
+    def jmhJarTask = tasks.named('jmhJar', Jar)
+    dependsOn jmhJarTask
+    classpath = files(jmhJarTask.flatMap { it.archiveFile })
+    mainClass = 'org.openjdk.jmh.Main'
+    jvmArgs '-Xms4g', '-Xmx4g'
+
+    def include = (findProperty('cirrusJmhInclude') ?: '').toString().trim()
+    if (include.isEmpty()) {
+        throw new GradleException("jmhRun requires -PcirrusJmhInclude=<benchmark regex>, e.g. -PcirrusJmhInclude=RecipeGraphBuildBenchmark")
+    }
+    def result = (findProperty('cirrusJmhResult') ?: '').toString().trim()
+    if (result.isEmpty()) {
+        throw new GradleException("jmhRun requires -PcirrusJmhResult=<result json path>, e.g. -PcirrusJmhResult=perf/results/base.json")
+    }
+    def resultFile = rootProject.file(result)
+    resultFile.parentFile.mkdirs()
+    args include
+    args '-rf', 'json', '-rff', resultFile.absolutePath
+    def extra = (findProperty('cirrusJmhExtra') ?: '').toString().trim()
+    if (!extra.isEmpty()) {
+        args(extra.split(/\s+/) as List)
+    }
+}

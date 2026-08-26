@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.performance;
 import dev.vfyjxf.cirrus.api.recipe.routing.RecipeGraph;
 import dev.vfyjxf.cirrus.internal.performance.CalculatorSyntheticScenario;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
+import dev.vfyjxf.cirrus.recipe.classify.ClassificationHeuristics;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -35,6 +36,10 @@ public class RecipeGraphBuildBenchmark {
 
         @Setup(Level.Trial)
         public void setup() {
+            // the real path registers classification heuristics before building
+            // (RecipePathSettings); they are idempotent and feed per-node hints
+            // during buildGraph, so the benchmark must register them too.
+            ClassificationHeuristics.register();
             scenario = CalculatorSyntheticScenario.create(competingRecipes);
             previousApi = CalculatorSyntheticScenario.attachRecipeApi(scenario.system());
         }
