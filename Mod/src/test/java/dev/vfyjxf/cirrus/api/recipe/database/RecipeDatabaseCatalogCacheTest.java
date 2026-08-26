@@ -52,6 +52,24 @@ class RecipeDatabaseCatalogCacheTest {
         assertNotSame(first, second);
     }
 
+    @Test
+    void invalidateForcesRebuildWithIdenticalKey() {
+        // datapack reload swaps recipe content under stable system instances,
+        // which the identity-based key cannot see; the lifecycle unload path
+        // invalidates explicitly, so the next lookup must rebuild
+        RecipeDatabaseCatalogCache.configureTtlForTests(Duration.ofMinutes(5));
+        Namespace source = Namespace.of("test", "cache_invalidate");
+        CountingRecipeSystem system = new CountingRecipeSystem(source, List.of(new FakeRecipe("recipe_a")));
+
+        RecipeDatabaseIndex first = RecipeDatabaseCatalogCache.getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
+        RecipeDatabaseIndex hit = RecipeDatabaseCatalogCache.getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
+        assertSame(first, hit);
+
+        RecipeDatabaseCatalogCache.invalidate();
+        RecipeDatabaseIndex rebuilt = RecipeDatabaseCatalogCache.getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
+        assertNotSame(first, rebuilt);
+    }
+
     private record FakeRecipe(String id) {
     }
 

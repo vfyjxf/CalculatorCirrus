@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.internal.lifecycle;
 
+import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseCatalogCache;
 import dev.vfyjxf.cirrus.recipe.classify.RecipeClassificationService;
 import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
 import dev.vfyjxf.cirrus.ui.process.CalculatorBuildResultCache;
@@ -22,6 +23,13 @@ public final class CirrusClientRuntime {
     }
 
     public static void beforeUnload() {
+        // runs on world unload AND on datapack reload (the lifecycle driver's
+        // default reload action is unload-then-load); the catalog cache is not
+        // part of RecipePathSettings.clearRuntimeCaches, and its key only
+        // fingerprints system identity — recipe content changes under stable
+        // system instances on reload, so without this invalidate the prewarm
+        // would hit the cache and serve the pre-reload catalog until TTL expiry
+        RecipeDatabaseCatalogCache.invalidate();
         RecipePathSettings.clearRuntimeCaches("clientLifecycleUnload");
         RecipeClassificationService.clearRuntimeCaches();
         CalculatorBuildResultCache.clear();
