@@ -363,8 +363,11 @@ class RecipeDatabaseIndexTest {
 
         assertEquals(1, second.records().size());
         assertEquals("working_recipe", second.records().getFirst().recipe().id().getPath());
+        // broken recipes stay skipped on rebuild via the failure registry, while
+        // working recipes reuse the memoized empty-context result from the first
+        // build: both builds share one api instance and no invalidation ran in between
         assertEquals(1, system.resolveAttempts(broken));
-        assertEquals(2, system.resolveAttempts(working));
+        assertEquals(1, system.resolveAttempts(working));
     }
 
     @Test
