@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Collection;
 
 
@@ -109,6 +110,26 @@ class ContentApiTest {
         Assertions.assertEquals(tag, TagHelper.findTagMatchStacks(tagType, stacks));
         TagType.clearAllTagsCache();
         Assertions.assertEquals(tag, TagHelper.findTagMatchStacks(tagType, stacks));
+    }
+
+    @Test
+    void testTagHelperMatchesDuplicateStackInputs(MinecraftServer server) {
+        TagType<Item> tagType = CirrusTypes.Contents.ITEM.tagType();
+        TagKey<Item> tag = null;
+        Collection<? extends ContentStack<Item, ?>> duplicated = null;
+        for (TagKey<Item> candidate : tagType.allTags()) {
+            var values = tagType.getTagValues(candidate);
+            // a single-member tag duplicated across slots: the degenerate case that
+            // used to compare 2 inputs against a tag size of 1 and scan to null
+            if (values.size() != 1) continue;
+            var one = ContentStack.fromContent(values.iterator().next());
+            duplicated = List.of(one, one);
+            tag = candidate;
+            break;
+        }
+        Assertions.assertNotNull(tag, "no single-member item tag found in the ephemeral registry");
+        Assertions.assertEquals(tag, TagHelper.findTagMatchStacks(tagType, duplicated),
+            "duplicate-stack inputs must still resolve through the member index");
     }
 
 

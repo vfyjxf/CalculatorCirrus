@@ -12,11 +12,9 @@ import net.minecraft.tags.TagKey;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Unmodifiable;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,17 +31,16 @@ public final class TagHelper {
     ) {
         if (stacks.isEmpty()) return null;
         ContentType<T> contentType = tagType.contentType();
-        ArrayList<Holder<?>> holderList = new ArrayList<>(stacks.size());
         HashSet<Holder<?>> holders = new HashSet<>(stacks.size());
         for (S stack : stacks) {
-            Holder<T> holder = contentType.getHolder(stackType.getContent(stack));
-            holderList.add(holder);
-            holders.add(holder);
+            holders.add(contentType.getHolder(stackType.getContent(stack)));
         }
-        if (holders.size() != stacks.size()) {
-            return scanTags(tagType, holderList, stacks.size());
-        }
-        return findIndexedTag(tagType, stacks.size(), holders);
+        // A tag holds each member exactly once, so the DEDUPED holder set is the only
+        // thing a tag can match. The old duplicate-stack path compared a deduped tag
+        // size against the un-deduped input count, matched nothing, and fell back to
+        // an O(allTags) scan per resolution (the top in-game hotspot) that always
+        // returned null for such inputs.
+        return findIndexedTag(tagType, holders.size(), holders);
     }
 
     public static <T> @Nullable TagKey<T> findTagMatchStacks(
@@ -52,17 +49,11 @@ public final class TagHelper {
     ) {
         if (stacks.isEmpty()) return null;
         ContentType<T> contentType = tagType.contentType();
-        ArrayList<Holder<?>> holderList = new ArrayList<>(stacks.size());
         HashSet<Holder<?>> holders = new HashSet<>(stacks.size());
         for (ContentStack<T, ?> stack : stacks) {
-            Holder<T> holder = contentType.getHolder(stack.content());
-            holderList.add(holder);
-            holders.add(holder);
+            holders.add(contentType.getHolder(stack.content()));
         }
-        if (holders.size() != stacks.size()) {
-            return scanTags(tagType, holderList, stacks.size());
-        }
-        return findIndexedTag(tagType, stacks.size(), holders);
+        return findIndexedTag(tagType, holders.size(), holders);
     }
 
     @SuppressWarnings("unchecked")
@@ -88,26 +79,6 @@ public final class TagHelper {
             tagMemberIndexCache.put(key, cached);
         }
         return (TagKey<T>) cached.tagsByMembers.get(new TagMemberKey(memberCount, holders));
-    }
-
-    private static <T> @Nullable TagKey<T> scanTags(TagType<T> tagType, List<Holder<?>> holders, int memberCount) {
-        for (TagKey<T> tag : allTags(tagType)) {
-            HolderSet.Named<T> tagSet = tagType.getTagSet(tag);
-            if (tagSet == null || tagSet.size() != memberCount) {
-                continue;
-            }
-            boolean matched = true;
-            for (Holder<?> holder : holders) {
-                if (!tagSet.contains((Holder<T>) holder)) {
-                    matched = false;
-                    break;
-                }
-            }
-            if (matched) {
-                return tag;
-            }
-        }
-        return null;
     }
 
     private static <T> TagMemberIndexSnapshot buildTagMemberIndex(TagType<T> tagType, Object sourceTagSet) {
