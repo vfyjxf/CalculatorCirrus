@@ -18,10 +18,16 @@ public final class RecipeDatabaseSearchDocument {
     private static final String[] emptyStrings = new String[0];
     private static final ContentTerm[] emptyContent = new ContentTerm[0];
     private static final double[] emptyNumbers = new double[0];
+    private static final byte[] emptyIds = new byte[0];
 
     private final String[][] rawText;
     private final String[][] normalizedText;
-    private final SearchField[][] textSourceFields;
+    // per-field entry ordinals of the scoring source fields, parallel to the
+    // raw/normalized channels; a null slot means the field has no entries.
+    // Stored as bytes instead of SearchField references: the ~354k tiny enum
+    // arrays dominated retained memory. CirrusSearchFields.SET is process-wide
+    // and its ids are dense, so readers decode via SET.field(id).
+    private final byte[][] textSourceFieldIds;
     private final ContentTerm[][] contentTerms;
     private final double[][] numbers;
     private final byte[] present;
@@ -31,7 +37,7 @@ public final class RecipeDatabaseSearchDocument {
         SearchFieldSet fieldSet,
         String[][] rawText,
         String[][] normalizedText,
-        SearchField[][] textSourceFields,
+        byte[][] textSourceFieldIds,
         ContentTerm[][] contentTerms,
         double[][] numbers,
         byte[] present
@@ -39,7 +45,7 @@ public final class RecipeDatabaseSearchDocument {
         this.fieldSet = fieldSet;
         this.rawText = rawText;
         this.normalizedText = normalizedText;
-        this.textSourceFields = textSourceFields;
+        this.textSourceFieldIds = textSourceFieldIds;
         this.contentTerms = contentTerms;
         this.numbers = numbers;
         this.present = present;
@@ -80,9 +86,10 @@ public final class RecipeDatabaseSearchDocument {
         return id < normalizedText.length && normalizedText[id] != null ? normalizedText[id] : emptyStrings;
     }
 
-    public SearchField[] textSourceFields(SearchField field) {
+    /** Per-entry source-field ids, parallel to {@link #rawText(SearchField)}. */
+    public byte[] textSourceFieldIds(SearchField field) {
         int id = field.id();
-        return id < textSourceFields.length && textSourceFields[id] != null ? textSourceFields[id] : new SearchField[0];
+        return id < textSourceFieldIds.length && textSourceFieldIds[id] != null ? textSourceFieldIds[id] : emptyIds;
     }
 
     public ContentTerm[] contentTerms(SearchField field) {
@@ -252,7 +259,7 @@ public final class RecipeDatabaseSearchDocument {
 
             String[][] raw = new String[fieldSet.size()][];
             String[][] normalized = new String[fieldSet.size()][];
-            SearchField[][] sources = new SearchField[fieldSet.size()][];
+            byte[][] sourceIds = new byte[fieldSet.size()][];
             ContentTerm[][] contentArrays = new ContentTerm[fieldSet.size()][];
             double[][] numberArrays = new double[fieldSet.size()][];
             byte[] present = new byte[fieldSet.size()];
@@ -261,7 +268,7 @@ public final class RecipeDatabaseSearchDocument {
                 int ordinal = field.id();
                 raw[ordinal] = stringArray(rawText[ordinal]);
                 normalized[ordinal] = stringArray(normalizedText[ordinal]);
-                sources[ordinal] = sourceFieldArray(textSourceFields[ordinal]);
+                sourceIds[ordinal] = sourceIdArray(textSourceFields[ordinal]);
                 contentArrays[ordinal] = contentArray(content[ordinal]);
                 numberArrays[ordinal] = numberArray(numbers[ordinal]);
                 if (raw[ordinal].length > 0
@@ -270,7 +277,7 @@ public final class RecipeDatabaseSearchDocument {
                     present[ordinal] = 1;
                 }
             }
-            return new RecipeDatabaseSearchDocument(fieldSet, raw, normalized, sources, contentArrays, numberArrays, present);
+            return new RecipeDatabaseSearchDocument(fieldSet, raw, normalized, sourceIds, contentArrays, numberArrays, present);
         }
 
         private void flushMergedContent() {
@@ -297,8 +304,15 @@ public final class RecipeDatabaseSearchDocument {
             return values == null || values.isEmpty() ? emptyStrings : values.toArray(new String[0]);
         }
 
-        private static SearchField[] sourceFieldArray(ArrayList<SearchField> values) {
-            return values == null || values.isEmpty() ? emptyFields : values.toArray(new SearchField[0]);
+        private static byte[] sourceIdArray(ArrayList<SearchField> values) {
+            if (values == null || values.isEmpty()) {
+                return null;
+            }
+            byte[] out = new byte[values.size()];
+            for (int index = 0; index < out.length; index++) {
+                out[index] = (byte) values.get(index).id();
+            }
+            return out;
         }
 
         private static ContentTerm[] contentArray(LinkedHashMap<ContentKey, MergedContent> values) {
@@ -333,8 +347,6 @@ public final class RecipeDatabaseSearchDocument {
         }
 
         private static final int SMALL_LIST_DEDUP_LIMIT = 16;
-
-        private static final SearchField[] emptyFields = new SearchField[0];
 
         @SuppressWarnings("unchecked")
         private ArrayList<String>[] stringLists() {

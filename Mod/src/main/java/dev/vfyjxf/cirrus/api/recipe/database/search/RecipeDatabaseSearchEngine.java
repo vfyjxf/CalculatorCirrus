@@ -784,13 +784,13 @@ public final class RecipeDatabaseSearchEngine {
             return SearchMatch.YES;
         }
         String[] values = strict ? document.rawText(field) : document.normalizedText(field);
-        SearchField[] sourceFields = document.textSourceFields(field);
+        byte[] sourceFieldIds = document.textSourceFieldIds(field);
         int best = 0;
         for (int index = 0; index < values.length; index++) {
             String value = values[index];
             boolean matched = mode == TextMode.exact ? value.equals(needle) : SearchTexts.contains(value, needle);
             if (matched) {
-                SearchField scoreField = index < sourceFields.length ? sourceFields[index] : field;
+                SearchField scoreField = index < sourceFieldIds.length ? CirrusSearchFields.SET.field(sourceFieldIds[index]) : field;
                 best = Math.max(best, score(scoreField, value, needle));
             }
         }
