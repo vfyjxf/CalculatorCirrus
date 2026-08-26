@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.recipe;
 
+import com.google.common.collect.MapMaker;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolver;
@@ -42,6 +43,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 public class RecipeApiImpl implements RecipeApi {
 
@@ -78,6 +81,22 @@ public class RecipeApiImpl implements RecipeApi {
         return attachEpoch;
     }
 
+    /**
+     * Drops every memoized {@link ResolveContext#empty()} resolution held by the live api
+     * instances. Called from the client lifecycle before unload, which also runs on datapack
+     * reload: reload swaps recipe content while keeping system instances stable, so identity-keyed
+     * memo entries would keep serving pre-reload results without this.
+     */
+    public static void clearEmptyContextResolveMemos() {
+        RecipeApiImpl current = instance;
+        if (current != null) {
+            current.emptyContextResolutions.clear();
+        }
+        if (canonicalInstance != null && canonicalInstance != current) {
+            canonicalInstance.emptyContextResolutions.clear();
+        }
+    }
+
     private final ImmutableMap<Namespace, RecipeSystem<?>> systems;
     private final ImmutableMap<Namespace, ClauseType> clauses;
     private final ImmutableMap<ClauseType, ContentTransformer<?, ?>> contentTransformers;
@@ -92,6 +111,14 @@ public class RecipeApiImpl implements RecipeApi {
     private final ImmutableMap<Namespace, ProjectionPlugin> projectionPlugins;
     private final ImmutableMap<Namespace, ProjectionContextOption<?>> projectionContextOptions;
     private final Map<Namespace, List<RecipeApiRegistryBuilder.SubsystemEntry<?>>> recipeSubsystems;
+    /**
+     * Memo for {@link ResolveContext#empty()} resolutions. Outer map keys are system
+     * instances — already strongly reachable from {@link #systems} for this api's whole
+     * lifetime, so nothing extra is retained there. Inner maps are identity-keyed
+     * ({@link MapMaker#weakKeys()}) on the recipe so entries evaporate with the recipe
+     * instance instead of pinning pre-reload recipes until the next clear.
+     */
+    private final ConcurrentHashMap<RecipeSystem<?>, ConcurrentMap<Object, ResolveResult>> emptyContextResolutions = new ConcurrentHashMap<>();
 
     public RecipeApiImpl(RecipeApiRegistryBuilder builder) {
         this.systems = Maps.immutable.ofMap(builder.recipeSystems);
@@ -268,6 +295,21 @@ public class RecipeApiImpl implements RecipeApi {
         Checks.checkNotNull(context, "context");
         Checks.checkNotNull(system, "system");
         Checks.checkNotNull(recipe, "recipe");
+        if (context != ResolveContext.empty()) {
+            return resolveUncached(context, system, recipe);
+        }
+        var byRecipe = emptyContextResolutions.computeIfAbsent(system, ignored -> newRecipeResultMap());
+        // building synchronously inside computeIfAbsent is deliberate: a layout resolve is
+        // orders of magnitude heavier than waiting on one bin lock, and duplicate recomputes
+        // across the parallel database workers cost more than brief contention
+        return byRecipe.computeIfAbsent(recipe, ignored -> resolveUncached(context, system, recipe));
+    }
+
+    private static ConcurrentMap<Object, ResolveResult> newRecipeResultMap() {
+        return new MapMaker().weakKeys().concurrencyLevel(4).<Object, ResolveResult>makeMap();
+    }
+
+    private <R> ResolveResult resolveUncached(ResolveContext context, RecipeSystem<R> system, R recipe) {
         if (!system.claim(recipe).claimed()) {
             return ResolveResult.failed(ResolveError.unsupported);
         }

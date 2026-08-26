@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.internal.lifecycle;
 
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseCatalogCache;
+import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.classify.RecipeClassificationService;
 import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
 import dev.vfyjxf.cirrus.ui.process.CalculatorBuildResultCache;
@@ -30,6 +31,12 @@ public final class CirrusClientRuntime {
         // system instances on reload, so without this invalidate the prewarm
         // would hit the cache and serve the pre-reload catalog until TTL expiry
         RecipeDatabaseCatalogCache.invalidate();
+        // same reload-shape hazard as the catalog cache above: the empty-context
+        // resolve memo keys recipe instances by identity, and datapack reload can
+        // hand out rebuilt recipe content without changing the api instance, so
+        // stale memoized results must be dropped here even though the weak-keyed
+        // inner maps already evaporate replaced recipe instances on their own
+        RecipeApiImpl.clearEmptyContextResolveMemos();
         RecipePathSettings.clearRuntimeCaches("clientLifecycleUnload");
         RecipeClassificationService.clearRuntimeCaches();
         CalculatorBuildResultCache.clear();
