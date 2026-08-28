@@ -125,7 +125,7 @@
     },
     {
       "id": "cirrus:storage_compression_ladders",
-      "recipeIdPattern": "(?i)(^allthecompressed:(compress|decompress)/|^quark:building/crafting/(compressed/|raw_[a-z_]+_bricks|[^/]*uncompress|vertslabs/|vertplanks/)|crateuncompress|_from_crate$|_from_bag$|^immersiveengineering:crafting/(ingot|nugget|storage)_steel_to_|^create:crafting/materials/cardboard_(block|from_block)$|^minecraft:(bone_block|bone_meal|lapis_block|lapis_lazuli|redstone_block|redstone|coal_block|coal|diamond_block|diamond|emerald_block|emerald|iron_block|gold_block|copper_block|netherite_block|honey_block|honey_bottle|hay_block|slime_block|slime_ball|magma_block|magma_cream|raw_iron_block|raw_iron|raw_gold_block|raw_gold|raw_copper_block|raw_copper)$|_from_(iron|gold|copper|diamond|emerald|netherite|lapis|redstone|coal|zinc|steel|bronze|ferricore|eclipsealloy|celestigem|blazegold)_block$|_nuggets?_from_[a-z_]+$|_[a-z_]+_from_nuggets?$|_(block_craft|block_decraft)$|^farmersdelight:(rice|straw|canvas)|_from_conversion$|^productivetrees:wood/|(blazing_crystal|dielectric_rod))",
+      "recipeIdPattern": "(?i)(^allthecompressed:(compress|decompress)/|^quark:building/crafting/(compressed/|raw_[a-z_]+_bricks|[^/]*uncompress|vertslabs/|vertplanks/)|crateuncompress|_from_crate$|_from_bag$|^immersiveengineering:crafting/(ingot|nugget|storage)_steel_to_|^create:crafting/materials/(cardboard_(block|from_block)|.*_block)$|^minecraft:(bone_block|bone_meal|lapis_block|lapis_lazuli|redstone_block|redstone|coal_block|coal|diamond_block|diamond|emerald_block|emerald|iron_block|gold_block|copper_block|netherite_block|honey_block|honey_bottle|hay_block|wheat|slime_block|slime_ball|magma_block|magma_cream|raw_iron_block|raw_iron|raw_gold_block|raw_gold|raw_copper_block|raw_copper)$|_from_(iron|gold|copper|diamond|emerald|netherite|lapis|redstone|coal|zinc|steel|bronze|ferricore|eclipsealloy|celestigem|blazegold)_block$|_nuggets?_from_[a-z_]+$|_[a-z_]+_from_nuggets?$|_(block_craft|block_decraft)$|^farmersdelight:(rice|straw|canvas|[a-z_]+_crate)|_from_conversion$|^productivetrees:wood/|(blazing_crystal|dielectric_rod|tumblestone|netherite_(ingot|nugget))|compressed_[a-z_]+$|storage_blocks?/from_)",
       "tags": ["cirrus:pattern/storage_ladder"]
     },
     {
@@ -153,6 +153,11 @@
       "id": "cirrus:salvage_mod_roundtrips",
       "mod": "create_salvage",
       "tags": ["cirrus:intent/recycling"]
+    },
+    {
+      "id": "cirrus:cobble_generators",
+      "recipeIdPattern": "(?i)(^create_generators:generator_|cobble_generator)",
+      "tags": ["cirrus:intent/generation"]
     }
   ]
 }
