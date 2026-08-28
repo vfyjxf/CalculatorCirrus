@@ -235,6 +235,10 @@ tasks.register('generateTestModData', JavaExec) {
 def chainExportTestClasspath = sourceSets.test.runtimeClasspath
 tasks.register('chainExportClasspath') {
     group = 'verification'
+    // Without this the classpath resolves to stale build outputs: resources edited in
+    // src/main (e.g. builtin_rules.json) never reached the bare JVMs until something
+    // else happened to rebuild them.
+    dependsOn 'testClasses'
     def output = layout.buildDirectory.file('chainexport/cp.txt')
     outputs.file(output)
     doLast {

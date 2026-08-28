@@ -105,7 +105,7 @@
     },
     {
       "id": "cirrus:resource_generators",
-      "systemPattern": "(?i)(blockgen|cobblegen|laser_ore|laser_drill|ore_to_resource|/quarry|oil_drilling|pollination|/fruiting$|botanypots/crop)",
+      "systemPattern": "(?i)(blockgen|cobblegen|laser_ore|laser_drill|ore_to_resource|/quarry|oil_drilling|pollination|/fruiting$|botanypots/crop|alakarkinos|graphite_processing)",
       "tags": ["cirrus:intent/generation"]
     },
     {
@@ -125,8 +125,19 @@
     },
     {
       "id": "cirrus:storage_compression_ladders",
-      "recipeIdPattern": "(?i)(^allthecompressed:(compress|decompress)/|^quark:building/crafting/compressed/|crateuncompress|_from_crate$|^immersiveengineering:crafting/(ingot|nugget|storage)_steel_to_|^create:crafting/materials/cardboard_(block|from_block)$)",
+      "recipeIdPattern": "(?i)(^allthecompressed:(compress|decompress)/|^quark:building/crafting/(compressed/|raw_[a-z_]+_bricks|[^/]*uncompress|vertslabs/|vertplanks/)|crateuncompress|_from_crate$|_from_bag$|^immersiveengineering:crafting/(ingot|nugget|storage)_steel_to_|^create:crafting/materials/cardboard_(block|from_block)$|^minecraft:(bone_block|bone_meal|lapis_block|lapis_lazuli|redstone_block|redstone|coal_block|coal|diamond_block|diamond|emerald_block|emerald|iron_block|gold_block|copper_block|netherite_block|honey_block|honey_bottle|hay_block|slime_block|slime_ball|magma_block|magma_cream|raw_iron_block|raw_iron|raw_gold_block|raw_gold|raw_copper_block|raw_copper)$|_from_(iron|gold|copper|diamond|emerald|netherite|lapis|redstone|coal|zinc|steel|bronze|ferricore|eclipsealloy|celestigem|blazegold)_block$|_nuggets?_from_[a-z_]+$|_[a-z_]+_from_nuggets?$|_(block_craft|block_decraft)$|^farmersdelight:(rice|straw|canvas)|_from_conversion$|^productivetrees:wood/|(blazing_crystal|dielectric_rod))",
       "tags": ["cirrus:pattern/storage_ladder"]
+    },
+    {
+      "id": "cirrus:variant_stonecutting_cycles",
+      "recipeIdPattern": "(?i)(createdeco|dndecor|garnished|blockbox|glazedresymmetry):",
+      "recipePathPattern": "(?i)(stonecutting|shard|slab|pillar|centered)",
+      "tags": ["cirrus:pattern/exchange"]
+    },
+    {
+      "id": "cirrus:smithing_trim_swaps",
+      "recipePathPattern": "(?i)_smithing_trim$",
+      "tags": ["cirrus:pattern/exchange"]
     },
     {
       "id": "cirrus:slab_to_block_generalized",
