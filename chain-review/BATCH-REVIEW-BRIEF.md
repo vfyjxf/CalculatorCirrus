@@ -99,6 +99,21 @@ grep -n 'crafts=[0-9]\{5,\}' index.tsv                # 数量失控链
 - 无新模式时写"无"。
 ```
 
+## 选路质量深审（producers 索引交叉核对，round-6+ 可用）
+
+前置 5 轮已把"模式族"收敛；深审聚焦**生产者选择合理性**——planner 为某物品选的生产者，
+在同包可选生产者中是否明显更差。需要每包 producers 索引（`cirrus-audit-data/<pack>/`）：
+
+```bash
+grep -F '<item id>\t' producers.tsv          # 该物品有几个生产者
+grep '"for": "<item id>"' producers.jsonl | head -20   # 生产者明细（sys/id/machines/in/outs）
+```
+
+判定纪律：`worse-alternative`/`silly-detour`/`impure-recipe` **必须**在索引里实际查到更优
+生产者才可判 major，并写明"应选谁、为什么更好"（输入更少/更常见、无催化剂、直连少步、
+无杂产）。权衡可辩护的（如机器自动化 vs 手工）判 ok。生成器/导出层伪影（溢出哨兵、
+`|+N` id、预算截断症状、机器映射、已带标签家族的放大）不作为发现，除非**选择本身**错误。
+
 ## 最终回复（紧凑 JSON）
 
 ```json

@@ -110,7 +110,7 @@
     },
     {
       "id": "cirrus:resource_generators",
-      "systemPattern": "(?i)(blockgen|cobblegen|laser_ore|laser_drill|ore_to_resource|/quarry|oil_drilling|pollination|/fruiting$|botanypots/crop|alakarkinos|graphite_processing)",
+      "systemPattern": "(?i)(blockgen|cobblegen|laser_ore|laser_drill|ore_to_resource|/quarry|oil_drilling|pollination|/fruiting$|botanypots/crop|alakarkinos|graphite_processing|occultism:miner|nucleosynthesizing)",
       "tags": ["cirrus:intent/generation"]
     },
     {
@@ -163,6 +163,11 @@
       "id": "cirrus:cobble_generators",
       "recipeIdPattern": "(?i)(^create_generators:generator_|cobble_generator|cobblestone_gen|lava_from_cobble)",
       "tags": ["cirrus:intent/generation"]
+    },
+    {
+      "id": "cirrus:mineral_dye_sources",
+      "recipeIdPattern": "^minecraft:(blue|white)_dye$",
+      "tags": ["cirrus:pattern/mineral_dye_source"]
     },
     {
       "id": "cirrus:shape_reverse_roundtrips",
