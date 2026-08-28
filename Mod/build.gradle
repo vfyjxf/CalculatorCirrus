@@ -230,6 +230,49 @@ tasks.register('generateTestModData', JavaExec) {
     systemProperty 'cirrusExportPack', (findProperty('cirrusExportPack') ?: 'atm10-lite')
 }
 
+// Writes the test runtime classpath to build/chainexport/cp.txt so chain-export.sh can
+// spawn bare JVMs (per-pack parallel workers) without gradle overhead.
+def chainExportTestClasspath = sourceSets.test.runtimeClasspath
+tasks.register('chainExportClasspath') {
+    group = 'verification'
+    def output = layout.buildDirectory.file('chainexport/cp.txt')
+    outputs.file(output)
+    doLast {
+        def file = output.get().asFile
+        file.parentFile.mkdirs()
+        file.text = chainExportTestClasspath.asPath
+        println "chain-export classpath written to ${file}"
+    }
+}
+
+// Offline recipe-chain export: solves stratified targets from exports/<pack>/recipes-*.json
+// with the real routing planner (no game launch) and writes pure-text chains per pack.
+//   ./gradlew :Mod:chainExport -PcirrusChainsPacks=fom -PcirrusChainsOut=../chain-exports
+// All -PcirrusChains* properties are forwarded as CLI flags; chain-export.sh wraps this
+// with parallel per-pack workers.
+tasks.register('chainExport', JavaExec) {
+    group = 'verification'
+    description = 'Generates pure-text recipe chains from exported pack dumps (offline).'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.vfyjxf.cirrus.recipe.chainexport.ChainExportMain'
+    workingDir = rootProject.projectDir
+    jvmArgs '-Xmx8g'
+    def argsList = ['--export-dir', (findProperty('cirrusChainsExportDir') ?: '../exports').toString(),
+                    '--out', (findProperty('cirrusChainsOut') ?: '../chain-exports').toString()]
+    def packs = (findProperty('cirrusChainsPacks') ?: '').toString().trim()
+    if (!packs.isEmpty()) {
+        argsList.addAll(['--packs', packs])
+    }
+    def perPack = (findProperty('cirrusChainsPerPack') ?: '').toString().trim()
+    if (!perPack.isEmpty()) {
+        argsList.addAll(['--per-pack', perPack])
+    }
+    if (Boolean.parseBoolean((findProperty('cirrusChainsOverwrite') ?: 'false').toString())) {
+        argsList.add('--overwrite')
+    }
+    args argsList
+}
+
 tasks.named('jmhJar', Jar).configure {
     zip64 = true
     // The fat jmh jar merges log4j's multi-release classes; without this attribute

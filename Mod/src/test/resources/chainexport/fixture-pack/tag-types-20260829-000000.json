@@ -1,0 +1,15 @@
+{
+  "formatVersion": 1,
+  "generatedAt": "2026-08-29T00:00:00",
+  "minecraftVersion": "1.21.1",
+  "tagTypes": [
+    {
+      "id": "minecraft:tag/item",
+      "contentType": "minecraft:item",
+      "registry": "minecraft:item",
+      "tagCount": 1,
+      "tags": ["minecraft:logs"]
+    }
+  ],
+  "tagTypeCount": 1
+}

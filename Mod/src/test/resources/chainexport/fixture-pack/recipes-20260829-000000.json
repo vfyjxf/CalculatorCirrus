@@ -1,0 +1,110 @@
+{
+  "formatVersion": 1,
+  "generatedAt": "2026-08-29T00:00:00",
+  "minecraftVersion": "1.21.1",
+  "recipes": [
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "test:planks",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "tag", "tag": "minecraft:logs", "amount": 1, "chance": 1.0, "values": ["minecraft:oak_log", "minecraft:birch_log"] }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:planks", "count": 4 }, "amount": 4, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "test:sticks",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:planks", "count": 2 }, "amount": 2, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stick", "count": 4 }, "amount": 4, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "test:crafting_table",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:planks", "count": 4 }, "amount": 4, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:crafting_table", "count": 1 }, "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "test:wooden_pickaxe",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "any", "amount": 1, "chance": 1.0, "stacks": [
+          { "type": "item", "id": "minecraft:planks", "count": 1 },
+          { "type": "item", "id": "minecraft:crafting_table", "count": 1 }
+        ]},
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stick", "count": 2 }, "amount": 2, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:wooden_pickaxe", "count": 1 }, "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "test:smelting_compat",
+      "machines": ["minecraft:furnace"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:raw_iron", "count": 1 }, "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:iron_ingot", "count": 1 }, "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "test:raw_iron_block",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:raw_iron", "count": 9 }, "amount": 9, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:raw_iron_block", "count": 1 }, "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "test:raw_iron_from_block",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:raw_iron_block", "count": 1 }, "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:raw_iron", "count": 9 }, "amount": 9, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:smelting",
+      "source": "vanilla",
+      "id": "test:furnace",
+      "machines": ["minecraft:furnace"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:cobblestone", "count": 8 }, "amount": 8, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "value", "valueType": "calculator_cirrus:time", "value": 200, "chance": 0.0 }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:furnace", "count": 1 }, "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    }
+  ],
+  "recipeCount": 8,
+  "skippedCount": 0
+}
