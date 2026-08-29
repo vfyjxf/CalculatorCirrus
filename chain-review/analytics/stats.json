@@ -1,0 +1,1918 @@
+{
+ "pooled": {
+  "packs": 22,
+  "recipes_total": 427694,
+  "producers_per_ingredient": {
+   "n": 87521,
+   "min": 0,
+   "max": 2125,
+   "mean": 2.71,
+   "median": 2.0,
+   "p25": 1.0,
+   "p75": 3.0,
+   "p90": 5.0,
+   "p99": 20.0
+  },
+  "pct_raw_leaf": 11.8,
+  "pct_single_source": 32.0,
+  "inputs_per_recipe": {
+   "n": 420231,
+   "min": 0,
+   "max": 55,
+   "mean": 3.74,
+   "median": 2.0,
+   "p25": 1.0,
+   "p75": 6.0,
+   "p90": 9.0,
+   "p99": 9.0
+  },
+  "outputs_per_recipe": {
+   "n": 420231,
+   "min": 1,
+   "max": 11463,
+   "mean": 1.15,
+   "median": 1.0,
+   "p25": 1.0,
+   "p75": 1.0,
+   "p90": 1.0,
+   "p99": 2.0
+  },
+  "pct_tag_inputs": 25.5,
+  "pct_byproduct_recipes": 1.6,
+  "top_hub_items": [
+   [
+    "minecraft:lingering_potion",
+    2598,
+    14
+   ],
+   [
+    "minecraft:splash_potion",
+    2598,
+    14
+   ],
+   [
+    "extended_industrialization:canned_food",
+    2125,
+    1
+   ],
+   [
+    "minecraft:bone_meal",
+    1751,
+    22
+   ],
+   [
+    "minecraft:potion",
+    1512,
+    15
+   ],
+   [
+    "minecraft:enchanted_book",
+    1350,
+    10
+   ],
+   [
+    "minecraft:charcoal",
+    1005,
+    12
+   ],
+   [
+    "minecraft:bucket",
+    995,
+    18
+   ],
+   [
+    "minecraft:red_dye",
+    420,
+    22
+   ],
+   [
+    "minecraft:pink_dye",
+    411,
+    22
+   ],
+   [
+    "evilcraft:dark_tank",
+    393,
+    2
+   ],
+   [
+    "minecraft:green_dye",
+    385,
+    21
+   ],
+   [
+    "minecraft:iron_chestplate",
+    376,
+    15
+   ],
+   [
+    "minecraft:magenta_dye",
+    371,
+    22
+   ],
+   [
+    "mekanism:creative_fluid_tank",
+    369,
+    1
+   ],
+   [
+    "farmersdelight:tree_bark",
+    364,
+    6
+   ],
+   [
+    "minecraft:gold_ingot",
+    362,
+    20
+   ],
+   [
+    "create:experience_nugget",
+    343,
+    14
+   ],
+   [
+    "minecraft:light_gray_dye",
+    325,
+    22
+   ],
+   [
+    "minecraft:yellow_dye",
+    323,
+    22
+   ]
+  ]
+ },
+ "per_pack": {
+  "All Of Create 2.1": {
+   "total_recipes": 13744,
+   "excluded": 0,
+   "kept": 13744,
+   "rule_hits": {},
+   "ingredients": 3140,
+   "producers_per_ingredient": {
+    "n": 3140,
+    "min": 0,
+    "max": 21,
+    "mean": 1.69,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 2.0,
+    "p90": 3.0,
+    "p99": 10.0
+   },
+   "pct_raw_leaf": 21.3,
+   "pct_single_source": 36.7,
+   "inputs_per_recipe": {
+    "n": 13744,
+    "min": 0,
+    "max": 9,
+    "mean": 3.21,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 5.0,
+    "p90": 7.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 13744,
+    "min": 1,
+    "max": 1,
+    "mean": 1.0,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.0,
+   "pct_tag_inputs": 37.8,
+   "top_hubs": [
+    [
+     "extendedwrenches:extended_wrench",
+     65
+    ],
+    [
+     "create_connected:empty_fan_catalyst",
+     27
+    ],
+    [
+     "minecraft:iron_chestplate",
+     21
+    ],
+    [
+     "sophisticatedstorage:shulker_box",
+     19
+    ],
+    [
+     "create_submarine:floater",
+     16
+    ],
+    [
+     "sophisticatedstorage:barrel",
+     13
+    ],
+    [
+     "sophisticatedstorage:chest",
+     13
+    ],
+    [
+     "sophisticatedstorage:limited_barrel_1",
+     12
+    ]
+   ]
+  },
+  "BlockFront - Official Mod Pack 0.9.0.24b": {
+   "total_recipes": 1277,
+   "excluded": 0,
+   "kept": 1277,
+   "rule_hits": {},
+   "ingredients": 428,
+   "producers_per_ingredient": {
+    "n": 428,
+    "min": 0,
+    "max": 10,
+    "mean": 1.05,
+    "median": 1.0,
+    "p25": 0.0,
+    "p75": 1.0,
+    "p90": 3.0,
+    "p99": 5.0
+   },
+   "pct_raw_leaf": 34.8,
+   "pct_single_source": 45.1,
+   "inputs_per_recipe": {
+    "n": 1277,
+    "min": 1,
+    "max": 9,
+    "mean": 3.59,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 6.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 1277,
+    "min": 1,
+    "max": 1,
+    "mean": 1.0,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.0,
+   "pct_tag_inputs": 20.4,
+   "top_hubs": [
+    [
+     "minecraft:iron_chestplate",
+     19
+    ],
+    [
+     "minecraft:gold_ingot",
+     10
+    ],
+    [
+     "minecraft:copper_ingot",
+     8
+    ],
+    [
+     "minecraft:iron_ingot",
+     8
+    ],
+    [
+     "minecraft:coal",
+     5
+    ],
+    [
+     "minecraft:deepslate_tile_slab",
+     5
+    ],
+    [
+     "minecraft:deepslate_tile_stairs",
+     5
+    ],
+    [
+     "minecraft:deepslate_tile_wall",
+     5
+    ]
+   ]
+  },
+  "Brick's Building 1.4.1": {
+   "total_recipes": 17209,
+   "excluded": 266,
+   "kept": 16943,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 263,
+    "cirrus:anvil_leak_recipes": 3
+   },
+   "ingredients": 2246,
+   "producers_per_ingredient": {
+    "n": 2246,
+    "min": 0,
+    "max": 137,
+    "mean": 5.63,
+    "median": 4.0,
+    "p25": 2.0,
+    "p75": 7.0,
+    "p90": 11.0,
+    "p99": 20.0
+   },
+   "pct_raw_leaf": 8.5,
+   "pct_single_source": 5.7,
+   "inputs_per_recipe": {
+    "n": 16943,
+    "min": 0,
+    "max": 25,
+    "mean": 2.86,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 3.0,
+    "p90": 7.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 16943,
+    "min": 1,
+    "max": 271,
+    "mean": 1.16,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 4.0
+   },
+   "pct_byproduct_recipes": 3.2,
+   "pct_tag_inputs": 22.9,
+   "top_hubs": [
+    [
+     "minecraft:enchanted_book",
+     137
+    ],
+    [
+     "minecraft:lingering_potion",
+     104
+    ],
+    [
+     "minecraft:splash_potion",
+     104
+    ],
+    [
+     "minecraft:potion",
+     56
+    ],
+    [
+     "minecraft:bucket",
+     52
+    ],
+    [
+     "minecraft:iron_chestplate",
+     39
+    ],
+    [
+     "create:experience_nugget",
+     33
+    ],
+    [
+     "computercraft:disk",
+     32
+    ]
+   ]
+  },
+  "CreateCustomised1.1.2": {
+   "total_recipes": 10145,
+   "excluded": 0,
+   "kept": 10145,
+   "rule_hits": {},
+   "ingredients": 1437,
+   "producers_per_ingredient": {
+    "n": 1437,
+    "min": 0,
+    "max": 42,
+    "mean": 4.31,
+    "median": 3.0,
+    "p25": 2.0,
+    "p75": 7.0,
+    "p90": 8.0,
+    "p99": 21.0
+   },
+   "pct_raw_leaf": 10.4,
+   "pct_single_source": 7.4,
+   "inputs_per_recipe": {
+    "n": 10145,
+    "min": 0,
+    "max": 21,
+    "mean": 3.02,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 4.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 10145,
+    "min": 1,
+    "max": 23,
+    "mean": 1.09,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 3.0
+   },
+   "pct_byproduct_recipes": 3.4,
+   "pct_tag_inputs": 30.8,
+   "top_hubs": [
+    [
+     "minecraft:enchanted_book",
+     137
+    ],
+    [
+     "farmersdelight:tree_bark",
+     42
+    ],
+    [
+     "minecraft:gold_ingot",
+     39
+    ],
+    [
+     "minecraft:iron_ingot",
+     36
+    ],
+    [
+     "create:experience_nugget",
+     35
+    ],
+    [
+     "minecraft:bucket",
+     30
+    ],
+    [
+     "minecraft:light_gray_dye",
+     29
+    ],
+    [
+     "minecraft:lime_dye",
+     27
+    ]
+   ]
+  },
+  "LuckyBlockChallenge": {
+   "total_recipes": 1277,
+   "excluded": 0,
+   "kept": 1277,
+   "rule_hits": {},
+   "ingredients": 428,
+   "producers_per_ingredient": {
+    "n": 428,
+    "min": 0,
+    "max": 10,
+    "mean": 1.05,
+    "median": 1.0,
+    "p25": 0.0,
+    "p75": 1.0,
+    "p90": 3.0,
+    "p99": 5.0
+   },
+   "pct_raw_leaf": 34.8,
+   "pct_single_source": 45.1,
+   "inputs_per_recipe": {
+    "n": 1277,
+    "min": 1,
+    "max": 9,
+    "mean": 3.59,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 6.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 1277,
+    "min": 1,
+    "max": 1,
+    "mean": 1.0,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.0,
+   "pct_tag_inputs": 20.4,
+   "top_hubs": [
+    [
+     "minecraft:iron_chestplate",
+     19
+    ],
+    [
+     "minecraft:gold_ingot",
+     10
+    ],
+    [
+     "minecraft:copper_ingot",
+     8
+    ],
+    [
+     "minecraft:iron_ingot",
+     8
+    ],
+    [
+     "minecraft:coal",
+     5
+    ],
+    [
+     "minecraft:deepslate_tile_slab",
+     5
+    ],
+    [
+     "minecraft:deepslate_tile_stairs",
+     5
+    ],
+    [
+     "minecraft:deepslate_tile_wall",
+     5
+    ]
+   ]
+  },
+  "atm10": {
+   "total_recipes": 135917,
+   "excluded": 1077,
+   "kept": 134840,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 782,
+    "cirrus:trades": 231,
+    "cirrus:colony_views": 28,
+    "cirrus:loot_displays": 17,
+    "cirrus:archaeology": 8,
+    "cirrus:anvil_leak_recipes": 5
+   },
+   "ingredients": 19714,
+   "producers_per_ingredient": {
+    "n": 19714,
+    "min": 0,
+    "max": 2125,
+    "mean": 4.2,
+    "median": 3.0,
+    "p25": 2.0,
+    "p75": 5.0,
+    "p90": 7.0,
+    "p99": 20.0
+   },
+   "pct_raw_leaf": 4.6,
+   "pct_single_source": 8.9,
+   "inputs_per_recipe": {
+    "n": 134840,
+    "min": 0,
+    "max": 55,
+    "mean": 3.99,
+    "median": 3.0,
+    "p25": 1.0,
+    "p75": 6.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 134840,
+    "min": 1,
+    "max": 11463,
+    "mean": 1.28,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 2.0
+   },
+   "pct_byproduct_recipes": 1.8,
+   "pct_tag_inputs": 24.2,
+   "top_hubs": [
+    [
+     "extended_industrialization:canned_food",
+     2125
+    ],
+    [
+     "minecraft:bone_meal",
+     1522
+    ],
+    [
+     "minecraft:enchanted_book",
+     780
+    ],
+    [
+     "minecraft:bucket",
+     676
+    ],
+    [
+     "minecraft:lingering_potion",
+     443
+    ],
+    [
+     "minecraft:splash_potion",
+     443
+    ],
+    [
+     "mekanism:sawdust",
+     432
+    ],
+    [
+     "evilcraft:dark_tank",
+     390
+    ]
+   ]
+  },
+  "atm10-lite": {
+   "total_recipes": 14094,
+   "excluded": 649,
+   "kept": 13445,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 526,
+    "cirrus:trades": 101,
+    "cirrus:archaeology": 8,
+    "cirrus:anvil_leak_recipes": 4,
+    "cirrus:breeding_displays": 4,
+    "cirrus:loot_displays": 2
+   },
+   "ingredients": 4645,
+   "producers_per_ingredient": {
+    "n": 4645,
+    "min": 0,
+    "max": 203,
+    "mean": 2.24,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 2.0,
+    "p90": 4.0,
+    "p99": 12.0
+   },
+   "pct_raw_leaf": 5.9,
+   "pct_single_source": 30.4,
+   "inputs_per_recipe": {
+    "n": 13445,
+    "min": 1,
+    "max": 55,
+    "mean": 4.15,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 9.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 13445,
+    "min": 1,
+    "max": 1289,
+    "mean": 1.21,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 2.0
+   },
+   "pct_byproduct_recipes": 2.4,
+   "pct_tag_inputs": 30.4,
+   "top_hubs": [
+    [
+     "minecraft:lingering_potion",
+     203
+    ],
+    [
+     "minecraft:splash_potion",
+     203
+    ],
+    [
+     "minecraft:potion",
+     120
+    ],
+    [
+     "sophisticatedstorageinmotion:storage_boat",
+     60
+    ],
+    [
+     "mekanism:sawdust",
+     50
+    ],
+    [
+     "mekanism:bio_fuel",
+     50
+    ],
+    [
+     "sophisticatedstorageinmotion:storage_minecart",
+     44
+    ],
+    [
+     "minecraft:oak_planks",
+     42
+    ]
+   ]
+  },
+  "civilization-isolaria": {
+   "total_recipes": 12505,
+   "excluded": 673,
+   "kept": 11832,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 559,
+    "cirrus:anvil_leak_recipes": 114
+   },
+   "ingredients": 5122,
+   "producers_per_ingredient": {
+    "n": 5122,
+    "min": 0,
+    "max": 221,
+    "mean": 1.7,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 2.0,
+    "p90": 3.0,
+    "p99": 7.0
+   },
+   "pct_raw_leaf": 9.7,
+   "pct_single_source": 44.4,
+   "inputs_per_recipe": {
+    "n": 11832,
+    "min": 0,
+    "max": 9,
+    "mean": 4.6,
+    "median": 3.0,
+    "p25": 2.0,
+    "p75": 9.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 11832,
+    "min": 1,
+    "max": 1996,
+    "mean": 1.17,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.0,
+   "pct_tag_inputs": 42.2,
+   "top_hubs": [
+    [
+     "minecraft:lingering_potion",
+     221
+    ],
+    [
+     "minecraft:splash_potion",
+     221
+    ],
+    [
+     "minecraft:potion",
+     120
+    ],
+    [
+     "enderio:conduit",
+     57
+    ],
+    [
+     "evilcraft:broom_part",
+     39
+    ],
+    [
+     "ars_nouveau:sourcestone",
+     33
+    ],
+    [
+     "minecraft:iron_chestplate",
+     20
+    ],
+    [
+     "sophisticatedstorage:shulker_box",
+     20
+    ]
+   ]
+  },
+  "cobblemon-x-create": {
+   "total_recipes": 14912,
+   "excluded": 298,
+   "kept": 14614,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 295,
+    "cirrus:anvil_leak_recipes": 3
+   },
+   "ingredients": 2396,
+   "producers_per_ingredient": {
+    "n": 2396,
+    "min": 0,
+    "max": 106,
+    "mean": 4.65,
+    "median": 3.0,
+    "p25": 2.0,
+    "p75": 5.25,
+    "p90": 10.0,
+    "p99": 23.0
+   },
+   "pct_raw_leaf": 13.8,
+   "pct_single_source": 9.8,
+   "inputs_per_recipe": {
+    "n": 14614,
+    "min": 0,
+    "max": 21,
+    "mean": 3.43,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 6.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 14614,
+    "min": 1,
+    "max": 316,
+    "mean": 1.18,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 4.0
+   },
+   "pct_byproduct_recipes": 3.1,
+   "pct_tag_inputs": 16.4,
+   "top_hubs": [
+    [
+     "minecraft:enchanted_book",
+     157
+    ],
+    [
+     "minecraft:lingering_potion",
+     106
+    ],
+    [
+     "minecraft:splash_potion",
+     106
+    ],
+    [
+     "minecraft:potion",
+     58
+    ],
+    [
+     "create:experience_nugget",
+     52
+    ],
+    [
+     "minecraft:red_dye",
+     41
+    ],
+    [
+     "sophisticatedstorage:shulker_box",
+     38
+    ],
+    [
+     "minecraft:yellow_dye",
+     37
+    ]
+   ]
+  },
+  "create-lets-create": {
+   "total_recipes": 16160,
+   "excluded": 551,
+   "kept": 15609,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 437,
+    "cirrus:anvil_leak_recipes": 114
+   },
+   "ingredients": 4358,
+   "producers_per_ingredient": {
+    "n": 4358,
+    "min": 0,
+    "max": 172,
+    "mean": 1.74,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 2.0,
+    "p90": 2.0,
+    "p99": 10.0
+   },
+   "pct_raw_leaf": 15.4,
+   "pct_single_source": 37.9,
+   "inputs_per_recipe": {
+    "n": 15609,
+    "min": 0,
+    "max": 9,
+    "mean": 3.61,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 6.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 15609,
+    "min": 1,
+    "max": 212,
+    "mean": 1.01,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.0,
+   "pct_tag_inputs": 20.1,
+   "top_hubs": [
+    [
+     "minecraft:lingering_potion",
+     172
+    ],
+    [
+     "minecraft:splash_potion",
+     172
+    ],
+    [
+     "minecraft:potion",
+     93
+    ],
+    [
+     "create_connected:empty_fan_catalyst",
+     25
+    ],
+    [
+     "minecraft:iron_chestplate",
+     22
+    ],
+    [
+     "sophisticatedstorage:shulker_box",
+     19
+    ],
+    [
+     "minecraft:pink_dye",
+     13
+    ],
+    [
+     "sophisticatedstorage:barrel",
+     13
+    ]
+   ]
+  },
+  "create-oneblock": {
+   "total_recipes": 10122,
+   "excluded": 251,
+   "kept": 9871,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 248,
+    "cirrus:anvil_leak_recipes": 3
+   },
+   "ingredients": 1426,
+   "producers_per_ingredient": {
+    "n": 1426,
+    "min": 0,
+    "max": 98,
+    "mean": 5.15,
+    "median": 3.0,
+    "p25": 2.0,
+    "p75": 6.0,
+    "p90": 12.0,
+    "p99": 20.0
+   },
+   "pct_raw_leaf": 10.2,
+   "pct_single_source": 5.2,
+   "inputs_per_recipe": {
+    "n": 9871,
+    "min": 0,
+    "max": 21,
+    "mean": 3.24,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 5.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 9871,
+    "min": 1,
+    "max": 49,
+    "mean": 1.2,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 5.0
+   },
+   "pct_byproduct_recipes": 4.7,
+   "pct_tag_inputs": 27.0,
+   "top_hubs": [
+    [
+     "minecraft:lingering_potion",
+     98
+    ],
+    [
+     "minecraft:splash_potion",
+     98
+    ],
+    [
+     "minecraft:potion",
+     53
+    ],
+    [
+     "create:experience_nugget",
+     31
+    ],
+    [
+     "minecraft:lime_dye",
+     25
+    ],
+    [
+     "create_connected:empty_fan_catalyst",
+     24
+    ],
+    [
+     "minecraft:light_gray_dye",
+     24
+    ],
+    [
+     "minecraft:red_dye",
+     21
+    ]
+   ]
+  },
+  "create-train": {
+   "total_recipes": 43977,
+   "excluded": 538,
+   "kept": 43439,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 517,
+    "cirrus:loot_displays": 15,
+    "cirrus:anvil_leak_recipes": 3,
+    "cirrus:villager_trade_displays": 1,
+    "cirrus:archaeology": 1,
+    "cirrus:query_displays": 1
+   },
+   "ingredients": 5740,
+   "producers_per_ingredient": {
+    "n": 5740,
+    "min": 0,
+    "max": 920,
+    "mean": 4.89,
+    "median": 3.0,
+    "p25": 2.0,
+    "p75": 5.0,
+    "p90": 9.0,
+    "p99": 20.61
+   },
+   "pct_raw_leaf": 11.9,
+   "pct_single_source": 6.9,
+   "inputs_per_recipe": {
+    "n": 43439,
+    "min": 0,
+    "max": 25,
+    "mean": 3.18,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 5.0,
+    "p90": 8.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 43439,
+    "min": 1,
+    "max": 531,
+    "mean": 1.14,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 3.0
+   },
+   "pct_byproduct_recipes": 5.3,
+   "pct_tag_inputs": 23.5,
+   "top_hubs": [
+    [
+     "minecraft:charcoal",
+     920
+    ],
+    [
+     "minecraft:enchanted_book",
+     424
+    ],
+    [
+     "tacz:attachment",
+     310
+    ],
+    [
+     "farmersdelight:tree_bark",
+     233
+    ],
+    [
+     "tacz:modern_kinetic_gun",
+     214
+    ],
+    [
+     "minecraft:lingering_potion",
+     199
+    ],
+    [
+     "minecraft:splash_potion",
+     199
+    ],
+    [
+     "minecraft:bucket",
+     182
+    ]
+   ]
+  },
+  "create-ultimate": {
+   "total_recipes": 10647,
+   "excluded": 0,
+   "kept": 10647,
+   "rule_hits": {},
+   "ingredients": 2588,
+   "producers_per_ingredient": {
+    "n": 2588,
+    "min": 0,
+    "max": 20,
+    "mean": 1.75,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 2.0,
+    "p90": 3.0,
+    "p99": 10.0
+   },
+   "pct_raw_leaf": 21.2,
+   "pct_single_source": 36.1,
+   "inputs_per_recipe": {
+    "n": 10647,
+    "min": 1,
+    "max": 9,
+    "mean": 2.97,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 4.0,
+    "p90": 7.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 10647,
+    "min": 1,
+    "max": 1,
+    "mean": 1.0,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.0,
+   "pct_tag_inputs": 32.6,
+   "top_hubs": [
+    [
+     "create_connected:empty_fan_catalyst",
+     27
+    ],
+    [
+     "minecraft:iron_chestplate",
+     20
+    ],
+    [
+     "computercraft:disk",
+     16
+    ],
+    [
+     "create_submarine:floater",
+     16
+    ],
+    [
+     "computercraft:turtle_advanced",
+     13
+    ],
+    [
+     "computercraft:turtle_normal",
+     12
+    ],
+    [
+     "minecraft:gold_ingot",
+     12
+    ],
+    [
+     "minecraft:copper_ingot",
+     11
+    ]
+   ]
+  },
+  "creative-drawers-producer-2": {
+   "total_recipes": 10797,
+   "excluded": 639,
+   "kept": 10158,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 525,
+    "cirrus:anvil_leak_recipes": 114
+   },
+   "ingredients": 4876,
+   "producers_per_ingredient": {
+    "n": 4876,
+    "min": 0,
+    "max": 212,
+    "mean": 1.73,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 2.0,
+    "p90": 2.0,
+    "p99": 7.0
+   },
+   "pct_raw_leaf": 8.2,
+   "pct_single_source": 38.3,
+   "inputs_per_recipe": {
+    "n": 10158,
+    "min": 0,
+    "max": 9,
+    "mean": 4.58,
+    "median": 3.0,
+    "p25": 1.0,
+    "p75": 9.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 10158,
+    "min": 1,
+    "max": 1424,
+    "mean": 1.14,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.0,
+   "pct_tag_inputs": 23.7,
+   "top_hubs": [
+    [
+     "minecraft:lingering_potion",
+     212
+    ],
+    [
+     "minecraft:splash_potion",
+     212
+    ],
+    [
+     "minecraft:potion",
+     115
+    ],
+    [
+     "ae2wtlib:wireless_universal_terminal",
+     29
+    ],
+    [
+     "ars_nouveau:sourcestone",
+     22
+    ],
+    [
+     "minecraft:iron_chestplate",
+     20
+    ],
+    [
+     "extendedae_plus:basic_core",
+     14
+    ],
+    [
+     "justdirethings:eclipsealloy_paxel",
+     13
+    ]
+   ]
+  },
+  "enigmatica10": {
+   "total_recipes": 34160,
+   "excluded": 748,
+   "kept": 33412,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 633,
+    "cirrus:anvil_leak_recipes": 115
+   },
+   "ingredients": 8387,
+   "producers_per_ingredient": {
+    "n": 8387,
+    "min": 0,
+    "max": 274,
+    "mean": 1.7,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 2.0,
+    "p90": 3.0,
+    "p99": 11.0
+   },
+   "pct_raw_leaf": 8.5,
+   "pct_single_source": 54.2,
+   "inputs_per_recipe": {
+    "n": 33412,
+    "min": 0,
+    "max": 9,
+    "mean": 3.33,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 6.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 33412,
+    "min": 1,
+    "max": 2103,
+    "mean": 1.06,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.0,
+   "pct_tag_inputs": 34.3,
+   "top_hubs": [
+    [
+     "minecraft:lingering_potion",
+     274
+    ],
+    [
+     "minecraft:splash_potion",
+     274
+    ],
+    [
+     "minecraft:potion",
+     150
+    ],
+    [
+     "evilcraft:broom_part",
+     39
+    ],
+    [
+     "ars_nouveau:sourcestone",
+     33
+    ],
+    [
+     "enderio:conduit",
+     25
+    ],
+    [
+     "betterblockz:ambercore_blockz_0",
+     24
+    ],
+    [
+     "betterblockz:ironslate_blockz_0",
+     24
+    ]
+   ]
+  },
+  "farmers-colonies": {
+   "total_recipes": 2098,
+   "excluded": 362,
+   "kept": 1736,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 248,
+    "cirrus:anvil_leak_recipes": 114
+   },
+   "ingredients": 565,
+   "producers_per_ingredient": {
+    "n": 565,
+    "min": 0,
+    "max": 98,
+    "mean": 1.61,
+    "median": 1.0,
+    "p25": 0.0,
+    "p75": 2.0,
+    "p90": 2.0,
+    "p99": 8.0
+   },
+   "pct_raw_leaf": 32.6,
+   "pct_single_source": 36.1,
+   "inputs_per_recipe": {
+    "n": 1736,
+    "min": 1,
+    "max": 9,
+    "mean": 3.58,
+    "median": 2.0,
+    "p25": 1.0,
+    "p75": 6.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 1736,
+    "min": 1,
+    "max": 67,
+    "mean": 1.04,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.1,
+   "pct_tag_inputs": 22.3,
+   "top_hubs": [
+    [
+     "minecraft:lingering_potion",
+     98
+    ],
+    [
+     "minecraft:splash_potion",
+     98
+    ],
+    [
+     "minecraft:potion",
+     52
+    ],
+    [
+     "minecraft:iron_chestplate",
+     20
+    ],
+    [
+     "minecraft:gold_ingot",
+     10
+    ],
+    [
+     "minecraft:copper_ingot",
+     8
+    ],
+    [
+     "minecraft:iron_ingot",
+     8
+    ],
+    [
+     "minecraft:coal",
+     5
+    ]
+   ]
+  },
+  "fom": {
+   "total_recipes": 3442,
+   "excluded": 0,
+   "kept": 3442,
+   "rule_hits": {},
+   "ingredients": 1077,
+   "producers_per_ingredient": {
+    "n": 1077,
+    "min": 0,
+    "max": 12,
+    "mean": 1.28,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 2.0,
+    "p90": 2.0,
+    "p99": 5.0
+   },
+   "pct_raw_leaf": 22.2,
+   "pct_single_source": 41.4,
+   "inputs_per_recipe": {
+    "n": 3442,
+    "min": 1,
+    "max": 9,
+    "mean": 3.53,
+    "median": 3.0,
+    "p25": 1.0,
+    "p75": 6.0,
+    "p90": 8.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 3442,
+    "min": 1,
+    "max": 1,
+    "mean": 1.0,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.0,
+   "pct_tag_inputs": 27.7,
+   "top_hubs": [
+    [
+     "create_connected:empty_fan_catalyst",
+     25
+    ],
+    [
+     "minecraft:iron_chestplate",
+     19
+    ],
+    [
+     "minecraft:gold_ingot",
+     12
+    ],
+    [
+     "minecraft:copper_ingot",
+     11
+    ],
+    [
+     "minecraft:iron_ingot",
+     10
+    ],
+    [
+     "create:zinc_ingot",
+     8
+    ],
+    [
+     "createpropulsion:platinum_ingot",
+     8
+    ],
+    [
+     "minecraft:coal",
+     5
+    ]
+   ]
+  },
+  "lost-world": {
+   "total_recipes": 4058,
+   "excluded": 252,
+   "kept": 3806,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 248,
+    "cirrus:anvil_leak_recipes": 3,
+    "cirrus:quests": 1
+   },
+   "ingredients": 999,
+   "producers_per_ingredient": {
+    "n": 999,
+    "min": 0,
+    "max": 98,
+    "mean": 1.62,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 2.0,
+    "p90": 3.0,
+    "p99": 9.02
+   },
+   "pct_raw_leaf": 22.9,
+   "pct_single_source": 47.2,
+   "inputs_per_recipe": {
+    "n": 3806,
+    "min": 0,
+    "max": 9,
+    "mean": 3.65,
+    "median": 3.0,
+    "p25": 1.0,
+    "p75": 6.0,
+    "p90": 7.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 3806,
+    "min": 1,
+    "max": 77,
+    "mean": 1.03,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.1,
+   "pct_tag_inputs": 19.2,
+   "top_hubs": [
+    [
+     "minecraft:lingering_potion",
+     98
+    ],
+    [
+     "minecraft:splash_potion",
+     98
+    ],
+    [
+     "minecraft:potion",
+     52
+    ],
+    [
+     "minecraft:iron_chestplate",
+     20
+    ],
+    [
+     "minecraft:gold_ingot",
+     11
+    ],
+    [
+     "silentgear:axe",
+     10
+    ],
+    [
+     "silentgear:sword",
+     10
+    ],
+    [
+     "silentgear:shovel",
+     10
+    ]
+   ]
+  },
+  "minecolonies-dimensional-adventure": {
+   "total_recipes": 42297,
+   "excluded": 676,
+   "kept": 41621,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 562,
+    "cirrus:anvil_leak_recipes": 114
+   },
+   "ingredients": 9540,
+   "producers_per_ingredient": {
+    "n": 9540,
+    "min": 0,
+    "max": 221,
+    "mean": 1.38,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 2.0,
+    "p99": 11.0
+   },
+   "pct_raw_leaf": 12.2,
+   "pct_single_source": 66.1,
+   "inputs_per_recipe": {
+    "n": 41621,
+    "min": 1,
+    "max": 9,
+    "mean": 4.26,
+    "median": 4.0,
+    "p25": 2.0,
+    "p75": 7.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 41621,
+    "min": 1,
+    "max": 987,
+    "mean": 1.02,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.0,
+   "pct_tag_inputs": 22.5,
+   "top_hubs": [
+    [
+     "minecraft:lingering_potion",
+     221
+    ],
+    [
+     "minecraft:splash_potion",
+     221
+    ],
+    [
+     "minecraft:potion",
+     117
+    ],
+    [
+     "betterblockz:ambercore_blockz_0",
+     24
+    ],
+    [
+     "betterblockz:ironslate_blockz_0",
+     24
+    ],
+    [
+     "betterblockz:kryp_blockz_0",
+     24
+    ],
+    [
+     "betterblockz:lablink_blockz_0",
+     24
+    ],
+    [
+     "betterblockz:synthalloy_blockz_0",
+     24
+    ]
+   ]
+  },
+  "mythcrafts": {
+   "total_recipes": 11967,
+   "excluded": 483,
+   "kept": 11484,
+   "rule_hits": {
+    "cirrus:jei_vanilla_mirrors": 378,
+    "cirrus:anvil_leak_recipes": 105
+   },
+   "ingredients": 3452,
+   "producers_per_ingredient": {
+    "n": 3452,
+    "min": 0,
+    "max": 149,
+    "mean": 1.6,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 2.0,
+    "p90": 3.0,
+    "p99": 6.0
+   },
+   "pct_raw_leaf": 20.0,
+   "pct_single_source": 35.8,
+   "inputs_per_recipe": {
+    "n": 11484,
+    "min": 0,
+    "max": 9,
+    "mean": 3.81,
+    "median": 3.0,
+    "p25": 1.0,
+    "p75": 6.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 11484,
+    "min": 1,
+    "max": 793,
+    "mean": 1.07,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.0,
+   "pct_tag_inputs": 17.0,
+   "top_hubs": [
+    [
+     "minecraft:lingering_potion",
+     149
+    ],
+    [
+     "minecraft:splash_potion",
+     149
+    ],
+    [
+     "minecraft:potion",
+     80
+    ],
+    [
+     "minecraft:iron_chestplate",
+     41
+    ],
+    [
+     "sophisticatedstorage:chest",
+     24
+    ],
+    [
+     "sophisticatedstorage:shulker_box",
+     19
+    ],
+    [
+     "minecraft:gold_ingot",
+     16
+    ],
+    [
+     "minecraft:iron_ingot",
+     16
+    ]
+   ]
+  },
+  "technical-electrical": {
+   "total_recipes": 12548,
+   "excluded": 0,
+   "kept": 12548,
+   "rule_hits": {},
+   "ingredients": 3504,
+   "producers_per_ingredient": {
+    "n": 3504,
+    "min": 0,
+    "max": 22,
+    "mean": 1.31,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 2.0,
+    "p90": 2.0,
+    "p99": 6.0
+   },
+   "pct_raw_leaf": 18.2,
+   "pct_single_source": 51.9,
+   "inputs_per_recipe": {
+    "n": 12548,
+    "min": 0,
+    "max": 9,
+    "mean": 4.35,
+    "median": 3.0,
+    "p25": 2.0,
+    "p75": 7.0,
+    "p90": 9.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 12548,
+    "min": 1,
+    "max": 1,
+    "mean": 1.0,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.0,
+   "pct_tag_inputs": 39.3,
+   "top_hubs": [
+    [
+     "ars_nouveau:sourcestone",
+     22
+    ],
+    [
+     "minecraft:iron_chestplate",
+     21
+    ],
+    [
+     "immersiveengineering:nugget_steel",
+     19
+    ],
+    [
+     "immersiveengineering:ingot_uranium",
+     17
+    ],
+    [
+     "securitycraft:lens",
+     17
+    ],
+    [
+     "computercraft:disk",
+     16
+    ],
+    [
+     "minecraft:gold_ingot",
+     15
+    ],
+    [
+     "minecraft:iron_ingot",
+     15
+    ]
+   ]
+  },
+  "tfc-enhanced": {
+   "total_recipes": 4341,
+   "excluded": 0,
+   "kept": 4341,
+   "rule_hits": {},
+   "ingredients": 1453,
+   "producers_per_ingredient": {
+    "n": 1453,
+    "min": 0,
+    "max": 36,
+    "mean": 0.91,
+    "median": 1.0,
+    "p25": 0.0,
+    "p75": 1.0,
+    "p90": 2.0,
+    "p99": 5.48
+   },
+   "pct_raw_leaf": 45.9,
+   "pct_single_source": 42.5,
+   "inputs_per_recipe": {
+    "n": 4341,
+    "min": 0,
+    "max": 9,
+    "mean": 3.93,
+    "median": 3.0,
+    "p25": 2.0,
+    "p75": 6.0,
+    "p90": 8.0,
+    "p99": 9.0
+   },
+   "outputs_per_recipe": {
+    "n": 4341,
+    "min": 1,
+    "max": 1,
+    "mean": 1.0,
+    "median": 1.0,
+    "p25": 1.0,
+    "p75": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+   },
+   "pct_byproduct_recipes": 0.0,
+   "pct_tag_inputs": 15.7,
+   "top_hubs": [
+    [
+     "minecraft:clay_ball",
+     36
+    ],
+    [
+     "tfc:food/barley_bread_jam_sandwich",
+     30
+    ],
+    [
+     "tfc:food/maize_bread_jam_sandwich",
+     30
+    ],
+    [
+     "tfc:food/oat_bread_jam_sandwich",
+     30
+    ],
+    [
+     "tfc:food/rice_bread_jam_sandwich",
+     30
+    ],
+    [
+     "tfc:food/rye_bread_jam_sandwich",
+     30
+    ],
+    [
+     "tfc:food/wheat_bread_jam_sandwich",
+     30
+    ],
+    [
+     "minecraft:iron_chestplate",
+     18
+    ]
+   ]
+  }
+ }
+}
