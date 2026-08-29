@@ -7,6 +7,8 @@ import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleCollectionKey;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleCollectionScope;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleProfilePreset;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleRepositoryView;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleAction;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleCondition;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
 import dev.vfyjxf.cirrus.ui.widget.NumberInputCalculatorPopup;
 import dev.vfyjxf.cirrus.ui.widget.NumberInputWidget;
@@ -33,6 +35,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -648,9 +651,9 @@ class CirrusCommonWidgetContractTest {
         page.debugAddSimpleStockSensitiveRule("minecraft:cobblestone", 2.0d);
 
         assertEquals(2, page.debugSelectedScoreRuleCount());
-        assertTrue(page.debugSelectedRule().clauses().get(0).hardReject());
-        assertEquals("rejectCandidate", page.debugSelectedRule().clauses().get(0).effect().kind().name());
-        assertEquals("coverageScoreAdjustment", page.debugSelectedRule().clauses().get(1).effect().kind().name());
+        assertTrue(page.debugSelectedRule().clauses().get(0).actions().stream().anyMatch(a -> a instanceof RuleAction.Reject));
+        assertTrue(page.debugSelectedRule().clauses().get(1).actions().stream()
+            .anyMatch(a -> a instanceof RuleAction.ScoreAdjust sa && sa.scale() == RuleAction.ScoreAdjust.ScoreScale.coverageShortage));
         assertEquals(
             page.debugSelectedRule().profile().toProfile().hardRules().size() + 1,
             page.debugSelectedRule().profile().toProfile(page.debugSelectedRule().clauses()).hardRules().size()
@@ -670,10 +673,10 @@ class CirrusCommonWidgetContractTest {
 
         assertEquals(1, page.debugSelectedScoreRuleCount());
         assertEquals(2, page.debugSelectedClauseMaterialCount(0));
-        assertEquals(
-            List.of("minecraft:slime_ball", "minecraft:cobblestone"),
-            page.debugSelectedRule().clauses().get(0).condition().values()
-        );
+        Set<String> groupedIds = ((RuleCondition.Material) page.debugSelectedRule().clauses().get(0).condition()).ids();
+        assertTrue(groupedIds.contains("minecraft:slime_ball"));
+        assertTrue(groupedIds.contains("minecraft:cobblestone"));
+        assertEquals(2, groupedIds.size());
     }
 
     @Test
@@ -686,10 +689,10 @@ class CirrusCommonWidgetContractTest {
 
         assertEquals(1, page.debugSelectedScoreRuleCount());
         assertEquals(2, page.debugSelectedClauseMaterialCount(0));
-        assertEquals(
-            List.of("minecraft:cobblestone", "minecraft:slime_ball"),
-            page.debugSelectedRule().clauses().get(0).condition().values()
-        );
+        Set<String> mergedIds = ((RuleCondition.Material) page.debugSelectedRule().clauses().get(0).condition()).ids();
+        assertTrue(mergedIds.contains("minecraft:cobblestone"));
+        assertTrue(mergedIds.contains("minecraft:slime_ball"));
+        assertEquals(2, mergedIds.size());
     }
 
     @Test

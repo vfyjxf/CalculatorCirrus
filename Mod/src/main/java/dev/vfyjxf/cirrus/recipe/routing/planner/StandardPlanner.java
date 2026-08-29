@@ -31,7 +31,8 @@ import dev.vfyjxf.cirrus.api.recipe.routing.rule.ExplorePolicy;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.HardRule;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.HardRuleResult;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleProfile;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleProfile.FastScoringPreset;
+import dev.vfyjxf.cirrus.api.recipe.rule.FeatureType;
+import dev.vfyjxf.cirrus.api.recipe.rule.FeatureVector;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.UnresolvedInputContext;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.UnresolvedInputRule;
 import dev.vfyjxf.cirrus.api.recipe.routing.service.DiagnosticLevel;
@@ -126,14 +127,6 @@ public final class StandardPlanner implements RoutePlanner {
     private static final int candidatePreShortlistMinimum = 64;
     private static final int candidatePreShortlistMultiplier = 64;
     private static final int candidatePreShortlistVariantRetentionLimit = 512;
-    private static final double indirectActiveDemandCyclePenalty = 1_000_000.0d;
-    private static final double intraLoopConversionPenalty = 100_000.0d;
-    /**
-     * Soft penalty for closing an equal-amount round-trip pair (compress↔decompress)
-     * under loop policies that do not hard-forbid it; matches the intra-loop
-     * conversion penalty magnitude.
-     */
-    private static final double roundTripPenalty = 100_000.0d;
     /**
      * Minimum producer refs evaluated per input before a budget gate may cut
      * enumeration: a {@code candidateCount == 0} pending must never be caused by
@@ -1114,17 +1107,25 @@ public final class StandardPlanner implements RoutePlanner {
      * The per-request unit-cost oracle. Its producer provider is the same
      * request-static, scan-capped filter pipeline the planner uses, so cost
      * estimation never explores producers the planner itself would reject.
+     * The advisory multipliers (generation / soft advisory) come from the
+     * active score model; a second, multiplier-free base oracle backs the
+     * {@code advisoryCostExcess} feature so the cost tier stays additive.
      */
-    /** Cost multiplier for free-resource generators: above any real chain, below unsourced. */
-    private static final double generationCostPenalty = 1_000.0d;
-    /** Mild deprioritization for the soft advisory tags. */
-    private static final double advisoryCostPenalty = 4.0d;
-
     private UnitCostOracle unitCostOracle(PlannerContext context, InputVariantCache variantCache) {
+        RuleProfile profile = context.ruleProfile();
         return context.caches().unitCostOracle(() -> new UnitCostOracle(
             context.catalog(),
             input -> filteredProducersFor(context, input, variantCache),
-            advisoryPenalty(context)
+            advisoryPenalty(context, profile.model().generationCostMultiplier(), profile.model().softAdvisoryMultiplier())
+        ));
+    }
+
+    /** The per-request base oracle: identical producer pipeline, no advisory multipliers. */
+    private UnitCostOracle baseUnitCostOracle(PlannerContext context, InputVariantCache variantCache) {
+        return context.caches().baseUnitCostOracle(() -> new UnitCostOracle(
+            context.catalog(),
+            input -> filteredProducersFor(context, input, variantCache),
+            null
         ));
     }
 
@@ -1135,7 +1136,11 @@ public final class StandardPlanner implements RoutePlanner {
      * win; the multiplier sinks them below real chains while keeping them
      * usable when they are the only source.
      */
-    private static @Nullable java.util.function.IntToDoubleFunction advisoryPenalty(PlannerContext context) {
+    private static @Nullable java.util.function.IntToDoubleFunction advisoryPenalty(
+        PlannerContext context,
+        double generationMultiplier,
+        double softMultiplier
+    ) {
         java.util.BitSet generation = context.tagSnapshot().recipesForTag(dev.vfyjxf.cirrus.api.recipe.classify.ClassificationTags.GENERATION);
         java.util.BitSet soft = new java.util.BitSet();
         for (String tag : new String[]{
@@ -1153,8 +1158,8 @@ public final class StandardPlanner implements RoutePlanner {
         }
         java.util.BitSet generationBits = generation == null ? new java.util.BitSet() : generation;
         return recipeIndex -> generationBits.get(recipeIndex)
-            ? generationCostPenalty
-            : soft.get(recipeIndex) ? advisoryCostPenalty : 1.0d;
+            ? generationMultiplier
+            : soft.get(recipeIndex) ? softMultiplier : 1.0d;
     }
 
     /**
@@ -1361,6 +1366,7 @@ public final class StandardPlanner implements RoutePlanner {
         OutputContent matchedOutput = producer.matchedOutput();
         int craftTimes = (int) Math.ceil((double) remaining / matchedOutput.amount());
         double estimatedSubtreeCost = unitCostOracle(context, variantCache).subtreeCost(node, craftTimes);
+        double baseSubtreeCost = baseSubtreeCost(context, variantCache, node, craftTimes, estimatedSubtreeCost);
         // Impurity on the candidate's own primary ranking axis: when the demand
         // has a pure sibling producer, impure (multi-guaranteed-output) recipes
         // must lose the first axis instead of tying on base cost and winning on
@@ -1370,6 +1376,7 @@ public final class StandardPlanner implements RoutePlanner {
         double impurity = impurityFactorFor(context, input, node, matchedOutput, variantCache);
         if (impurity > 1.0d) {
             estimatedSubtreeCost *= impurity;
+            baseSubtreeCost *= impurity;
         }
         // Round-trip filtering happens in the full addCandidateIfAccepted pass
         // (seeds carry no debug log / cycle marking here); seeds only carry the
@@ -1385,7 +1392,10 @@ public final class StandardPlanner implements RoutePlanner {
             if (!fastHardRulesAccept(node)) {
                 return;
             }
-            applyFastScore(profile.fastScoringPreset(), node, craftTimes, depth, amplificationRisk, availableCoverage, estimatedSubtreeCost, score);
+            applyModelScore(
+                profile, scoringScratch.features(), node, craftTimes, depth, amplificationRisk, availableCoverage,
+                baseSubtreeCost, estimatedSubtreeCost - baseSubtreeCost, 0.0d,
+                false, false, false, score);
         } else {
             CandidateContext candidateContext = new CandidateContext(
                 node,
@@ -1402,11 +1412,14 @@ public final class StandardPlanner implements RoutePlanner {
             if (!hardResult.accepted()) {
                 return;
             }
+            applyModelScore(
+                profile, scoringScratch.features(), node, craftTimes, depth, amplificationRisk, availableCoverage,
+                baseSubtreeCost, estimatedSubtreeCost - baseSubtreeCost, 0.0d,
+                false, false, false, score);
             var accumulator = scoringScratch.accumulator();
             for (var rule : profile.scoreRules()) {
                 rule.contribute(candidateContext, accumulator);
             }
-            applyHeuristicScore(node.routingHints(), accumulator);
         }
         // Count only candidates that survived the hard gates: the generation
         // budget measures real evaluation work, not refs discarded by the
@@ -1545,12 +1558,14 @@ public final class StandardPlanner implements RoutePlanner {
         double amplificationRisk = estimateAmplificationRisk(cycleCandidate, depth);
         double availableCoverage = estimateCandidateAvailableCoverage(node, craftTimes, availabilityScratch);
         double estimatedSubtreeCost = unitCostOracle(context, variantCache).subtreeCost(node, craftTimes);
+        double baseSubtreeCost = baseSubtreeCost(context, variantCache, node, craftTimes, estimatedSubtreeCost);
         // Same impurity/round-trip handling as the seed path: primary-axis
         // impurity (waived when no pure sibling exists) and hard round-trip
         // filtering under forbidAmplification / soft penalty otherwise.
         double impurity = impurityFactorFor(context, input, node, matchedOutput, variantCache);
         if (impurity > 1.0d) {
             estimatedSubtreeCost *= impurity;
+            baseSubtreeCost *= impurity;
         }
         boolean roundTripWithActive = hasActiveRoundTripPartner(context, recipeIndex, activePath);
         if (roundTripWithActive) {
@@ -1585,13 +1600,10 @@ public final class StandardPlanner implements RoutePlanner {
                 }
                 return;
             }
-            applyFastScore(profile.fastScoringPreset(), node, craftTimes, depth, amplificationRisk, availableCoverage, estimatedSubtreeCost, score);
-            applyIndirectActiveDemandCyclePenalty(indirectActiveDemandCycle, score);
-            applyIntraLoopConversionPenalty(intraLoopConversion, score);
-            applyRoundTripPenalty(roundTripWithActive, score);
-            if (contextualPenalty > 0.0d && score.length > 0) {
-                score[0] += contextualPenalty;
-            }
+            applyModelScore(
+                profile, scoringScratch.features(), node, craftTimes, depth, amplificationRisk, availableCoverage,
+                baseSubtreeCost, estimatedSubtreeCost - baseSubtreeCost, contextualPenalty,
+                indirectActiveDemandCycle, intraLoopConversion, roundTripWithActive, score);
         } else {
             candidateContext = new CandidateContext(
                 node,
@@ -1602,7 +1614,12 @@ public final class StandardPlanner implements RoutePlanner {
                 cycleCandidate,
                 amplificationRisk,
                 availableCoverage,
-                estimatedSubtreeCost
+                estimatedSubtreeCost,
+                indirectActiveDemandCycle,
+                intraLoopConversion,
+                roundTripWithActive,
+                node.routingHints(),
+                contextualPenalty
             );
             HardRuleResult hardResult = evaluateHardRules(profile.hardRules(), candidateContext);
             if (!hardResult.accepted()) {
@@ -1619,16 +1636,13 @@ public final class StandardPlanner implements RoutePlanner {
                 }
                 return;
             }
+            applyModelScore(
+                profile, scoringScratch.features(), node, craftTimes, depth, amplificationRisk, availableCoverage,
+                baseSubtreeCost, estimatedSubtreeCost - baseSubtreeCost, contextualPenalty,
+                indirectActiveDemandCycle, intraLoopConversion, roundTripWithActive, score);
             var accumulator = scoringScratch.accumulator();
             for (var rule : profile.scoreRules()) {
                 rule.contribute(candidateContext, accumulator);
-            }
-            applyHeuristicScore(node.routingHints(), accumulator);
-            applyIndirectActiveDemandCyclePenalty(indirectActiveDemandCycle, accumulator);
-            applyIntraLoopConversionPenalty(intraLoopConversion, accumulator);
-            applyRoundTripPenalty(roundTripWithActive, accumulator);
-            if (contextualPenalty > 0.0d) {
-                accumulator.add("contextual", contextualPenalty);
             }
         }
         // Count only candidates that survived the hard gates: the generation
@@ -1653,7 +1667,7 @@ public final class StandardPlanner implements RoutePlanner {
     }
 
     private boolean useFastScoring(PlannerContext context, RuleProfile profile) {
-        return profile.fastScoringPreset() != null
+        return profile.fastPathEligible()
             && DefaultRuleProfiles.usesStableRecipeTieBreak(profile)
             && !context.request().explorationEnabled();
     }
@@ -1673,66 +1687,67 @@ public final class StandardPlanner implements RoutePlanner {
     }
 
     /**
-     * Writes the preset score vector. Profiles whose first axis is the
-     * unit-cost estimate (the default profiles) carry one leading slot; custom
-     * 4-axis profiles keep the legacy layout, so all writes go through
-     * {@code offset = score.length - 4}.
+     * Fills the candidate's feature vector from the planner's per-candidate
+     * scalars and evaluates the profile's compiled score model into the
+     * tier-sum vector. This is the single place where candidate state becomes
+     * score input — every magnitude applied afterwards lives in the score
+     * model's declared weights, not in code.
      */
-    private void applyFastScore(
-        @Nullable FastScoringPreset preset,
+    private void applyModelScore(
+        RuleProfile profile,
+        FeatureVector features,
         RecipeGraph.Node node,
         int craftTimes,
         int depth,
         double amplificationRisk,
         double availableCoverage,
-        double estimatedSubtreeCost,
-        double[] score
-    ) {
-        if (score.length < 4) {
-            return;
-        }
-        int offset = score.length - 4;
-        if (offset > 0) {
-            score[0] = estimatedSubtreeCost;
-        }
-        double craftScore = craftTimes + heuristicCraftPenalty(node.routingHints());
-        score[offset] = craftScore;
-        score[offset + 1] = 1.0d - availableCoverage;
-        if (preset == FastScoringPreset.assuredBounded) {
-            score[offset + 2] = depth * 0.8d;
-            score[offset + 3] = amplificationRisk * 1.2d;
-            return;
-        }
-        score[offset + 2] = depth;
-        score[offset + 3] = amplificationRisk;
-    }
-
-    private void applyIndirectActiveDemandCyclePenalty(boolean indirectActiveDemandCycle, double[] score) {
-        if (indirectActiveDemandCycle && score.length > 0) {
-            score[0] += indirectActiveDemandCyclePenalty;
-        }
-    }
-
-    private void applyIntraLoopConversionPenalty(boolean intraLoopConversion, double[] score) {
-        if (intraLoopConversion && score.length > 0) {
-            score[0] += intraLoopConversionPenalty;
-        }
-    }
-
-    /** Soft round-trip penalty for loop policies that do not hard-forbid no-op pairs. */
-    private void applyRoundTripPenalty(boolean roundTripWithActive, double[] score) {
-        if (roundTripWithActive && score.length > 0) {
-            score[0] += roundTripPenalty;
-        }
-    }
-
-    private void applyRoundTripPenalty(
+        double baseSubtreeCost,
+        double advisoryCostExcess,
+        double contextualPenalty,
+        boolean indirectActiveDemandCycle,
+        boolean intraLoopConversion,
         boolean roundTripWithActive,
-        dev.vfyjxf.cirrus.api.recipe.routing.rule.ScoreAccumulator accumulator
+        double[] tierSums
     ) {
-        if (roundTripWithActive) {
-            accumulator.add("roundTrip", roundTripPenalty);
+        features.clear();
+        features.set(FeatureType.subtreeCost, baseSubtreeCost);
+        features.set(FeatureType.advisoryCostExcess, advisoryCostExcess);
+        features.set(FeatureType.contextualPenalty, contextualPenalty);
+        features.set(FeatureType.craftTimes, craftTimes);
+        features.set(FeatureType.inventoryShortage, 1.0d - availableCoverage);
+        features.set(FeatureType.depth, depth);
+        features.set(FeatureType.amplificationRisk, amplificationRisk);
+        features.set(FeatureType.activeDemandCycle, indirectActiveDemandCycle ? 1.0d : 0.0d);
+        features.set(FeatureType.roundTrip, roundTripWithActive ? 1.0d : 0.0d);
+        features.set(FeatureType.intraLoopConversion, intraLoopConversion ? 1.0d : 0.0d);
+        dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeRoutingHints hints = node.routingHints();
+        features.set(FeatureType.hintDiscouraged, hints.usePolicy() == RecipeUsePolicy.discouraged ? 1.0d : 0.0d);
+        features.set(FeatureType.hintLastResort, hints.usePolicy() == RecipeUsePolicy.lastResort ? 1.0d : 0.0d);
+        features.set(FeatureType.hintPenalty, hints.penalty());
+        profile.evaluateFeatures(features, tierSums);
+    }
+
+    /**
+     * The multiplier-free base cost of the candidate. When the request carries
+     * no advisory-tagged recipes the advisory oracle is identical to the base
+     * oracle, so the cached full cost is returned directly and no second
+     * oracle is ever built.
+     */
+    private double baseSubtreeCost(
+        PlannerContext context,
+        InputVariantCache variantCache,
+        RecipeGraph.Node node,
+        int craftTimes,
+        double fullSubtreeCost
+    ) {
+        if (advisoryPenalty(
+            context,
+            context.ruleProfile().model().generationCostMultiplier(),
+            context.ruleProfile().model().softAdvisoryMultiplier()
+        ) == null) {
+            return fullSubtreeCost;
         }
+        return baseUnitCostOracle(context, variantCache).subtreeCost(node, craftTimes);
     }
 
     /**
@@ -1786,15 +1801,6 @@ public final class StandardPlanner implements RoutePlanner {
             }
         }
         return 1.0d;
-    }
-
-    private void applyIntraLoopConversionPenalty(
-        boolean intraLoopConversion,
-        dev.vfyjxf.cirrus.api.recipe.routing.rule.ScoreAccumulator accumulator
-    ) {
-        if (intraLoopConversion) {
-            accumulator.add("craft", intraLoopConversionPenalty);
-        }
     }
 
     /**
@@ -1892,15 +1898,6 @@ public final class StandardPlanner implements RoutePlanner {
         return false;
     }
 
-    private void applyIndirectActiveDemandCyclePenalty(
-        boolean indirectActiveDemandCycle,
-        dev.vfyjxf.cirrus.api.recipe.routing.rule.ScoreAccumulator accumulator
-    ) {
-        if (indirectActiveDemandCycle) {
-            accumulator.add("craft", indirectActiveDemandCyclePenalty);
-        }
-    }
-
     private boolean heuristicAllowsCandidate(RoutingRequest request, RecipeGraph.Node node) {
         if (request.heuristicPolicy() == HeuristicPolicy.ignoreHints) {
             return true;
@@ -1914,26 +1911,6 @@ public final class StandardPlanner implements RoutePlanner {
             case targetOnly -> request.heuristicPolicy() == HeuristicPolicy.includeAll
                 || request.target() instanceof RoutingRequest.RecipeTarget target && target.recipe().equals(node.recipe());
         };
-    }
-
-    private void applyHeuristicScore(
-        RecipeRoutingHints hints,
-        dev.vfyjxf.cirrus.api.recipe.routing.rule.ScoreAccumulator accumulator
-    ) {
-        int penalty = heuristicCraftPenalty(hints);
-        if (penalty > 0) {
-            accumulator.add("craft", penalty);
-        }
-    }
-
-    private int heuristicCraftPenalty(RecipeRoutingHints hints) {
-        int penalty = hints.penalty();
-        if (hints.usePolicy() == RecipeUsePolicy.discouraged) {
-            penalty += 1_000;
-        } else if (hints.usePolicy() == RecipeUsePolicy.lastResort) {
-            penalty += 50_000;
-        }
-        return penalty;
     }
 
     private void markCandidateBudgetIfReached(
@@ -2295,9 +2272,17 @@ public final class StandardPlanner implements RoutePlanner {
         if (first.length == 0 || next.length == 0) {
             return true;
         }
+        // Tiers before the cost tier (safety flags) must tie exactly: a
+        // cycle-flagged candidate is never a near-tie of a clean one.
+        int costTier = Math.min(context.ruleProfile().costTierIndex(), Math.min(first.length, next.length) - 1);
+        for (int tier = 0; tier < costTier; tier++) {
+            if (Double.compare(first[tier], next[tier]) != 0) {
+                return false;
+            }
+        }
         double epsilon = Math.max(0.0d, context.ruleProfile().nearTieEpsilon());
-        double reference = Math.max(1.0d, Math.abs(first[0]));
-        return next[0] <= first[0] + epsilon * reference;
+        double reference = Math.max(1.0d, Math.abs(first[costTier]));
+        return next[costTier] <= first[costTier] + epsilon * reference;
     }
 
     private RoutingFailureCode unresolvedInputFailureCode(UnresolvedInputContext.Phase phase) {
@@ -3389,6 +3374,7 @@ public final class StandardPlanner implements RoutePlanner {
     private static final class ScoringScratch {
         private final double[] score;
         private final dev.vfyjxf.cirrus.api.recipe.routing.rule.ScoreAccumulator accumulator;
+        private final FeatureVector features = new FeatureVector();
 
         private ScoringScratch(RuleProfile profile) {
             this.score = profile.newScoreVector();
@@ -3402,6 +3388,10 @@ public final class StandardPlanner implements RoutePlanner {
 
         private dev.vfyjxf.cirrus.api.recipe.routing.rule.ScoreAccumulator accumulator() {
             return accumulator;
+        }
+
+        private FeatureVector features() {
+            return features;
         }
     }
 

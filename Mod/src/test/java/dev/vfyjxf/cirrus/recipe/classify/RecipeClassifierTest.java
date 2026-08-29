@@ -3,16 +3,18 @@ package dev.vfyjxf.cirrus.recipe.classify;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationResult;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationTags;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassifyContent;
-import dev.vfyjxf.cirrus.api.recipe.classify.PatternClassificationRule;
 import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifyView;
 import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifier;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleSpec;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -48,8 +50,8 @@ class RecipeClassifierTest {
 
     @Test
     void builtinPatternRulesAreLoaded() {
-        assertTrue(RecipeClassifier.loadBuiltinPatternRules().size() >= 10,
-            "expected the builtin pattern rules resource to load");
+        assertTrue(RecipeClassifier.loadBuiltinRuleSpecs().size() >= 10,
+            "expected the builtin unified rule document to load");
     }
 
     @Test
@@ -243,15 +245,38 @@ class RecipeClassifierTest {
         RecipeClassifier classifier = classifier();
         assertTrue(classifier.isExcludedSystem("jei:category/ftbquests/quest"));
         assertTrue(classifier.isExcludedSystem("jei:category/minecolonies/stonemason"));
+        assertTrue(classifier.isExcludedSystem("cirrus_test:jei__category/ftbquests/quest"));
         assertFalse(classifier.isExcludedSystem("minecraft:crafting"));
         assertFalse(classifier.isExcludedSystem("jei:category/create/milling"));
     }
 
     @Test
-    void patternRuleJsonRoundTrip() {
-        List<PatternClassificationRule> rules = RecipeClassifier.loadBuiltinPatternRules();
-        assertTrue(rules.stream().anyMatch(rule -> rule.id().equals("cirrus:quests")));
-        assertTrue(rules.stream().anyMatch(rule -> rule.tags().contains(ClassificationTags.RECYCLING)));
+    void builtinDocumentCarriesExpectedRules() {
+        List<RuleSpec> specs = RecipeClassifier.loadBuiltinRuleSpecs();
+        assertTrue(specs.stream().anyMatch(rule -> rule.id().toString().equals("cirrus:quests")));
+        assertTrue(specs.stream().anyMatch(rule ->
+            rule.actions().stream().anyMatch(action -> action instanceof dev.vfyjxf.cirrus.api.recipe.rule.RuleAction.Tag tag
+                && tag.tag().equals(ClassificationTags.RECYCLING))));
+        // no dangling tags: every tagged value has a classification-tag constant or consumer
+        assertTrue(specs.stream().anyMatch(rule -> rule.id().toString().equals("cirrus:storage_compression_shape")),
+            "the structured compression-shape rule must be present");
+    }
+
+    @Test
+    void unifiedHintsAreExposedThroughLocalOutcome() {
+        RecipeClassifier classifier = classifier();
+        // recolor rules declare a discouraged hint action in the v3 document
+        RecipeClassifyView recolor = view(0,
+            "minecraft:crafting", "utilitarian:utility/redying/white_concrete_powder_single",
+            List.of(stack("minecraft:red_concrete_powder"), stack("minecraft:white_dye")),
+            List.of(stack("minecraft:white_concrete_powder")));
+        assertEquals(dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeUsePolicy.discouraged,
+            classifier.hintOf(recolor));
+        // plain crafting carries no hint
+        RecipeClassifyView plain = view(1,
+            "minecraft:crafting", "minecraft:stick",
+            List.of(stack("minecraft:oak_planks")), List.of(stack("minecraft:stick")));
+        assertNull(classifier.hintOf(plain));
     }
 
     @Test
@@ -289,18 +314,5 @@ class RecipeClassifierTest {
         assertTrue(classifier.classifyLocal(plain).isEmpty());
         assertTrue(classifier.classifyLocal(recolor).contains(ClassificationTags.RECOLOR));
         assertTrue(classifier.classifyLocal(plain).isEmpty(), "plain recipe must not inherit the recolor tag");
-    }
-
-    @Test
-    void systemMatcherMemoKeepsVerdicts() {
-        PatternClassificationRule quests = RecipeClassifier.loadBuiltinPatternRules().stream()
-            .filter(rule -> rule.id().equals("cirrus:quests"))
-            .findFirst()
-            .orElseThrow();
-        assertTrue(quests.matches(view(0, "jei:category/ftbquests/quest", "a:one", List.of(), List.of())));
-        assertTrue(quests.matches(view(1, "jei:category/ftbquests/quest", "b:two", List.of(), List.of())));
-        assertFalse(quests.matches(view(2, "minecraft:crafting", "a:three", List.of(), List.of())));
-        assertTrue(quests.matchesSystem("jei:category/ftbquests/quest"));
-        assertFalse(quests.matchesSystem("minecraft:crafting"));
     }
 }

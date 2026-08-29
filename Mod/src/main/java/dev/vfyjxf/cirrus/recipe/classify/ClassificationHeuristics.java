@@ -6,7 +6,9 @@ import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifier;
 import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeHeuristicContext;
 import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeRoutingHeuristicRule;
 import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeRoutingHeuristics;
+import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeUsePolicy;
 import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,15 +17,23 @@ import java.util.concurrent.ConcurrentHashMap;
  * Bridges recipe classification into graph-build-time node hints.
  *
  * <p>{@link RecipeRoutingHeuristics} rules are evaluated once per recipe node
- * when a {@code RecipeGraph} is built; registering classification-derived
- * rules there lets advisory tags ({@code recolor}/{@code exchange}/{@code
- * recycling}) translate into scoring penalties through the existing hint
- * pipeline, with zero changes to the planner.
+ * when a {@code RecipeGraph} is built. The hint policies themselves are
+ * declared by the catalog-stage rules in the unified rule document ({@code
+ * hint} actions); this bridge only transports the classifier's verdict into
+ * the hint pipeline, with zero planner changes:
  *
- * <p>The three registered rules share one classification computation per
- * recipe: a thread-local last-context cache dedupes the rules evaluated for a
- * single node, and a per-recipe memo ({@link #tagsByRecipe}) dedupes across
- * the fresh per-node contexts graph building allocates (graph building is
+ * <ul>
+ *   <li>{@code hint_discouraged} / {@code hint_last_resort} — the hint policy
+ *   declared by matching unified rules (recolor/exchange → discouraged,
+ *   recycling/storage ladders → per-rule declaration).</li>
+ *   <li>{@code recycling_role} — attaches the {@code recycling} role to
+ *   recipes tagged as recycling (role flag, no policy change).</li>
+ * </ul>
+ *
+ * <p>The registered rules share one classification computation per recipe: a
+ * thread-local last-context cache dedupes the rules evaluated for a single
+ * node, and a per-recipe memo ({@link #outcomeByRecipe}) dedupes across the
+ * fresh per-node contexts graph building allocates (graph building is
  * parallel, so both must stay thread-safe).
  */
 public final class ClassificationHeuristics {
@@ -31,18 +41,18 @@ public final class ClassificationHeuristics {
     private static final ThreadLocal<CacheEntry> lastClassification = new ThreadLocal<>();
 
     /**
-     * Per-recipe memo of classification tags, keyed by {@code systemId + '\n' +
-     * recipeId} — the same key space and semantics as the classifier's
-     * {@code localTagsCache} (see {@link RecipeClassifier#classifyLocal}).
+     * Per-recipe memo of classification outcomes, keyed by {@code systemId +
+     * '\n' + recipeId} — the same key space and semantics as the classifier's
+     * {@code localOutcomeCache} (see {@link RecipeClassifier#classifyLocal}).
      * Graph building allocates a fresh {@link RecipeHeuristicContext} per node,
-     * so the thread-local above only dedupes the three rules evaluated for one
-     * node; this map dedupes across nodes and skips the view materialization in
+     * so the thread-local above only dedupes the rules evaluated for one node;
+     * this map dedupes across nodes and skips the view materialization in
      * {@link ClassifyViewFactory#fromHeuristicContext} entirely. Entries with a
      * null recipe id are never cached (distinct recipes would share the key).
      * Cleared from {@link RecipeClassificationService#clearRuntimeCaches()} on
      * client unload, same lifecycle as the classifier memo.
      */
-    private static final ConcurrentHashMap<String, Set<String>> tagsByRecipe = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, RecipeClassifier.LocalOutcome> outcomeByRecipe = new ConcurrentHashMap<>();
 
     private ClassificationHeuristics() {
     }
@@ -53,35 +63,52 @@ public final class ClassificationHeuristics {
      * a {@code RecipeRoutingHeuristics.clear()} (tests) followed by a fresh
      * {@code register()} restores them. The match conditions check the
      * screening config switch at evaluation time, so disabling screening
-     * turns the penalties off without needing an unregister hook.
+     * turns the hints off without needing an unregister hook.
+     *
+     * <p>Two hint sources flow together (strictest wins in the hint
+     * pipeline): explicit {@code hint} actions declared by unified rules
+     * (e.g. storage ladders), and the classic advisory tags emitted by the
+     * structural rules (recolor/exchange/recycling).
      */
     public static synchronized void register() {
         java.util.Set<String> existing = new java.util.HashSet<>();
         for (RecipeRoutingHeuristicRule rule : RecipeRoutingHeuristics.snapshot()) {
             existing.add(rule.ruleId().toString());
         }
-        if (existing.add("cirrus:classification/recolor")) {
-            RecipeRoutingHeuristics.add("cirrus:classification/recolor")
-                .match(context -> screeningEnabled() && tagsOf(context).contains(ClassificationTags.RECOLOR))
+        if (existing.add("cirrus:classification/hint_discouraged")) {
+            RecipeRoutingHeuristics.add("cirrus:classification/hint_discouraged")
+                .match(context -> screeningEnabled() && isDiscouraged(context))
                 .discouraged()
-                .reasonKey("cirrus.routing.classification.recolor")
+                .reasonKey("cirrus.routing.classification.hint")
                 .register();
         }
-        if (existing.add("cirrus:classification/exchange")) {
-            RecipeRoutingHeuristics.add("cirrus:classification/exchange")
-                .match(context -> screeningEnabled() && tagsOf(context).contains(ClassificationTags.EXCHANGE))
-                .discouraged()
-                .reasonKey("cirrus.routing.classification.exchange")
-                .register();
-        }
-        if (existing.add("cirrus:classification/recycling")) {
-            RecipeRoutingHeuristics.add("cirrus:classification/recycling")
-                .match(context -> screeningEnabled() && tagsOf(context).contains(ClassificationTags.RECYCLING))
+        if (existing.add("cirrus:classification/hint_last_resort")) {
+            RecipeRoutingHeuristics.add("cirrus:classification/hint_last_resort")
+                .match(context -> screeningEnabled() && isLastResort(context))
                 .lastResort()
+                .reasonKey("cirrus.routing.classification.hint")
+                .register();
+        }
+        if (existing.add("cirrus:classification/recycling_role")) {
+            RecipeRoutingHeuristics.add("cirrus:classification/recycling_role")
+                .match(context -> screeningEnabled() && tagsOf(context).contains(ClassificationTags.RECYCLING))
                 .recycling()
                 .reasonKey("cirrus.routing.classification.recycling")
                 .register();
         }
+    }
+
+    private static boolean isDiscouraged(RecipeHeuristicContext context) {
+        RecipeClassifier.LocalOutcome outcome = outcomeOf(context);
+        return outcome.hint() == RecipeUsePolicy.discouraged
+            || outcome.tags().contains(ClassificationTags.RECOLOR)
+            || outcome.tags().contains(ClassificationTags.EXCHANGE);
+    }
+
+    private static boolean isLastResort(RecipeHeuristicContext context) {
+        RecipeClassifier.LocalOutcome outcome = outcomeOf(context);
+        return outcome.hint() == RecipeUsePolicy.lastResort
+            || outcome.tags().contains(ClassificationTags.RECYCLING);
     }
 
     private static boolean screeningEnabled() {
@@ -90,40 +117,44 @@ public final class ClassificationHeuristics {
 
     // package-private for ClassificationHeuristicsTest
     static Set<String> tagsOf(RecipeHeuristicContext context) {
+        return outcomeOf(context).tags();
+    }
+
+    private static RecipeClassifier.LocalOutcome outcomeOf(RecipeHeuristicContext context) {
         CacheEntry cached = lastClassification.get();
         if (cached != null && cached.context == context) {
-            return cached.tags;
+            return cached.outcome;
         }
         ResourceLocation recipeId = context.recipeId();
-        Set<String> tags;
+        RecipeClassifier.LocalOutcome outcome;
         if (recipeId != null) {
-            tags = tagsByRecipe.computeIfAbsent(
+            outcome = outcomeByRecipe.computeIfAbsent(
                 context.systemId() + "\n" + recipeId,
                 key -> classify(context)
             );
         } else {
-            tags = classify(context);
+            outcome = classify(context);
         }
-        lastClassification.set(new CacheEntry(context, tags));
-        return tags;
+        lastClassification.set(new CacheEntry(context, outcome));
+        return outcome;
     }
 
-    private static Set<String> classify(RecipeHeuristicContext context) {
+    private static RecipeClassifier.LocalOutcome classify(RecipeHeuristicContext context) {
         RecipeClassifyView view = ClassifyViewFactory.fromHeuristicContext(context);
         // immutable copy: the returned set is shared across threads and rules
-        return Set.copyOf(RecipeClassificationService.classifier().classifyLocal(view));
+        return RecipeClassificationService.classifier().classifyLocalOutcome(view);
     }
 
-    /** Drops the per-recipe tag memo (world unload / datapack reload). */
+    /** Drops the per-recipe outcome memo (world unload / datapack reload). */
     static void clearTagsCache() {
-        tagsByRecipe.clear();
+        outcomeByRecipe.clear();
     }
 
     // package-private for ClassificationHeuristicsTest
     static int tagsByRecipeSize() {
-        return tagsByRecipe.size();
+        return outcomeByRecipe.size();
     }
 
-    private record CacheEntry(RecipeHeuristicContext context, Set<String> tags) {
+    private record CacheEntry(RecipeHeuristicContext context, RecipeClassifier.LocalOutcome outcome) {
     }
 }

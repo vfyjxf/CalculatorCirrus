@@ -5,16 +5,16 @@ import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.ActiveRoutingRule;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultRuleDefinitions;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.FileRuleRepository;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleClauseSpec;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleCollection;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleCollectionKey;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleCollectionScope;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleConditionSpec;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleConditionKind;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleContentChannel;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleDefinition;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleEffectSpec;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleProfilePreset;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleAction;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleChannel;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleCondition;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleSpec;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleStage;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleProfileSpec;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleRepositoryView;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicy;
@@ -161,7 +161,7 @@ public final class RulesPage extends CirrusScrollablePageWidget {
     private SimpleRuleKind draftSimpleKind = SimpleRuleKind.penalty;
     private String draftSimpleMaterial = "minecraft:stone";
     private String draftSimpleStrength = "1";
-    private RuleContentChannel draftSimpleChannel = RuleContentChannel.any;
+    private RuleChannel draftSimpleChannel = RuleChannel.any;
     private boolean materialPickerOpen;
     private int expandedClauseIndex = -1;
     private String materialPickerQuery = "";
@@ -178,7 +178,7 @@ public final class RulesPage extends CirrusScrollablePageWidget {
     private String draftScoreKey = defaultScoreKey;
     private String draftScoreAmount = "1";
     private SourcePolicyAction draftSourceAction = SourcePolicyAction.excludeMatch;
-    private RuleContentChannel draftScoreChannel = RuleContentChannel.any;
+    private RuleChannel draftScoreChannel = RuleChannel.any;
     private boolean draftSourceOverride;
 
     public RulesPage() {
@@ -252,8 +252,8 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         if (selectedRule == null || index < 0 || index >= selectedRule.clauses().size()) {
             return 0;
         }
-        RuleClauseSpec clause = selectedRule.clauses().get(index);
-        return clause.condition().kind() == RuleConditionKind.material ? clause.condition().values().size() : 0;
+        RuleSpec clause = selectedRule.clauses().get(index);
+        return clause.condition() instanceof RuleCondition.Material m ? m.ids().size() + m.tags().size() : 0;
     }
 
     public void debugCreatePlayerRule(String name) {
@@ -281,7 +281,7 @@ public final class RulesPage extends CirrusScrollablePageWidget {
     }
 
     public void debugAddScoreRule(String material, double amount) {
-        addScoreRule(material, RuleContentChannel.any, defaultScoreKey, amount);
+        addScoreRule(material, RuleChannel.any, defaultScoreKey, amount);
     }
 
     public void debugToggleSelectedClause(int index) {
@@ -314,11 +314,11 @@ public final class RulesPage extends CirrusScrollablePageWidget {
     }
 
     public void debugAddSimpleRejectRule(String material) {
-        addRejectRule(material, RuleContentChannel.any);
+        addRejectRule(material, RuleChannel.any);
     }
 
     public void debugAddSimpleStockSensitiveRule(String material, double amount) {
-        addCoverageRule(material, RuleContentChannel.any, defaultScoreKey, amount);
+        addCoverageRule(material, RuleChannel.any, defaultScoreKey, amount);
     }
 
     public boolean debugCreatingRule() {
@@ -874,7 +874,7 @@ public final class RulesPage extends CirrusScrollablePageWidget {
             clauses.addContent(CirrusText.muted(CirrusLangs.Calculator.Rules.noClauses));
         } else {
             int clauseIndex = 0;
-            for (RuleClauseSpec spec : rule.clauses()) {
+            for (RuleSpec spec : rule.clauses()) {
                 clauses.addContent(clauseCard(spec, clauseIndex++));
             }
         }
@@ -962,12 +962,12 @@ public final class RulesPage extends CirrusScrollablePageWidget {
     }
 
     private Widget simpleScopeRow() {
-        CirrusChoiceBoxWidget<RuleContentChannel> choice = new CirrusChoiceBoxWidget<RuleContentChannel>(64)
-            .option(RuleContentChannel.any, CirrusLangs.Calculator.Rules.scopeAny)
-            .option(RuleContentChannel.input, CirrusLangs.Calculator.Rules.scopeInput)
-            .option(RuleContentChannel.output, CirrusLangs.Calculator.Rules.scopeOutput)
+        CirrusChoiceBoxWidget<RuleChannel> choice = new CirrusChoiceBoxWidget<RuleChannel>(64)
+            .option(RuleChannel.any, CirrusLangs.Calculator.Rules.scopeAny)
+            .option(RuleChannel.input, CirrusLangs.Calculator.Rules.scopeInput)
+            .option(RuleChannel.output, CirrusLangs.Calculator.Rules.scopeOutput)
             .value(draftSimpleChannel)
-            .onChanged(value -> draftSimpleChannel = value == null ? RuleContentChannel.any : value);
+            .onChanged(value -> draftSimpleChannel = value == null ? RuleChannel.any : value);
         return formRow(CirrusLangs.Calculator.Rules.fieldScope, choice);
     }
 
@@ -1049,10 +1049,10 @@ public final class RulesPage extends CirrusScrollablePageWidget {
     private Widget scoreActionRow() {
         WidgetGroup<Widget> row = new WidgetGroup<>();
         row.useStyle(flexRow(), alignItemsCenter(), gap(3), heightOf(formRowHeight), minWidth(0), overflow(Overflow.HIDDEN));
-        CirrusChoiceBoxWidget<RuleContentChannel> channel = new CirrusChoiceBoxWidget<RuleContentChannel>(50)
-            .option(RuleContentChannel.any, Component.literal("any"))
-            .option(RuleContentChannel.input, Component.literal("in"))
-            .option(RuleContentChannel.output, Component.literal("out"))
+        CirrusChoiceBoxWidget<RuleChannel> channel = new CirrusChoiceBoxWidget<RuleChannel>(50)
+            .option(RuleChannel.any, Component.literal("any"))
+            .option(RuleChannel.input, Component.literal("in"))
+            .option(RuleChannel.output, Component.literal("out"))
             .value(draftScoreChannel)
             .onChanged(value -> draftScoreChannel = value);
         row.addWidget(channel);
@@ -1195,7 +1195,7 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         return card;
     }
 
-    private Widget clauseCard(RuleClauseSpec spec, int index) {
+    private Widget clauseCard(RuleSpec spec, int index) {
         WidgetGroup<Widget> card = ruleCard();
         card.onMouseClick((input, clickCount, context) -> {
             if (!input.isLeftClick()) {
@@ -1207,11 +1207,11 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         });
         Component title = clauseTitle(spec);
         card.addWidget(clauseHeader(title, spec, index));
-        if (spec.condition().kind() == RuleConditionKind.material) {
+        if (spec.condition() instanceof RuleCondition.Material) {
             card.addWidget(materialConditionRow(spec));
         } else {
             card.addWidget(compactPair(CirrusLangs.Calculator.Rules.fieldWhen, conditionLabel(spec.condition())));
-            card.addWidget(effectSummaryRow(spec.effect()));
+            card.addWidget(effectSummaryRow(spec.actions()));
         }
         if (expandedClauseIndex == index) {
             card.addWidget(clauseDetailPanel(spec));
@@ -1219,14 +1219,14 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         return card;
     }
 
-    private Widget materialConditionRow(RuleClauseSpec spec) {
-        RuleConditionSpec condition = spec.condition();
+    private Widget materialConditionRow(RuleSpec spec) {
+        RuleCondition.Material condition = (RuleCondition.Material) spec.condition();
         WidgetGroup<Widget> row = new WidgetGroup<>();
         row.useStyle(flexRow(), flexWrap(), alignItemsCenter(), gap(clauseMaterialGap), minWidth(0), minHeight(materialIconSize));
         row.onHoverTooltip((mouseX, mouseY) -> clauseTooltip(spec));
 
-        row.addWidget(effectIconBadge(spec.effect()));
-        List<String> materials = condition.values();
+        row.addWidget(effectIconBadge(spec.actions()));
+        List<String> materials = materialTokens(condition);
         int visible = Math.min(clauseMaterialPreviewLimit, materials.size());
         for (int i = 0; i < visible; i++) {
             Widget preview = materialPreviewSlot(materials.get(i));
@@ -1242,7 +1242,7 @@ public final class RulesPage extends CirrusScrollablePageWidget {
             more.onHoverTooltip((mouseX, mouseY) -> clauseTooltip(spec));
             row.addWidget(more);
         }
-        Widget amount = effectAmountBadge(spec.effect());
+        Widget amount = effectAmountBadge(spec.actions());
         if (amount != null) {
             row.addWidget(amount);
         }
@@ -1250,7 +1250,7 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         return row;
     }
 
-    private Widget clauseDetailPanel(RuleClauseSpec spec) {
+    private Widget clauseDetailPanel(RuleSpec spec) {
         WidgetGroup<Widget> panel = new WidgetGroup<>();
         panel.useStyle(
             flexColumn(),
@@ -1262,33 +1262,34 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         );
         panel.onHoverTooltip((mouseX, mouseY) -> clauseTooltip(spec));
         panel.addWidget(clauseVisualSummary(spec));
-        if (spec.condition().kind() == RuleConditionKind.material) {
-            panel.addWidget(materialDetailGrid(spec.condition()));
+        if (spec.condition() instanceof RuleCondition.Material m) {
+            panel.addWidget(materialDetailGrid(m));
         } else {
             panel.addWidget(compactPair(CirrusLangs.Calculator.Rules.fieldWhen, conditionLabel(spec.condition())));
         }
         return panel;
     }
 
-    private Widget clauseVisualSummary(RuleClauseSpec spec) {
+    private Widget clauseVisualSummary(RuleSpec spec) {
         WidgetGroup<Widget> row = new WidgetGroup<>();
         row.useStyle(flexRow(), flexWrap(), alignItemsCenter(), gap(2), minWidth(0), minHeight(actionButtonHeight));
-        row.addWidget(effectIconBadge(spec.effect()));
-        Widget amount = effectAmountBadge(spec.effect());
+        row.addWidget(effectIconBadge(spec.actions()));
+        Widget amount = effectAmountBadge(spec.actions());
         if (amount != null) {
             row.addWidget(amount);
         }
-        row.addWidget(channelBadge(spec.condition().channel()));
-        if (spec.condition().kind() == RuleConditionKind.material) {
-            row.addWidget(countBadge(spec.condition().values().size()));
+        RuleChannel channel = spec.condition() instanceof RuleCondition.Material m ? m.channel() : RuleChannel.any;
+        row.addWidget(channelBadge(channel));
+        if (spec.condition() instanceof RuleCondition.Material m) {
+            row.addWidget(countBadge(materialTokens(m).size()));
         }
         row.onHoverTooltip((mouseX, mouseY) -> clauseTooltip(spec));
         return row;
     }
 
-    private Widget materialDetailGrid(RuleConditionSpec condition) {
+    private Widget materialDetailGrid(RuleCondition.Material condition) {
         WidgetGroup<Widget> grid = new WidgetGroup<>();
-        List<String> materials = condition.values();
+        List<String> materials = materialTokens(condition);
         int rows = Math.max(1, (materials.size() + clauseMaterialDetailColumns - 1) / clauseMaterialDetailColumns);
         int gridHeight = rows * materialIconSize + Math.max(0, rows - 1) * clauseMaterialGap + 4;
         grid.useStyle(
@@ -1313,7 +1314,7 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         return grid;
     }
 
-    private Widget channelBadge(RuleContentChannel channel) {
+    private Widget channelBadge(RuleChannel channel) {
         Component label = switch (channel) {
             case any -> CirrusLangs.Calculator.Rules.scopeAny.component();
             case input -> CirrusLangs.Calculator.Rules.scopeInput.component();
@@ -1336,15 +1337,15 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         return badge;
     }
 
-    private Widget effectIconBadge(RuleEffectSpec effect) {
-        TextureIconWidget icon = new TextureIconWidget(effectIconTexture(effect), materialIconSize);
+    private Widget effectIconBadge(List<RuleAction> actions) {
+        TextureIconWidget icon = new TextureIconWidget(effectIconTexture(actions), materialIconSize);
         icon.useStyle(sizeOf(materialIconSize, materialIconSize), flexShrink(0), background(CirrusTextures.Background.Outlined.flat));
-        icon.onHoverTooltip((mouseX, mouseY) -> Tooltip.create().add(effectLabel(effect)));
+        icon.onHoverTooltip((mouseX, mouseY) -> Tooltip.create().add(effectLabel(actions)));
         return icon;
     }
 
-    private Widget effectAmountBadge(RuleEffectSpec effect) {
-        String amount = effectAmountText(effect);
+    private Widget effectAmountBadge(List<RuleAction> actions) {
+        String amount = effectAmountText(actions);
         if (amount.isBlank()) {
             return null;
         }
@@ -1352,27 +1353,33 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         badge.align(CirrusFittedTextWidget.Align.center);
         badge.textPadding(0, 0);
         badge.useStyle(widthOf(24), heightOf(materialIconSize), flexShrink(0), background(CirrusTextures.Background.Outlined.flat));
-        badge.onHoverTooltip((mouseX, mouseY) -> Tooltip.create().add(effectLabel(effect)));
+        badge.onHoverTooltip((mouseX, mouseY) -> Tooltip.create().add(effectLabel(actions)));
         return badge;
     }
 
-    private Widget effectSummaryRow(RuleEffectSpec effect) {
+    private Widget effectSummaryRow(List<RuleAction> actions) {
         WidgetGroup<Widget> row = new WidgetGroup<>();
         row.useStyle(flexRow(), alignItemsCenter(), gap(3), minWidth(0), minHeight(ruleSentenceHeight));
-        row.addWidget(new TextureIconWidget(effectIconTexture(effect), ruleSentenceHeight));
-        CirrusFittedTextWidget value = new CirrusFittedTextWidget(effectLabel(effect), textSecondary);
+        row.addWidget(new TextureIconWidget(effectIconTexture(actions), ruleSentenceHeight));
+        CirrusFittedTextWidget value = new CirrusFittedTextWidget(effectLabel(actions), textSecondary);
         value.textPadding(1, 1);
         value.useStyle(flexGrow(1), minWidth(0), heightOf(ruleSentenceHeight));
         row.addWidget(value);
         return row;
     }
 
-    private SizedTexture effectIconTexture(RuleEffectSpec effect) {
-        return switch (effect.kind()) {
-            case rejectCandidate -> CirrusTextures.Icon.pause;
-            case coverageScoreAdjustment -> CirrusTextures.Icon.Sign.Amount.available;
-            case scoreAdjustment -> effect.amount() < 0 ? CirrusTextures.Icon.Small.plus : CirrusTextures.Icon.Small.minus;
-        };
+    private SizedTexture effectIconTexture(List<RuleAction> actions) {
+        if (rejectOf(actions).isPresent()) {
+            return CirrusTextures.Icon.pause;
+        }
+        return scoreOf(actions)
+            .map(adjust -> {
+                if (adjust.scale() == RuleAction.ScoreAdjust.ScoreScale.coverageShortage) {
+                    return CirrusTextures.Icon.Sign.Amount.available;
+                }
+                return adjust.boost() ? CirrusTextures.Icon.Small.plus : CirrusTextures.Icon.Small.minus;
+            })
+            .orElse(CirrusTextures.Icon.Small.minus);
     }
 
     private WidgetGroup<Widget> ruleCard() {
@@ -1388,11 +1395,11 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         return card;
     }
 
-    private Widget clauseHeader(Component title, RuleClauseSpec spec, int index) {
+    private Widget clauseHeader(Component title, RuleSpec spec, int index) {
         WidgetGroup<Widget> row = cardHeader(
             title,
             spec.enabled(),
-            compactId(spec.clauseId().toString()),
+            compactId(spec.id().toString()),
             () -> toggleClause(index),
             () -> removeClause(index)
         );
@@ -1811,71 +1818,82 @@ public final class RulesPage extends CirrusScrollablePageWidget {
             return;
         }
         double strength = Math.abs(parseDouble(draftSimpleStrength, 1.0d));
-        RuleClauseSpec clause = simpleClause(cleanMaterials, strength);
+        RuleSpec clause = simpleClause(cleanMaterials, strength);
         if (clause == null) {
             return;
         }
         replaceSelected(withClauses(selectedRule, mergeMaterialClause(selectedRule.clauses().castToList(), clause)));
     }
 
-    private RuleClauseSpec simpleClause(List<String> materials, double strength) {
+    private RuleSpec simpleClause(List<String> materials, double strength) {
         List<String> cleanMaterials = normalizeMaterials(materials);
         if (cleanMaterials.isEmpty()) {
             return null;
         }
-        RuleContentChannel channel = draftSimpleChannel == null ? RuleContentChannel.any : draftSimpleChannel;
+        RuleChannel channel = draftSimpleChannel == null ? RuleChannel.any : draftSimpleChannel;
         String idSeed = cleanMaterials.size() == 1 ? cleanMaterials.getFirst() : cleanMaterials.getFirst() + "_" + cleanMaterials.size();
         return switch (draftSimpleKind) {
-            case reject -> RuleClauseSpec.materialReject(
+            case reject -> new RuleSpec(
                 uniqueChildId("reject", idSeed),
                 "",
-                channel,
-                cleanMaterials
+                true,
+                RuleStage.candidate,
+                RuleCondition.Material.ofTokens(channel, cleanMaterials, null, false),
+                List.of(new RuleAction.Reject(""))
             );
-            case penalty -> RuleClauseSpec.materialScoreAdjustment(
+            case penalty -> new RuleSpec(
                 uniqueChildId("score", idSeed),
                 "",
-                channel,
-                cleanMaterials,
-                defaultScoreKey,
-                strength
+                true,
+                RuleStage.candidate,
+                RuleCondition.Material.ofTokens(channel, cleanMaterials, null, false),
+                List.of(RuleAction.ScoreAdjust.penalize(defaultScoreKey, strength))
             );
-            case reward -> RuleClauseSpec.materialScoreAdjustment(
+            case reward -> new RuleSpec(
                 uniqueChildId("score", idSeed),
                 "",
-                channel,
-                cleanMaterials,
-                defaultScoreKey,
-                -strength
+                true,
+                RuleStage.candidate,
+                RuleCondition.Material.ofTokens(channel, cleanMaterials, null, false),
+                List.of(RuleAction.ScoreAdjust.boost(defaultScoreKey, strength))
             );
-            case stockSensitive -> RuleClauseSpec.materialCoverageScoreAdjustment(
+            case stockSensitive -> new RuleSpec(
                 uniqueChildId("stock", idSeed),
                 "",
-                channel,
-                cleanMaterials,
-                defaultScoreKey,
-                strength
+                true,
+                RuleStage.candidate,
+                RuleCondition.Material.ofTokens(channel, cleanMaterials, null, false),
+                List.of(new RuleAction.ScoreAdjust(defaultScoreKey, strength, RuleAction.ScoreAdjust.ScoreScale.coverageShortage, false))
             );
         };
     }
 
-    private List<RuleClauseSpec> mergeMaterialClause(List<RuleClauseSpec> current, RuleClauseSpec incoming) {
-        ArrayList<RuleClauseSpec> clauses = new ArrayList<>(current);
+    private List<RuleSpec> mergeMaterialClause(List<RuleSpec> current, RuleSpec incoming) {
+        ArrayList<RuleSpec> clauses = new ArrayList<>(current);
         for (int i = 0; i < clauses.size(); i++) {
-            RuleClauseSpec existing = clauses.get(i);
+            RuleSpec existing = clauses.get(i);
             if (!canMergeMaterialClause(existing, incoming)) {
                 continue;
             }
-            List<String> mergedMaterials = mergeMaterials(existing.condition().values(), incoming.condition().values());
-            if (mergedMaterials.equals(existing.condition().values())) {
+            RuleCondition.Material existingMaterial = (RuleCondition.Material) existing.condition();
+            RuleCondition.Material incomingMaterial = (RuleCondition.Material) incoming.condition();
+            List<String> mergedMaterials = mergeMaterials(materialTokens(existingMaterial), materialTokens(incomingMaterial));
+            if (mergedMaterials.equals(materialTokens(existingMaterial))) {
                 return clauses;
             }
-            clauses.set(i, new RuleClauseSpec(
-                existing.clauseId(),
-                existing.enabled(),
+            RuleCondition.Material mergedCondition = RuleCondition.Material.ofTokens(
+                existingMaterial.channel(),
+                mergedMaterials,
+                null,
+                false
+            );
+            clauses.set(i, new RuleSpec(
+                existing.id(),
                 existing.label(),
-                RuleConditionSpec.materials(existing.condition().channel(), mergedMaterials),
-                existing.effect()
+                existing.enabled(),
+                RuleStage.candidate,
+                mergedCondition,
+                existing.actions()
             ));
             return clauses;
         }
@@ -1883,15 +1901,24 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         return clauses;
     }
 
-    private boolean canMergeMaterialClause(RuleClauseSpec existing, RuleClauseSpec incoming) {
-        return existing.enabled()
-            && incoming.enabled()
-            && existing.condition().kind() == RuleConditionKind.material
-            && incoming.condition().kind() == RuleConditionKind.material
-            && existing.condition().channel() == incoming.condition().channel()
-            && existing.effect().kind() == incoming.effect().kind()
-            && existing.effect().scoreKey().equals(incoming.effect().scoreKey())
-            && Double.compare(existing.effect().amount(), incoming.effect().amount()) == 0;
+    private boolean canMergeMaterialClause(RuleSpec existing, RuleSpec incoming) {
+        if (!(existing.condition() instanceof RuleCondition.Material existingMaterial)
+            || !(incoming.condition() instanceof RuleCondition.Material incomingMaterial)) {
+            return false;
+        }
+        if (!existing.enabled() || !incoming.enabled()) {
+            return false;
+        }
+        if (!existingMaterial.channel().equals(incomingMaterial.channel())) {
+            return false;
+        }
+        if (!existingMaterial.amount().equals(incomingMaterial.amount())) {
+            return false;
+        }
+        if (existingMaterial.allSlots() != incomingMaterial.allSlots()) {
+            return false;
+        }
+        return actionShapesEqual(existing.actions(), incoming.actions());
     }
 
     private static List<String> normalizeMaterials(List<String> materials) {
@@ -1918,7 +1945,7 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         return List.copyOf(out);
     }
 
-    private RuleDefinition withClauses(RuleDefinition base, List<RuleClauseSpec> clauses) {
+    private RuleDefinition withClauses(RuleDefinition base, List<RuleSpec> clauses) {
         return new RuleDefinition(
             base.ruleId(),
             base.name(),
@@ -1929,7 +1956,7 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         );
     }
 
-    private void addRejectRule(String material, RuleContentChannel channel) {
+    private void addRejectRule(String material, RuleChannel channel) {
         if (!canEditSelected() || selectedRule == null) {
             return;
         }
@@ -1937,16 +1964,23 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         if (cleanMaterial.isBlank()) {
             return;
         }
-        RuleClauseSpec clause = RuleClauseSpec.materialReject(
+        RuleSpec clause = new RuleSpec(
             uniqueChildId("reject", cleanMaterial),
             "",
-            channel == null ? RuleContentChannel.any : channel,
-            List.of(cleanMaterial)
+            true,
+            RuleStage.candidate,
+            RuleCondition.Material.ofTokens(
+                channel == null ? RuleChannel.any : channel,
+                List.of(cleanMaterial),
+                null,
+                false
+            ),
+            List.of(new RuleAction.Reject(""))
         );
         replaceSelected(withClauses(selectedRule, mergeMaterialClause(selectedRule.clauses().castToList(), clause)));
     }
 
-    private void addScoreRule(String material, RuleContentChannel channel, String scoreKey, double amount) {
+    private void addScoreRule(String material, RuleChannel channel, String scoreKey, double amount) {
         if (!canEditSelected() || selectedRule == null) {
             return;
         }
@@ -1955,18 +1989,26 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         if (cleanMaterial.isBlank()) {
             return;
         }
-        RuleClauseSpec clause = RuleClauseSpec.materialScoreAdjustment(
+        RuleAction.ScoreAdjust action = amount < 0
+            ? RuleAction.ScoreAdjust.boost(cleanScore, -amount)
+            : RuleAction.ScoreAdjust.penalize(cleanScore, amount);
+        RuleSpec clause = new RuleSpec(
             uniqueChildId("score", cleanMaterial),
             "",
-            channel == null ? RuleContentChannel.any : channel,
-            List.of(cleanMaterial),
-            cleanScore,
-            amount
+            true,
+            RuleStage.candidate,
+            RuleCondition.Material.ofTokens(
+                channel == null ? RuleChannel.any : channel,
+                List.of(cleanMaterial),
+                null,
+                false
+            ),
+            List.of(action)
         );
         replaceSelected(withClauses(selectedRule, mergeMaterialClause(selectedRule.clauses().castToList(), clause)));
     }
 
-    private void addCoverageRule(String material, RuleContentChannel channel, String scoreKey, double amount) {
+    private void addCoverageRule(String material, RuleChannel channel, String scoreKey, double amount) {
         if (!canEditSelected() || selectedRule == null) {
             return;
         }
@@ -1975,13 +2017,18 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         if (cleanMaterial.isBlank()) {
             return;
         }
-        RuleClauseSpec clause = RuleClauseSpec.materialCoverageScoreAdjustment(
+        RuleSpec clause = new RuleSpec(
             uniqueChildId("stock", cleanMaterial),
             "",
-            channel == null ? RuleContentChannel.any : channel,
-            List.of(cleanMaterial),
-            cleanScore,
-            amount
+            true,
+            RuleStage.candidate,
+            RuleCondition.Material.ofTokens(
+                channel == null ? RuleChannel.any : channel,
+                List.of(cleanMaterial),
+                null,
+                false
+            ),
+            List.of(new RuleAction.ScoreAdjust(cleanScore, amount, RuleAction.ScoreAdjust.ScoreScale.coverageShortage, false))
         );
         replaceSelected(withClauses(selectedRule, mergeMaterialClause(selectedRule.clauses().castToList(), clause)));
     }
@@ -2019,10 +2066,10 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         if (!canEditSelected() || selectedRule == null || index < 0 || index >= selectedRule.clauses().size()) {
             return;
         }
-        ArrayList<RuleClauseSpec> clauses = new ArrayList<>();
+        ArrayList<RuleSpec> clauses = new ArrayList<>();
         selectedRule.clauses().forEach(clauses::add);
-        RuleClauseSpec spec = clauses.get(index);
-        clauses.set(index, new RuleClauseSpec(spec.clauseId(), !spec.enabled(), spec.label(), spec.condition(), spec.effect()));
+        RuleSpec spec = clauses.get(index);
+        clauses.set(index, new RuleSpec(spec.id(), spec.label(), !spec.enabled(), spec.stage(), spec.condition(), spec.actions()));
         replaceSelected(new RuleDefinition(selectedRule.ruleId(), selectedRule.name(), selectedRule.profile(), selectedRule.sourcePolicy(), Lists.immutable.ofAll(clauses), true));
     }
 
@@ -2039,7 +2086,7 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         if (!canEditSelected() || selectedRule == null || index < 0 || index >= selectedRule.clauses().size()) {
             return;
         }
-        ArrayList<RuleClauseSpec> clauses = new ArrayList<>();
+        ArrayList<RuleSpec> clauses = new ArrayList<>();
         selectedRule.clauses().forEach(clauses::add);
         clauses.remove(index);
         if (expandedClauseIndex == index) {
@@ -2239,8 +2286,8 @@ public final class RulesPage extends CirrusScrollablePageWidget {
                         return true;
                     }
                 }
-                for (RuleClauseSpec spec : rule.clauses()) {
-                    if (spec.clauseId().equals(id)) {
+                for (RuleSpec spec : rule.clauses()) {
+                    if (spec.id().equals(id)) {
                         return true;
                     }
                 }
@@ -2273,51 +2320,70 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         });
     }
 
-    private Component conditionLabel(RuleConditionSpec condition) {
-        return switch (condition.kind()) {
-            case always -> CirrusLangs.Calculator.Rules.conditionAlways.component();
-            case material -> switch (condition.channel()) {
-                case input -> CirrusLangs.Calculator.Rules.conditionInputMaterial.component(materialSummary(condition.values()));
-                case output -> CirrusLangs.Calculator.Rules.conditionOutputMaterial.component(materialSummary(condition.values()));
-                case any -> CirrusLangs.Calculator.Rules.conditionAnyMaterial.component(materialSummary(condition.values()));
+    private Component conditionLabel(RuleCondition condition) {
+        if (condition instanceof RuleCondition.Material material) {
+            List<String> values = materialTokens(material);
+            return switch (material.channel()) {
+                case input -> CirrusLangs.Calculator.Rules.conditionInputMaterial.component(materialSummary(values));
+                case output -> CirrusLangs.Calculator.Rules.conditionOutputMaterial.component(materialSummary(values));
+                case any -> CirrusLangs.Calculator.Rules.conditionAnyMaterial.component(materialSummary(values));
             };
-        };
+        }
+        return CirrusLangs.Calculator.Rules.conditionAlways.component();
     }
 
-    private Component clauseTitle(RuleClauseSpec spec) {
+    private Component clauseTitle(RuleSpec spec) {
         if (!spec.label().isBlank()) {
             return Component.literal(spec.label());
         }
-        return switch (spec.effect().kind()) {
-            case rejectCandidate -> CirrusLangs.Calculator.Rules.simpleReject.component();
-            case coverageScoreAdjustment -> CirrusLangs.Calculator.Rules.simpleStock.component();
-            case scoreAdjustment -> spec.effect().amount() < 0
-                ? CirrusLangs.Calculator.Rules.simpleReward.component()
-                : CirrusLangs.Calculator.Rules.simplePenalty.component();
-        };
+        if (spec.actions().stream().anyMatch(a -> a instanceof RuleAction.Reject)) {
+            return CirrusLangs.Calculator.Rules.simpleReject.component();
+        }
+        return scoreOf(spec.actions())
+            .map(adjust -> {
+                if (adjust.scale() == RuleAction.ScoreAdjust.ScoreScale.coverageShortage) {
+                    return CirrusLangs.Calculator.Rules.simpleStock.component();
+                }
+                return adjust.boost()
+                    ? CirrusLangs.Calculator.Rules.simpleReward.component()
+                    : CirrusLangs.Calculator.Rules.simplePenalty.component();
+            })
+            .orElse(CirrusLangs.Calculator.Rules.simplePenalty.component());
     }
 
-    private Component effectLabel(RuleEffectSpec effect) {
-        return switch (effect.kind()) {
-            case rejectCandidate -> CirrusLangs.Calculator.Rules.effectReject.component();
-            case coverageScoreAdjustment -> CirrusLangs.Calculator.Rules.effectStock.component(compactDecimal(Math.abs(effect.amount())));
-            case scoreAdjustment -> effect.amount() < 0
-                ? CirrusLangs.Calculator.Rules.effectReward.component(compactDecimal(Math.abs(effect.amount())))
-                : CirrusLangs.Calculator.Rules.effectPenalty.component(compactDecimal(effect.amount()));
-        };
+    private Component effectLabel(List<RuleAction> actions) {
+        if (rejectOf(actions).isPresent()) {
+            return CirrusLangs.Calculator.Rules.effectReject.component();
+        }
+        return scoreOf(actions)
+            .map(adjust -> {
+                String decimals = compactDecimal(Math.abs(adjust.amount()));
+                if (adjust.scale() == RuleAction.ScoreAdjust.ScoreScale.coverageShortage) {
+                    return CirrusLangs.Calculator.Rules.effectStock.component(decimals);
+                }
+                return adjust.boost()
+                    ? CirrusLangs.Calculator.Rules.effectReward.component(decimals)
+                    : CirrusLangs.Calculator.Rules.effectPenalty.component(decimals);
+            })
+            .orElse(Component.literal(""));
     }
 
-    private static String effectAmountText(RuleEffectSpec effect) {
-        return switch (effect.kind()) {
-            case rejectCandidate -> "";
-            case coverageScoreAdjustment -> compactDecimal(Math.abs(effect.amount()));
-            case scoreAdjustment -> effect.amount() < 0
-                ? "+" + compactDecimal(Math.abs(effect.amount()))
-                : "-" + compactDecimal(Math.abs(effect.amount()));
-        };
+    private static String effectAmountText(List<RuleAction> actions) {
+        if (rejectOf(actions).isPresent()) {
+            return "";
+        }
+        return scoreOf(actions)
+            .map(adjust -> {
+                String decimals = compactDecimal(Math.abs(adjust.amount()));
+                if (adjust.scale() == RuleAction.ScoreAdjust.ScoreScale.coverageShortage) {
+                    return decimals;
+                }
+                return adjust.boost() ? "+" + decimals : "-" + decimals;
+            })
+            .orElse("");
     }
 
-    private static String channelShortLabel(RuleContentChannel channel) {
+    private static String channelShortLabel(RuleChannel channel) {
         return switch (channel) {
             case any -> "*";
             case input -> "in";
@@ -2329,15 +2395,15 @@ public final class RulesPage extends CirrusScrollablePageWidget {
         return hidden <= 99 ? String.valueOf(Math.max(0, hidden)) : "...";
     }
 
-    private Tooltip clauseTooltip(RuleClauseSpec spec) {
+    private Tooltip clauseTooltip(RuleSpec spec) {
         Tooltip tooltip = Tooltip.create();
         tooltip.add(clauseTitle(spec));
         tooltip.add(conditionLabel(spec.condition()));
-        tooltip.add(effectLabel(spec.effect()));
-        if (spec.condition().kind() == RuleConditionKind.material) {
-            tooltip.add(CirrusLangs.Calculator.Rules.materialSelected.component(spec.condition().values().size()));
+        tooltip.add(effectLabel(spec.actions()));
+        if (spec.condition() instanceof RuleCondition.Material m) {
+            tooltip.add(CirrusLangs.Calculator.Rules.materialSelected.component(materialTokens(m).size()));
         }
-        tooltip.add(Component.literal(spec.clauseId().toString()));
+        tooltip.add(Component.literal(spec.id().toString()));
         return tooltip;
     }
 
@@ -2495,6 +2561,53 @@ public final class RulesPage extends CirrusScrollablePageWidget {
             return first;
         }
         return first + " +" + (materials.size() - 1);
+    }
+
+    /** Reconstructs the display tokens for a material condition (ids raw, tags prefixed with {@code #}). */
+    private static List<String> materialTokens(RuleCondition.Material condition) {
+        List<String> tokens = new ArrayList<>(condition.ids());
+        for (String tag : condition.tags()) {
+            tokens.add("#" + tag);
+        }
+        return List.copyOf(tokens);
+    }
+
+    private static java.util.Optional<RuleAction.Reject> rejectOf(List<RuleAction> actions) {
+        return actions.stream()
+            .filter(a -> a instanceof RuleAction.Reject)
+            .map(a -> (RuleAction.Reject) a)
+            .findFirst();
+    }
+
+    private static java.util.Optional<RuleAction.ScoreAdjust> scoreOf(List<RuleAction> actions) {
+        return actions.stream()
+            .filter(a -> a instanceof RuleAction.ScoreAdjust)
+            .map(a -> (RuleAction.ScoreAdjust) a)
+            .findFirst();
+    }
+
+    /** True when the two action lists share the same shape (both Reject or both ScoreAdjust with matching shape). */
+    private static boolean actionShapesEqual(List<RuleAction> left, List<RuleAction> right) {
+        if (left.size() != right.size()) {
+            return false;
+        }
+        for (int i = 0; i < left.size(); i++) {
+            RuleAction a = left.get(i);
+            RuleAction b = right.get(i);
+            if (a instanceof RuleAction.Reject && b instanceof RuleAction.Reject) {
+                continue;
+            }
+            if (a instanceof RuleAction.ScoreAdjust sa && b instanceof RuleAction.ScoreAdjust sb) {
+                if (!sa.component().equals(sb.component())
+                    || sa.scale() != sb.scale()
+                    || sa.boost() != sb.boost()) {
+                    return false;
+                }
+                continue;
+            }
+            return false;
+        }
+        return true;
     }
 
     private static CirrusWrappedTextWidget wrappedInfoText(Component text, int color, int maxLines) {

@@ -16,14 +16,15 @@
 
 ## 配方筛选（recipe screening）
 
-- 两层筛选：通用筛选按配方静态形状判定（内置模式规则 + 结构规则），排除垃圾/重复配方（电弧炉回收、考古、战利品伪装等），并对染色/兑换/回收/零输入生成类打 advisory 标签；规则数据内置在 `assets/calculator_cirrus/classification/builtin_rules.json`，可被覆盖
+- 统一规则语言：一份 v3 规则文件 `assets/calculator_cirrus/rules/builtin_rules.json`（结构化条件：id/标签/数量/槽位形状/概率/机器；正则仅作显式兜底 op）+ 5 条代码级结构规则，产出标签（junk/duplicate 排除；recolor/exchange/recycling/generation advisory）与路由 hint（discouraged/lastResort）
+- 候选打分为分层加权模型（safety/cost/quality 三层，层内加权求和，见 `DefaultScoreModels` 与 `Mod/docs/RULES.md`）；魔法罚分常数已全部显式化为模型权重/乘数
 - 被排除的配方不参与规划，但在数据库浏览中保留并打标（excluded/advisory 徽标）
-- 情境筛选针对具体请求判定：`ContextualRecipeRule` 接口 + 静态注册表（`ContextualRecipeRules`），内置目标族转换惩罚（目标在染色族时深层族内转换加罚）与缺失机器惩罚（库存证明没有该机器时加罚）
+- 情境筛选针对具体请求判定：`ContextualRecipeRule` 接口 + 静态注册表（`ContextualRecipeRules`），内置目标族转换惩罚与缺失机器惩罚，作为 `contextualPenalty` 特征进入 cost 层
 - 总开关：设置页"配方筛选"（`recipe_screening_enabled`），关闭后规划不再排除/惩罚，浏览打标保留
 
 ## 统一规划器（planner mode: auto）
 
 - `auto` 为默认模式：同一入口自动识别请求锥的拓扑——无环锥走精确 DP 规划器（`AcyclicPlanner`，全局最优，按总合成次数），有环锥走有界贪心（`StandardPlanner`）
 - 拓扑分析基于资源级 SCC（`GraphTopology`，Kosaraju）：染色族这类互相转换的资源构成非平凡 SCC；锥分析只沿来源策略允许的生产者走，因此被排除配方不会造成误判
-- 有环路径上的防死循环：同族转换惩罚（需求资源在环族时，消耗同族成员的候选加罚 100_000；tag/list 需求用匹配输出回退判定）+ 既有 forbidAmplification 硬拒
+- 有环路径上的防死循环：同族转换惩罚（需求资源在环族时，消耗同族成员的候选进入 safety 层的 intraLoop 分量；tag/list 需求用匹配输出回退判定）+ 既有 forbidAmplification 硬拒
 - DP 规划器遇环/超预算自动降级回贪心，不会因拓扑过近似而失败

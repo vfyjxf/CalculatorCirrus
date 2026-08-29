@@ -769,7 +769,7 @@ public final class ChainExportMain {
                     ruleLabel(rule), config.modCap(), config.seed(),
                     config.targetBlacklist() == null || config.targetBlacklist().isBlank() ? "(none)" : config.targetBlacklist());
                 writer.println();
-                writer.println("classification tag counts (builtin rules v2):");
+                writer.println("classification tag counts (builtin unified rules v3):");
                 pack.tagCounts().entrySet().stream()
                     .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
                     .forEach(e -> writer.printf("  %-32s %d%n", e.getKey(), e.getValue()));
@@ -815,7 +815,7 @@ public final class ChainExportMain {
 
                 BUILT-IN RULES ALREADY IN EFFECT - do not re-suggest these:
                 - Excluded before planning (never appear in chains): cirrus:quality/junk,
-                  cirrus:quality/duplicate (classification builtin rules v2).
+                  cirrus:quality/duplicate (classification builtin unified rules v3).
                 - Advisory tags, shown inline as "[rule-tag: pattern/exchange]" on the EXECUTE
                   line and summarized in the chain header as "builtin-rule-tags": the recipe
                   matches a known pattern the rule system already flags (pattern/exchange,

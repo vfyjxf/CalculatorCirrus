@@ -43,13 +43,14 @@ class RulePipelineContractTest {
             assertTrue(result.accepted(), "hard rule should accept deterministic recipe");
         }
 
+        // base feature scoring runs through the compiled score model; the
+        // quality tier must receive the craft count
         double[] score = profile.newScoreVector();
-        var accumulator = profile.newAccumulator(score);
-        for (var scoreRule : profile.scoreRules()) {
-            scoreRule.contribute(context, accumulator);
-        }
-        int craftAxis = profile.scoreKeys().indexOf("craft");
-        assertTrue(craftAxis >= 0 && score[craftAxis] > 0, "craft score should be populated");
+        dev.vfyjxf.cirrus.api.recipe.rule.FeatureVector features = new dev.vfyjxf.cirrus.api.recipe.rule.FeatureVector();
+        features.set(dev.vfyjxf.cirrus.api.recipe.rule.FeatureType.craftTimes, context.craftTimes());
+        profile.evaluateFeatures(features, score);
+        int qualityTier = profile.tierNames().indexOf("quality");
+        assertTrue(qualityTier >= 0 && score[qualityTier] > 0, "quality tier should be populated");
     }
 
     @Test

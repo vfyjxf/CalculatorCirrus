@@ -29,9 +29,9 @@ Minecraft 整合包里有数万到数十万条配方（atm10：28 万）。`Calc
 
 生成链时规则系统已生效，链文本里有对应标注：
 
-- **建图前已排除**（不会出现在链里）：`cirrus:quality/junk`、`cirrus:quality/duplicate`（builtin 分类规则 v2）。
-- **advisory 标注**：EXECUTE 行尾 `[rule-tag: pattern/exchange]`、链头部 `builtin-rule-tags (already handled, do not re-report)` ——这些配方命中已知模式（exchange/recolor/recycling 等），当前是"可见但不自动排除"。对它们的有效建议只有"是否应升级为排除"，不要重新发现模式本身。
-- **求解时已生效**：`calculator_preview` 规则 profile（5 轴评分：子树成本/合成次数/库存短缺/深度/放大风险）、source policy、有界放大环策略、锥形动态预算。链是这些规则的**输出**——planner 每步选哪个生产者已经反映它们。
+- **建图前已排除**（不会出现在链里）：`cirrus:quality/junk`、`cirrus:quality/duplicate`（builtin 统一规则 v3，`assets/calculator_cirrus/rules/builtin_rules.json`）。
+- **advisory 标注**：EXECUTE 行尾 `[rule-tag: pattern/exchange]`、链头部 `builtin-rule-tags (already handled, do not re-report)` ——这些配方命中已知模式（exchange/recolor/recycling/storage_ladder 等），当前是"可见但不自动排除"。对它们的有效建议只有"是否应升级为排除"，不要重新发现模式本身。
+- **求解时已生效**：`calculator_preview` 规则 profile（3 层加权计分：safety=循环/环路标志 → cost=子树成本/咨询超额/情境惩罚 → quality=合成次数/hint 惩罚/库存短缺/深度/放大风险，见 `Mod/docs/RULES.md`）、source policy、有界放大环策略、锥形动态预算。链是这些规则的**输出**——planner 每步选哪个生产者已经反映它们。
 
 审查应聚焦：**无 rule-tag 却可疑**的链/步骤、`UNRESOLVED reason=BUDGET_TRUNCATED/RANK_TRUNCATED`（planner 为何放弃）、以及 despite 规则仍荒谬的宽链/巨链。
 

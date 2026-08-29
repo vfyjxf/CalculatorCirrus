@@ -726,9 +726,9 @@ public final class RoutingService {
     private double heuristicUnitPenalty(RecipeRoutingHints hints) {
         double penalty = hints.penalty();
         if (hints.usePolicy() == RecipeUsePolicy.discouraged) {
-            penalty += 1_000.0d;
+            penalty += dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultScoreModels.HINT_DISCOURAGED_WEIGHT;
         } else if (hints.usePolicy() == RecipeUsePolicy.lastResort) {
-            penalty += 50_000.0d;
+            penalty += dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultScoreModels.HINT_LAST_RESORT_WEIGHT;
         }
         return penalty;
     }

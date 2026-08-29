@@ -2,12 +2,18 @@ package dev.vfyjxf.cirrus.api.recipe.classify;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.serialization.JsonOps;
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.ExchangeStructuralRule;
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.GenerationStructuralRule;
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.MassSinkStructuralRule;
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.RecolorStructuralRule;
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.RecyclingStructuralRule;
+import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeUsePolicy;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleDocument;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleSpec;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -17,13 +23,19 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The classification pipeline. Runs an ordered list of {@link ClassificationRule}s
  * over a catalog of {@link RecipeClassifyView}s and produces a
  * {@link ClassificationResult}.
+ *
+ * <p>The default classifier is the unified v3 rule document (structured
+ * conditions, loaded from {@link #BUILTIN_RULES_RESOURCE}) followed by the
+ * built-in structural rules.
  *
  * <p>The pipeline has two passes:
  * <ol>
@@ -38,46 +50,55 @@ import java.util.Map;
 public final class RecipeClassifier {
 
     /**
-     * Classpath location of the built-in pattern rules derived from the
-     * fifteen exported modpack datasets.
+     * Classpath location of the built-in unified rule document (v3):
+     * structured catalog-stage rules derived from the exported modpack
+     * datasets and the multi-pack routing/chain audits.
      */
-    public static final String BUILTIN_RULES_RESOURCE = "assets/calculator_cirrus/classification/builtin_rules.json";
+    public static final String BUILTIN_RULES_RESOURCE = "assets/calculator_cirrus/rules/builtin_rules.json";
 
+    private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Classifier");
     private static final ClassificationContext EMPTY_CONTEXT = ClassificationContext.of(List.of());
 
+    /** Local-pass outcome: tags plus the routing hint declared by unified rules. */
+    public record LocalOutcome(Set<String> tags, @Nullable RecipeUsePolicy hint) {
+    }
+
     /**
-     * Per-recipe memo of local-pass tags, keyed by {@code systemId + '\n' +
+     * Per-recipe memo of local-pass outcomes, keyed by {@code systemId + '\n' +
      * recipeId}. The local rules are all context-free (only the global rules
-     * read {@link ClassificationContext}), so a recipe's local tags are stable
+     * read {@link ClassificationContext}), so a recipe's local outcome is stable
      * for the lifetime of this classifier instance. The same recipe is
      * classified during graph-build hint derivation and again during the
      * catalog populate pass; the memo makes the second pass a lookup. Entries
      * with an empty recipe id are never cached (distinct recipes share that
      * key). Cleared on client unload via {@link #clearLocalTagsCache()}.
      */
-    private final java.util.concurrent.ConcurrentHashMap<String, java.util.Set<String>> localTagsCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentHashMap<String, LocalOutcome> localOutcomeCache = new java.util.concurrent.ConcurrentHashMap<>();
 
     private final List<ClassificationRule> rules;
     private final List<ClassificationRule> localRules;
+    private final @Nullable UnifiedClassificationRule unified;
 
-    private RecipeClassifier(List<ClassificationRule> rules) {
+    private RecipeClassifier(List<ClassificationRule> rules, @Nullable UnifiedClassificationRule unified) {
         this.rules = List.copyOf(rules);
         this.localRules = rules.stream().filter(rule -> !rule.global()).toList();
+        this.unified = unified;
     }
 
     /**
-     * Creates the default classifier: built-in pattern rules (loaded from the
-     * classpath resource) followed by the built-in structural rules.
+     * Creates the default classifier: the built-in unified rules (loaded from
+     * the classpath resource) followed by the built-in structural rules.
      */
     public static RecipeClassifier createDefault() {
         Builder builder = builder();
-        builder.addAll(loadBuiltinPatternRules());
+        UnifiedClassificationRule unified = UnifiedClassificationRule.of(loadBuiltinRuleSpecs());
+        builder.add(unified);
         builder.add(ExchangeStructuralRule.instance);
         builder.add(RecolorStructuralRule.instance);
         builder.add(RecyclingStructuralRule.instance);
         builder.add(GenerationStructuralRule.instance);
         builder.add(MassSinkStructuralRule.create());
-        return builder.build();
+        return builder.buildWithUnified(unified);
     }
 
     public static Builder builder() {
@@ -85,26 +106,33 @@ public final class RecipeClassifier {
     }
 
     /**
-     * Loads the built-in pattern rules from the classpath. Returns an empty
-     * list when the resource is missing or malformed (classification then
-     * relies on structural rules only).
+     * Loads the built-in unified rule specs from the classpath. Returns an
+     * empty list when the resource is missing or malformed — the failure is
+     * logged loudly (structural rules still classify) instead of silently
+     * degrading.
      */
-    public static List<PatternClassificationRule> loadBuiltinPatternRules() {
-        return loadPatternRules(BUILTIN_RULES_RESOURCE);
+    public static List<RuleSpec> loadBuiltinRuleSpecs() {
+        return loadRuleSpecs(BUILTIN_RULES_RESOURCE);
     }
 
-    /** Loads pattern rules from an arbitrary classpath resource. */
-    public static List<PatternClassificationRule> loadPatternRules(String resourcePath) {
+    /** Loads catalog-stage rule specs from an arbitrary classpath resource. */
+    public static List<RuleSpec> loadRuleSpecs(String resourcePath) {
         ClassLoader loader = RecipeClassifier.class.getClassLoader();
         try (InputStream stream = loader.getResourceAsStream(resourcePath)) {
             if (stream == null) {
+                logger.error("rule resource not found: {} (classification falls back to structural rules)", resourcePath);
                 return List.of();
             }
             try (Reader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
                 JsonObject document = JsonParser.parseReader(reader).getAsJsonObject();
-                return PatternClassificationRule.listFromJson(document);
+                return RuleDocument.CODEC
+                    .parse(JsonOps.INSTANCE, document)
+                    .resultOrPartial(error -> logger.error("rule resource {} failed to decode: {}", resourcePath, error))
+                    .map(RuleDocument::rules)
+                    .orElseGet(List::of);
             }
-        } catch (IOException | RuntimeException ignored) {
+        } catch (IOException | RuntimeException e) {
+            logger.error("rule resource {} failed to load: {}", resourcePath, e.toString());
             return List.of();
         }
     }
@@ -120,24 +148,35 @@ public final class RecipeClassifier {
      * for graph-build-time hint derivation where only one recipe is resolved.
      */
     public java.util.Set<String> classifyLocal(RecipeClassifyView view) {
+        return classifyLocalOutcome(view).tags();
+    }
+
+    /** Memoized local outcome (tags + unified hint) for one recipe. */
+    public LocalOutcome classifyLocalOutcome(RecipeClassifyView view) {
         if (!view.recipeId().isEmpty()) {
-            return localTagsCache.computeIfAbsent(localTagsKey(view), key -> classifyLocalUncached(view));
+            return localOutcomeCache.computeIfAbsent(localTagsKey(view), key -> classifyLocalUncached(view));
         }
         return classifyLocalUncached(view);
     }
 
-    private java.util.Set<String> classifyLocalUncached(RecipeClassifyView view) {
-        java.util.Set<String> tags = new java.util.LinkedHashSet<>();
+    /** The routing hint policy for one recipe, or {@code null}. */
+    public @Nullable RecipeUsePolicy hintOf(RecipeClassifyView view) {
+        return classifyLocalOutcome(view).hint();
+    }
+
+    private LocalOutcome classifyLocalUncached(RecipeClassifyView view) {
+        java.util.Set<String> tags = new LinkedHashSet<>();
         ClassificationSink sink = tags::add;
         for (ClassificationRule rule : localRules) {
             rule.classify(view, EMPTY_CONTEXT, sink);
         }
-        return tags;
+        RecipeUsePolicy hint = unified != null ? unified.hintOf(view) : null;
+        return new LocalOutcome(Set.copyOf(tags), hint);
     }
 
-    /** Drops the per-recipe local-tag memo (world unload / datapack reload). */
+    /** Drops the per-recipe local-outcome memo (world unload / datapack reload). */
     public void clearLocalTagsCache() {
-        localTagsCache.clear();
+        localOutcomeCache.clear();
     }
 
     private static String localTagsKey(RecipeClassifyView view) {
@@ -146,25 +185,11 @@ public final class RecipeClassifier {
 
     /**
      * Returns {@code true} when the given system id is matched by at least one
-     * pattern rule that only attaches exclusion-level tags
-     * ({@link ClassificationTags#isExclusionTag}). Such systems are skipped
-     * entirely when building the builtin routing catalog.
+     * system-only unified rule with exclusion-level effect. Such systems are
+     * skipped entirely when building the builtin routing catalog.
      */
     public boolean isExcludedSystem(String systemId) {
-        for (ClassificationRule rule : rules) {
-            if (!(rule instanceof PatternClassificationRule pattern)) {
-                continue;
-            }
-            if (!pattern.matchesSystem(systemId)) {
-                continue;
-            }
-            boolean allExclusion = !pattern.tags().isEmpty()
-                && pattern.tags().stream().allMatch(ClassificationTags::isExclusionTag);
-            if (allExclusion) {
-                return true;
-            }
-        }
-        return false;
+        return unified != null && unified.isExcludedSystem(systemId);
     }
 
     /**
@@ -192,7 +217,7 @@ public final class RecipeClassifier {
             if (!view.recipeId().isEmpty()) {
                 // local rules are context-free, so the memo shared with
                 // classifyLocal yields identical tags
-                for (String tag : localTagsCache.computeIfAbsent(localTagsKey(view), key -> collectLocalTags(view, context))) {
+                for (String tag : classifyLocalOutcome(view).tags()) {
                     sink.tag(tag);
                 }
                 continue;
@@ -217,15 +242,6 @@ public final class RecipeClassifier {
         return new ClassificationResult(recipes.size(), tags);
     }
 
-    private java.util.Set<String> collectLocalTags(RecipeClassifyView view, ClassificationContext context) {
-        java.util.Set<String> tags = new java.util.LinkedHashSet<>();
-        ClassificationSink sink = tags::add;
-        for (ClassificationRule rule : localRules) {
-            rule.classify(view, context, sink);
-        }
-        return tags;
-    }
-
     public static final class Builder {
         private final List<ClassificationRule> rules = new ArrayList<>();
 
@@ -240,7 +256,11 @@ public final class RecipeClassifier {
         }
 
         public RecipeClassifier build() {
-            return new RecipeClassifier(rules);
+            return new RecipeClassifier(rules, null);
+        }
+
+        private RecipeClassifier buildWithUnified(UnifiedClassificationRule unified) {
+            return new RecipeClassifier(rules, unified);
         }
     }
 }

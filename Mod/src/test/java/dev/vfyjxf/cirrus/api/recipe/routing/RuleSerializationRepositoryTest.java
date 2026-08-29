@@ -10,8 +10,6 @@ import dev.vfyjxf.cirrus.api.recipe.routing.rule.FileRuleRepository;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleCollection;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleCollectionKey;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleCollectionScope;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleClauseSpec;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleContentChannel;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleDefinition;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleProfilePreset;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleProfileSpec;
@@ -20,6 +18,11 @@ import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicyAction;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.SourcePolicyRuleSpec;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.TagExpr;
 import dev.vfyjxf.cirrus.api.recipe.routing.rule.UnresolvedInputMode;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleAction;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleChannel;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleCondition;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleSpec;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleStage;
 import dev.vfyjxf.cirrus.config.CalculatorRuleSelection;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.server.MinecraftServer;
@@ -153,13 +156,18 @@ class RuleSerializationRepositoryTest {
         double[] score = profile.newScoreVector();
         var accumulator = profile.newAccumulator(score);
 
+        // base craft feature (weight 1.0) plus the material clause's 0.5
+        // adjustment to the same component land in the quality tier together
+        dev.vfyjxf.cirrus.api.recipe.rule.FeatureVector features = new dev.vfyjxf.cirrus.api.recipe.rule.FeatureVector();
+        features.set(dev.vfyjxf.cirrus.api.recipe.rule.FeatureType.craftTimes, 1);
+        profile.evaluateFeatures(features, score);
         for (var rule : profile.scoreRules()) {
             rule.contribute(context, accumulator);
         }
 
-        int craftAxis = profile.scoreKeys().indexOf("craft");
-        assertTrue(craftAxis >= 0, "craft axis should exist");
-        assertEquals(1.5d, score[craftAxis], 0.0001d);
+        int qualityTier = profile.tierNames().indexOf("quality");
+        assertTrue(qualityTier >= 0, "quality tier should exist");
+        assertEquals(1.5d, score[qualityTier], 0.0001d);
     }
 
     private static RuleDefinition customRule(String suffix) {
@@ -189,13 +197,13 @@ class RuleSerializationRepositoryTest {
                     false
                 ))
             ),
-            Lists.immutable.of(RuleClauseSpec.materialScoreAdjustment(
+            Lists.immutable.of(new RuleSpec(
                 Namespace.of("test", "routing/clause/material_penalty_" + suffix),
                 "Deweight cobblestone",
-                RuleContentChannel.input,
-                List.of("minecraft:cobblestone"),
-                "craft",
-                0.5d
+                true,
+                RuleStage.candidate,
+                RuleCondition.Material.ofTokens(RuleChannel.input, List.of("minecraft:cobblestone"), null, false),
+                List.of(RuleAction.ScoreAdjust.penalize("craft", 0.5d))
             )),
             true
         );

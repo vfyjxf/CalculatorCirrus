@@ -31,26 +31,26 @@ class ClassificationHeuristicsTest {
         try {
             ClassificationHeuristics.register();
             Set<String> firstPass = registeredIds();
-            assertTrue(firstPass.contains("cirrus:classification/recolor"));
-            assertTrue(firstPass.contains("cirrus:classification/exchange"));
-            assertTrue(firstPass.contains("cirrus:classification/recycling"));
+            assertTrue(firstPass.contains("cirrus:classification/hint_discouraged"));
+            assertTrue(firstPass.contains("cirrus:classification/hint_last_resort"));
+            assertTrue(firstPass.contains("cirrus:classification/recycling_role"));
 
             // a second call must not duplicate the rules
             ClassificationHeuristics.register();
             Set<String> secondPass = registeredIds();
-            assertTrue(secondPass.contains("cirrus:classification/recolor"));
-            int recolorCount = 0;
+            assertTrue(secondPass.contains("cirrus:classification/hint_discouraged"));
+            int discouragedCount = 0;
             for (RecipeRoutingHeuristicRule rule : RecipeRoutingHeuristics.snapshot()) {
-                if ("cirrus:classification/recolor".equals(rule.ruleId().toString())) {
-                    recolorCount++;
+                if ("cirrus:classification/hint_discouraged".equals(rule.ruleId().toString())) {
+                    discouragedCount++;
                 }
             }
-            assertTrue(recolorCount == 1, "register must dedup by rule id, got " + recolorCount);
+            assertTrue(discouragedCount == 1, "register must dedup by rule id, got " + discouragedCount);
 
             // simulated test-side clear, then recovery on next register
             RecipeRoutingHeuristics.clear();
             ClassificationHeuristics.register();
-            assertTrue(registeredIds().contains("cirrus:classification/recycling"));
+            assertTrue(registeredIds().contains("cirrus:classification/hint_last_resort"));
         } finally {
             RecipeRoutingHeuristics.clear();
             ClassificationHeuristics.register();

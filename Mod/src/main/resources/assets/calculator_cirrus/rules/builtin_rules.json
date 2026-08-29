@@ -1,0 +1,379 @@
+{
+  "version": 3,
+  "rules": [
+    {
+      "id": "cirrus:quests",
+      "label": "FTB Quests reward pages are not player-craftable steps",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "contains", "values": ["category/ftbquests/", "category/quest"] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/junk" } ]
+    },
+    {
+      "id": "cirrus:archaeology",
+      "label": "Archaeology brush/display categories",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "contains", "values": ["archeolog", "jearchaeology", "/archaeology"] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/junk" } ]
+    },
+    {
+      "id": "cirrus:query_displays",
+      "label": "Attachment query / query display categories",
+      "stage": "catalog",
+      "when": { "kind": "any_of", "conditions": [
+        { "kind": "system", "op": "contains", "values": ["attachment_query"] },
+        { "kind": "system", "op": "suffix", "values": ["/query"] }
+      ] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/junk" } ]
+    },
+    {
+      "id": "cirrus:trades",
+      "label": "Trade tables and market displays",
+      "stage": "catalog",
+      "when": { "kind": "any_of", "conditions": [
+        { "kind": "system", "op": "contains", "values": [
+          "queen_trades", "queen_color_randomizer_trades", "amadron_trade", "spirit_trade",
+          "villager_trades", "farmingforblockheads/market"
+        ] },
+        { "kind": "system", "op": "suffix", "values": ["/trades"] }
+      ] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/junk" } ]
+    },
+    {
+      "id": "cirrus:villager_trade_displays",
+      "label": "JEI villager trade preview categories (regex: anchored per-mod segment)",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "regex", "values": ["category/[^/]+/(potential_)?villager(_trade)?s?$"] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/junk" } ]
+    },
+    {
+      "id": "cirrus:jeresources_displays",
+      "label": "JER plant/mob/fluid/dungeon/ore info pages (regex: anchored per-mod segment)",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "regex", "values": ["category/[^/]+/(plant|mob|fluid|dungeon|ore)$"] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/junk" } ]
+    },
+    {
+      "id": "cirrus:market_npc_trades",
+      "label": "Amadron / spirit trade market displays (regex: anchored per-mod segment)",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "regex", "values": ["category/[^/]+/(amadron(/spirit_trade)?|spirit_trade)$"] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/junk" } ]
+    },
+    {
+      "id": "cirrus:machine_produce_displays",
+      "label": "Industrial Foregoing machine produce preview",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "contains", "values": ["industrialforegoing/machine_produce"] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/junk" } ]
+    },
+    {
+      "id": "cirrus:synthetic_anvil_duplicates",
+      "label": "Anvil display category with per-enchantment-level duplicates",
+      "stage": "catalog",
+      "when": { "kind": "all_of", "conditions": [
+        { "kind": "any_of", "conditions": [
+          { "kind": "system", "op": "contains", "values": ["category/minecraft/anvil"] },
+          { "kind": "system", "op": "in", "values": ["minecraft:anvil", "crafting_on_a_stick:anvil"] }
+        ] },
+        { "kind": "recipe_id", "op": "regex", "values": ["enchantment\\._\\d+"] }
+      ] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/junk" } ]
+    },
+    {
+      "id": "cirrus:anvil_system_recipes",
+      "label": "The vanilla anvil system itself (leaks repair/merge pseudo-recipes)",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "in", "values": ["minecraft:anvil"] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/junk" } ]
+    },
+    {
+      "id": "cirrus:breeding_displays",
+      "label": "Easy Villagers / Just Enough Breeding preview categories",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "prefix", "values": [
+        "jei:category/easy_villagers/",
+        "jei:category/justenoughbreeding/",
+        "cirrus_test:jei__category/easy_villagers/",
+        "cirrus_test:jei__category/justenoughbreeding/"
+      ] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/junk" } ]
+    },
+    {
+      "id": "cirrus:loot_displays",
+      "label": "Lot fabricator / sim chamber / structure-locate displays",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "contains", "values": [
+        "hostilenetworks/loot_fabricator", "hostilenetworks/sim_chamber",
+        "/loot_table", "/loot_fabricator", "locate_structure"
+      ] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/junk" } ]
+    },
+    {
+      "id": "cirrus:colony_views",
+      "label": "MineColonies teachable recipes duplicate real crafts",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "prefix", "values": [
+        "jei:category/minecolonies/",
+        "cirrus_test:jei__category/minecolonies/"
+      ] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/duplicate" } ]
+    },
+    {
+      "id": "cirrus:jei_vanilla_mirrors",
+      "label": "JEI mirrors of vanilla systems (the vanilla system wins)",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "in", "values": [
+        "jei:category/minecraft/crafting",
+        "jei:category/minecraft/smelting",
+        "jei:category/minecraft/blasting",
+        "jei:category/minecraft/smoking",
+        "jei:category/minecraft/campfire_cooking",
+        "jei:category/minecraft/stonecutting",
+        "jei:category/minecraft/smithing",
+        "jei:category/minecraft/brewing"
+      ] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/duplicate" } ]
+    },
+    {
+      "id": "cirrus:recolor_systems",
+      "label": "Recoloring machine systems (dye one colored item into another)",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "suffix", "values": ["/coloring", "/painting", "/dyer"] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:pattern/recolor" },
+        { "do": "hint", "policy": "discouraged" }
+      ]
+    },
+    {
+      "id": "cirrus:recolor_recipes",
+      "label": "Redye/redye recipe ids",
+      "stage": "catalog",
+      "when": { "kind": "recipe_id", "op": "contains", "values": ["redying", "recolor", "redye"] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:pattern/recolor" },
+        { "do": "hint", "policy": "discouraged" }
+      ]
+    },
+    {
+      "id": "cirrus:chisel_systems",
+      "label": "Chisel/chipped block-swap systems and mystery conversions",
+      "stage": "catalog",
+      "when": { "kind": "any_of", "conditions": [
+        { "kind": "system", "op": "contains", "values": ["/chiseling"] },
+        { "kind": "system", "op": "prefix", "values": ["jei:category/chipped/", "cirrus_test:jei__category/chipped/"] },
+        { "kind": "system", "op": "suffix", "values": ["/mystery_conversion"] }
+      ] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:pattern/exchange" },
+        { "do": "hint", "policy": "discouraged" }
+      ]
+    },
+    {
+      "id": "cirrus:reinforced_swaps",
+      "label": "SecurityCraft vanilla <-> reinforced block swaps",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "contains", "values": [
+        "securitycraft/vanilla_to_securitycraft",
+        "securitycraft/securitycraft_to_vanilla"
+      ] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:pattern/exchange" },
+        { "do": "hint", "policy": "discouraged" }
+      ]
+    },
+    {
+      "id": "cirrus:recycling_recipes",
+      "label": "Recycling/salvage/uncrafting recipe ids (regex: word-boundary alternation)",
+      "stage": "catalog",
+      "when": { "kind": "recipe_id", "op": "regex", "values": [
+        "(^|/|_)(recycling|recycle|salvage|salvaging|disassembly|disassembling|uncrafting|uncraft)(/|_|:|$)|nugget_from_smelting|clay_oven_bottom_to_clay"
+      ] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:intent/recycling" },
+        { "do": "hint", "policy": "lastResort" }
+      ]
+    },
+    {
+      "id": "cirrus:recycling_systems",
+      "label": "Salvaging/scrapping/disassembly systems",
+      "stage": "catalog",
+      "when": { "kind": "any_of", "conditions": [
+        { "kind": "system", "op": "suffix", "values": ["/salvaging", "/scrapping"] },
+        { "kind": "system", "op": "contains", "values": ["/disassembly"] }
+      ] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:intent/recycling" },
+        { "do": "hint", "policy": "lastResort" }
+      ]
+    },
+    {
+      "id": "cirrus:mass_valorization",
+      "label": "Composters and other mass-valorization machines",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "contains", "values": [
+        "composter", "composting", "nutritional_liquifier", "canning_machine"
+      ] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:intent/recycling" },
+        { "do": "hint", "policy": "lastResort" }
+      ]
+    },
+    {
+      "id": "cirrus:resource_generators",
+      "label": "Resource generators: cobblegen, laser drills, quarries, pollination",
+      "stage": "catalog",
+      "when": { "kind": "system", "op": "contains", "values": [
+        "blockgen", "cobblegen", "laser_ore", "laser_drill", "ore_to_resource", "/quarry",
+        "oil_drilling", "pollination", "/fruiting", "botanypots/crop", "alakarkinos",
+        "graphite_processing", "occultism:miner", "nucleosynthesizing"
+      ] },
+      "then": [ { "do": "tag", "tag": "cirrus:intent/generation" } ]
+    },
+    {
+      "id": "cirrus:living_matter_predictions",
+      "label": "Living-matter / prediction pseudo-recipes (regex: token boundaries)",
+      "stage": "catalog",
+      "when": { "kind": "recipe_id", "op": "regex", "values": [
+        "(^|/|_)living_?matter(/|_|$)|_prediction$|/predictions?/"
+      ] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:intent/recycling" },
+        { "do": "hint", "policy": "lastResort" }
+      ]
+    },
+    {
+      "id": "cirrus:giant_block_conversions",
+      "label": "Giant block <-> item conversion recipes",
+      "stage": "catalog",
+      "when": { "kind": "recipe_id", "op": "regex", "values": ["(^|/)giant_\\w+_to_"] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:pattern/exchange" },
+        { "do": "hint", "policy": "discouraged" }
+      ]
+    },
+    {
+      "id": "cirrus:anvil_leak_recipes",
+      "label": "Anvil self-repair / enchantment pseudo-recipes leaked into exports",
+      "stage": "catalog",
+      "when": { "kind": "recipe_id", "op": "regex", "values": [
+        "^minecraft:anvil\\.(self_repair|materials_repair)|^minecraft:enchantment\\.|^crafting_on_a_stick:anvil$|enchantment\\.lvl_\\d+"
+      ] },
+      "then": [ { "do": "tag", "tag": "cirrus:quality/junk" } ]
+    },
+    {
+      "id": "cirrus:storage_compression_shape",
+      "label": "Storage ladder by shape: single-slot 9+:1 or 1:9 compression round-trips",
+      "stage": "catalog",
+      "when": { "kind": "any_of", "conditions": [
+        { "kind": "all_of", "conditions": [
+          { "kind": "slot_count", "channel": "input", "op": "eq", "value": 1 },
+          { "kind": "slot_count", "channel": "output", "op": "eq", "value": 1 },
+          { "kind": "material", "channel": "input", "amount": { "op": "ge", "value": 9 } }
+        ] },
+        { "kind": "all_of", "conditions": [
+          { "kind": "slot_count", "channel": "input", "op": "eq", "value": 1 },
+          { "kind": "slot_count", "channel": "output", "op": "eq", "value": 1 },
+          { "kind": "material", "channel": "output", "amount": { "op": "ge", "value": 9 } }
+        ] }
+      ] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:pattern/storage_ladder" },
+        { "do": "hint", "policy": "discouraged" }
+      ]
+    },
+    {
+      "id": "cirrus:storage_compression_families",
+      "label": "Mod-specific compression families not caught by the 9:1 shape (9x9 tiers, crates, conversions)",
+      "stage": "catalog",
+      "when": { "kind": "any_of", "conditions": [
+        { "kind": "recipe_id", "op": "prefix", "values": [
+          "allthecompressed:compress/", "allthecompressed:decompress/", "create_compressed:"
+        ] },
+        { "kind": "recipe_id", "op": "suffix", "values": [
+          "_from_crate", "_from_bag", "_from_conversion", "_block_craft", "_block_decraft"
+        ] },
+        { "kind": "recipe_id", "op": "contains", "values": [
+          "storage_blocks/from_", "deconstruction", "9x9"
+        ] }
+      ] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:pattern/storage_ladder" },
+        { "do": "hint", "policy": "discouraged" }
+      ]
+    },
+    {
+      "id": "cirrus:variant_stonecutting_cycles",
+      "label": "Decoration-mod stonecutting/shard/slab/pillar variant cycles",
+      "stage": "catalog",
+      "when": { "kind": "all_of", "conditions": [
+        { "kind": "recipe_mod", "op": "in", "values": ["createdeco", "dndecor", "garnished", "blockbox", "glazedresymmetry"] },
+        { "kind": "recipe_id", "op": "contains", "values": ["stonecutting", "shard", "slab", "pillar", "centered"] }
+      ] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:pattern/exchange" },
+        { "do": "hint", "policy": "discouraged" }
+      ]
+    },
+    {
+      "id": "cirrus:smithing_trim_swaps",
+      "label": "Smithing trim swaps change appearance, not production",
+      "stage": "catalog",
+      "when": { "kind": "recipe_id", "op": "suffix", "values": ["_smithing_trim"] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:pattern/exchange" },
+        { "do": "hint", "policy": "discouraged" }
+      ]
+    },
+    {
+      "id": "cirrus:slab_to_block_generalized",
+      "label": "Quark generalized slab-to-block recipes",
+      "stage": "catalog",
+      "when": { "kind": "recipe_id", "op": "prefix", "values": ["quark:tweaks/crafting/slab_to_block"] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:pattern/exchange" },
+        { "do": "hint", "policy": "discouraged" }
+      ]
+    },
+    {
+      "id": "cirrus:chisel_stonecutting_variants",
+      "label": "Chipped/chisel stonecutting variant recipes",
+      "stage": "catalog",
+      "when": { "kind": "recipe_id", "op": "contains", "values": ["stonecutting/chipped_", "stonecutting/chisel_"] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:pattern/exchange" },
+        { "do": "hint", "policy": "discouraged" }
+      ]
+    },
+    {
+      "id": "cirrus:salvage_mod_roundtrips",
+      "label": "Create Salvage mod: every recipe is a salvage round-trip",
+      "stage": "catalog",
+      "when": { "kind": "recipe_mod", "op": "in", "values": ["create_salvage"] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:intent/recycling" },
+        { "do": "hint", "policy": "lastResort" }
+      ]
+    },
+    {
+      "id": "cirrus:cobble_generators",
+      "label": "Cobblestone/resource generator recipes",
+      "stage": "catalog",
+      "when": { "kind": "recipe_id", "op": "contains", "values": [
+        "create_generators:generator_", "cobble_generator", "cobblestone_gen", "lava_from_cobble"
+      ] },
+      "then": [ { "do": "tag", "tag": "cirrus:intent/generation" } ]
+    },
+    {
+      "id": "cirrus:shape_reverse_roundtrips",
+      "label": "Unpacking stairs/walls/slabs back into blocks",
+      "stage": "catalog",
+      "when": { "kind": "recipe_id", "op": "suffix", "values": [
+        "_from_stairs", "_from_stair", "_from_walls", "_from_wall", "_from_slabs", "_from_slab"
+      ] },
+      "then": [
+        { "do": "tag", "tag": "cirrus:pattern/exchange" },
+        { "do": "hint", "policy": "discouraged" }
+      ]
+    }
+  ]
+}

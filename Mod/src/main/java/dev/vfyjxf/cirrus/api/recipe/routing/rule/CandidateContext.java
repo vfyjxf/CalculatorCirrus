@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.routing.rule;
 
 import dev.vfyjxf.cirrus.api.recipe.routing.RecipeGraph;
+import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeRoutingHints;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cloudlib.util.Checks;
 
@@ -10,7 +11,8 @@ import dev.vfyjxf.cloudlib.util.Checks;
  * <p>Passed to {@link HardRule#evaluate(CandidateContext)} and
  * {@link ScoreRule#contribute(CandidateContext, ScoreAccumulator)} during
  * the candidate ranking stage. Contains all information a rule needs to
- * decide whether to accept/reject or how to score a candidate.
+ * decide whether to accept/reject or how to score a candidate, including the
+ * loop topology flags and routing hints that feed the score model's features.
  *
  * @param recipe            the graph node representing the candidate recipe
  * @param demandedInput     the specific input that this candidate would supply
@@ -30,6 +32,14 @@ import dev.vfyjxf.cloudlib.util.Checks;
  *                          ({@code craftTimes × (1 + Σ input × h)}); large
  *                          values mark chains that dead-end into rare or
  *                          unsourced resources
+ * @param indirectActiveDemandCycle whether the candidate closes an indirect
+ *                          active-demand cycle (planner guard)
+ * @param intraLoopConversion whether the candidate is an intra-loop no-op
+ *                          conversion within the demand's SCC
+ * @param roundTripWithActive whether the candidate closes an equal-amount
+ *                          round trip with a recipe on the active path
+ * @param routingHints      the node's routing hints (policy + penalty)
+ * @param contextualPenalty request-scoped contextual penalty total
  */
 public record CandidateContext(
     RecipeGraph.Node recipe,
@@ -40,17 +50,40 @@ public record CandidateContext(
     boolean cycleCandidate,
     double amplificationRisk,
     double availableCoverage,
-    double estimatedSubtreeCost
+    double estimatedSubtreeCost,
+    boolean indirectActiveDemandCycle,
+    boolean intraLoopConversion,
+    boolean roundTripWithActive,
+    RecipeRoutingHints routingHints,
+    double contextualPenalty
 ) {
     public CandidateContext {
         Checks.checkNotNull(recipe, "recipe");
         Checks.checkNotNull(demandedInput, "demandedInput");
+        routingHints = RecipeRoutingHints.canonical(routingHints);
         Checks.checkArgument(requiredAmount > 0, "requiredAmount must be positive");
         Checks.checkArgument(craftTimes > 0, "craftTimes must be positive");
         Checks.checkArgument(depth >= 0, "depth must be non-negative");
         Checks.checkArgument(amplificationRisk >= 0, "amplificationRisk must be non-negative");
         Checks.checkArgument(availableCoverage >= 0, "availableCoverage must be non-negative");
         Checks.checkArgument(estimatedSubtreeCost >= 0, "estimatedSubtreeCost must be non-negative");
+        Checks.checkArgument(contextualPenalty >= 0, "contextualPenalty must be non-negative");
+    }
+
+    /** Constructor without loop flags/hints/contextual data (all neutral). */
+    public CandidateContext(
+        RecipeGraph.Node recipe,
+        InputContent demandedInput,
+        long requiredAmount,
+        int craftTimes,
+        int depth,
+        boolean cycleCandidate,
+        double amplificationRisk,
+        double availableCoverage,
+        double estimatedSubtreeCost
+    ) {
+        this(recipe, demandedInput, requiredAmount, craftTimes, depth, cycleCandidate,
+            amplificationRisk, availableCoverage, estimatedSubtreeCost,
+            false, false, false, RecipeRoutingHints.empty(), 0.0d);
     }
 }
-

@@ -53,6 +53,7 @@ public final class PlannerRequestCaches {
     // stable per graph node, so identity-memo the built key per request
     private final Map<InputContent, String> producerCacheKeys = new IdentityHashMap<>();
     private @Nullable UnitCostOracle unitCostOracle;
+    private @Nullable UnitCostOracle baseUnitCostOracle;
 
     /** Identity-memoized producer cache key; {@code null} keys (opaque inputs) are not memoized. */
     public @Nullable String producerCacheKey(InputContent input, Function<InputContent, @Nullable String> builder) {
@@ -85,6 +86,20 @@ public final class PlannerRequestCaches {
         if (current == null) {
             current = factory.get();
             unitCostOracle = current;
+        }
+        return current;
+    }
+
+    /**
+     * The per-request base unit-cost oracle (no advisory multipliers); feeds
+     * the score model's base-cost feature so the advisory excess stays a
+     * separate additive component.
+     */
+    public UnitCostOracle baseUnitCostOracle(Supplier<UnitCostOracle> factory) {
+        UnitCostOracle current = baseUnitCostOracle;
+        if (current == null) {
+            current = factory.get();
+            baseUnitCostOracle = current;
         }
         return current;
     }

@@ -6,6 +6,7 @@ import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingFailureCode;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.factory.Sets;
+import org.eclipse.collections.api.list.ImmutableList;
 
 import java.util.Comparator;
 import java.util.Objects;
@@ -13,22 +14,11 @@ import java.util.Objects;
 /**
  * Built-in default {@link RuleProfile} presets.
  *
- * <p>Provides built-in profiles with increasing quality guarantees, plus an
- * execution-oriented standard variant:
- * <ul>
- *     <li>{@link #standardDefault()} — fast greedy profile with
- *         lexicographic ranking, small rollback width, and deterministic
- *         tiebreaking. Suitable for the {@code standard} planner mode.</li>
- *     <li>{@link #standardExecution()} — standard scoring with a leaf-only
- *         direct-supply unresolved-input policy for execution planning.</li>
- *     <li>{@link #assuredBoundedDefault()} — tighter amplification
- *         control, larger shortlist, and wider rollback. Designed for
- *         {@code assuredBounded} mode.</li>
- *     <li>{@link #assuredProvenCompat()} — additionally declares
- *         {@link RuleCapabilityFlag#monotonicScore} and
- *         {@link RuleCapabilityFlag#admissibleBound}, enabling A*-class
- *         algorithms in the {@code assuredProven} mode.</li>
- * </ul>
+ * <p>All presets share the tiered score models from {@link DefaultScoreModels}
+ * and differ only in tuning: {@code assuredBounded} uses the depth ×0.8 /
+ * amplification ×1.2 weight variant, a larger shortlist and wider rollback.
+ * Base feature scoring lives in the model; user clauses attach as
+ * {@link HardRule}s (reject) and {@link ScoreRule}s (weighted adjustments).
  *
  * <p>All built-in profiles share a common hard rule that rejects recipes
  * with probabilistic (non-constant) inputs or outputs.
@@ -52,26 +42,16 @@ public final class DefaultRuleProfiles {
     }
 
     /**
-     * Returns the default profile for the {@code standard} planner mode.
-     *
-     * <p>Uses lexicographic ranking over (craft, depth, amplification),
-     * {@code shortlistK=4}, {@code rollbackWidth=2}, and a no-op explore
-     * policy for deterministic behavior.
-     *
-     * @return a fresh {@code standard} profile instance
+     * Returns the default profile for the {@code standard} planner mode:
+     * lexicographic tier ranking, {@code shortlistK=4}, {@code rollbackWidth=2},
+     * and a no-op explore policy for deterministic behavior.
      */
     public static RuleProfile standardDefault() {
         return new RuleProfile(
             standardDefaultId,
-            Lists.immutable.of("subtreeCost", "craft", "inventoryShortage", "depth", "amplification"),
+            DefaultScoreModels.standard(),
             Lists.immutable.of(DefaultRuleProfiles::rejectProbabilistic),
-            Lists.immutable.of(
-                (context, acc) -> acc.add("subtreeCost", context.estimatedSubtreeCost()),
-                (context, acc) -> acc.add("craft", context.craftTimes()),
-                (context, acc) -> acc.add("inventoryShortage", 1.0d - context.availableCoverage()),
-                (context, acc) -> acc.add("depth", context.depth()),
-                (context, acc) -> acc.add("amplification", context.amplificationRisk())
-            ),
+            Lists.immutable.empty(),
             lexicographicRank(),
             stableTieBreak(),
             noOpExplore,
@@ -87,22 +67,16 @@ public final class DefaultRuleProfiles {
             0.60,
             0.85,
             false,
-            RuleProfile.FastScoringPreset.standard
+            true
         );
     }
 
     public static RuleProfile standardExecution() {
         return new RuleProfile(
             standardExecutionId,
-            Lists.immutable.of("subtreeCost", "craft", "inventoryShortage", "depth", "amplification"),
+            DefaultScoreModels.standard(),
             Lists.immutable.of(DefaultRuleProfiles::rejectProbabilistic),
-            Lists.immutable.of(
-                (context, acc) -> acc.add("subtreeCost", context.estimatedSubtreeCost()),
-                (context, acc) -> acc.add("craft", context.craftTimes()),
-                (context, acc) -> acc.add("inventoryShortage", 1.0d - context.availableCoverage()),
-                (context, acc) -> acc.add("depth", context.depth()),
-                (context, acc) -> acc.add("amplification", context.amplificationRisk())
-            ),
+            Lists.immutable.empty(),
             lexicographicRank(),
             stableTieBreak(),
             noOpExplore,
@@ -118,32 +92,21 @@ public final class DefaultRuleProfiles {
             0.60,
             0.85,
             true,
-            RuleProfile.FastScoringPreset.standard
+            true
         );
     }
 
     /**
-     * Returns the default profile for the {@code assuredBounded} planner mode.
-     *
-     * <p>Compared to {@link #standardDefault()}, this profile uses weighted
-     * depth/amplification scores (0.8× depth, 1.2× amplification),
-     * {@code shortlistK=12}, {@code rollbackWidth=11}, and tighter
-     * amplification thresholds.
-     *
-     * @return a fresh {@code assuredBounded} profile instance
+     * Returns the default profile for the {@code assuredBounded} planner
+     * mode: depth ×0.8 / amplification ×1.2 weights, {@code shortlistK=12},
+     * {@code rollbackWidth=11}, and tighter amplification thresholds.
      */
     public static RuleProfile assuredBoundedDefault() {
         return new RuleProfile(
             assuredBoundedDefaultId,
-            Lists.immutable.of("subtreeCost", "craft", "inventoryShortage", "depth", "amplification"),
+            DefaultScoreModels.assuredBounded(),
             Lists.immutable.of(DefaultRuleProfiles::rejectProbabilistic),
-            Lists.immutable.of(
-                (context, acc) -> acc.add("subtreeCost", context.estimatedSubtreeCost()),
-                (context, acc) -> acc.add("craft", context.craftTimes()),
-                (context, acc) -> acc.add("inventoryShortage", 1.0d - context.availableCoverage()),
-                (context, acc) -> acc.add("depth", context.depth() * 0.8),
-                (context, acc) -> acc.add("amplification", context.amplificationRisk() * 1.2)
-            ),
+            Lists.immutable.empty(),
             lexicographicRank(),
             stableTieBreak(),
             noOpExplore,
@@ -159,32 +122,23 @@ public final class DefaultRuleProfiles {
             0.65,
             1.0,
             false,
-            RuleProfile.FastScoringPreset.assuredBounded
+            true
         );
     }
 
     /**
-     * Returns the default profile for the {@code assuredProven} planner mode.
-     *
-     * <p>Identical scoring to {@link #standardDefault()} but declares
+     * Returns the default profile for the {@code assuredProven} planner
+     * mode. Identical scoring to {@link #standardDefault()} but declares
      * additional capabilities ({@link RuleCapabilityFlag#monotonicScore},
-     * {@link RuleCapabilityFlag#admissibleBound}) that allow the planner
-     * to use A*-class algorithms with optimality guarantees.
-     *
-     * @return a fresh {@code assuredProven} profile instance
+     * {@link RuleCapabilityFlag#admissibleBound}) that allow the planner to
+     * use A*-class algorithms with optimality guarantees.
      */
     public static RuleProfile assuredProvenCompat() {
         return new RuleProfile(
             assuredProvenCompatId,
-            Lists.immutable.of("subtreeCost", "craft", "inventoryShortage", "depth", "amplification"),
+            DefaultScoreModels.standard(),
             Lists.immutable.of(DefaultRuleProfiles::rejectProbabilistic),
-            Lists.immutable.of(
-                (context, acc) -> acc.add("subtreeCost", context.estimatedSubtreeCost()),
-                (context, acc) -> acc.add("craft", context.craftTimes()),
-                (context, acc) -> acc.add("inventoryShortage", 1.0d - context.availableCoverage()),
-                (context, acc) -> acc.add("depth", context.depth()),
-                (context, acc) -> acc.add("amplification", context.amplificationRisk())
-            ),
+            Lists.immutable.empty(),
             lexicographicRank(),
             stableTieBreak(),
             noOpExplore,
@@ -202,11 +156,11 @@ public final class DefaultRuleProfiles {
             0.65,
             1.0,
             false,
-            RuleProfile.FastScoringPreset.standard
+            true
         );
     }
 
-    private static HardRuleResult rejectProbabilistic(CandidateContext context) {
+    static HardRuleResult rejectProbabilistic(CandidateContext context) {
         for (int inputIndex = 0; inputIndex < context.recipe().inputCount(); inputIndex++) {
             InputContent input = context.recipe().inputAt(inputIndex);
             if (!input.constantly()) {

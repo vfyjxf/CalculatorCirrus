@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.api.recipe.routing.rule;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import dev.vfyjxf.cirrus.api.recipe.rule.RuleSpec;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.list.ImmutableList;
@@ -11,7 +12,7 @@ public record RuleDefinition(
     String name,
     RuleProfileSpec profile,
     SourcePolicy sourcePolicy,
-    ImmutableList<RuleClauseSpec> clauses,
+    ImmutableList<RuleSpec> clauses,
     boolean editable
 ) {
     public static final Codec<RuleDefinition> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -19,7 +20,7 @@ public record RuleDefinition(
         Codec.STRING.fieldOf("name").forGetter(RuleDefinition::name),
         RuleProfileSpec.CODEC.fieldOf("profile").forGetter(RuleDefinition::profile),
         SourcePolicy.CODEC.fieldOf("source_policy").forGetter(RuleDefinition::sourcePolicy),
-        dev.vfyjxf.cloudlib.api.util.Codecs.immutableList(RuleClauseSpec.CODEC).fieldOf("clauses").forGetter(RuleDefinition::clauses),
+        dev.vfyjxf.cloudlib.api.util.Codecs.immutableList(RuleSpec.CODEC).fieldOf("clauses").forGetter(RuleDefinition::clauses),
         Codec.BOOL.fieldOf("editable").forGetter(RuleDefinition::editable)
     ).apply(instance, RuleDefinition::new));
 

@@ -1,49 +1,46 @@
 package dev.vfyjxf.cirrus.api.recipe.routing.rule;
 
+import dev.vfyjxf.cirrus.api.recipe.rule.ScoreModel;
 import dev.vfyjxf.cloudlib.util.Checks;
 
-import java.util.Map;
-
 /**
- * Mutable score vector accumulator keyed by named score dimensions.
+ * Mutable score accumulator for candidate-stage rules, keyed by score-model
+ * component names.
  *
- * <p>Created by {@link RuleProfile#newAccumulator(double[])} with a fresh
- * score vector. {@link ScoreRule} implementations call {@link #add(String, double)}
- * to contribute their score deltas. Unknown keys are silently ignored,
- * making it safe to use with profiles that have different score dimensions.
+ * <p>Created by {@link RuleProfile#newAccumulator(double[])} with the tier-sum
+ * vector. {@link ScoreRule} implementations call {@link #add(String, double)}
+ * to contribute deltas; the delta is multiplied by the component's weight and
+ * added to its tier's sum. Unknown component names throw — the profile
+ * compiles only rule sets whose component references were validated against
+ * the score model, so a failure here is a wiring bug, not a configuration
+ * typo (those are rejected at load time).
  *
  * @see ScoreRule
  * @see RuleProfile#newScoreVector()
+ * @see ScoreModel
  */
 public final class ScoreAccumulator {
-    private final double[] values;
-    private final Map<String, Integer> keyToIndex;
+    private final double[] tierSums;
+    private final ScoreModel.Compiled model;
 
     /**
-     * Creates an accumulator backed by the given score vector.
+     * Creates an accumulator backed by the given tier-sum vector.
      *
-     * @param values     the mutable score vector to write into
-     * @param keyToIndex mapping from score key names to vector indices
+     * @param tierSums the mutable tier-sum vector to write into
+     * @param model    the compiled score model mapping components to tiers
      */
-    public ScoreAccumulator(double[] values, Map<String, Integer> keyToIndex) {
-        this.values = Checks.checkNotNull(values, "values");
-        this.keyToIndex = Checks.checkNotNull(keyToIndex, "keyToIndex");
+    public ScoreAccumulator(double[] tierSums, ScoreModel.Compiled model) {
+        this.tierSums = Checks.checkNotNull(tierSums, "tierSums");
+        this.model = Checks.checkNotNull(model, "model");
     }
 
     /**
-     * Adds a delta to the named score dimension.
+     * Adds a weighted delta to the named component's tier sum.
      *
-     * <p>If the key is not present in this accumulator's key map,
-     * the call is silently ignored.
-     *
-     * @param key   the score dimension name (e.g. {@code "craft"}, {@code "depth"})
-     * @param delta the value to add
+     * @param component the score-model component name
+     * @param delta     the raw contribution in component units
      */
-    public void add(String key, double delta) {
-        Integer index = keyToIndex.get(key);
-        if (index != null) {
-            values[index] += delta;
-        }
+    public void add(String component, double delta) {
+        model.applyAdjustment(tierSums, component, delta);
     }
 }
-

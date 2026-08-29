@@ -43,7 +43,7 @@ import java.util.stream.Stream;
  * Streams an exported {@code recipes-<ts>.json} pack dump into solver-ready
  * {@link ExportRecipe}s backed by the offline id content model, plus the
  * display specs used by the text renderer. Junk/duplicate recipes are removed
- * up-front via the production {@link RecipeClassifier} (builtin rules v2).
+ * up-front via the production {@link RecipeClassifier} (builtin unified rules v3).
  */
 final class ExportPackLoader {
 
