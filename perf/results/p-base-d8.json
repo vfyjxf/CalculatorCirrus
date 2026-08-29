@@ -1,0 +1,69 @@
+[
+    {
+        "jmhVersion" : "1.37",
+        "benchmark" : "dev.vfyjxf.cirrus.performance.RecipeDatabaseIndexBenchmark.buildIndexWithRealItemStacks",
+        "mode" : "avgt",
+        "threads" : 1,
+        "forks" : 1,
+        "jvm" : "/Users/vfyjxf/Library/Java/JavaVirtualMachines/jbr-21.0.11/Contents/Home/bin/java",
+        "jvmArgs" : [
+            "-Xms4g",
+            "-Xmx4g",
+            "-Dfile.encoding=UTF-8",
+            "-Duser.country=CN",
+            "-Duser.language=zh",
+            "-Duser.variant"
+        ],
+        "jdkVersion" : "21.0.11",
+        "vmName" : "OpenJDK 64-Bit Server VM",
+        "vmVersion" : "21.0.11+10-b1163.116",
+        "warmupIterations" : 3,
+        "warmupTime" : "1 s",
+        "warmupBatchSize" : 1,
+        "measurementIterations" : 10,
+        "measurementTime" : "1 s",
+        "measurementBatchSize" : 1,
+        "params" : {
+            "recipes" : "4096"
+        },
+        "primaryMetric" : {
+            "score" : 10.182915395461844,
+            "scoreError" : 0.6457247420463709,
+            "scoreConfidence" : [
+                9.537190653415474,
+                10.828640137508215
+            ],
+            "scorePercentiles" : {
+                "0.0" : 9.818586165048544,
+                "50.0" : 10.003277019801981,
+                "90.0" : 11.09498030194597,
+                "95.0" : 11.145861263736263,
+                "99.0" : 11.145861263736263,
+                "99.9" : 11.145861263736263,
+                "99.99" : 11.145861263736263,
+                "99.999" : 11.145861263736263,
+                "99.9999" : 11.145861263736263,
+                "100.0" : 11.145861263736263
+            },
+            "scoreUnit" : "ms/op",
+            "rawData" : [
+                [
+                    9.918685460784314,
+                    10.276019979591837,
+                    10.312326530612244,
+                    9.963061465346534,
+                    10.637051645833333,
+                    11.145861263736263,
+                    9.86535032038835,
+                    10.043492574257426,
+                    9.848718549019608,
+                    9.818586165048544
+                ]
+            ]
+        },
+        "secondaryMetrics" : {
+        }
+    }
+]
+
+
