@@ -165,6 +165,11 @@ def main():
     }
     json.dump({"pooled": pooled, "per_pack": per_pack},
               open(os.path.join(HERE, "stats.json"), "w"), ensure_ascii=False, indent=1)
+    np.savez_compressed(os.path.join(HERE, "raw_arrays.npz"),
+                        pooled_prod=np.array(pooled_prod, dtype=np.int32),
+                        pooled_inputs=np.array(pooled_inputs, dtype=np.int32),
+                        pack_names=np.array(list(pack_raw.keys())),
+                        **{f"pack__{k}": np.array(v, dtype=np.int32) for k, v in pack_raw.items()})
     make_charts(packs, per_pack, pack_raw, pooled_prod, pooled_inputs)
     print("packs:", len(packs), "| pooled ingredients:", len(pooled_prod),
           "| pooled median producers:", pooled["producers_per_ingredient"]["median"])

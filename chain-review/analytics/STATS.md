@@ -77,6 +77,7 @@
 
 | 文件 | 内容 |
 |---|---|
+| `figs/0_combined_charts.png` | **六图合一总览**（`make_combined.py` 渲染） |
 | `figs/1_producer_histogram.png` | 生产者数 log-log 直方图（标中位数/P90） |
 | `figs/2_producer_buckets.png` | 0/1/2–3/4–9/10–49/50–199/≥200 分桶占比 |
 | `figs/3_box_by_pack.png` | 每包箱线图（log 轴，按中位数降序） |
