@@ -21,10 +21,17 @@ public enum PlannerMode {
     assuredBounded,
     /**
      * Quality-oriented planner requiring the rule profile to declare
-     * all proven-quality capabilities (monotonic score, admissible bound, etc.).
+     * all proven-quality capabilities (monotone score, admissible bound, etc.).
      * Falls back to {@link #assuredBounded} if capabilities are missing and
      * fallback is allowed.
      */
-    assuredProven
+    assuredProven,
+    /**
+     * Cost-aware best-first branch-and-bound planner over demand states.
+     * Selects routes by accumulated plan cost (production steps + optional
+     * {@link dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeCostHeuristic}
+     * quality penalty); the heuristic never affects feasibility.
+     */
+    costAware
 }
 

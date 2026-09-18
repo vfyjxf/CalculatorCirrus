@@ -401,6 +401,7 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
             case standard -> CirrusLangs.Calculator.Settings.plannerModeStandard;
             case assuredBounded -> CirrusLangs.Calculator.Settings.plannerModeAssuredBounded;
             case assuredProven -> CirrusLangs.Calculator.Settings.plannerModeAssuredProven;
+            case costAware -> CirrusLangs.Calculator.Settings.plannerModeCostAware;
         };
     }
 }

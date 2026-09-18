@@ -22,7 +22,7 @@ catalog 域（建图期，每配方一次）          candidate 域（规划期�
 - 旧 5 轴字典序 + 手调魔法罚分（1e6/1e5/5e4/1e3/×1000/×4）全部消失，语义原样搬进
   `DefaultScoreModels` 的显式权重与乘数。
 
-## 一、规则文件（v3 文档）
+## 一、规则文件（v3 文档，两层结构）
 
 ```json
 {
@@ -30,18 +30,41 @@ catalog 域（建图期，每配方一次）          candidate 域（规划期�
   "rules": [
     {
       "id": "cirrus:storage_compression_shape",
-      "label": "9+:1 / 1:9 压缩往返（按形状识别）",
+      "label": "[feat] Storage ladder by shape: 9+:1 or 1:9 round-trips",
       "stage": "catalog",
       "enabled": true,
       "when": { "kind": "all_of", "conditions": [ ... ] },
-      "then": [
-        { "do": "tag", "tag": "cirrus:pattern/storage_ladder" },
-        { "do": "hint", "policy": "discouraged" }
-      ]
+      "then": [ { "do": "tag", "tag": "cirrus:feat/storage_compression_shape" } ]
+    },
+    {
+      "id": "cirrus:relation/storage_ladder",
+      "label": "[relation] 存储压缩特征 => pattern/storage_ladder + discouraged",
+      "stage": "catalog",
+      "enabled": true,
+      "when": { "kind": "any_of", "conditions": [ { "kind": "classification_tag", "tag": "cirrus:feat/storage_compression_shape" }, ... ] },
+      "then": [ { "do": "tag", "tag": "cirrus:pattern/storage_ladder" }, { "do": "hint", "policy": "discouraged" } ]
     }
   ]
 }
 ```
+
+规则分两层（同文件、按文档序求值）：
+
+1. **特征提取层**（`[feat]`）：每条规则识别一个结构信号，只打 `cirrus:feat/<name>` 标签，
+   不做处置决策。它是 Naive-Bayes 实验（`experiments/naive-bayes`）的 per-rule 二值特征来源。
+2. **好坏关系层**（`[relation]`）：用 `classification_tag` 条件把特征组合映射为**建议性**处置
+   （`pattern/*`、`intent/*` 与 hint）。关系层必须排在特征层之后——`RuleEngine.evaluateCatalog`
+   按文档序累积标签，`classification_tag` 能看到同一轮先附上的标签。
+   注意：关系层**不再**输出 `quality/*` 排除标签——2026-09 重构后，逐配方垃圾处置由
+   离线级联分数（`experiments/generalization/export/<pack>.cascade.tsv`，经
+   `CascadeScoreRuntime` 以 soft-cost 接入 planner）承担；文本规则不再独立判死
+   （`relation/junk_displays` / `relation/duplicates` 已删除，`jei_vanilla_mirrors`
+   的 13 次误杀即其硬判所致）。
+
+硬排除只保留在一处：11 条 system-only 的展示族检测规则（quests/archaeology/trades/loot 等，
+人工标注精度 ≈1.0）在特征标签之外**直接附带** `quality/junk` 排除标签，保住
+`isExcludedSystem` 整系统快路径（快路径允许伴随描述性 tag，但要求至少一个排除效果动作）。
+新包的整系统排除应来自接入工具（pack_onboard）的系统级标注，而不是新增文本规则。
 
 - `stage`：`catalog`（分类/排除/hint）或 `candidate`（打分/否决）。必须与动作种类一致，加载期校验。
 - `when`：条件树。`all_of` / `any_of` / `not` 组合 + 叶子。
@@ -60,7 +83,8 @@ catalog 域（建图期，每配方一次）          candidate 域（规划期�
 | `classification_tag` | `tag` | 配方已带该分类标签 |
 | `flag` / `scalar` / `hint` | 见下 | **candidate 域专用**：`flag ∈ cycleCandidate/activeDemandCycle/intraLoopConversion/roundTrip`；`scalar ∈ depth/craftTimes/subtreeCost/amplificationRisk/contextualPenalty`（op+value）；`hint ∈ normal/discouraged/lastResort/...` |
 
-规则在不适用的域求值时，域专属叶子返回 `false`（不报错）。
+规则在不适用的域求值时，域专属叶子返回 `false`（不报错）。例外：catalog 域内
+`classification_tag` 能看到本轮先附上的标签（关系层的基础）；candidate 域没有标签，返回 `false`。
 
 ### 动作（`do` 分发）
 

@@ -262,7 +262,8 @@ public final class StandardPlanner implements RoutePlanner {
             counters.explorationBranchesExpanded,
             counters.explorationBudgetUsed,
             request.explorationSeed() == null ? 0 : request.explorationSeed(),
-            request.loopPolicy()
+            request.loopPolicy(),
+            counters.candidateRollbacks
         );
 
         RoutingTrace trace = null;
@@ -822,7 +823,7 @@ public final class StandardPlanner implements RoutePlanner {
                             );
                         }
                         captureIssuesSince(issues, rollback.issueCount(), frame.candidateIssues, visibleIssueRecipe(context, frame.recipeNode.recipe()));
-                        rollback.restore(ledger, planBuilder, issues, traceStages);
+                        rollback.restore(ledger, planBuilder, issues, traceStages, counters);
                         frame.pendingCost = rollback.pendingCostAtMark();
                         frame.rollback = null;
                         if (frame.recommittingBest) {
@@ -855,13 +856,13 @@ public final class StandardPlanner implements RoutePlanner {
                             && !explorationBudgetExhausted(context, counters)
                             && nextProbeWithinTieBand(context, frame);
                         if (canProbeMore) {
-                            rollback.restore(ledger, planBuilder, issues, traceStages);
+                            rollback.restore(ledger, planBuilder, issues, traceStages, counters);
                             frame.pendingCost = rollback.pendingCostAtMark();
                             frame.state = FrameState.tryingCandidates;
                             continue;
                         }
                         if (frame.bestCandidateIndex != frame.candidateAttemptIndex - 1) {
-                            rollback.restore(ledger, planBuilder, issues, traceStages);
+                            rollback.restore(ledger, planBuilder, issues, traceStages, counters);
                             frame.pendingCost = rollback.pendingCostAtMark();
                             frame.candidateAttemptIndex = frame.candidateAttemptLimit;
                             frame.state = FrameState.tryingCandidates;
@@ -875,7 +876,7 @@ public final class StandardPlanner implements RoutePlanner {
                     if (context.ruleProfile().liftMultiSemanticChildShortages()
                         && preservesOriginalInputShortage(input, variantCache)
                         && hasOnlyNonBlockingShortages(issues, childIssueStart)) {
-                        rollback.restore(ledger, planBuilder, issues, traceStages);
+                        rollback.restore(ledger, planBuilder, issues, traceStages, counters);
                         frame.pendingCost = rollback.pendingCostAtMark();
                         rollbackRestoredForParentFallback = true;
                         if (resolveUnresolvedInput(
@@ -1136,6 +1137,17 @@ public final class StandardPlanner implements RoutePlanner {
      * win; the multiplier sinks them below real chains while keeping them
      * usable when they are the only source.
      */
+    /**
+     * The profile's own-candidate advisory multiplier for one recipe: the
+     * per-recipe multiplier applied to the candidate's full subtree cost (its
+     * inputs' producers are already covered inside the oracle). Returns 1.0
+     * unless the active profile carries an {@code advisoryCostMultiplier}.
+     */
+    private static double ownAdvisoryMultiplier(PlannerContext context, int recipeIndex) {
+        java.util.function.IntToDoubleFunction multiplier = context.ruleProfile().advisoryCostMultiplier();
+        return multiplier == null ? 1.0d : multiplier.applyAsDouble(recipeIndex);
+    }
+
     private static @Nullable java.util.function.IntToDoubleFunction advisoryPenalty(
         PlannerContext context,
         double generationMultiplier,
@@ -1153,13 +1165,18 @@ public final class StandardPlanner implements RoutePlanner {
                 soft.or(bits);
             }
         }
+        java.util.function.IntToDoubleFunction extra = context.ruleProfile().advisoryCostMultiplier();
         if ((generation == null || generation.isEmpty()) && soft.isEmpty()) {
-            return null;
+            return extra;
         }
         java.util.BitSet generationBits = generation == null ? new java.util.BitSet() : generation;
-        return recipeIndex -> generationBits.get(recipeIndex)
+        java.util.function.IntToDoubleFunction tagBased = recipeIndex -> generationBits.get(recipeIndex)
             ? generationMultiplier
             : soft.get(recipeIndex) ? softMultiplier : 1.0d;
+        if (extra == null) {
+            return tagBased;
+        }
+        return recipeIndex -> tagBased.applyAsDouble(recipeIndex) * extra.applyAsDouble(recipeIndex);
     }
 
     /**
@@ -1365,7 +1382,8 @@ public final class StandardPlanner implements RoutePlanner {
         RecipeGraph.Node node = producer.node();
         OutputContent matchedOutput = producer.matchedOutput();
         int craftTimes = (int) Math.ceil((double) remaining / matchedOutput.amount());
-        double estimatedSubtreeCost = unitCostOracle(context, variantCache).subtreeCost(node, craftTimes);
+        double estimatedSubtreeCost = unitCostOracle(context, variantCache).subtreeCost(node, craftTimes)
+            * ownAdvisoryMultiplier(context, producer.recipeIndex());
         double baseSubtreeCost = baseSubtreeCost(context, variantCache, node, craftTimes, estimatedSubtreeCost);
         // Impurity on the candidate's own primary ranking axis: when the demand
         // has a pure sibling producer, impure (multi-guaranteed-output) recipes
@@ -1557,7 +1575,8 @@ public final class StandardPlanner implements RoutePlanner {
         boolean cycleCandidate = isActive(activePath, recipeIndex);
         double amplificationRisk = estimateAmplificationRisk(cycleCandidate, depth);
         double availableCoverage = estimateCandidateAvailableCoverage(node, craftTimes, availabilityScratch);
-        double estimatedSubtreeCost = unitCostOracle(context, variantCache).subtreeCost(node, craftTimes);
+        double estimatedSubtreeCost = unitCostOracle(context, variantCache).subtreeCost(node, craftTimes)
+            * ownAdvisoryMultiplier(context, recipeIndex);
         double baseSubtreeCost = baseSubtreeCost(context, variantCache, node, craftTimes, estimatedSubtreeCost);
         // Same impurity/round-trip handling as the seed path: primary-axis
         // impurity (waived when no pure sibling exists) and hard round-trip
@@ -2310,6 +2329,7 @@ public final class StandardPlanner implements RoutePlanner {
         int modeWindow = switch (context.request().plannerMode()) {
             case standard -> Math.min(shortlist, rollbackWindow);
             case auto, assuredBounded, assuredProven -> boundedWindow;
+            case costAware -> boundedWindow;
         };
         return Math.min(candidateCount, Math.max(1, modeWindow));
     }
@@ -2321,6 +2341,7 @@ public final class StandardPlanner implements RoutePlanner {
         return switch (context.request().plannerMode()) {
             case standard -> Math.min(shortlist, rollbackWindow);
             case auto, assuredBounded, assuredProven -> Math.max(shortlist, rollbackWindow);
+            case costAware -> Math.max(shortlist, rollbackWindow);
         };
     }
 
@@ -3263,7 +3284,8 @@ public final class StandardPlanner implements RoutePlanner {
             context.counters().explorationBranchesExpanded,
             context.counters().explorationBudgetUsed,
             context.request().explorationSeed() == null ? 0 : context.request().explorationSeed(),
-            context.request().loopPolicy()
+            context.request().loopPolicy(),
+            context.counters().candidateRollbacks
         );
         return new RoutingOutcome(RoutingStatus.failed, plan, issues.toImmutable(), metrics, null);
     }
@@ -4144,12 +4166,14 @@ public final class StandardPlanner implements RoutePlanner {
             ResourceLedger currentLedger,
             PlanBuilder currentPlan,
             MutableList<RoutingIssue> currentIssues,
-            MutableList<RoutingTrace.TraceStage> currentTraceStages
+            MutableList<RoutingTrace.TraceStage> currentTraceStages,
+            PlannerContext.Counters counters
         ) {
             currentLedger.rollback(ledgerMark);
             currentPlan.restore(planActionCount, planNextActionId);
             trimToSize(currentIssues, issueCount);
             trimToSize(currentTraceStages, traceCount);
+            counters.candidateRollbacks++;
         }
 
         private void commit(ResourceLedger currentLedger) {

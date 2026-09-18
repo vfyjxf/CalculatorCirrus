@@ -117,6 +117,25 @@ public final class RecipePathSettings {
         );
     }
 
+    /**
+     * Public holder for the live routing state, exported to external harnesses
+     * (ProfileHelper) that need to run routes outside the calculator UI.
+     */
+    public record RoutingGraphHandle(RecipeGraph graph, RoutingService service) {
+    }
+
+    /**
+     * Reflection access point for external harnesses (ProfileHelper): the live
+     * routing graph + service for the calculator, building them on first use.
+     * Never call on the client thread — the graph build is heavy.
+     */
+    public static @org.jetbrains.annotations.Nullable RoutingGraphHandle currentEntryForProfileHelper() {
+        Catalog catalog = calculatorCatalog(null);
+        RuleDefinition rule = calculatorRule();
+        RoutingCacheEntry cache = cachedRoutingGraph(catalog, rule, ExecutionOverlayClientConfig.calculatorPlannerMode(), ExecutionOverlayClientConfig.calculatorInventorySensitivity(), calculatorLoopPolicy(rule));
+        return new RoutingGraphHandle(cache.graph(), cache.service());
+    }
+
     public static CompletableFuture<Void> prewarmCalculatorRoutingGraph(String reason) {
         long warmupId = warmupSequence.incrementAndGet();
         logger.info("routing.graph.prewarm.schedule reason={} warmupId={}", reason, warmupId);
@@ -507,6 +526,9 @@ public final class RecipePathSettings {
             if (ExecutionOverlayClientConfig.calculatorRecipeScreeningEnabled()) {
                 service.tagIndex().populate(cachedClassification(catalog, graph).tagToRecipes());
             }
+            // attach the trained NB soft-cost profile for cost-aware planning
+            // (no-op when the model resource is absent; preference only)
+            BayesRuntime.attach(service, graph);
             long serviceBuiltNanos = System.nanoTime();
             RoutingCacheEntry entry = new RoutingCacheEntry(graph, service, serviceBuiltNanos);
             synchronized (routingCacheLock) {

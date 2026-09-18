@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.api.recipe.classify;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
+import dev.vfyjxf.cirrus.api.recipe.classify.structural.ColonyViewMirrorRule;
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.ExchangeStructuralRule;
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.GenerationStructuralRule;
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.MassSinkStructuralRule;
@@ -98,6 +99,7 @@ public final class RecipeClassifier {
         builder.add(RecyclingStructuralRule.instance);
         builder.add(GenerationStructuralRule.instance);
         builder.add(MassSinkStructuralRule.create());
+        builder.add(ColonyViewMirrorRule.instance);
         return builder.buildWithUnified(unified);
     }
 

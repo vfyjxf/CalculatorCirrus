@@ -24,7 +24,8 @@ public final class ClassificationContext {
         this.consumersByInput = consumersByInput;
     }
 
-    static ClassificationContext of(List<RecipeClassifyView> recipes) {
+    /** Builds the context indexes over the given catalog of views. */
+    public static ClassificationContext of(List<RecipeClassifyView> recipes) {
         Map<String, IntBag> producers = new java.util.HashMap<>();
         Map<String, IntBag> consumers = new java.util.HashMap<>();
         for (RecipeClassifyView view : recipes) {

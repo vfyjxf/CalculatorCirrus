@@ -222,7 +222,7 @@
   "cirrus.ui.execution.step.store": "存储产出",
   "cirrus.ui.execution.step.store.desc": "存储 %s 个产出资源。",
   "cirrus.ui.execution.step.manual": "手动检查点",
-  "__Comment__": "槽位执行暂停原因",
+  "__Comment__": "路由问题",
   "cirrus.ui.execution.slot.manual.closed": "交互界面未打开",
   "cirrus.ui.execution.slot.manual.prepare": "需要手动准备输入",
   "cirrus.ui.execution.slot.manual.execute": "需要手动执行配方",
@@ -303,11 +303,9 @@
   "cirrus.ui.execution.workbench.warning.missing_stock.detail": "还缺少 %s 才能继续此步骤。",
   "cirrus.ui.execution.workbench.warning.missing_capacity.summary": "背包空间不足：%1$s（%2$s / %3$s）",
   "cirrus.ui.execution.workbench.warning.missing_capacity.detail": "还需要 %s 的空闲容量。",
-  "__Comment__": "执行路由失败",
   "cirrus.ui.execution.routing_failed.summary.generic": "无法生成执行计划",
   "cirrus.ui.execution.routing_failed.detail.generic": "目标：%s",
   "cirrus.ui.execution.routing_failed.detail": "目标：%s｜原因：%s",
-  "__Comment__": "路由问题",
   "cirrus.routing.missing_target": "未选择路由目标",
   "cirrus.routing.loop_policy_unbounded_forbidden": "不允许无界循环路由",
   "cirrus.routing.invalid_budget": "路由预算无效",
@@ -674,5 +672,6 @@
   "key.calculator_cirrus.calculator.open_amount_popup": "数量输入：打开计算器弹窗",
   "cirrus.ui.execution.debug.title": "执行 Overlay 调试界面",
   "cirrus.ui.execution.debug.opened": "已打开执行 Overlay 调试界面",
-  "cirrus.ui.execution.debug.player_required": "当前没有可用于打开调试界面的玩家"
+  "cirrus.ui.execution.debug.player_required": "当前没有可用于打开调试界面的玩家",
+  "cirrus.ui.calculator.settings.planner_mode.cost_aware": "成本感知"
 }

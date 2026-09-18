@@ -69,6 +69,8 @@ public final class RuleProfile {
     private final boolean liftMultiSemanticChildShortages;
     private final boolean fastPathEligible;
     private final int costTierIndex;
+    private final @Nullable java.util.function.IntToDoubleFunction advisoryCostMultiplier;
+    private final @Nullable dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeCostHeuristic costHeuristic;
 
     /**
      * Creates a new rule profile with all components and tuning parameters.
@@ -111,6 +113,44 @@ public final class RuleProfile {
         boolean liftMultiSemanticChildShortages,
         boolean fastPathEligible
     ) {
+        this(profileId, scoreModel, hardRules, scoreRules, rankPolicy, tieBreakPolicy, explorePolicy,
+            unresolvedInputRule, capabilities, shortlistK, rollbackWidth, nearTieEpsilon,
+            amplificationSoftThreshold, amplificationHardThreshold, liftMultiSemanticChildShortages,
+            fastPathEligible, null, null);
+    }
+
+    /**
+     * Full constructor with optional per-recipe soft-cost pieces for cost-aware
+     * planning: an advisory cost multiplier (composed into the advisory unit-cost
+     * oracle) and/or a planner heuristic (per-recipe quality penalty). Both are
+     * ranking signals only — neither ever removes a recipe from the search.
+     *
+     * @param advisoryCostMultiplier optional per-recipe multiplier over the
+     *                               advisory (full) cost oracle; {@code null}
+     *                               keeps the default tag-only behavior
+     * @param costHeuristic          optional per-recipe quality penalty read by
+     *                               the cost-aware planner; {@code null} disables
+     */
+    public RuleProfile(
+        Namespace profileId,
+        ScoreModel scoreModel,
+        ImmutableList<HardRule> hardRules,
+        ImmutableList<ScoreRule> scoreRules,
+        RankPolicy rankPolicy,
+        TieBreakPolicy tieBreakPolicy,
+        ExplorePolicy explorePolicy,
+        UnresolvedInputRule unresolvedInputRule,
+        RuleCapabilities capabilities,
+        int shortlistK,
+        int rollbackWidth,
+        double nearTieEpsilon,
+        double amplificationSoftThreshold,
+        double amplificationHardThreshold,
+        boolean liftMultiSemanticChildShortages,
+        boolean fastPathEligible,
+        @Nullable java.util.function.IntToDoubleFunction advisoryCostMultiplier,
+        @Nullable dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeCostHeuristic costHeuristic
+    ) {
         this.profileId = Checks.checkNotNull(profileId, "profileId");
         this.scoreModel = Checks.checkNotNull(scoreModel, "scoreModel").compile();
         this.hardRules = Checks.checkNotNull(hardRules, "hardRules");
@@ -132,6 +172,8 @@ public final class RuleProfile {
         this.amplificationHardThreshold = amplificationHardThreshold;
         this.liftMultiSemanticChildShortages = liftMultiSemanticChildShortages;
         this.fastPathEligible = fastPathEligible;
+        this.advisoryCostMultiplier = advisoryCostMultiplier;
+        this.costHeuristic = costHeuristic;
         this.costTierIndex = resolveCostTier(this.scoreModel);
     }
 
@@ -248,6 +290,49 @@ public final class RuleProfile {
      */
     public int costTierIndex() {
         return costTierIndex;
+    }
+
+    /**
+     * The optional per-recipe advisory cost multiplier, or {@code null} when
+     * the profile uses only the tag-driven advisory multipliers.
+     */
+    public @Nullable java.util.function.IntToDoubleFunction advisoryCostMultiplier() {
+        return advisoryCostMultiplier;
+    }
+
+    /**
+     * The optional cost-aware planner heuristic (recipe quality penalty),
+     * or {@code null} when the profile carries none. Preference only — never
+     * a feasibility signal.
+     */
+    public @Nullable dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeCostHeuristic costHeuristic() {
+        return costHeuristic;
+    }
+
+    /** Copy of this profile carrying the given planner cost heuristic. */
+    public RuleProfile withCostHeuristic(
+        @Nullable dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeCostHeuristic heuristic
+    ) {
+        return new RuleProfile(
+            profileId,
+            scoreModel.model(),
+            hardRules,
+            scoreRules,
+            rankPolicy,
+            tieBreakPolicy,
+            explorePolicy,
+            unresolvedInputRule,
+            capabilities,
+            shortlistK,
+            rollbackWidth,
+            nearTieEpsilon,
+            amplificationSoftThreshold,
+            amplificationHardThreshold,
+            liftMultiSemanticChildShortages,
+            fastPathEligible,
+            advisoryCostMultiplier,
+            heuristic
+        );
     }
 
     /**

@@ -130,9 +130,15 @@ final class OfflineContent {
             return null;
         }
 
+        private final java.util.concurrent.ConcurrentHashMap<String, @org.jetbrains.annotations.Nullable ResourceLocation> locationCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
         @Override
         public @Nullable ResourceLocation getLocation(String value) {
-            return ResourceLocation.tryParse(value);
+            // hot path: ClassifyViewFactory resolves ids on every oracle
+            // evaluation; tryParse re-validates the path chars each time.
+            // Id strings form a bounded set, so a cache pays for itself.
+            return value == null ? null : locationCache.computeIfAbsent(value, ResourceLocation::tryParse);
         }
 
         @Override

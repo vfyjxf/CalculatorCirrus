@@ -94,6 +94,7 @@ public final class RoutingService {
     private final RoutePlanner standardPlanner = new StandardPlanner();
     private final RoutePlanner assuredPlanner = new AssuredPlanner();
     private final RoutePlanner acyclicPlanner = new AcyclicPlanner(standardPlanner);
+    private final RoutePlanner costAwarePlanner = new dev.vfyjxf.cirrus.recipe.routing.planner.CostAwarePlanner();
     private final Object coneCacheLock = new Object();
     private final Map<ConeCacheKey, ConeStats> coneCache = new LinkedHashMap<>(16, 0.75f, true);
     /**
@@ -350,6 +351,11 @@ public final class RoutingService {
      */
     public void registerRuleProfile(RuleProfile ruleProfile) {
         ruleProfiles.put(ruleProfile.profileId(), ruleProfile);
+    }
+
+    /** The registered profile for the given id, or null when unregistered. */
+    public @Nullable RuleProfile ruleProfile(Namespace profileId) {
+        return ruleProfiles.get(profileId);
     }
 
     public void registerRuleDefinition(RuleDefinition ruleDefinition) {
@@ -660,7 +666,8 @@ public final class RoutingService {
             original.explorationBranchesExpanded(),
             original.explorationBudgetUsed(),
             original.effectiveExplorationSeed(),
-            original.effectiveLoopPolicy()
+            original.effectiveLoopPolicy(),
+            original.candidateRollbacks()
         );
     }
 
@@ -791,6 +798,7 @@ public final class RoutingService {
         return switch (request.plannerMode()) {
             case standard -> standardPlanner;
             case assuredBounded, assuredProven -> assuredPlanner;
+            case costAware -> costAwarePlanner;
             case auto -> coneHasCycle(targetIndex, allowedRecipes) ? standardPlanner : acyclicPlanner;
         };
     }
@@ -906,7 +914,8 @@ public final class RoutingService {
             0,
             0,
             request.explorationSeed() == null ? 0 : request.explorationSeed(),
-            request.loopPolicy()
+            request.loopPolicy(),
+            0
         );
         return new RoutingOutcome(RoutingStatus.failed, null, Lists.immutable.of(issue), metrics, null);
     }

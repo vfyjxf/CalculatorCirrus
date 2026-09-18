@@ -41,6 +41,7 @@ import org.jetbrains.annotations.Nullable;
  * @param explorationBudgetUsed                 exploration-specific budget consumed
  * @param effectiveExplorationSeed              the effective exploration seed used
  * @param effectiveLoopPolicy                   the loop policy that was applied
+ * @param candidateRollbacks                    candidate probes rolled back after a failed/soft child outcome
  */
 public record RoutingMetrics(
     long elapsedMs,
@@ -71,7 +72,8 @@ public record RoutingMetrics(
     int explorationBranchesExpanded,
     int explorationBudgetUsed,
     long effectiveExplorationSeed,
-    LoopPolicy effectiveLoopPolicy
+    LoopPolicy effectiveLoopPolicy,
+    int candidateRollbacks
 ) {
     public RoutingMetrics {
         Checks.checkArgument(elapsedMs >= 0, "elapsedMs must be non-negative");
@@ -98,6 +100,7 @@ public record RoutingMetrics(
         Checks.checkArgument(explorationBranchesExpanded >= 0, "explorationBranchesExpanded must be non-negative");
         Checks.checkArgument(explorationBudgetUsed >= 0, "explorationBudgetUsed must be non-negative");
         Checks.checkNotNull(effectiveLoopPolicy, "effectiveLoopPolicy");
+        Checks.checkArgument(candidateRollbacks >= 0, "candidateRollbacks must be non-negative");
     }
 
     public static RoutingMetrics empty(
@@ -136,7 +139,8 @@ public record RoutingMetrics(
             0,
             0,
             0,
-            loopPolicy
+            loopPolicy,
+            0
         );
     }
 }

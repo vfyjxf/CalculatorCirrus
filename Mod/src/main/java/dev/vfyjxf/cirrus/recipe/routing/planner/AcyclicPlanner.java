@@ -137,7 +137,8 @@ public final class AcyclicPlanner implements RoutePlanner {
             counters.explorationBranchesExpanded,
             counters.explorationBudgetUsed,
             request.explorationSeed() == null ? 0 : request.explorationSeed(),
-            request.loopPolicy()
+            request.loopPolicy(),
+            counters.candidateRollbacks
         );
         RoutingStatus status = planBuilder.hasActions() ? RoutingStatus.success : RoutingStatus.failed;
         return new RoutingOutcome(status, plan, issues.toImmutable(), metrics, null);

@@ -486,6 +486,7 @@ public final class CirrusLangs {
             public static final LangEntry plannerModeAuto = ui("calculator.settings.planner_mode.auto");
             public static final LangEntry plannerModeAssuredBounded = ui("calculator.settings.planner_mode.assured_bounded");
             public static final LangEntry plannerModeAssuredProven = ui("calculator.settings.planner_mode.assured_proven");
+            public static final LangEntry plannerModeCostAware = ui("calculator.settings.planner_mode.cost_aware");
             public static final LangEntry useLiveStock = ui("calculator.settings.use_live_stock");
             public static final LangEntry useLiveStockDesc = ui("calculator.settings.use_live_stock.desc");
             public static final LangEntry recipeScreening = ui("calculator.settings.recipe_screening");

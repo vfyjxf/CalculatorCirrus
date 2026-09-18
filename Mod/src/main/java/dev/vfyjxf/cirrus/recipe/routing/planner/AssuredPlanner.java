@@ -113,7 +113,8 @@ public final class AssuredPlanner implements RoutePlanner {
             0,
             0,
             context.request().explorationSeed() == null ? 0 : context.request().explorationSeed(),
-            context.request().loopPolicy()
+            context.request().loopPolicy(),
+            0
         );
         return new RoutingOutcome(RoutingStatus.failed, null, Lists.immutable.of(issue), metrics, null);
     }
@@ -182,7 +183,8 @@ public final class AssuredPlanner implements RoutePlanner {
             m.explorationBranchesExpanded(),
             m.explorationBudgetUsed(),
             m.effectiveExplorationSeed(),
-            m.effectiveLoopPolicy()
+            m.effectiveLoopPolicy(),
+            m.candidateRollbacks()
         );
         return new RoutingOutcome(origin.status(), origin.plan(), origin.issues(), rewritten, origin.trace());
     }

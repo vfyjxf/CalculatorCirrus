@@ -73,6 +73,22 @@ public final class MassSinkStructuralRule implements ClassificationRule {
             if (group.size() < minGroupSize) {
                 continue;
             }
+            // Variant-unification exemption: when most recipes consume their input
+            // through tag slots (e.g. sawmill "#logs -> one product" families), the
+            // group unifies variants instead of sinking unrelated mass — not a
+            // mass sink.
+            int tagInputRecipes = 0;
+            for (RecipeClassifyView view : group) {
+                for (var input : view.inputs()) {
+                    if (input.kind() == dev.vfyjxf.cirrus.api.recipe.classify.ClassifyContent.Kind.tag) {
+                        tagInputRecipes++;
+                        break;
+                    }
+                }
+            }
+            if (tagInputRecipes * 2 >= group.size()) {
+                continue;
+            }
             Set<String> distinctInputs = new HashSet<>();
             for (RecipeClassifyView view : group) {
                 distinctInputs.addAll(view.allInputIds());

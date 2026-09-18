@@ -89,8 +89,10 @@ public final class RuleEngine {
         Set<String> tags = new LinkedHashSet<>();
         boolean excluded = false;
         @Nullable RecipeUsePolicy hint = null;
+        // relation rules can build on tags attached earlier in the same pass
+        RuleInput accumulated = new AccumulatedTagsInput(input, tags);
         for (RuleSpec rule : catalogRules) {
-            if (!rule.enabled() || !rule.condition().matches(input)) {
+            if (!rule.enabled() || !rule.condition().matches(accumulated)) {
                 continue;
             }
             for (RuleAction action : rule.actions()) {
@@ -108,11 +110,65 @@ public final class RuleEngine {
         return new CatalogVerdict(tags, excluded, hint);
     }
 
+    /** Delegating wrapper exposing the tags accumulated so far in this pass. */
+    private static final class AccumulatedTagsInput implements RuleInput {
+        private final RuleInput delegate;
+        private final Set<String> tags;
+
+        private AccumulatedTagsInput(RuleInput delegate, Set<String> tags) {
+            this.delegate = delegate;
+            this.tags = tags;
+        }
+
+        @Override
+        public String systemId() {
+            return delegate.systemId();
+        }
+
+        @Override
+        public String recipeId() {
+            return delegate.recipeId();
+        }
+
+        @Override
+        public List<String> machines() {
+            return delegate.machines();
+        }
+
+        @Override
+        public int slotCount(boolean inputSide) {
+            return delegate.slotCount(inputSide);
+        }
+
+        @Override
+        public Slot slot(boolean inputSide, int index) {
+            return delegate.slot(inputSide, index);
+        }
+
+        @Override
+        public Set<String> inputIds() {
+            return delegate.inputIds();
+        }
+
+        @Override
+        public Set<String> outputIds() {
+            return delegate.outputIds();
+        }
+
+        @Override
+        public Set<String> tags() {
+            return tags;
+        }
+    }
+
     /**
      * Whole-system exclusion fast path: whether some system-only catalog rule
-     * (condition depends on nothing but the system id) with only
-     * exclusion-effect actions matches this system id. Such systems can be
-     * skipped entirely at catalog build without materializing recipes.
+     * (condition depends on nothing but the system id) with an exclusion-effect
+     * action matches this system id. Descriptive tag actions may accompany the
+     * exclusion (layered rule files attach {@code cirrus:feat/*} tags first);
+     * their loss on skipped systems is harmless because those recipes are
+     * excluded from routing anyway. Hint actions disqualify the rule (hints on
+     * skipped systems would be silently lost).
      */
     public boolean isExcludedSystem(String systemId) {
         RuleInput systemOnly = new SystemOnlyInput(systemId);
@@ -120,8 +176,17 @@ public final class RuleEngine {
             if (!rule.enabled() || !rule.condition().dependsOnlyOnSystem()) {
                 continue;
             }
-            boolean allExcluding = !rule.actions().isEmpty() && rule.actions().stream().allMatch(RuleEngine::isExclusionEffect);
-            if (allExcluding && rule.condition().matches(systemOnly)) {
+            boolean hasExclusionEffect = false;
+            boolean eligible = !rule.actions().isEmpty();
+            for (RuleAction action : rule.actions()) {
+                if (isExclusionEffect(action)) {
+                    hasExclusionEffect = true;
+                } else if (!(action instanceof RuleAction.Tag)) {
+                    eligible = false;
+                    break;
+                }
+            }
+            if (eligible && hasExclusionEffect && rule.condition().matches(systemOnly)) {
                 return true;
             }
         }

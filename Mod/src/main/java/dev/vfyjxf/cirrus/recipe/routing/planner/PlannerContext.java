@@ -90,6 +90,11 @@ public record PlannerContext(
         public int scannedRefs;
         /** Number of candidates that passed all hard rules. */
         public int acceptedCandidates;
+        /**
+         * Candidate probes rolled back after a failed or soft child outcome —
+         * the planner's backtracking count.
+         */
+        public int candidateRollbacks;
         /** Number of output-target adapter attempts (producer candidates tried). */
         public int adapterAttemptCount;
         /** Number of branches expanded during optional exploration. */

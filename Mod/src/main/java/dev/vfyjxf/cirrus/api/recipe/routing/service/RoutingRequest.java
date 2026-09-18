@@ -305,10 +305,12 @@ public record RoutingRequest(
                 case standard -> DefaultRuleProfiles.standardDefaultId;
                 case auto, assuredBounded -> DefaultRuleProfiles.assuredBoundedDefaultId;
                 case assuredProven -> DefaultRuleProfiles.assuredProvenCompatId;
+                case costAware -> DefaultRuleProfiles.standardDefaultId;
             };
             RoutingBudget resolvedBudget = budget != null ? budget : switch (plannerMode) {
                 case standard -> RoutingBudget.standardDefault();
                 case auto, assuredBounded, assuredProven -> RoutingBudget.assuredDefault();
+                case costAware -> RoutingBudget.assuredDefault();
             };
             LoopBudget resolvedLoopBudget = loopBudget != null ? loopBudget : resolvedBudget.loopBudget();
             InventorySensitivityProfile resolvedInventoryProfile = inventorySensitivityProfile != null

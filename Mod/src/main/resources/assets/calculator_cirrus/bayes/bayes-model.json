@@ -1,0 +1,248 @@
+{
+  "alpha": 0.1,
+  "trainedOn": [
+    "atm10",
+    "cobblemon-x-create",
+    "tfc-enhanced"
+  ],
+  "nLabeledJunk": 338,
+  "nLabeledUseful": 178,
+  "priorLogOdds": -0.034710582063926014,
+  "features": [
+    {
+      "id": "cirrus:quests",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:archaeology",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:query_displays",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:trades",
+      "wPresent": 9.045426184657652,
+      "wAbsent": -0.008514821572421399
+    },
+    {
+      "id": "cirrus:villager_trade_displays",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:jeresources_displays",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:market_npc_trades",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:machine_produce_displays",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:synthetic_anvil_duplicates",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:anvil_system_recipes",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:breeding_displays",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:loot_displays",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:colony_views",
+      "wPresent": 12.587239133426761,
+      "wAbsent": -0.34643831346354864
+    },
+    {
+      "id": "cirrus:jei_vanilla_mirrors",
+      "wPresent": 9.820789728104193,
+      "wAbsent": -0.01858320752682953
+    },
+    {
+      "id": "cirrus:recolor_systems",
+      "wPresent": 10.791487956875162,
+      "wAbsent": -0.04982527081679115
+    },
+    {
+      "id": "cirrus:recolor_recipes",
+      "wPresent": 9.541048026508747,
+      "wAbsent": -0.014016313122350724
+    },
+    {
+      "id": "cirrus:chisel_systems",
+      "wPresent": 8.414493499605305,
+      "wAbsent": -0.00452119939864534
+    },
+    {
+      "id": "cirrus:reinforced_swaps",
+      "wPresent": 8.414493499605305,
+      "wAbsent": -0.00452119939864534
+    },
+    {
+      "id": "cirrus:recycling_recipes",
+      "wPresent": 11.022600392581444,
+      "wAbsent": -0.06319732931537618
+    },
+    {
+      "id": "cirrus:recycling_systems",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:mass_valorization",
+      "wPresent": 0.7278383590515923,
+      "wAbsent": -0.017989440622198916
+    },
+    {
+      "id": "cirrus:resource_generators",
+      "wPresent": 0.03471053726455961,
+      "wAbsent": -0.0003105856971355502
+    },
+    {
+      "id": "cirrus:living_matter_predictions",
+      "wPresent": 9.045426184657652,
+      "wAbsent": -0.008514821572421399
+    },
+    {
+      "id": "cirrus:giant_block_conversions",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:anvil_leak_recipes",
+      "wPresent": 12.536166894779226,
+      "wAbsent": -0.32603368295131663
+    },
+    {
+      "id": "cirrus:storage_compression_shape",
+      "wPresent": 4.081306118899309,
+      "wAbsent": -0.021927529386841053
+    },
+    {
+      "id": "cirrus:storage_compression_families",
+      "wPresent": 10.716947614605893,
+      "wAbsent": -0.04616230393631805
+    },
+    {
+      "id": "cirrus:variant_stonecutting_cycles",
+      "wPresent": 1.4695351556315848,
+      "wAbsent": -0.006254741610528085
+    },
+    {
+      "id": "cirrus:smithing_trim_swaps",
+      "wPresent": 4.2843228102005035,
+      "wAbsent": -7.155602928421542e-05
+    },
+    {
+      "id": "cirrus:slab_to_block_generalized",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:chisel_stonecutting_variants",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:salvage_mod_roundtrips",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:cobble_generators",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:shape_reverse_roundtrips",
+      "wPresent": 7.005856361640001,
+      "wAbsent": -0.001102683114855719
+    },
+    {
+      "id": "cirrus:relation/junk_displays",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:relation/duplicates",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:relation/recolor",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:relation/exchange",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:relation/storage_ladder",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:relation/recycling",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:relation/generation",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:structural/exchange",
+      "wPresent": 2.868420744918627,
+      "wAbsent": -0.7159279361703814
+    },
+    {
+      "id": "cirrus:structural/recolor",
+      "wPresent": 2.323589691336422,
+      "wAbsent": -0.004080281215873728
+    },
+    {
+      "id": "cirrus:structural/recycling",
+      "wPresent": 10.145276608027885,
+      "wAbsent": -0.025799499255659383
+    },
+    {
+      "id": "cirrus:structural/generation",
+      "wPresent": 0.0,
+      "wAbsent": 0.0
+    },
+    {
+      "id": "cirrus:structural/mass_sink",
+      "wPresent": -0.18842914225009594,
+      "wAbsent": 0.007306201870287749
+    },
+    {
+      "id": "cirrus:structural/colony_view_mirror",
+      "wPresent": 12.511087073029165,
+      "wAbsent": -0.3165318355793883
+    }
+  ]
+}

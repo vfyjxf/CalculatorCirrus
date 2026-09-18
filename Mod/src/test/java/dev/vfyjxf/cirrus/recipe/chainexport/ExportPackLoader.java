@@ -42,8 +42,10 @@ import java.util.stream.Stream;
 /**
  * Streams an exported {@code recipes-<ts>.json} pack dump into solver-ready
  * {@link ExportRecipe}s backed by the offline id content model, plus the
- * display specs used by the text renderer. Junk/duplicate recipes are removed
- * up-front via the production {@link RecipeClassifier} (builtin unified rules v3).
+ * display specs used by the text renderer. By default junk/duplicate recipes
+ * are removed up-front via the production {@link RecipeClassifier} (builtin
+ * unified rules v3); {@link LoadOptions#keepJunk()} retains them (with their
+ * exclusion tags attached) for experiments that need the unfiltered catalog.
  */
 final class ExportPackLoader {
 
@@ -109,10 +111,12 @@ final class ExportPackLoader {
         final ImmutableList<InputContent> inputs;
         final ImmutableList<OutputContent> outputs;
         /**
-         * Advisory classification tags from the builtin rules (v2) — attached after
+         * Classification tags from the builtin rules — attached after
          * classification so chain text can mark recipes the production rule system
-         * already knows about (exchange/recycling/recolor patterns, ...). Exclusion
-         * tags (junk/duplicate) never get here: those recipes are dropped up-front.
+         * already knows about (exchange/recycling/recolor patterns, ...). In the
+         * default load mode only advisory tags are present (exclusion-tagged
+         * recipes are dropped up-front); with {@link LoadOptions#keepJunk()} the
+         * exclusion tags (junk/duplicate) are kept too.
          */
         Set<String> classificationTags = Set.of();
 
@@ -195,6 +199,11 @@ final class ExportPackLoader {
         }
     }
 
+    /** Options for {@link #load(Path, OfflineContent.Session, LoadOptions)}. */
+    record LoadOptions(boolean keepJunk) {
+        static final LoadOptions DEFAULT = new LoadOptions(false);
+    }
+
     record LoadedPack(
         String name,
         int totalRecipes,
@@ -206,11 +215,30 @@ final class ExportPackLoader {
         List<ExportRecipe> recipes,
         Map<String, Integer> tagCounts,
         long parseMs,
-        long classifyMs
+        long classifyMs,
+        @Nullable ClassificationResult classification,
+        @Nullable List<RecipeClassifyView> views
     ) {
+        /**
+         * Recipes carrying a junk or duplicate exclusion tag; empty unless loaded
+         * with {@link LoadOptions#keepJunk()}.
+         */
+        BitSet junkOrDuplicate() {
+            if (classification == null) {
+                return new BitSet(0);
+            }
+            BitSet combined = classification.recipesWithTag(ClassificationTags.JUNK);
+            BitSet duplicates = classification.recipesWithTag(ClassificationTags.DUPLICATE);
+            combined.or(duplicates);
+            return combined;
+        }
     }
 
     static LoadedPack load(Path packDir, OfflineContent.Session session) throws IOException {
+        return load(packDir, session, LoadOptions.DEFAULT);
+    }
+
+    static LoadedPack load(Path packDir, OfflineContent.Session session, LoadOptions options) throws IOException {
         Path recipesFile = findRecipesFile(packDir);
         if (recipesFile == null) {
             throw new IOException("no recipes-*.json in " + packDir);
@@ -260,7 +288,7 @@ final class ExportPackLoader {
         int dropped = 0;
         Map<String, List<ExportRecipe>> bySystem = new LinkedHashMap<>();
         for (Partial partial : partials) {
-            if (excluded.get(partial.recipe().index)) {
+            if (!options.keepJunk() && excluded.get(partial.recipe().index)) {
                 continue;
             }
             ExportRecipe recipe = partial.recipe();
@@ -270,7 +298,8 @@ final class ExportPackLoader {
             }
             Set<String> tags = result.tagsOf(recipe.index);
             if (!tags.isEmpty()) {
-                // advisory tags only — exclusion tags were filtered above
+                // advisory tags in default mode; exclusion tags additionally present
+                // in keepJunk mode (those recipes are no longer dropped up-front)
                 recipe.classificationTags = Set.copyOf(tags);
             }
             bySystem.computeIfAbsent(recipe.systemId, s -> new ArrayList<>()).add(recipe);
@@ -296,7 +325,9 @@ final class ExportPackLoader {
             kept,
             result.tagCounts(),
             parseMs,
-            classifyMs
+            classifyMs,
+            options.keepJunk() ? result : null,
+            options.keepJunk() ? views : null
         );
     }
 

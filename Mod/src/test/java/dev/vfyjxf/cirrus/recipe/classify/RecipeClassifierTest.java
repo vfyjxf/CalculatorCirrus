@@ -71,11 +71,27 @@ class RecipeClassifierTest {
     }
 
     @Test
-    void colonyViewIsDuplicate() {
-        ClassificationResult result = classify(view(0,
-            "jei:category/minecolonies/stonemason", "minecolonies:stonemason/stone_bricks",
-            List.of(stack("minecraft:stone")), List.of(stack("minecraft:stone_bricks"))));
+    void colonyViewWithMirrorIsDuplicate() {
+        // the teachable view mirrors a real craft (other producer exists) => duplicate
+        ClassificationResult result = classify(
+            view(0, "jei:category/minecolonies/stonemason", "minecolonies:stonemason/stone_bricks",
+                List.of(stack("minecraft:stone")), List.of(stack("minecraft:stone_bricks"))),
+            view(1, "minecraft:crafting", "minecraft:stone_bricks",
+                List.of(stack("minecraft:stone")), List.of(stack("minecraft:stone_bricks"))));
         assertTrue(result.hasTag(0, ClassificationTags.DUPLICATE));
+        assertFalse(result.hasTag(1, ClassificationTags.DUPLICATE));
+    }
+
+    @Test
+    void soleColonyViewIsSoftNotExcluded() {
+        // no other producer: the teachable view IS the production path and must
+        // stay reachable (soft exchange tag, never duplicate/junk)
+        ClassificationResult result = classify(view(0,
+            "jei:category/minecolonies/baker", "minecolonies:baker/cake_batter",
+            List.of(stack("minecraft:wheat")), List.of(stack("minecolonies:cake_batter"))));
+        assertTrue(result.hasTag(0, ClassificationTags.EXCHANGE));
+        assertFalse(result.hasTag(0, ClassificationTags.DUPLICATE));
+        assertFalse(result.hasTag(0, ClassificationTags.JUNK));
     }
 
     @Test
@@ -244,7 +260,9 @@ class RecipeClassifierTest {
     void exclusionSystemDetection() {
         RecipeClassifier classifier = classifier();
         assertTrue(classifier.isExcludedSystem("jei:category/ftbquests/quest"));
-        assertTrue(classifier.isExcludedSystem("jei:category/minecolonies/stonemason"));
+        // colony views are no longer system-excluded: their disposition (mirror vs
+        // sole producer) is decided per recipe by ColonyViewMirrorRule
+        assertFalse(classifier.isExcludedSystem("jei:category/minecolonies/stonemason"));
         assertTrue(classifier.isExcludedSystem("cirrus_test:jei__category/ftbquests/quest"));
         assertFalse(classifier.isExcludedSystem("minecraft:crafting"));
         assertFalse(classifier.isExcludedSystem("jei:category/create/milling"));

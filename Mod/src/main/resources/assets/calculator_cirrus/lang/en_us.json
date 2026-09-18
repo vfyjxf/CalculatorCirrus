@@ -222,7 +222,7 @@
   "cirrus.ui.execution.step.store": "Store outputs",
   "cirrus.ui.execution.step.store.desc": "Store %s produced resource.",
   "cirrus.ui.execution.step.manual": "Manual checkpoint",
-  "__Comment__": "Slot Execution Pause Reasons",
+  "__Comment__": "Routing Issues",
   "cirrus.ui.execution.slot.manual.closed": "Interaction closed",
   "cirrus.ui.execution.slot.manual.prepare": "Prepare inputs manually",
   "cirrus.ui.execution.slot.manual.execute": "Execute recipe manually",
@@ -303,11 +303,9 @@
   "cirrus.ui.execution.workbench.warning.missing_stock.detail": "Need %s more to continue this step.",
   "cirrus.ui.execution.workbench.warning.missing_capacity.summary": "Not enough space for %1$s (%2$s / %3$s)",
   "cirrus.ui.execution.workbench.warning.missing_capacity.detail": "Need %s more free capacity.",
-  "__Comment__": "Execution Routing Failure",
   "cirrus.ui.execution.routing_failed.summary.generic": "Unable to build execution plan",
   "cirrus.ui.execution.routing_failed.detail.generic": "Target: %s",
   "cirrus.ui.execution.routing_failed.detail": "Target: %s | Reason: %s",
-  "__Comment__": "Routing Issues",
   "cirrus.routing.missing_target": "No routing target is selected",
   "cirrus.routing.loop_policy_unbounded_forbidden": "Unbounded loop routing is not allowed",
   "cirrus.routing.invalid_budget": "Routing budget is invalid",
@@ -674,5 +672,6 @@
   "key.calculator_cirrus.calculator.open_amount_popup": "Amount input: open calculator popup",
   "cirrus.ui.execution.debug.title": "Execution Overlay Debug",
   "cirrus.ui.execution.debug.opened": "Opened execution overlay debug screen",
-  "cirrus.ui.execution.debug.player_required": "No player is available to open the debug screen"
+  "cirrus.ui.execution.debug.player_required": "No player is available to open the debug screen",
+  "cirrus.ui.calculator.settings.planner_mode.cost_aware": "Cost-Aware"
 }
