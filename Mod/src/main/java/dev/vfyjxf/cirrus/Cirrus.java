@@ -5,6 +5,7 @@ import dev.vfyjxf.cirrus.api.plugin.CirrusPlugin;
 import dev.vfyjxf.cirrus.content.ContentRegistryBuilder;
 import dev.vfyjxf.cirrus.internal.debug.CirrusDiagnosticsCommands;
 import dev.vfyjxf.cirrus.network.CirrusPayloads;
+import dev.vfyjxf.cirrus.planning.bridge.WorldFacilityRegistry;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.RecipeApiRegistryBuilder;
 import dev.vfyjxf.cirrus.recipe.content.RecipeContentRendererApi;
@@ -19,6 +20,8 @@ import dev.vfyjxf.cloudlib.api.plugin.PluginLoader;
 import dev.vfyjxf.cloudlib.api.plugin.ProgressTracker;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import org.eclipse.collections.api.list.MutableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +50,9 @@ public sealed abstract class Cirrus permits CirrusClient, CirrusServer {
         plugins = PluginDispatcher.create(pluginsWithBuiltin, pluginExecutor);
         modBus.addListener(CirrusPayloads::register);
         NeoForge.EVENT_BUS.addListener(CirrusDiagnosticsCommands::register);
+        NeoForge.EVENT_BUS.addListener((ServerStartedEvent event) ->
+                WorldFacilityRegistry.mount(event.getServer().overworld()));
+        NeoForge.EVENT_BUS.addListener((ServerStoppingEvent event) -> WorldFacilityRegistry.unmount());
     }
 
     protected final void load() {

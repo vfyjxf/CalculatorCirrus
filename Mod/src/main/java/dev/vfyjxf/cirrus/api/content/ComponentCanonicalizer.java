@@ -28,11 +28,11 @@ import java.util.concurrent.ConcurrentMap;
  *
  * <p><b>Contract:</b> canonicalized maps must not be mutated afterwards — a mutated map would keep
  * its stale canonical representative. All {@code ContentStack} values in the recipe calculation and
- * routing pipeline are freshly constructed, read-only stacks, satisfying this contract.
+ * planning pipeline are freshly constructed, read-only stacks, satisfying this contract.
  *
- * <p>Cleared on datapack/cache lifecycle via {@code RecipePathSettings#clearRuntimeCaches}; growth
- * is additionally bounded by a soft cap that simply drops the pool (representatives are lazily
- * recomputed, and comparisons stay correct through the {@code equals} fallback).
+ * <p>Cleared on datapack/cache lifecycle by the client runtime; growth is additionally bounded by a
+ * soft cap that simply drops the pool (representatives are lazily recomputed, and comparisons stay
+ * correct through the {@code equals} fallback).
  */
 @ApiStatus.Internal
 public final class ComponentCanonicalizer {

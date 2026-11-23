@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.overlay;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
@@ -13,7 +15,6 @@ import dev.vfyjxf.cirrus.api.recipe.execution.core.PauseReasons;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowStatus;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.network.chat.Component;
 import org.eclipse.collections.api.factory.Lists;
@@ -570,7 +571,7 @@ public record ExecutionOverlayViewModel(
         };
     }
 
-    private static @Nullable RecipeContent firstOutputContent(ImmutableList<PlanAction.OutputBinding> outputs) {
+    private static @Nullable RecipeContent firstOutputContent(ImmutableList<OutputBinding> outputs) {
         for (var output : outputs) {
             RecipeContent content = contentFromResource(output.resource(), output.amount());
             if (content != null && content.notEmpty()) {
@@ -580,7 +581,7 @@ public record ExecutionOverlayViewModel(
         return null;
     }
 
-    private static @Nullable RecipeContent firstInputContent(ImmutableList<PlanAction.InputBinding> inputs) {
+    private static @Nullable RecipeContent firstInputContent(ImmutableList<InputBinding> inputs) {
         for (var input : inputs) {
             InputContent content = input.input();
             if (content.notEmpty()) {
@@ -590,11 +591,11 @@ public record ExecutionOverlayViewModel(
         return null;
     }
 
-    private static ImmutableList<PlanAction.OutputBinding> executeOutputsForRecipe(
+    private static ImmutableList<OutputBinding> executeOutputsForRecipe(
         ExecutionSession session,
         RecipeEntry<?> recipe
     ) {
-        MutableList<PlanAction.OutputBinding> outputs = Lists.mutable.empty();
+        MutableList<OutputBinding> outputs = Lists.mutable.empty();
         for (InteractionStep step : session.plan().steps()) {
             if (!(step instanceof InteractionStep.ExecuteRecipeStep executeRecipeStep)) {
                 continue;

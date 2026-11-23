@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.recipe.execution.driver.slot;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.recipe.execution.ExecutionRuntime;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
@@ -23,8 +24,7 @@ import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionProbeResult
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.PauseReasonKey;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
+import dev.vfyjxf.cirrus.api.content.stock.Stock;
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayContentHelper;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
@@ -631,7 +631,7 @@ public class SlotExecutionDriver implements ExecutionDriver {
         }
         MutableList<ItemStack> normalized = Lists.mutable.empty();
         for (Object output : outputs) {
-            if (!(output instanceof PlanAction.OutputBinding binding)) {
+            if (!(output instanceof OutputBinding binding)) {
                 continue;
             }
             ItemStack stack = normalize(SlotExecutionDriverSupport.stackFromOutputBinding(binding));
@@ -1580,7 +1580,7 @@ public class SlotExecutionDriver implements ExecutionDriver {
 
     private static final class SlotExecutionDriverSupport {
 
-        private static ItemStack stackFromOutputBinding(PlanAction.OutputBinding output) {
+        private static ItemStack stackFromOutputBinding(OutputBinding output) {
             if (output.resource() == null) {
                 return ItemStack.EMPTY;
             }

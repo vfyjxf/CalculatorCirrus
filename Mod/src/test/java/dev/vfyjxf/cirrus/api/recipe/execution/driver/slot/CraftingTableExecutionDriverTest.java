@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.driver.slot;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
@@ -13,7 +15,6 @@ import dev.vfyjxf.cirrus.api.recipe.execution.InteractionExecutionPlan;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -79,11 +80,11 @@ class CraftingTableExecutionDriverTest {
             ExecutionCapability.interactionPerform,
             recipeEntry("craft"),
             16,
-            Lists.immutable.of(new PlanAction.InputBinding(
+            Lists.immutable.of(new InputBinding(
                 InputContent.fromItemStack(new ItemStack(Items.OAK_LOG), 16),
                 16
             )),
-            Lists.immutable.of(new PlanAction.OutputBinding(
+            Lists.immutable.of(new OutputBinding(
                 ContentStack.fromStack(new ItemStack(Items.SMOKER)),
                 16
             ))
@@ -114,11 +115,11 @@ class CraftingTableExecutionDriverTest {
             ExecutionCapability.interactionPerform,
             recipeEntry("tag_craft"),
             1,
-            Lists.immutable.of(new PlanAction.InputBinding(
+            Lists.immutable.of(new InputBinding(
                 InputContent.fromItemTag(ItemTags.PLANKS, 4),
                 4
             )),
-            Lists.immutable.of(new PlanAction.OutputBinding(
+            Lists.immutable.of(new OutputBinding(
                 ContentStack.fromStack(new ItemStack(Items.CHEST)),
                 1
             ))
@@ -179,13 +180,13 @@ class CraftingTableExecutionDriverTest {
                 recipeEntry("make_furnace"),
                 16,
                 Lists.immutable.of(
-                    new PlanAction.InputBinding(
+                    new InputBinding(
                         InputContent.fromItemStack(new ItemStack(Items.COBBLESTONE), 128),
                         128
                     )
                 ),
                 Lists.immutable.of(
-                    new PlanAction.OutputBinding(
+                    new OutputBinding(
                         ContentStack.fromStack(new ItemStack(Items.FURNACE)),
                         16
                     )
@@ -197,17 +198,17 @@ class CraftingTableExecutionDriverTest {
                 recipeEntry("make_smoker"),
                 16,
                 Lists.immutable.of(
-                    new PlanAction.InputBinding(
+                    new InputBinding(
                         InputContent.fromItemStack(new ItemStack(Items.FURNACE), 16),
                         16
                     ),
-                    new PlanAction.InputBinding(
+                    new InputBinding(
                         InputContent.fromItemStack(new ItemStack(Items.OAK_LOG), 64),
                         64
                     )
                 ),
                 Lists.immutable.of(
-                    new PlanAction.OutputBinding(
+                    new OutputBinding(
                         ContentStack.fromStack(new ItemStack(Items.SMOKER)),
                         16
                     )

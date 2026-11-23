@@ -673,5 +673,7 @@
   "cirrus.ui.execution.debug.title": "Execution Overlay Debug",
   "cirrus.ui.execution.debug.opened": "Opened execution overlay debug screen",
   "cirrus.ui.execution.debug.player_required": "No player is available to open the debug screen",
-  "cirrus.ui.calculator.settings.planner_mode.cost_aware": "Cost-Aware"
+  "cirrus.ui.calculator.settings.planner_mode.cost_aware": "Cost-Aware",
+  "cirrus.ui.execution.target.pause.plan_unavailable.summary": "The execution plan for this target cannot be built",
+  "cirrus.ui.execution.target.pause.plan_unavailable.detail": "The recipe is not resolvable by the planning runtime; check the recipe's inputs and try again"
 }

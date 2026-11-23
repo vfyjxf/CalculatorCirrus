@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.driver.slot;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
@@ -21,7 +23,6 @@ import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayTraceSnaps
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -656,11 +657,11 @@ class SlotExecutionDriverTest {
             ExecutionCapability.interactionPerform,
             recipeEntry("craft"),
             8,
-            Lists.immutable.of(new PlanAction.InputBinding(
+            Lists.immutable.of(new InputBinding(
                 InputContent.fromItemStack(stack(Items.OAK_LOG, 1), 8),
                 8
             )),
-            Lists.immutable.of(new PlanAction.OutputBinding(
+            Lists.immutable.of(new OutputBinding(
                 ContentStack.fromStack(stack(Items.OAK_PLANKS, 1)),
                 8
             ))
@@ -713,11 +714,11 @@ class SlotExecutionDriverTest {
             ExecutionCapability.interactionPerform,
             recipeEntry("craft"),
             8,
-            Lists.immutable.of(new PlanAction.InputBinding(
+            Lists.immutable.of(new InputBinding(
                 InputContent.fromItemStack(stack(Items.OAK_LOG, 1), 8),
                 8
             )),
-            Lists.immutable.of(new PlanAction.OutputBinding(
+            Lists.immutable.of(new OutputBinding(
                 ContentStack.fromStack(stack(Items.OAK_PLANKS, 1)),
                 8
             ))
@@ -761,7 +762,7 @@ class SlotExecutionDriverTest {
             ExecutionSideRequirement.environmentAgnostic,
             ExecutionCapability.outputStorage,
             recipeEntry("craft"),
-            Lists.immutable.of(new PlanAction.OutputBinding(
+            Lists.immutable.of(new OutputBinding(
                 ContentStack.fromStack(stack(Items.OAK_PLANKS, 1)),
                 8
             ))
@@ -845,11 +846,11 @@ class SlotExecutionDriverTest {
             ExecutionCapability.interactionPerform,
             recipeEntry("craft"),
             1,
-            Lists.immutable.of(new PlanAction.InputBinding(
+            Lists.immutable.of(new InputBinding(
                 InputContent.fromItemStack(stack(Items.OAK_LOG, 1), 1),
                 1
             )),
-            Lists.immutable.of(new PlanAction.OutputBinding(
+            Lists.immutable.of(new OutputBinding(
                 ContentStack.fromStack(stack(Items.OAK_PLANKS, 1)),
                 4
             ))

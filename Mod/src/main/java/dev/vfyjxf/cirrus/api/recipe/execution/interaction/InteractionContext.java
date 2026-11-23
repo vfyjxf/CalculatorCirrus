@@ -1,7 +1,8 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.interaction;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.list.ImmutableList;
 
@@ -11,8 +12,8 @@ import org.eclipse.collections.api.list.ImmutableList;
 public record InteractionContext(
     RecipeEntry<?> recipe,
     int times,
-    ImmutableList<PlanAction.InputBinding> inputs,
-    ImmutableList<PlanAction.OutputBinding> expectedOutputs
+    ImmutableList<InputBinding> inputs,
+    ImmutableList<OutputBinding> expectedOutputs
 ) {
 
     public InteractionContext {

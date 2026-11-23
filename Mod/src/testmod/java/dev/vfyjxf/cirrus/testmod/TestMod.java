@@ -1,17 +1,12 @@
 package dev.vfyjxf.cirrus.testmod;
 
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
-import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseCatalogCache;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseFailureRegistry;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseIndex;
-import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseWorkspace;
-import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
-import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
-import dev.vfyjxf.cirrus.ui.process.CalculatorProcessGraphBuilder;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -51,8 +46,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Dummy content mod for watching the calculator's screening and planner in a
- * live game. Two kinds of content:
+ * Dummy content mod for watching the calculator's screening in a live game. Two kinds of content:
  *
  * <p><b>Showcase content</b> — a handful of hand-registered items plus one
  * fluid, wired into hand-designed demo recipes (recolor loop, recycling pair,
@@ -64,7 +58,7 @@ import java.util.Set;
  * {@code datagen/TestDataGenerator}) an own item/fluid is registered under a
  * flattened name: {@code minecraft:iron_ingot} becomes
  * {@code cirrus_test:minecraft__iron_ingot}. Recipes reference the mimics
- * 1:1, so the planner sees the pack's real topology — real item fan-in, real
+ * 1:1, so the calculator sees the pack's real topology — real item fan-in, real
  * tags, real systems — without shipping any real mod content. Mimics are
  * browsed through JEI; the creative tab shows the showcase items only.
  */
@@ -168,11 +162,7 @@ public final class TestMod {
         // on the integrated server RecipeApi initializes after ServerStartedEvent,
         // so the diagnosis retries each tick until the api becomes available
         NeoForge.EVENT_BUS.addListener((ServerTickEvent.Post event) -> diagnoseCatalog());
-        NeoForge.EVENT_BUS.addListener((ServerTickEvent.Post event) -> maybeAutoCalculate());
         NeoForge.EVENT_BUS.addListener((ServerTickEvent.Post event) -> maybeAutoDbIndex());
-        if (TestModAutoSample.enabled()) {
-            TestModAutoSample.register();
-        }
         // client-only hooks live in TestModClientUi so the server dist (game
         // tests) never resolves client-only types
         if (FMLEnvironment.dist == Dist.CLIENT) {
@@ -183,10 +173,8 @@ public final class TestMod {
     private volatile boolean catalogDiagnosed;
 
     /**
-     * Diagnostic: once RecipeApi is up, exercise the exact data path the
-     * planner uses (builtin catalog over all registered systems) and log how
-     * many of the mimic recipes survive it. Any parse/resolution failure in a
-     * mimic system is logged with its stack trace.
+     * Diagnostic: once RecipeApi is up, log how many mimic recipes each mimic
+     * system registered. Any load failure is logged with its stack trace.
      */
     private void diagnoseCatalog() {
         if (catalogDiagnosed) {
@@ -220,102 +208,8 @@ public final class TestMod {
                 }
             }
             LOG.info("cirrus_test registered systems={} recipes={}", mimicSystems, mimicRecipes);
-            RecipePathSettings.Catalog catalog = RecipePathSettings.catalogForWorkspace(
-                api, RecipeDatabaseWorkspace.defaults(), null
-            );
-            LOG.info("builtin catalog recipes={}", catalog.recipes().size());
         } catch (RuntimeException exception) {
             LOG.error("cirrus_test catalog diagnosis failed", exception);
-        }
-    }
-
-    //region auto-calc benchmark hook
-
-    private static final String AUTOCALC_PROPERTY = "cirrus.test.autocalc";
-
-    private volatile boolean autoCalcStarted;
-
-    /**
-     * Headless benchmark hook: with {@code -Dcirrus.test.autocalc=<raw item id>}
-     * (e.g. {@code allthetweaks:atm_star}) the first tick after RecipeApi is up
-     * finds the mimic recipe outputting that item (the candidate with the most
-     * inputs) and times {@code CalculatorProcessGraphBuilder.buildResult} on a
-     * daemon worker thread, once cold and once warm against the shared routing
-     * caches. {@code -Dcirrus.test.autocalc.times=N} sets the crafting count
-     * (default 1).
-     */
-    private void maybeAutoCalculate() {
-        if (autoCalcStarted) {
-            return;
-        }
-        String targetRawId = System.getProperty(AUTOCALC_PROPERTY);
-        if (targetRawId == null || targetRawId.isBlank()) {
-            autoCalcStarted = true;
-            return;
-        }
-        RecipeApi api;
-        try {
-            api = RecipeApi.instance();
-        } catch (RuntimeException notReady) {
-            if (notReady.getMessage() != null && notReady.getMessage().contains("not initialized")) {
-                return; // retried on the next tick
-            }
-            autoCalcStarted = true;
-            LOG.error("cirrus_test autocalc failed", notReady);
-            return;
-        }
-        autoCalcStarted = true;
-        int times = Integer.getInteger(AUTOCALC_PROPERTY + ".times", 1);
-        Thread worker = new Thread(() -> runAutoCalc(api, targetRawId, Math.max(1, times)), "cirrus-test-autocalc");
-        worker.setDaemon(true);
-        worker.start();
-    }
-
-    private void runAutoCalc(RecipeApi api, String targetRawId, int times) {
-        try {
-            String mimicPath = mimicName(targetRawId);
-            RecipeSystem<?> targetSystem = null;
-            Object targetRecipe = null;
-            int targetInputs = -1;
-            int candidates = 0;
-            for (RecipeSystem<?> system : api.allSystems()) {
-                if (!MOD_ID.equals(system.systemId().root())) {
-                    continue;
-                }
-                for (Object recipe : system.allRecipes()) {
-                    if (recipe instanceof TestDataPlugin.DummyRecipe dummy && outputsMimic(dummy, mimicPath)) {
-                        candidates++;
-                        if (dummy.inputs().size() > targetInputs) {
-                            targetInputs = dummy.inputs().size();
-                            targetSystem = system;
-                            targetRecipe = recipe;
-                        }
-                    }
-                }
-            }
-            if (targetSystem == null) {
-                LOG.error("autocalc: no mimic recipe outputs {}", targetRawId);
-                return;
-            }
-            LOG.info(
-                "autocalc target={} candidates={} chosen system={} inputs={} times={}",
-                targetRawId, candidates, targetSystem.systemId(), targetInputs, times
-            );
-            for (int run = 1; run <= 2; run++) {
-                long start = System.nanoTime();
-                CalculatorProcessGraphBuilder.BuildResult result = buildAutoCalc(targetSystem, targetRecipe, times);
-                long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
-                var debug = result.debugInfo();
-                LOG.info(
-                    "autocalc run={} elapsed={} ms nodes={} edges={} planActions={} routingElapsed={} ms expanded={} generated={} budgetExhausted={} stop={} fallback={}",
-                    run, elapsedMs, result.graph().nodeCount(), result.graph().edgeCount(),
-                    debug.routePlanActions(), debug.routingElapsedMs(), debug.expandedNodes(),
-                    debug.generatedCandidates(), debug.budgetExhausted(), debug.budgetStopReason(),
-                    debug.fallbackUsed()
-                );
-            }
-        } catch (RuntimeException exception) {
-            LOG.error("autocalc failed for " + targetRawId, exception);
         }
     }
 
@@ -398,17 +292,6 @@ public final class TestMod {
             }
         }
         return false;
-    }
-
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    private static CalculatorProcessGraphBuilder.BuildResult buildAutoCalc(RecipeSystem system, Object recipe, int times) {
-        return CalculatorProcessGraphBuilder.buildResult(
-            RecipeEntry.of(system, recipe),
-            times,
-            Stock.empty(),
-            java.util.Map.of(),
-            CalculatorProcessGraphBuilder.RouteMode.calculator
-        );
     }
 
     //endregion

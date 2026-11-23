@@ -18,7 +18,6 @@ import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowStatus;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageAccessibility;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageApi;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageGuidance;
@@ -141,8 +140,8 @@ class ExecutionRuntimeContractTest {
             ExecutionCapability.interactionPerform,
             recipeEntry("craft"),
             1,
-            Lists.immutable.of(new PlanAction.InputBinding(input(1L), 1L)),
-            Lists.immutable.of(new PlanAction.OutputBinding(resource(4L), 4L))
+            Lists.immutable.of(new InputBinding(input(1L), 1L)),
+            Lists.immutable.of(new OutputBinding(resource(4L), 4L))
         );
         var runtime = new ExecutionRuntime(new FakeStorageApi(), new FakeInteractionApi(false));
         var session = runtime.advance(ExecutionSession.start(new InteractionExecutionPlan(recipeEntry("craft"), 1, Lists.immutable.of(step)), flowRoot(step)));
@@ -219,8 +218,8 @@ class ExecutionRuntimeContractTest {
             ExecutionCapability.interactionPerform,
             recipeEntry("craft"),
             8,
-            Lists.immutable.of(new PlanAction.InputBinding(input(8L), 8L)),
-            Lists.immutable.of(new PlanAction.OutputBinding(resource(8L), 8L))
+            Lists.immutable.of(new InputBinding(input(8L), 8L)),
+            Lists.immutable.of(new OutputBinding(resource(8L), 8L))
         );
         var runtime = new ExecutionRuntime(new FakeStorageApi(), new ReTranslatingInteractionApi());
         var session = runtime.advance(

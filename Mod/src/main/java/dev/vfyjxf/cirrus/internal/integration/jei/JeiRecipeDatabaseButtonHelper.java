@@ -3,7 +3,6 @@ package dev.vfyjxf.cirrus.internal.integration.jei;
 import dev.vfyjxf.cirrus.api.recipe.database.CustomRecipeDatabase;
 import dev.vfyjxf.cirrus.api.recipe.database.FileRecipeDatabaseRepository;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseWorkspace;
-import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
@@ -12,6 +11,7 @@ import mezz.jei.api.gui.buttons.IButtonState;
 import mezz.jei.api.gui.buttons.IIconButtonController;
 import mezz.jei.api.gui.inputs.IJeiUserInput;
 import mezz.jei.api.recipe.advanced.IRecipeButtonControllerFactory;
+import net.neoforged.fml.loading.FMLPaths;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.file.Path;
@@ -33,7 +33,7 @@ public final class JeiRecipeDatabaseButtonHelper {
     }
 
     public static Path defaultRepositoryRoot() {
-        return RecipePathSettings.defaultDatabaseRepositoryRoot();
+        return FMLPaths.CONFIGDIR.get().resolve("cirrus").resolve("databases");
     }
 
     private static String activeDatabaseName() {

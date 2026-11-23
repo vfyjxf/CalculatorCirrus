@@ -2,8 +2,6 @@ package dev.vfyjxf.cirrus.config;
 
 import dev.vfyjxf.cirrus.CirrusConstants;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionObservedStockPolicy;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.InventorySensitivityProfile;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.PlannerMode;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
@@ -26,15 +24,12 @@ public final class ExecutionOverlayClientConfig {
     public static final boolean calculatorRulesReadOtherWorldsDefault = false;
     public static final boolean calculatorUseLiveStockDefault = false;
     public static final boolean calculatorRecipeScreeningEnabledDefault = true;
-    public static final PlannerMode calculatorPlannerModeDefault = PlannerMode.auto;
-    public static final InventorySensitivityProfile calculatorInventorySensitivityDefault = InventorySensitivityProfile.balanced;
     public static final CalculatorRuleSelection calculatorRuleSelectionDefault = CalculatorRuleSelection.preview;
     public static final boolean calculatorAutoDeepenEnabledDefault = true;
     public static final int calculatorDeepenMaxGeneratedDefault = 240_000;
     public static final int calculatorDeepenMaxGeneratedMin = 60_000;
     public static final int calculatorDeepenMaxGeneratedMax = 960_000;
     public static final boolean executionUsesCalculatorPathSettingsDefault = true;
-    public static final PlannerMode executionPlannerModeDefault = PlannerMode.standard;
 
     private static final ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
 
@@ -47,13 +42,10 @@ public final class ExecutionOverlayClientConfig {
     private static final ModConfigSpec.BooleanValue calculatorRulesReadOtherWorldsValue;
     private static final ModConfigSpec.BooleanValue calculatorUseLiveStockValue;
     private static final ModConfigSpec.BooleanValue calculatorRecipeScreeningEnabledValue;
-    private static final ModConfigSpec.EnumValue<PlannerMode> calculatorPlannerModeValue;
-    private static final ModConfigSpec.EnumValue<InventorySensitivityProfile> calculatorInventorySensitivityValue;
     private static final ModConfigSpec.EnumValue<CalculatorRuleSelection> calculatorRuleSelectionValue;
     private static final ModConfigSpec.BooleanValue calculatorAutoDeepenEnabledValue;
     private static final ModConfigSpec.IntValue calculatorDeepenMaxGeneratedValue;
     private static final ModConfigSpec.BooleanValue executionUsesCalculatorPathSettingsValue;
-    private static final ModConfigSpec.EnumValue<PlannerMode> executionPlannerModeValue;
     public static final ModConfigSpec SPEC;
 
     private static volatile int overlayRate = overlayRateDefault;
@@ -65,13 +57,10 @@ public final class ExecutionOverlayClientConfig {
     private static volatile boolean calculatorRulesReadOtherWorlds = calculatorRulesReadOtherWorldsDefault;
     private static volatile boolean calculatorUseLiveStock = calculatorUseLiveStockDefault;
     private static volatile boolean calculatorRecipeScreeningEnabled = calculatorRecipeScreeningEnabledDefault;
-    private static volatile PlannerMode calculatorPlannerMode = calculatorPlannerModeDefault;
-    private static volatile InventorySensitivityProfile calculatorInventorySensitivity = calculatorInventorySensitivityDefault;
     private static volatile CalculatorRuleSelection calculatorRuleSelection = calculatorRuleSelectionDefault;
     private static volatile boolean calculatorAutoDeepenEnabled = calculatorAutoDeepenEnabledDefault;
     private static volatile int calculatorDeepenMaxGenerated = calculatorDeepenMaxGeneratedDefault;
     private static volatile boolean executionUsesCalculatorPathSettings = executionUsesCalculatorPathSettingsDefault;
-    private static volatile PlannerMode executionPlannerMode = executionPlannerModeDefault;
 
     static {
         builder.push("execution");
@@ -90,9 +79,6 @@ public final class ExecutionOverlayClientConfig {
         executionUsesCalculatorPathSettingsValue = builder
             .comment("Whether execution routing uses the calculator path settings, including active recipe database, rule profile, planner mode, and inventory sensitivity.")
             .define("use_calculator_path_settings", executionUsesCalculatorPathSettingsDefault);
-        executionPlannerModeValue = builder
-            .comment("Planner mode used by execution routing when use_calculator_path_settings is false.")
-            .defineEnum("planner_mode", executionPlannerModeDefault);
         builder.pop();
         builder.push("jei");
         jeiTargetButtonAutoCloseValue = builder
@@ -123,12 +109,6 @@ public final class ExecutionOverlayClientConfig {
         calculatorRecipeScreeningEnabledValue = builder
             .comment("Whether recipe screening filters junk/duplicate recipes out of planning and marks them in the database browser.")
             .define("recipe_screening_enabled", calculatorRecipeScreeningEnabledDefault);
-        calculatorPlannerModeValue = builder
-            .comment("Planner mode used by the calculator process graph.")
-            .defineEnum("planner_mode", calculatorPlannerModeDefault);
-        calculatorInventorySensitivityValue = builder
-            .comment("How strongly calculator previews should prefer current stock when live stock is enabled.")
-            .defineEnum("inventory_sensitivity", calculatorInventorySensitivityDefault);
         calculatorAutoDeepenEnabledValue = builder
             .comment("Whether the calculator automatically continues planning with a larger budget when the first wave stops on budget limits with pending inputs.")
             .define("auto_deepen", calculatorAutoDeepenEnabledDefault);
@@ -235,26 +215,6 @@ public final class ExecutionOverlayClientConfig {
         calculatorRecipeScreeningEnabledValue.save();
     }
 
-    public static PlannerMode calculatorPlannerMode() {
-        return calculatorPlannerMode;
-    }
-
-    public static void setCalculatorPlannerMode(PlannerMode mode) {
-        calculatorPlannerMode = mode == null ? calculatorPlannerModeDefault : mode;
-        calculatorPlannerModeValue.set(calculatorPlannerMode);
-        calculatorPlannerModeValue.save();
-    }
-
-    public static InventorySensitivityProfile calculatorInventorySensitivity() {
-        return calculatorInventorySensitivity;
-    }
-
-    public static void setCalculatorInventorySensitivity(InventorySensitivityProfile profile) {
-        calculatorInventorySensitivity = profile == null ? calculatorInventorySensitivityDefault : profile;
-        calculatorInventorySensitivityValue.set(calculatorInventorySensitivity);
-        calculatorInventorySensitivityValue.save();
-    }
-
     public static CalculatorRuleSelection calculatorRuleSelection() {
         return calculatorRuleSelection;
     }
@@ -296,16 +256,6 @@ public final class ExecutionOverlayClientConfig {
         executionUsesCalculatorPathSettingsValue.save();
     }
 
-    public static PlannerMode executionPlannerMode() {
-        return executionPlannerMode;
-    }
-
-    public static void setExecutionPlannerMode(PlannerMode mode) {
-        executionPlannerMode = mode == null ? executionPlannerModeDefault : mode;
-        executionPlannerModeValue.set(executionPlannerMode);
-        executionPlannerModeValue.save();
-    }
-
     public static void setObservedStockPolicy(ExecutionObservedStockPolicy policy) {
         observedStockPolicy = policy == null ? observedStockPolicyDefault : policy;
         observedStockPolicyValue.set(observedStockPolicy);
@@ -328,13 +278,10 @@ public final class ExecutionOverlayClientConfig {
         calculatorRulesReadOtherWorlds = calculatorRulesReadOtherWorldsValue.get();
         calculatorUseLiveStock = calculatorUseLiveStockValue.get();
         calculatorRecipeScreeningEnabled = calculatorRecipeScreeningEnabledValue.get();
-        calculatorPlannerMode = calculatorPlannerModeValue.get();
-        calculatorInventorySensitivity = calculatorInventorySensitivityValue.get();
         calculatorRuleSelection = calculatorRuleSelectionValue.get();
         calculatorAutoDeepenEnabled = calculatorAutoDeepenEnabledValue.get();
         calculatorDeepenMaxGenerated = calculatorDeepenMaxGeneratedValue.get();
         executionUsesCalculatorPathSettings = executionUsesCalculatorPathSettingsValue.get();
-        executionPlannerMode = executionPlannerModeValue.get();
     }
 
     private static int clamp(int value) {

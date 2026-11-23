@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.ui.execution.page;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
@@ -10,7 +12,6 @@ import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionEngine;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContexts;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.recipe.execution.driver.slot.CraftingTableExecutionDriver;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayContentHelper;
@@ -27,8 +28,8 @@ import java.util.List;
 
 public record RecipeActiveContext(
     RecipeEntry<?> recipe,
-    ImmutableList<PlanAction.InputBinding> inputs,
-    ImmutableList<PlanAction.OutputBinding> outputs,
+    ImmutableList<InputBinding> inputs,
+    ImmutableList<OutputBinding> outputs,
     boolean current,
     LangEntry phase,
     @Nullable ProjectedRecipe projected,
@@ -107,8 +108,8 @@ public record RecipeActiveContext(
 
     private static RecipeActiveContext build(
         RecipeEntry<?> recipe,
-        ImmutableList<PlanAction.InputBinding> inputs,
-        ImmutableList<PlanAction.OutputBinding> outputs,
+        ImmutableList<InputBinding> inputs,
+        ImmutableList<OutputBinding> outputs,
         boolean current,
         LangEntry phase
     ) {
@@ -120,7 +121,7 @@ public record RecipeActiveContext(
             : projected == null
                 ? List.of()
                 : mergeMaterialSlots(inputContentSlots(projected.inputs()));
-        ImmutableList<PlanAction.InputBinding> previewBindings = previewBindings(inputs, projected);
+        ImmutableList<InputBinding> previewBindings = previewBindings(inputs, projected);
         List<ProcessNode.MaterialSlot> displayInputGrid = previewBindings.notEmpty()
             ? mapPreviewSlots(recipe, previewBindings)
             : new ArrayList<>(displayInputs);
@@ -201,12 +202,12 @@ public record RecipeActiveContext(
     }
 
     private static List<RecipeContent> outputContents(
-        ImmutableList<PlanAction.OutputBinding> outputs,
+        ImmutableList<OutputBinding> outputs,
         @Nullable ProjectedRecipe projected
     ) {
         if (outputs.notEmpty()) {
             ArrayList<RecipeContent> out = new ArrayList<>(outputs.size());
-            for (PlanAction.OutputBinding output : outputs) {
+            for (OutputBinding output : outputs) {
                 RecipeContent content = ExecutionOverlayContentHelper.recipeContentFromResource(
                     output.resource(),
                     Math.max(1L, output.amount()),
@@ -230,17 +231,17 @@ public record RecipeActiveContext(
         return out;
     }
 
-    private static List<ProcessNode.MaterialSlot> inputBindingSlots(ImmutableList<PlanAction.InputBinding> inputs) {
+    private static List<ProcessNode.MaterialSlot> inputBindingSlots(ImmutableList<InputBinding> inputs) {
         ArrayList<ProcessNode.MaterialSlot> out = new ArrayList<>(inputs.size());
-        for (PlanAction.InputBinding binding : inputs) {
+        for (InputBinding binding : inputs) {
             out.add(ExecutionOverlayContentHelper.materialSlot(binding, false));
         }
         return out;
     }
 
-    private static List<ProcessNode.MaterialSlot> outputBindingSlots(ImmutableList<PlanAction.OutputBinding> outputs) {
+    private static List<ProcessNode.MaterialSlot> outputBindingSlots(ImmutableList<OutputBinding> outputs) {
         ArrayList<ProcessNode.MaterialSlot> out = new ArrayList<>(outputs.size());
-        for (PlanAction.OutputBinding binding : outputs) {
+        for (OutputBinding binding : outputs) {
             out.add(ExecutionOverlayContentHelper.materialSlot(binding));
         }
         return out;
@@ -262,8 +263,8 @@ public record RecipeActiveContext(
         return out;
     }
 
-    private static ImmutableList<PlanAction.InputBinding> previewBindings(
-        ImmutableList<PlanAction.InputBinding> inputs,
+    private static ImmutableList<InputBinding> previewBindings(
+        ImmutableList<InputBinding> inputs,
         @Nullable ProjectedRecipe projected
     ) {
         if (inputs.notEmpty()) {
@@ -272,16 +273,16 @@ public record RecipeActiveContext(
         if (projected == null || projected.inputs().isEmpty()) {
             return Lists.immutable.empty();
         }
-        ArrayList<PlanAction.InputBinding> bindings = new ArrayList<>(projected.inputs().size());
+        ArrayList<InputBinding> bindings = new ArrayList<>(projected.inputs().size());
         for (InputContent input : projected.inputs()) {
-            bindings.add(new PlanAction.InputBinding(input, input.amount()));
+            bindings.add(new InputBinding(input, input.amount()));
         }
         return Lists.immutable.ofAll(bindings);
     }
 
     private static ArrayList<ProcessNode.MaterialSlot> mapPreviewSlots(
         RecipeEntry<?> recipe,
-        ImmutableList<PlanAction.InputBinding> bindings
+        ImmutableList<InputBinding> bindings
     ) {
         ImmutableList<CraftingTableExecutionDriver.RecipePreviewSlot> previewSlots =
             CraftingTableExecutionDriver.resolvePreviewSlots(recipe, bindings);

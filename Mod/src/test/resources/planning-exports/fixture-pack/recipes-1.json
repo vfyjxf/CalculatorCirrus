@@ -1,0 +1,619 @@
+{
+  "formatVersion": 1,
+  "minecraftVersion": "1.21.1",
+  "note": "Synthetic offline export fixture: 6 content kinds, crafting/smelting/blasting/stonecutting/smithing, reversible packing, amplification and regenerative cycles, dirty-recipe drop buckets.",
+  "recipes": [
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:oak_planks",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "tag", "tag": "minecraft:logs", "amount": 1, "chance": 1.0,
+          "values": ["minecraft:oak_log", "minecraft:birch_log", "minecraft:oak_log"] }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:oak_planks", "count": 4 },
+          "amount": 4, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:chest",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:oak_planks", "count": 8 },
+          "amount": 8, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:chest", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:smelting",
+      "source": "vanilla",
+      "id": "fixture:iron_ingot_from_smelting_raw_iron",
+      "machines": ["minecraft:furnace"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:raw_iron", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:iron_ingot", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:blasting",
+      "source": "vanilla",
+      "id": "fixture:iron_ingot_from_blasting_raw_iron",
+      "machines": ["minecraft:blast_furnace"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:raw_iron", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:iron_ingot", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:stonecutting",
+      "source": "vanilla",
+      "id": "fixture:stonecutting_stone_bricks",
+      "machines": ["minecraft:stonecutter"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone_bricks", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:stone_bricks",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone", "count": 4 },
+          "amount": 4, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone_bricks", "count": 4 },
+          "amount": 4, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:hopper",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:iron_ingot", "count": 5 },
+          "amount": 5, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:chest", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:hopper", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:piston",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:oak_planks", "count": 3 },
+          "amount": 3, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:cobblestone", "count": 4 },
+          "amount": 4, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:iron_ingot", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:redstone", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:hopper", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:piston", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:observer",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:cobblestone", "count": 6 },
+          "amount": 6, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:piston", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:redstone", "count": 2 },
+          "amount": 2, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:nether_quartz", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:observer", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:iron_block",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:iron_ingot", "count": 9 },
+          "amount": 9, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:iron_block", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:iron_ingot_from_block",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:iron_block", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:iron_ingot", "count": 9 },
+          "amount": 9, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:smithing",
+      "source": "vanilla",
+      "id": "fixture:smithing_template_duplication",
+      "machines": ["minecraft:smithing_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:netherite_upgrade_smithing_template", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:diamond", "count": 7 },
+          "amount": 7, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:netherrack", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:netherite_upgrade_smithing_template", "count": 2 },
+          "amount": 2, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:cycle_forward",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:a", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:x", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:b", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:p", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:cycle_back",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:b", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:y", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:a", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:smelting",
+      "source": "vanilla",
+      "id": "fixture:stone_from_cobblestone",
+      "machines": ["minecraft:furnace"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:cobblestone", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:complex_dirty",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "complex", "amount": 1, "chance": 1.0, "implementation": "com.example.ComplexInput" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:complex_product", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:unknown_kind_dirty",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "mystery", "amount": 1, "chance": 1.0 }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:unknown_product", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:any_input",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "any", "amount": 1, "chance": 1.0,
+          "stacks": [
+            { "type": "item", "id": "minecraft:iron_ingot", "count": 1 },
+            { "type": "item", "id": "minecraft:gold_ingot", "count": 1 }
+          ] }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:any_product", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:typed_any_input",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "typedAny", "amount": 1, "chance": 1.0, "stackType": "minecraft:item",
+          "stacks": [
+            { "type": "item", "id": "minecraft:copper_ingot", "count": 1 },
+            { "type": "item", "id": "minecraft:tin_ingot", "count": 1 }
+          ] }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:typed_any_product", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:smelting",
+      "source": "vanilla",
+      "id": "fixture:timed_smelt",
+      "machines": ["minecraft:furnace"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:raw_copper", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "value", "valueType": "calculator_cirrus:energy", "value": 10, "chance": 1.0 }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:copper_ingot", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "value", "valueType": "calculator_cirrus:time", "value": 200, "chance": 1.0 }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:merged_tag_inputs",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "tag", "tag": "minecraft:logs", "amount": 1, "chance": 1.0,
+          "values": ["minecraft:birch_log", "minecraft:oak_log"] },
+        { "kind": "tag", "tag": "minecraft:logs", "amount": 2, "chance": 1.0,
+          "values": ["minecraft:oak_log", "minecraft:birch_log"] }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:merged_log_block", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:merged_outputs",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone_bricks", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone_bricks", "count": 2 },
+          "amount": 2, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "fixture:fluid_mixing",
+      "source": "custom",
+      "id": "fixture:fluid_mix",
+      "machines": ["fixture:mixer"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "fluid", "fluid": "minecraft:water", "amount": 1000 },
+          "amount": 1000, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "fluid", "fluid": "fixture:slurry", "amount": 1000 },
+          "amount": 1000, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "fixture:charging",
+      "source": "custom",
+      "id": "fixture:energy_charge",
+      "machines": ["fixture:charger"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "fixture:energy", "amount": 1, "value": "500" },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "fixture:charged", "amount": 1, "value": "x" },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:enchanted_sword_to_diamond",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack",
+          "stack": { "type": "item", "id": "minecraft:netherite_sword", "count": 1,
+            "components": { "minecraft:enchantments": { "levels": { "minecraft:sharpness": 5 } } } },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identityAndComponent" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:diamond", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:component_ignored",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack",
+          "stack": { "type": "item", "id": "minecraft:netherite_sword", "count": 1,
+            "components": { "minecraft:enchantments": { "levels": { "minecraft:sharpness": 5 } } } },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:diamond", "count": 2 },
+          "amount": 2, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stick", "count": 2 },
+          "amount": 2, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:empty_id_product", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stick", "count": 2 },
+          "amount": 2, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:empty_id_product", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stick", "count": 3 },
+          "amount": 3, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:empty_id_product_2", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:zero_amount",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone", "count": 0 },
+          "amount": 0, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone_bricks", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:no_inputs",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone_bricks", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:no_outputs",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": []
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:tag_empty",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "tag", "tag": "minecraft:empty_tag", "amount": 1, "chance": 1.0, "values": [] }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:tag_empty_product", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:multi_stack_output",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "any", "amount": 1, "chance": 1.0,
+          "stacks": [
+            { "type": "item", "id": "minecraft:stone_bricks", "count": 1 },
+            { "type": "item", "id": "minecraft:stone", "count": 1 }
+          ] }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:value_only_output",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "value", "valueType": "calculator_cirrus:time", "value": 5, "chance": 1.0 }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:value_only_input",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "value", "valueType": "calculator_cirrus:time", "value": 5, "chance": 1.0 }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone_bricks", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:bad_stack",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone_bricks", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:tag_output_single",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "tag", "tag": "fixture:tag/stone_like", "amount": 1, "chance": 1.0,
+          "values": ["fixture:tag_output_product"] }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:tag_output_multi",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:stone", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "tag", "tag": "fixture:tag/ambiguous", "amount": 1, "chance": 1.0,
+          "values": ["fixture:tag_alt_a", "fixture:tag_alt_b"] }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:probabilistic_dust",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:redstone", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:probabilistic_dust", "count": 1 },
+          "amount": 1, "chance": 0.5, "matchStrategy": "identity" }
+      ]
+    },
+    {
+      "system": "minecraft:crafting",
+      "source": "vanilla",
+      "id": "fixture:chance_zero_slots",
+      "machines": ["minecraft:crafting_table"],
+      "inputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:redstone", "count": 1 },
+          "amount": 1, "chance": 0.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "minecraft:cobblestone", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" }
+      ],
+      "outputs": [
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:chance_zero_product", "count": 1 },
+          "amount": 1, "chance": 1.0, "matchStrategy": "identity" },
+        { "kind": "stack", "stack": { "type": "item", "id": "fixture:chance_zero_side", "count": 1 },
+          "amount": 1, "chance": 0.0, "matchStrategy": "identity" }
+      ]
+    }
+  ]
+}

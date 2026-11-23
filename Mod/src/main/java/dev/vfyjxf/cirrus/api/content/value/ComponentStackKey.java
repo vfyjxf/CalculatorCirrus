@@ -13,9 +13,8 @@ import java.util.Objects;
  * components, amount-independent — unlike {@code TypedContentStack}'s deliberately component-blind
  * {@code equals}, which must not be changed because other maps rely on it.
  *
- * <p>Used for the amount map in {@link dev.vfyjxf.cirrus.api.recipe.routing.Stock} and the byproduct
- * pool in {@link dev.vfyjxf.cirrus.api.recipe.routing.state.ResourceLedger}, where keying by the
- * stack itself conflated same-content/different-component entries.
+ * <p>Used for the amount map in {@link dev.vfyjxf.cirrus.api.content.stock.Stock}, where keying by
+ * the stack itself conflated same-content/different-component entries.
  *
  * <p>The hash includes a value-based components hash (stable across canonical-pool clears) so that
  * variants of the same content land in distinct buckets. Bucket collisions between variants of the

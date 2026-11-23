@@ -1,9 +1,9 @@
 package dev.vfyjxf.cirrus.config;
 
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.ActiveRoutingRule;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultRuleDefinitions;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleDefinition;
-
+/**
+ * Persisted calculator rule preset choice, kept as a stable config value until the planning bridge
+ * exposes presets again.
+ */
 public enum CalculatorRuleSelection {
     preview,
     active,
@@ -11,13 +11,5 @@ public enum CalculatorRuleSelection {
     strict,
     assured;
 
-    public RuleDefinition resolve() {
-        return switch (this) {
-            case preview -> DefaultRuleDefinitions.calculatorPreview();
-            case active -> ActiveRoutingRule.activeRule();
-            case execution -> DefaultRuleDefinitions.standardExecution();
-            case strict -> DefaultRuleDefinitions.standardDefault();
-            case assured -> DefaultRuleDefinitions.assuredBounded();
-        };
-    }
+    // TODO(planning-bridge): 规则档案/规则集切换随旧路由删除，待 bridge 提供新预设后再接回（旧路由已删除，待 bridge 接线）
 }

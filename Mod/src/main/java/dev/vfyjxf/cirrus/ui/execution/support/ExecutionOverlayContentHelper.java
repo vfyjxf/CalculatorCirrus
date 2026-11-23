@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.ui.execution.support;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.content.render.StackRenderer;
 import dev.vfyjxf.cirrus.api.content.value.ContentKind;
@@ -12,7 +14,6 @@ import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
 import dev.vfyjxf.cirrus.ui.process.MaterialCategory;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode;
@@ -218,7 +219,7 @@ public final class ExecutionOverlayContentHelper {
         return location == null ? stack.toString() : location.toString();
     }
 
-    public static ProcessNode.MaterialSlot materialSlot(PlanAction.InputBinding binding, boolean catalyst) {
+    public static ProcessNode.MaterialSlot materialSlot(InputBinding binding, boolean catalyst) {
         return materialSlot(binding.input(), safeInt(binding.amount()), catalyst);
     }
 
@@ -239,7 +240,7 @@ public final class ExecutionOverlayContentHelper {
         );
     }
 
-    public static ProcessNode.MaterialSlot materialSlot(PlanAction.OutputBinding binding) {
+    public static ProcessNode.MaterialSlot materialSlot(OutputBinding binding) {
         return materialSlot(binding.resource(), safeInt(binding.amount()), 1.0d);
     }
 

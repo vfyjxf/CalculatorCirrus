@@ -2,14 +2,9 @@ package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
-import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingStatus;
+import dev.vfyjxf.cirrus.api.content.stock.Stock;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.execution.ExecutionTargetRecipeState;
-import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.ActiveRoutingRule;
 import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
 import dev.vfyjxf.cirrus.ui.CirrusUiAsync;
@@ -83,7 +78,6 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
     private long amount = 1;
     private CalculatorProcessGraphBuilder.RouteMode graphRouteMode = CalculatorProcessGraphBuilder.RouteMode.calculator;
     private ProcessGraph graph = new ProcessGraph();
-	private @Nullable RoutingPlan routingPlan;
 	private long calculationRequestId = 0L;
     private Map<String, String> contentVariantPreferences = Map.of();
 	private final Set<String> milestoneManualCompletions = new HashSet<>();
@@ -283,12 +277,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 				minWidth(0)
 		);
 
-		// Pending-input banner (budget-limited plans the user can deepen)
-		Widget pendingBanner = createPendingInputsBanner();
-		if (pendingBanner != null) {
-			leftArea.addWidget(pendingBanner);
-		}
-
+		// TODO(planning-ui): 恢复待解析输入横幅与深化按钮（新规划器接线后）
 		// View switcher tabs
 		viewSwitcher = new ViewSwitcherWidget(this);
 		viewSwitcher.setDeepenAvailable(deepenActionAvailable);
@@ -307,39 +296,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 		refreshHoverTooltipSoon();
 	}
 
-	/**
-	 * Banner shown above the process views when the routed plan left inputs
-	 * unresolved: reports how many inputs still lack a source and offers a
-	 * deepen button that re-runs the router (bypassing the build cache) with
-	 * the deepen budget waves forced on. A pending input counts as continuable
-	 * when its candidate set was never fully tried (or never enumerated).
-	 */
-	private @Nullable Widget createPendingInputsBanner() {
-		RoutingPlan plan = routingPlan;
-		if (plan == null) {
-			return null;
-		}
-		int pending = 0;
-		int continuable = 0;
-		for (PlanAction action : plan.actions()) {
-			if (action instanceof PlanAction.PendingInput pendingInput) {
-				pending++;
-				if (pendingInput.candidateCount() == 0 || pendingInput.attemptedCount() < pendingInput.candidateCount()) {
-					continuable++;
-				}
-			}
-		}
-		deepenActionAvailable = continuable > 0;
-		if (viewSwitcher != null) {
-			viewSwitcher.setDeepenAvailable(deepenActionAvailable);
-		}
-		if (pending == 0) {
-			return null;
-		}
-		// the deepen action lives on the view toolbar next to expand; the
-		// "have no source yet" text banner is intentionally gone
-		return null;
-	}
+	// TODO(planning-ui): 恢复待解析输入横幅与深化按钮（新规划器接线后）
 
 	void deepenCalculation() {
 		if (pendingCalculation != null && !pendingCalculation.isDone()) {
@@ -442,15 +399,11 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
         if (!canSetCurrentPathAsExecutionTarget()) {
             return;
         }
-        RoutingPlan currentPlan = routingPlan;
-        if (currentPlan == null) {
-            currentPlan = routeCurrentCalculatorSelection();
-            routingPlan = currentPlan;
+        // TODO(planning-bridge): 恢复带 ProductionPlan 的执行目标设置（旧路由已删除，待 bridge 接线）
+        CalculatorTargetRecipeState.Selection selection = CalculatorTargetRecipeState.current();
+        if (selection != null) {
+            ExecutionTargetRecipeState.set(selection.recipe(), requestedTimes());
         }
-        if (currentPlan == null) {
-            return;
-        }
-        ExecutionTargetRecipeState.setPath(currentPlan.targetRecipe(), currentPlan.targetTimes(), currentPlan);
     }
 
 	public void setProcessGraph(ProcessGraph graph) {
@@ -464,7 +417,6 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
     public void releaseCalculationState() {
         cancelPendingCalculation();
         graph = new ProcessGraph();
-        routingPlan = null;
         contentVariantPreferences = Map.of();
         milestoneManualCompletions.clear();
         calculationDebugText = "";
@@ -563,7 +515,6 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 		cancelPendingCalculation();
 		if (selection == null) {
 			calculationRequestId++;
-			routingPlan = null;
 			showCalculationResult("noSelection");
 			return;
 		}
@@ -574,7 +525,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
         CalculatorProcessGraphBuilder.RouteMode requestedRouteMode = graphRouteMode;
         calculationDebugText = "queued target=" + describeRecipe(recipe) + " times=" + times + " mode=" + graphRouteMode;
         calculationDebugTrace = List.of(calculationDebugText);
-		Stock stock = RecipePathSettings.calculatorStock();
+		Stock stock = Stock.empty();
 		Map<String, String> preferences = contentVariantPreferences;
         logger.info(
             "calculator.ui.start requestId={} target={} times={} requestedAmount={} mode={} stockEmpty={} preferredVariants={}",
@@ -586,7 +537,6 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
             stock.isEmpty(),
             preferences.size()
         );
-		routingPlan = null;
 		controlBar.setTargetItem(CalculatorTargetRecipeState.previewStack(selection.recipe()));
 		showCalculatingState();
         pendingCalculation = CirrusUiAsync.recipeTask(() -> {
@@ -608,12 +558,11 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
                     forceDeepen
                 );
                 logger.info(
-                    "calculator.ui.worker.finish requestId={} target={} elapsedMs={} graphNodes={} planActions={} debug={}",
+                    "calculator.ui.worker.finish requestId={} target={} elapsedMs={} graphNodes={} debug={}",
                     requestId,
                     describeRecipe(recipe),
                     (System.nanoTime() - startNanos) / 1_000_000L,
                     buildResult.graph().nodeCount(),
-                    buildResult.routingPlan() == null ? 0 : buildResult.routingPlan().actions().size(),
                     buildResult.debugInfo().toDebugText()
                 );
                 return new CalculationResult(
@@ -622,7 +571,6 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
                     requestedAmount,
                     buildResult.routeMode(),
                     buildResult.graph(),
-                    buildResult.routingPlan(),
                     buildResult.debugInfo(),
                     buildResult.debugTrace()
                 );
@@ -678,35 +626,30 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
         }
         graphRouteMode = result.routeMode();
         graph = result.graph();
-        routingPlan = result.routingPlan();
         calculationDebugText = result.debugInfo().toDebugText();
         calculationDebugTrace = result.debugTrace();
         amount = result.amount();
         controlBar.setAmount(result.amount());
         controlBar.setTargetItem(CalculatorTargetRecipeState.previewStack(result.recipe()));
         String graphIssue = CalculatorProcessGraphBuilder.debugTargetGraphIssueForTests(result.recipe(), result.graph());
-        boolean failed = result.debugInfo().routingStatus() == RoutingStatus.failed
-            || result.debugInfo().exception() != null
-            || graphIssue != null;
-        if (failed || result.debugInfo().budgetExhausted()) {
+        boolean failed = result.debugInfo().exception() != null || graphIssue != null;
+        if (failed) {
             logger.warn(
-                "calculator.ui.finish requestId={} target={} mode={} graphNodes={} graphIssue={} planActions={} debug={}",
+                "calculator.ui.finish requestId={} target={} mode={} graphNodes={} graphIssue={} debug={}",
                 result.requestId(),
                 describeRecipe(result.recipe()),
                 result.routeMode(),
                 result.graph().nodeCount(),
                 graphIssue,
-                result.routingPlan() == null ? 0 : result.routingPlan().actions().size(),
                 result.debugInfo().toDebugText()
             );
         } else {
             logger.info(
-                "calculator.ui.finish requestId={} target={} mode={} graphNodes={} planActions={} debug={}",
+                "calculator.ui.finish requestId={} target={} mode={} graphNodes={} debug={}",
                 result.requestId(),
                 describeRecipe(result.recipe()),
                 result.routeMode(),
                 result.graph().nodeCount(),
-                result.routingPlan() == null ? 0 : result.routingPlan().actions().size(),
                 result.debugInfo().toDebugText()
             );
         }
@@ -732,24 +675,12 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 		}
 	}
 
-	private @Nullable RoutingPlan routeCurrentCalculatorSelection() {
-		CalculatorTargetRecipeState.Selection selection = CalculatorTargetRecipeState.current();
-		if (selection == null) {
-			return null;
-		}
-		return CalculatorProcessGraphBuilder.routePlan(
-			selection.recipe(),
-			requestedRoutingTimes(),
-			RecipePathSettings.calculatorStock(),
-			contentVariantPreferences,
-			graphRouteMode
-		);
-	}
+	// TODO(planning-bridge): 恢复当前选择的路由计划查询（旧路由已删除，待 bridge 接线）
 
 	/**
 	 * Runs the calculator build through the session result cache: reopening the
 	 * calculator screen or re-picking the same target replays the previous
-	 * result instead of rerunning the full routing pipeline. Calculations with
+	 * result instead of rerunning the full build pipeline. Calculations with
 	 * live stock bypass the cache — inventory mutates under the result, so a
 	 * replayed plan would be stale. {@code forceDeepen} (the pending-input
 	 * banner's deepen action) skips the cache read so the router re-runs with
@@ -797,18 +728,12 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 
 	/**
 	 * Fingerprint of every calculator input that is not part of the explicit
-	 * cache key: recipe-system catalog version, catalog content, rule
-	 * selection/content, planner mode, stock sensitivity and screening toggle.
-	 * Runs on worker threads — {@code calculatorCatalog} is cache-backed there.
+	 * cache key: recipe-system catalog version, rule selection and screening toggle.
 	 */
 	private static long calculatorSettingsFingerprint(RecipeEntry<?> target) {
 		long fingerprint = CirrusJeiPlugin.recipeSystemCatalogVersion();
 		fingerprint = 31L * fingerprint + RecipeApiImpl.attachEpoch();
-		fingerprint = 31L * fingerprint + RecipePathSettings.calculatorCatalog(target).fingerprint();
 		fingerprint = 31L * fingerprint + ExecutionOverlayClientConfig.calculatorRuleSelection().hashCode();
-		fingerprint = 31L * fingerprint + ActiveRoutingRule.version();
-		fingerprint = 31L * fingerprint + ExecutionOverlayClientConfig.calculatorPlannerMode().hashCode();
-		fingerprint = 31L * fingerprint + ExecutionOverlayClientConfig.calculatorInventorySensitivity().hashCode();
 		fingerprint = 31L * fingerprint + Boolean.hashCode(ExecutionOverlayClientConfig.calculatorRecipeScreeningEnabled());
 		fingerprint = 31L * fingerprint + Boolean.hashCode(ExecutionOverlayClientConfig.calculatorUseLiveStock());
 		return fingerprint;
@@ -816,7 +741,6 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
 
 	private void completeFailedCalculation(@Nullable Throwable cause) {
 		graph = new ProcessGraph();
-		routingPlan = null;
         calculationDebugText = "failed requestId=" + calculationRequestId + (cause == null ? "" : " cause=" + describeThrowable(cause));
         calculationDebugTrace = cause == null
             ? List.of(calculationDebugText)
@@ -1026,18 +950,8 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
     }
 
 	boolean canSetCurrentPathAsExecutionTarget() {
-		RoutingPlan currentPlan = routingPlan;
 		CalculatorTargetRecipeState.Selection selection = CalculatorTargetRecipeState.current();
-		if (!calculated || selection == null) {
-			return false;
-		}
-		if (currentPlan == null) {
-			return amount == requestedRoutingTimes();
-		}
-		if (!selection.recipe().equals(currentPlan.targetRecipe())) {
-			return false;
-		}
-		return currentPlan.targetTimes() == requestedRoutingTimes();
+		return calculated && selection != null && amount == requestedTimes();
 	}
 
 	int debugContentVariantPreferenceCount() {
@@ -1089,7 +1003,6 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
         long amount,
         CalculatorProcessGraphBuilder.RouteMode routeMode,
         ProcessGraph graph,
-		@Nullable RoutingPlan routingPlan,
         CalculatorProcessGraphBuilder.CalculatorBuildDebugInfo debugInfo,
         List<String> debugTrace
     ) {
@@ -1098,7 +1011,7 @@ public class OmniCalculatorView extends CompositeWidget<Widget> {
         }
     }
 
-	private int requestedRoutingTimes() {
+	private int requestedTimes() {
 		long requested = controlBar.getAmount();
 		if (requested >= Integer.MAX_VALUE) {
 			return Integer.MAX_VALUE;

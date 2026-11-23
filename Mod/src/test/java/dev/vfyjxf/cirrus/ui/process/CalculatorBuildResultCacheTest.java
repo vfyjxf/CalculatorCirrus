@@ -24,7 +24,7 @@ class CalculatorBuildResultCacheTest {
     }
 
     private static BuildResult result() {
-        return new BuildResult(null, null, null, null, null);
+        return new BuildResult(null, null, null, null);
     }
 
     @Test

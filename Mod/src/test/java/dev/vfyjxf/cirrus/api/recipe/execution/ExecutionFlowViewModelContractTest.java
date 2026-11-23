@@ -10,7 +10,6 @@ import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowStatus;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowViewModel;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -53,8 +52,8 @@ class ExecutionFlowViewModelContractTest {
             ExecutionCapability.interactionPerform,
             recipe,
             1,
-            Lists.immutable.of(new PlanAction.InputBinding(input(1L), 1L)),
-            Lists.immutable.of(new PlanAction.OutputBinding(resource(4L), 4L))
+            Lists.immutable.of(new InputBinding(input(1L), 1L)),
+            Lists.immutable.of(new OutputBinding(resource(4L), 4L))
         );
         var store = new InteractionStep.StoreOutputsStep(
             ExecutionSideRequirement.client,
@@ -147,8 +146,8 @@ class ExecutionFlowViewModelContractTest {
             ExecutionCapability.interactionPerform,
             recipe,
             1,
-            Lists.immutable.of(new PlanAction.InputBinding(input(1L), 1L)),
-            Lists.immutable.of(new PlanAction.OutputBinding(resource(4L), 4L))
+            Lists.immutable.of(new InputBinding(input(1L), 1L)),
+            Lists.immutable.of(new OutputBinding(resource(4L), 4L))
         );
 
         var root = ExecutionFlowNode.pending(

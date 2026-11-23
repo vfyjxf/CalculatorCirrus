@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.rule;
 
 import com.mojang.serialization.JsonOps;
-import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeUsePolicy;
+import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;

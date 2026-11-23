@@ -3,15 +3,24 @@ package dev.vfyjxf.cirrus.ui.widget.omnicalc.calculator;
 import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.platform.InputConstants;
+import com.google.common.collect.MapMaker;
+import dev.vfyjxf.cirrus.api.content.type.ContentType;
+import dev.vfyjxf.cirrus.api.content.value.ContentKind;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
+import dev.vfyjxf.cirrus.api.content.value.ContentValue;
+import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.BatchableRecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
+import dev.vfyjxf.cirrus.api.recipe.content.StackListContent;
+import dev.vfyjxf.cirrus.api.recipe.content.TagStackContent;
+import dev.vfyjxf.cirrus.api.recipe.content.TypedStackListContent;
+import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
 import dev.vfyjxf.cirrus.content.renderer.FluidStackRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentVisual;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentVisualCache;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingVariantKeys;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusMouse;
 import dev.vfyjxf.cirrus.ui.CirrusScroll;
@@ -42,6 +51,7 @@ import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipStack;
 import dev.vfyjxf.cloudlib.api.ui.texture.BatchableTexture;
 import dev.vfyjxf.cloudlib.api.ui.texture.ImageTexture;
 import dev.vfyjxf.cloudlib.api.ui.texture.SizedTexture;
+import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -59,6 +69,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentMap;
 import java.util.function.Consumer;
 
 import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.*;
@@ -3742,11 +3753,11 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
     }
 
     private static @Nullable String inputKey(MaterialSlot slot) {
-        return slot.content() instanceof InputContent input ? RoutingVariantKeys.inputKey(input) : null;
+        return slot.content() instanceof InputContent input ? selectionInputKey(input) : null;
     }
 
     private static @Nullable String variantKey(MaterialSlot slot, int visualIndex) {
-        return RoutingVariantKeys.variantKey(slot.content(), visualIndex);
+        return selectionVariantKey(slot.content(), visualIndex);
     }
 
     private static int visualIndexForVariantKey(RecipeContent content, String variantKey) {
@@ -3755,12 +3766,86 @@ public class TreeCanvasWidget extends CompositeWidget<Widget> {
         }
         int index = 0;
         for (var variant : input.enumerate()) {
-            if (Objects.equals(RoutingVariantKeys.variantKey(variant), variantKey)) {
+            if (Objects.equals(selectionVariantKey(variant), variantKey)) {
                 return index;
             }
             index++;
         }
         return -1;
+    }
+
+    static String selectionInputKey(InputContent input) {
+        Checks.checkNotNull(input, "input");
+        return switch (input) {
+            case TagStackContent<?> tag -> "tag:" + tag.type().typeId() + ":" + tag.tagKey().location();
+            case StackContent<?, ?> stack -> "stack:" + selectionVariantKey(stack.content());
+            case TypedStackListContent<?, ?> list -> "typed_stack_list:" + list.type().typeId() + ":" + selectionVariantListKey(list.stacks());
+            case StackListContent list -> "stack_list:" + selectionVariantListKey(list.stacks());
+            case ValueContent<?> value -> "value:" + value.type().typeId();
+            default -> input.isEnumerable()
+                ? "variants:" + selectionVariantListKey(input.enumerate())
+                : input.getClass().getName();
+        };
+    }
+
+    static @Nullable String selectionVariantKey(RecipeContent content, int visualIndex) {
+        if (!(content instanceof InputContent input) || !input.isEnumerable()) {
+            return null;
+        }
+        int index = 0;
+        for (ContentVariant variant : input.enumerate()) {
+            if (index == visualIndex) {
+                return selectionVariantKey(variant);
+            }
+            index++;
+        }
+        return null;
+    }
+
+    static String selectionVariantKey(ContentVariant variant) {
+        Checks.checkNotNull(variant, "variant");
+        return switch (variant) {
+            case ContentStack<?, ?> stack -> selectionStackKey(stack);
+            case ContentKind<?> kind -> "kind:" + kind.type().typeId() + ":" + selectionContentKey(kind.type(), kind.value());
+            case ContentValue<?> value -> "value:" + value.type().typeId();
+            default -> variant.getClass().getName() + ":" + variant;
+        };
+    }
+
+    private static String selectionVariantListKey(Iterable<? extends ContentVariant> variants) {
+        StringBuilder builder = new StringBuilder();
+        int index = 0;
+        for (ContentVariant variant : variants) {
+            if (index++ > 0) {
+                builder.append('|');
+            }
+            builder.append(selectionVariantKey(variant));
+        }
+        return builder.toString();
+    }
+
+    private static final ConcurrentMap<ContentStack<?, ?>, String> selectionStackKeyCache =
+            new MapMaker().weakKeys().concurrencyLevel(4).makeMap();
+
+    private static String selectionStackKey(ContentStack<?, ?> stack) {
+        // Stacks are read-only after construction, so the built key survives as long as the stack does.
+        String cached = selectionStackKeyCache.get(stack);
+        if (cached != null) return cached;
+        String key = "stack:" + stack.type().typeId() + ":" + selectionContentKey(stack.contentType(), stack.content());
+        if (!stack.componentsPatch().isEmpty()) {
+            key += ":components:" + Integer.toHexString(stack.componentsPatch().hashCode());
+        }
+        selectionStackKeyCache.put(stack, key);
+        return key;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static String selectionContentKey(ContentType type, Object value) {
+        ResourceLocation location = type.getLocation(value);
+        if (location != null) {
+            return location.toString();
+        }
+        return type.asString(value);
     }
 
     private NodeRenderModel renderModel(LayoutNode node) {

@@ -673,5 +673,7 @@
   "cirrus.ui.execution.debug.title": "执行 Overlay 调试界面",
   "cirrus.ui.execution.debug.opened": "已打开执行 Overlay 调试界面",
   "cirrus.ui.execution.debug.player_required": "当前没有可用于打开调试界面的玩家",
-  "cirrus.ui.calculator.settings.planner_mode.cost_aware": "成本感知"
+  "cirrus.ui.calculator.settings.planner_mode.cost_aware": "成本感知",
+  "cirrus.ui.execution.target.pause.plan_unavailable.summary": "无法为当前目标生成执行计划",
+  "cirrus.ui.execution.target.pause.plan_unavailable.detail": "规划运行时无法解析该配方；请检查配方输入后重试"
 }

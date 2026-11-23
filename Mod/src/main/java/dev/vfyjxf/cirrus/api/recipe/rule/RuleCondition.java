@@ -3,7 +3,7 @@ package dev.vfyjxf.cirrus.api.recipe.rule;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeUsePolicy;
+import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.jetbrains.annotations.Nullable;
 

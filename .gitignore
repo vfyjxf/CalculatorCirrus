@@ -29,3 +29,9 @@ repo
 #agent
 .codex
 .vscode/
+
+# python experiments
+experiments/quality/.venv/
+experiments/quality/cache/
+experiments/quality/__pycache__/
+experiments/quality/**/__pycache__/

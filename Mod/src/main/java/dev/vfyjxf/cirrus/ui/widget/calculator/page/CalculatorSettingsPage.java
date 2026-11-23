@@ -1,8 +1,6 @@
 package dev.vfyjxf.cirrus.ui.widget.calculator.page;
 
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionObservedStockPolicy;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.InventorySensitivityProfile;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.PlannerMode;
 import dev.vfyjxf.cirrus.config.CalculatorRuleSelection;
 import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
@@ -57,12 +55,7 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
     public CalculatorSettingsPage() {
         CirrusSectionWidget planning = settingsSection(CirrusLangs.Calculator.Settings.categoryPlanning);
         planning.addContent(ruleRow());
-        planning.addContent(plannerModeRow(
-            CirrusLangs.Calculator.Settings.plannerMode,
-            CirrusLangs.Calculator.Settings.plannerModeDesc,
-            ExecutionOverlayClientConfig::calculatorPlannerMode,
-            ExecutionOverlayClientConfig::setCalculatorPlannerMode
-        ));
+        // TODO(planning-ui): 恢复规划模式下拉框（新规划器接线后）
         planning.addContent(switchRow(
             CirrusLangs.Calculator.Settings.useLiveStock,
             CirrusLangs.Calculator.Settings.useLiveStockDesc,
@@ -75,7 +68,7 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
             ExecutionOverlayClientConfig::calculatorRecipeScreeningEnabled,
             ExecutionOverlayClientConfig::setCalculatorRecipeScreeningEnabled
         ));
-        planning.addContent(inventorySensitivityRow());
+        // TODO(planning-ui): 恢复库存敏感度下拉框（新规划器接线后）
         addWidget(planning);
 
         CirrusSectionWidget execution = settingsSection(CirrusLangs.Calculator.Settings.categoryExecution);
@@ -98,12 +91,7 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
             ExecutionOverlayClientConfig::executionUsesCalculatorPathSettings,
             ExecutionOverlayClientConfig::setExecutionUsesCalculatorPathSettings
         ));
-        execution.addContent(plannerModeRow(
-            CirrusLangs.Calculator.Settings.executionPlannerMode,
-            CirrusLangs.Calculator.Settings.executionPlannerModeDesc,
-            ExecutionOverlayClientConfig::executionPlannerMode,
-            ExecutionOverlayClientConfig::setExecutionPlannerMode
-        ));
+        // TODO(planning-ui): 恢复执行规划模式下拉框（新规划器接线后）
         addWidget(execution);
 
         CirrusSectionWidget database = settingsSection(CirrusLangs.Calculator.Settings.categoryDatabase);
@@ -282,55 +270,9 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
         return styleSettingsRow(row, tooltip);
     }
 
-    private static Widget inventorySensitivityRow() {
-        WidgetGroup<Widget> row = baseRow();
-        row.addWidget(rowLabel(CirrusLangs.Calculator.Settings.inventorySensitivity));
-        CirrusChoiceBoxWidget<InventorySensitivityProfile> value = new CirrusChoiceBoxWidget<InventorySensitivityProfile>(sensitivityChoiceWidth)
-            .option(InventorySensitivityProfile.high, CirrusLangs.Calculator.Settings.inventorySensitivityHigh)
-            .option(InventorySensitivityProfile.balanced, CirrusLangs.Calculator.Settings.inventorySensitivityBalanced)
-            .option(InventorySensitivityProfile.low, CirrusLangs.Calculator.Settings.inventorySensitivityLow)
-            .value(ExecutionOverlayClientConfig.calculatorInventorySensitivity())
-            .onChanged(ExecutionOverlayClientConfig::setCalculatorInventorySensitivity);
-        Supplier<Tooltip> tooltip = () -> choiceTooltip(
-            CirrusLangs.Calculator.Settings.inventorySensitivity,
-            CirrusLangs.Calculator.Settings.inventorySensitivityDesc,
-            sensitivityLabel(value.value()),
-            CirrusLangs.Calculator.Settings.inventorySensitivityHigh,
-            CirrusLangs.Calculator.Settings.inventorySensitivityBalanced,
-            CirrusLangs.Calculator.Settings.inventorySensitivityLow
-        );
-        value.tooltip(tooltip);
-        row.addWidget(value);
-        return styleSettingsRow(row, tooltip);
-    }
+    // TODO(planning-ui): 恢复库存敏感度下拉框（新规划器接线后）
 
-    private static Widget plannerModeRow(
-        LangEntry label,
-        LangEntry description,
-        Supplier<PlannerMode> getter,
-        Consumer<PlannerMode> setter
-    ) {
-        WidgetGroup<Widget> row = baseRow();
-        row.addWidget(rowLabel(label));
-        CirrusChoiceBoxWidget<PlannerMode> value = new CirrusChoiceBoxWidget<PlannerMode>(plannerChoiceWidth)
-            .option(PlannerMode.auto, CirrusLangs.Calculator.Settings.plannerModeAuto)
-            .option(PlannerMode.standard, CirrusLangs.Calculator.Settings.plannerModeStandard)
-            .option(PlannerMode.assuredBounded, CirrusLangs.Calculator.Settings.plannerModeAssuredBounded)
-            .option(PlannerMode.assuredProven, CirrusLangs.Calculator.Settings.plannerModeAssuredProven)
-            .value(getter.get())
-            .onChanged(setter);
-        Supplier<Tooltip> tooltip = () -> choiceTooltip(
-            label,
-            description,
-            plannerModeLabel(value.value()),
-            CirrusLangs.Calculator.Settings.plannerModeStandard,
-            CirrusLangs.Calculator.Settings.plannerModeAssuredBounded,
-            CirrusLangs.Calculator.Settings.plannerModeAssuredProven
-        );
-        value.tooltip(tooltip);
-        row.addWidget(value);
-        return styleSettingsRow(row, tooltip);
-    }
+    // TODO(planning-ui): 恢复规划模式下拉框（新规划器接线后）
 
     private static Tooltip switchTooltip(LangEntry label, LangEntry description, BooleanSupplier value) {
         Tooltip tooltip = settingTooltip(label, description);
@@ -380,14 +322,6 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
         };
     }
 
-    private static LangEntry sensitivityLabel(InventorySensitivityProfile value) {
-        return switch (value) {
-            case high -> CirrusLangs.Calculator.Settings.inventorySensitivityHigh;
-            case balanced -> CirrusLangs.Calculator.Settings.inventorySensitivityBalanced;
-            case low -> CirrusLangs.Calculator.Settings.inventorySensitivityLow;
-        };
-    }
-
     private static LangEntry stockPolicyLabel(ExecutionObservedStockPolicy value) {
         return switch (value) {
             case consumeObservedStock -> CirrusLangs.Calculator.Settings.stockPolicyConsume;
@@ -395,13 +329,4 @@ public final class CalculatorSettingsPage extends CirrusScrollablePageWidget {
         };
     }
 
-    private static LangEntry plannerModeLabel(PlannerMode value) {
-        return switch (value) {
-            case auto -> CirrusLangs.Calculator.Settings.plannerModeAuto;
-            case standard -> CirrusLangs.Calculator.Settings.plannerModeStandard;
-            case assuredBounded -> CirrusLangs.Calculator.Settings.plannerModeAssuredBounded;
-            case assuredProven -> CirrusLangs.Calculator.Settings.plannerModeAssuredProven;
-            case costAware -> CirrusLangs.Calculator.Settings.plannerModeCostAware;
-        };
-    }
 }

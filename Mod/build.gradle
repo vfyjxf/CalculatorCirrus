@@ -230,49 +230,52 @@ tasks.register('generateTestModData', JavaExec) {
     systemProperty 'cirrusExportPack', (findProperty('cirrusExportPack') ?: 'atm10-lite')
 }
 
-// Writes the test runtime classpath to build/chainexport/cp.txt so chain-export.sh can
+// Writes the main runtime classpath to build/chainexport/cp.txt so chain-export.sh can
 // spawn bare JVMs (per-pack parallel workers) without gradle overhead.
-def chainExportTestClasspath = sourceSets.test.runtimeClasspath
+def chainExportRuntimeClasspath = sourceSets.main.runtimeClasspath
 tasks.register('chainExportClasspath') {
     group = 'verification'
-    // Without this the classpath resolves to stale build outputs: resources edited in
-    // src/main (e.g. builtin_rules.json) never reached the bare JVMs until something
-    // else happened to rebuild them.
-    dependsOn 'testClasses'
+    // Without this the classpath resolves to stale build outputs: classes/resources edited
+    // in src/main never reached the bare JVMs until something else rebuilt them.
+    dependsOn 'classes'
     def output = layout.buildDirectory.file('chainexport/cp.txt')
-    outputs.file(output)
+    // No declared outputs: the classpath string is not a task input, so always rewrite it.
     doLast {
         def file = output.get().asFile
         file.parentFile.mkdirs()
-        file.text = chainExportTestClasspath.asPath
+        file.text = chainExportRuntimeClasspath.asPath
         println "chain-export classpath written to ${file}"
     }
 }
 
-// Offline recipe-chain export: solves stratified targets from exports/<pack>/recipes-*.json
-// with the real routing planner (no game launch) and writes pure-text chains per pack.
+// Offline plan bench over exports/<pack>/recipes-*.json (or an exports.zip): loads the raw
+// catalog, compiles the L1 graph and plans the requested targets without launching the game.
 //   ./gradlew :Mod:chainExport -PcirrusChainsPacks=fom -PcirrusChainsOut=../chain-exports
-// All -PcirrusChains* properties are forwarded as CLI flags; chain-export.sh wraps this
-// with parallel per-pack workers.
+//   ./gradlew :Mod:chainExport -PcirrusChainsZip=../exports.zip -PcirrusChainsTargets=minecraft:hopper=1
+// chain-export.sh wraps this with parallel per-pack workers.
 tasks.register('chainExport', JavaExec) {
     group = 'verification'
-    description = 'Generates pure-text recipe chains from exported pack dumps (offline).'
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'dev.vfyjxf.cirrus.recipe.chainexport.ChainExportMain'
+    description = 'Runs the offline plan bench over exported pack dumps (no game launch).'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.vfyjxf.cirrus.planning.offline.OfflinePlanBench'
     workingDir = rootProject.projectDir
     jvmArgs '-Xmx8g'
-    def argsList = ['--export-dir', (findProperty('cirrusChainsExportDir') ?: '../exports').toString(),
-                    '--out', (findProperty('cirrusChainsOut') ?: '../chain-exports').toString()]
+    def outDir = (findProperty('cirrusChainsOut') ?: '../chain-exports').toString()
+    def zip = (findProperty('cirrusChainsZip') ?: '').toString().trim()
+    def argsList = zip.isEmpty()
+            ? ['--export-dir', (findProperty('cirrusChainsExportDir') ?: '../exports').toString(), '--out', outDir]
+            : ['--zip', zip, '--out', outDir]
     def packs = (findProperty('cirrusChainsPacks') ?: '').toString().trim()
     if (!packs.isEmpty()) {
         argsList.addAll(['--packs', packs])
     }
+    def targets = (findProperty('cirrusChainsTargets') ?: '').toString().trim()
+    if (!targets.isEmpty()) {
+        argsList.addAll(['--targets', targets])
+    }
     def perPack = (findProperty('cirrusChainsPerPack') ?: '').toString().trim()
     if (!perPack.isEmpty()) {
         argsList.addAll(['--per-pack', perPack])
-    }
-    if (Boolean.parseBoolean((findProperty('cirrusChainsOverwrite') ?: 'false').toString())) {
-        argsList.add('--overwrite')
     }
     args argsList
 }

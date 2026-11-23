@@ -12,7 +12,6 @@ import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionPerformResu
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionProbeResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -44,8 +43,8 @@ class InteractionApiContractTest {
         var perform = api.perform(new InteractionContext(
             recipe,
             1,
-            Lists.immutable.of(new PlanAction.InputBinding(input(1L), 1L)),
-            Lists.immutable.of(new PlanAction.OutputBinding(resource(4L), 4L))
+            Lists.immutable.of(new InputBinding(input(1L), 1L)),
+            Lists.immutable.of(new OutputBinding(resource(4L), 4L))
         ));
 
         assertTrue(probe instanceof InteractionProbeResult.Supported);
@@ -69,8 +68,8 @@ class InteractionApiContractTest {
         var perform = api.perform(new InteractionContext(
             recipe,
             1,
-            Lists.immutable.of(new PlanAction.InputBinding(input(1L), 1L)),
-            Lists.immutable.of(new PlanAction.OutputBinding(resource(4L), 4L))
+            Lists.immutable.of(new InputBinding(input(1L), 1L)),
+            Lists.immutable.of(new OutputBinding(resource(4L), 4L))
         ));
 
         assertTrue(probe instanceof InteractionProbeResult.Supported);
@@ -91,8 +90,8 @@ class InteractionApiContractTest {
         int maxBatch = api.maxExecuteBatchSize(new InteractionContext(
             recipe,
             130,
-            Lists.immutable.of(new PlanAction.InputBinding(input(130L), 130L)),
-            Lists.immutable.of(new PlanAction.OutputBinding(resource(520L), 520L))
+            Lists.immutable.of(new InputBinding(input(130L), 130L)),
+            Lists.immutable.of(new OutputBinding(resource(520L), 520L))
         ));
 
         assertEquals(64, maxBatch);

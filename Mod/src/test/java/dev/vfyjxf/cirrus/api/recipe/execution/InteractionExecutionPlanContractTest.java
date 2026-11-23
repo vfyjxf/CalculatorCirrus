@@ -7,7 +7,6 @@ import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -74,8 +73,8 @@ class InteractionExecutionPlanContractTest {
         var recipe = recipeEntry("craft_planks");
         var accessibleInput = input(1L);
         var outputResource = resource(8L);
-        var expectedOutputs = Lists.immutable.of(new PlanAction.OutputBinding(outputResource, 8L));
-        var inputBindings = Lists.immutable.of(new PlanAction.InputBinding(accessibleInput, 1L));
+        var expectedOutputs = Lists.immutable.of(new OutputBinding(outputResource, 8L));
+        var inputBindings = Lists.immutable.of(new InputBinding(accessibleInput, 1L));
 
         var accessible = new InteractionStep.EnsureAccessibleStep(
             ExecutionSideRequirement.environmentAgnostic,

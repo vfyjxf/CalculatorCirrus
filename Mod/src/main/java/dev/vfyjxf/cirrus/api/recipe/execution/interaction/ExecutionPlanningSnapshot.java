@@ -1,11 +1,11 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.interaction;
 
-import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
+import dev.vfyjxf.cirrus.api.content.stock.Stock;
 
 /**
  * Frozen planning-time resource view supplied by an interaction/driver.
  *
- * <p>This keeps routing-time stock discovery out of generic execution state code.
+ * <p>This keeps planning-time stock discovery out of generic execution state code.
  * Concrete drivers can expose whatever slots or buffers are visible to the current
  * interaction without leaking machine-specific details into shared planning code.
  */

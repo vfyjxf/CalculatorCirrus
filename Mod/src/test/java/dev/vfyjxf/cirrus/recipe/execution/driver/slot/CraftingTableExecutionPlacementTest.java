@@ -1,12 +1,12 @@
 package dev.vfyjxf.cirrus.recipe.execution.driver.slot;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TagStackContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSideRequirement;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.slot.SlotAccess;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.slot.SlotLayout;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.tags.ItemTags;
@@ -49,7 +49,7 @@ class CraftingTableExecutionPlacementTest {
             2,
             2,
             context(access),
-            Lists.immutable.of(new PlanAction.InputBinding(
+            Lists.immutable.of(new InputBinding(
                 InputContent.fromItemStack(stack(Items.OAK_LOG, 1), 1),
                 16
             ))
@@ -73,7 +73,7 @@ class CraftingTableExecutionPlacementTest {
             1,
             1,
             context(access),
-            Lists.immutable.of(new PlanAction.InputBinding(
+            Lists.immutable.of(new InputBinding(
                 InputContent.fromItemTag(ItemTags.PLANKS, 1),
                 16
             ))
@@ -94,7 +94,7 @@ class CraftingTableExecutionPlacementTest {
             1,
             1,
             context(access),
-            Lists.immutable.of(new PlanAction.InputBinding(
+            Lists.immutable.of(new InputBinding(
                 InputContent.fromItemTag(ItemTags.PLANKS, 1),
                 16
             ))
@@ -120,8 +120,8 @@ class CraftingTableExecutionPlacementTest {
             1,
             context(access),
             Lists.immutable.of(
-                new PlanAction.InputBinding(InputContent.fromItemStack(stack(Items.COAL, 1), 1), 1),
-                new PlanAction.InputBinding(InputContent.fromItemStack(stack(Items.STICK, 1), 1), 1)
+                new InputBinding(InputContent.fromItemStack(stack(Items.COAL, 1), 1), 1),
+                new InputBinding(InputContent.fromItemStack(stack(Items.STICK, 1), 1), 1)
             )
         );
 
@@ -148,11 +148,11 @@ class CraftingTableExecutionPlacementTest {
             3,
             context(access),
             Lists.immutable.of(
-                new PlanAction.InputBinding(
+                new InputBinding(
                     InputContent.fromItemStack(stack(Items.FURNACE, 1), 1),
                     16
                 ),
-                new PlanAction.InputBinding(
+                new InputBinding(
                     InputContent.fromItemTag(ItemTags.LOGS, 1),
                     64
                 )
@@ -178,8 +178,8 @@ class CraftingTableExecutionPlacementTest {
             3,
             3,
             Lists.immutable.of(
-                new PlanAction.InputBinding(InputContent.fromItemStack(stack(Items.FURNACE, 1), 1), 16),
-                new PlanAction.InputBinding(InputContent.fromItemTag(ItemTags.LOGS, 1), 64)
+                new InputBinding(InputContent.fromItemStack(stack(Items.FURNACE, 1), 1), 16),
+                new InputBinding(InputContent.fromItemTag(ItemTags.LOGS, 1), 64)
             )
         );
 
@@ -206,7 +206,7 @@ class CraftingTableExecutionPlacementTest {
             3,
             context(access),
             Lists.immutable.of(
-                new PlanAction.InputBinding(
+                new InputBinding(
                     InputContent.fromItemStack(stack(Items.COBBLESTONE, 1), 1),
                     64
                 )

@@ -1,0 +1,40 @@
+package dev.vfyjxf.cirrus.api.planning.graph;
+
+import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
+public record RawIngredientSlot(
+        Optional<String> tagId,
+        List<ResourceKey> candidates,
+        long amount,
+        SlotMatchMode matchMode,
+        int durabilityCostPerBatch,
+        int maxDurability
+) {
+
+    public RawIngredientSlot(
+            Optional<String> tagId,
+            List<ResourceKey> candidates,
+            long amount,
+            SlotMatchMode matchMode
+    ) {
+        this(tagId, candidates, amount, matchMode, 0, 0);
+    }
+
+    public RawIngredientSlot {
+        Objects.requireNonNull(tagId, "tagId");
+        Objects.requireNonNull(candidates, "candidates");
+        Objects.requireNonNull(matchMode, "matchMode");
+        candidates = List.copyOf(candidates);
+        if (durabilityCostPerBatch < 0) {
+            throw new IllegalArgumentException("durabilityCostPerBatch must be >= 0");
+        }
+        if (maxDurability < 0) {
+            throw new IllegalArgumentException("maxDurability must be >= 0");
+        }
+    }
+}

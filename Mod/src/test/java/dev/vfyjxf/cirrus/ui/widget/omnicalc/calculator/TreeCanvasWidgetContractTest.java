@@ -5,7 +5,6 @@ import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingVariantKeys;
 import dev.vfyjxf.cirrus.content.ContentApiImpl;
 import dev.vfyjxf.cirrus.content.ContentRegistryBuilder;
 import dev.vfyjxf.cirrus.internal.InternalPlugin;
@@ -722,7 +721,7 @@ class TreeCanvasWidgetContractTest {
     }
 
     @Test
-    void contentCandidateSelectionEmitsRoutingVariantPreference() {
+    void contentCandidateSelectionEmitsVariantPreference() {
         TreeCanvasWidget widget = new TreeCanvasWidget();
         InputContent alternatives = InputContent.fromTypedStackList(
                 CirrusTypes.Contents.ITEM_STACK,
@@ -758,8 +757,8 @@ class TreeCanvasWidgetContractTest {
         assertTrue(widget.debugSelectContentCandidateForPath("root", 1));
 
         assertEquals("root", selected.get().pathId());
-        assertEquals(RoutingVariantKeys.inputKey(alternatives), selected.get().inputKey());
-        assertEquals(RoutingVariantKeys.variantKey(alternatives, 1), selected.get().variantKey());
+        assertEquals(TreeCanvasWidget.selectionInputKey(alternatives), selected.get().inputKey());
+        assertEquals(TreeCanvasWidget.selectionVariantKey(alternatives, 1), selected.get().variantKey());
         assertEquals(1, selected.get().visualIndex());
     }
 

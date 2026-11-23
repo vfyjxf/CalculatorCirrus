@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.ui.execution.tooltip;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
@@ -9,7 +11,6 @@ import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayRecipePreview;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.recipe.execution.driver.slot.CraftingTableExecutionDriver;
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayContentHelper;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode;
@@ -103,9 +104,9 @@ public final class ExecutionRecipeTooltipPreview {
         if (inputs.isEmpty()) {
             return List.of();
         }
-        ArrayList<PlanAction.InputBinding> bindings = new ArrayList<>(inputs.size());
+        ArrayList<InputBinding> bindings = new ArrayList<>(inputs.size());
         for (InputContent input : inputs) {
-            bindings.add(new PlanAction.InputBinding(input, Math.max(1L, input.amount())));
+            bindings.add(new InputBinding(input, Math.max(1L, input.amount())));
         }
         ImmutableList<CraftingTableExecutionDriver.RecipePreviewSlot> previewSlots =
             CraftingTableExecutionDriver.resolvePreviewSlots(recipe, Lists.immutable.ofAll(bindings));
@@ -136,7 +137,7 @@ public final class ExecutionRecipeTooltipPreview {
 
     public static List<ProcessNode.MaterialSlot> previewInputSlots(
         @Nullable RecipeEntry<?> recipe,
-        ImmutableList<PlanAction.InputBinding> inputs
+        ImmutableList<InputBinding> inputs
     ) {
         if (inputs.isEmpty()) {
             return List.of();
@@ -147,20 +148,20 @@ public final class ExecutionRecipeTooltipPreview {
             return mapPreviewSlots(previewSlots);
         }
         ArrayList<ProcessNode.MaterialSlot> out = new ArrayList<>(inputs.size());
-        for (PlanAction.InputBinding input : inputs) {
+        for (InputBinding input : inputs) {
             out.add(ExecutionOverlayContentHelper.materialSlot(input, false));
         }
         return out;
     }
 
     public static List<ProcessNode.MaterialSlot> previewOutputSlots(
-        ImmutableList<PlanAction.OutputBinding> outputs
+        ImmutableList<OutputBinding> outputs
     ) {
         if (outputs.isEmpty()) {
             return List.of();
         }
         ArrayList<ProcessNode.MaterialSlot> out = new ArrayList<>(outputs.size());
-        for (PlanAction.OutputBinding output : outputs) {
+        for (OutputBinding output : outputs) {
             out.add(ExecutionOverlayContentHelper.materialSlot(output));
         }
         return out;

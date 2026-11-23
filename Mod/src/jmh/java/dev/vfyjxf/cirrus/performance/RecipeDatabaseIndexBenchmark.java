@@ -10,7 +10,7 @@ import dev.vfyjxf.cirrus.api.recipe.database.DatabaseKind;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseCatalogCache;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseIndex;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeRoutingHints;
+import dev.vfyjxf.cirrus.api.recipe.screening.RecipeScreeningHints;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -318,8 +318,8 @@ public class RecipeDatabaseIndexBenchmark {
         }
 
         @Override
-        public RecipeRoutingHints routingHints(StackRecipe recipe) {
-            return RecipeRoutingHints.empty();
+        public RecipeScreeningHints routingHints(StackRecipe recipe) {
+            return RecipeScreeningHints.empty();
         }
 
         @Override

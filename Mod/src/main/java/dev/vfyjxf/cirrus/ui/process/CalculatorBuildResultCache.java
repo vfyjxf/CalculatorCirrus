@@ -13,10 +13,9 @@ import java.util.Map;
  *
  * <p>Reopening the calculator screen (or re-picking the same target in JEI)
  * rebuilds the {@code OmniCalculatorView} and would otherwise rerun the full
- * routing pipeline for a target whose inputs have not changed. Results are
- * keyed by target recipe, craft count, variant preferences, route mode and a
- * settings fingerprint (catalog fingerprint + rule/planner/sensitivity
- * selection), so any configuration change simply misses the cache.
+ * build pipeline for a target whose inputs have not changed. Results are keyed
+ * by target recipe, craft count, variant preferences, route mode and a settings
+ * fingerprint, so any configuration change simply misses the cache.
  *
  * <p>Only stock-free calculations are cached by callers (live stock is
  * volatile); this class is a plain keyed store. Cleared on client unload via

@@ -23,16 +23,9 @@ import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContext;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionEngine;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContexts;
-import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
-import dev.vfyjxf.cirrus.api.recipe.routing.Stock.ConsumedResource;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleDefinition;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingIssue;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingOutcome;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingRequest;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingService;
+import dev.vfyjxf.cirrus.api.content.stock.Stock;
+import dev.vfyjxf.cirrus.api.content.stock.Stock.ConsumedResource;
 import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
-import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.material.Fluid;
@@ -46,8 +39,8 @@ import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.set.ImmutableSet;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.LinkedHashSet;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -55,19 +48,27 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class ExecutionTargetRecipeState {
 
-	public record Selection(RecipeEntry<?> recipe, int times, long version, @Nullable RoutingPlan routingPlan) {
+	public record Selection(RecipeEntry<?> recipe, int times, long version) {
 		public Selection {
 			if (times <= 0) {
 				throw new IllegalArgumentException("times must be positive");
 			}
 		}
-
-		public Selection(RecipeEntry<?> recipe, int times, long version) {
-			this(recipe, times, version, null);
-		}
 	}
 
 	private static final AtomicLong versionCounter = new AtomicLong(0L);
+
+	/** 规划侧状态指纹来源（当前实现取 {@code CirrusPlanningRuntime.publishedVersion()}）。 */
+	@FunctionalInterface
+	public interface PlanStateSource {
+		long fingerprint();
+	}
+
+	private static volatile PlanStateSource planStateSource = () -> 0L;
+
+	public static void setPlanStateSource(@Nullable PlanStateSource source) {
+		planStateSource = source == null ? () -> 0L : source;
+	}
 
 	private static volatile @Nullable Selection selection;
 	private static volatile long cachedPlanVersion = -1L;
@@ -85,21 +86,6 @@ public final class ExecutionTargetRecipeState {
 
 	public static Selection set(RecipeEntry<?> recipe, int times) {
 		Selection next = new Selection(recipe, Math.max(1, times), versionCounter.incrementAndGet());
-		selection = next;
-		clearCaches();
-		return next;
-	}
-
-	public static Selection setPath(RecipeEntry<?> recipe, int times, RoutingPlan routingPlan) {
-		Objects.requireNonNull(routingPlan, "routingPlan");
-		if (!recipe.equals(routingPlan.targetRecipe())) {
-			throw new IllegalArgumentException("routing plan target does not match selected recipe");
-		}
-		int normalizedTimes = Math.max(1, times);
-		if (routingPlan.targetTimes() != normalizedTimes) {
-			throw new IllegalArgumentException("routing plan times does not match selected times");
-		}
-		Selection next = new Selection(recipe, normalizedTimes, versionCounter.incrementAndGet(), routingPlan);
 		selection = next;
 		clearCaches();
 		return next;
@@ -237,42 +223,36 @@ public final class ExecutionTargetRecipeState {
 			return cachedPlan;
 		}
 
-		RoutingPlanBuild routingPlan = buildRoutingPlan(selected, interaction);
-		InteractionExecutionPlan plan = routingPlan.plan();
+		PlanBuild planBuild = composePlan(selected, interaction);
+		InteractionExecutionPlan plan = planBuild.plan();
 
 		cachedPlanVersion = selected.version();
 		cachedPlanStateFingerprint = stateFingerprint;
 		cachedPlanInteraction = interaction;
 		cachedPlan = plan;
-		cachedPlanPauseReason = routingPlan.pauseReason();
+		cachedPlanPauseReason = planBuild.pauseReason();
 		return plan;
 	}
 
-	private static RoutingPlanBuild buildRoutingPlan(Selection selected, ExecutionInteraction interaction) {
-		RoutingPlan precomputedPlan = selected.routingPlan();
-		if (precomputedPlan != null) {
-			return new RoutingPlanBuild(new ExecutionTranslator(interaction.interactionApi()).translate(precomputedPlan), null);
+	private static PlanBuild composePlan(Selection selected, ExecutionInteraction interaction) {
+		Optional<InteractionExecutionPlan> translated = new ExecutionTranslator(interaction.interactionApi())
+			.translateTarget(selected.recipe(), selected.times());
+		if (translated.isPresent()) {
+			return new PlanBuild(translated.get(), null);
 		}
-		RecipePathSettings.RoutingContext routingContext = RecipePathSettings.executionRoutingContext(selected.recipe());
-		RoutingService routingService = routingContext.service();
-		RuleDefinition activeRule = routingContext.rule();
-		routingService.registerRuleDefinition(activeRule);
-		ExecutionPlanningSnapshot planningSnapshot = interaction.planningSnapshot();
-		RoutingOutcome outcome = routingService.route(
-				RoutingRequest.builder()
-							  .plannerMode(routingContext.plannerMode())
-							  .targetRecipe(selected.recipe(), selected.times())
-							  .ruleProfileId(activeRule.profile().profileId())
-							  .sourcePolicyId(activeRule.sourcePolicy().policyId())
-							  .stock(planningSnapshot.stock())
-							  .inventorySensitivityProfile(routingContext.inventorySensitivity())
-							  .loopPolicy(routingContext.loopPolicy())
-							  .build()
+		return new PlanBuild(emptyPlan(selected), planUnavailablePause());
+	}
+
+	private static PauseReason planUnavailablePause() {
+		return new PauseReason(
+			PauseReasons.routingPlanFailed,
+			new ExecutionGuidance(
+				Component.translatable("cirrus.ui.execution.target.pause.plan_unavailable.summary"),
+				Component.translatable("cirrus.ui.execution.target.pause.plan_unavailable.detail"),
+				Lists.immutable.empty(),
+				Sets.immutable.empty()
+			)
 		);
-		if (outcome.plan() == null) {
-			return new RoutingPlanBuild(emptyPlan(selected), routingFailurePauseReason(selected, outcome));
-		}
-		return new RoutingPlanBuild(new ExecutionTranslator(interaction.interactionApi()).translate(outcome.plan()), null);
 	}
 
 	private static ExecutionFlowNode buildFlowRoot(InteractionExecutionPlan plan, @Nullable ExecutionGuidance guidance) {
@@ -625,57 +605,11 @@ public final class ExecutionTargetRecipeState {
 		return new InteractionExecutionPlan(selected.recipe(), selected.times(), Lists.immutable.empty());
 	}
 
-	private static PauseReason routingFailurePauseReason(Selection selected, RoutingOutcome outcome) {
-		return new PauseReason(PauseReasons.routingPlanFailed, routingFailureGuidance(selected, outcome));
-	}
-
-	private static ExecutionGuidance routingFailureGuidance(Selection selected, RoutingOutcome outcome) {
-		MutableList<Component> issues = routingIssueTexts(outcome);
-		if (issues.isEmpty()) {
-			return new ExecutionGuidance(
-				Component.translatable("cirrus.ui.execution.routing_failed.summary.generic"),
-				Component.translatable("cirrus.ui.execution.routing_failed.detail.generic", displayName(selected.recipe())),
-				Lists.immutable.empty(),
-				Sets.immutable.empty()
-			);
-		}
-
-		Component summary = issues.getFirst();
-		MutableList<Component> rest = Lists.mutable.ofAll(issues);
-		rest.remove(0);
-		return new ExecutionGuidance(
-			summary,
-			Component.translatable("cirrus.ui.execution.routing_failed.detail.generic", displayName(selected.recipe())),
-			rest.toImmutable(),
-			Sets.immutable.empty()
-		);
-	}
-
-	private static MutableList<Component> routingIssueTexts(RoutingOutcome outcome) {
-		MutableList<Component> texts = Lists.mutable.empty();
-		LinkedHashSet<String> seen = new LinkedHashSet<>();
-		for (RoutingIssue issue : outcome.issues()) {
-			Component text = routingIssueText(issue);
-			if (seen.add(text.getString())) {
-				texts.add(text);
-			}
-		}
-		return texts;
-	}
-
-	private static Component routingIssueText(RoutingIssue issue) {
-		Object[] args = issue.translationArgs();
-		if (args.length == 0) {
-			return Component.translatable(issue.messageKey());
-		}
-		return Component.translatable(issue.messageKey(), args);
-	}
-
 	private static long planStateFingerprint(@Nullable Selection selected, ExecutionInteraction interaction) {
 		if (selected == null) {
 			return 0L;
 		}
-		return 31L * interaction.planningSnapshot().fingerprint() + RecipePathSettings.executionSettingsFingerprint();
+		return 31L * interaction.planningSnapshot().fingerprint() + planStateSource.fingerprint();
 	}
 
     private static void clearCaches() {
@@ -702,7 +636,7 @@ public final class ExecutionTargetRecipeState {
 		return nodeId(recipe) + "/expanded/" + sequence;
 	}
 
-	private record RoutingPlanBuild(
+	private record PlanBuild(
 		InteractionExecutionPlan plan,
 		@Nullable PauseReason pauseReason
 	) {

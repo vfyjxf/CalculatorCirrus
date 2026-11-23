@@ -1,149 +1,168 @@
 package dev.vfyjxf.cirrus.recipe.execution;
 
+import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
+import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
+import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionCapability;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSideRequirement;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionExecutionPlan;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
-import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionContext;
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionApi;
+import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionContext;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionProbeResult;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan;
+import dev.vfyjxf.cirrus.planning.bridge.CirrusCatalogAdapter;
+import dev.vfyjxf.cirrus.planning.bridge.ExecutionPlanBridge;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Function;
 
 /**
- * Translates routing plans into runtime interaction steps without changing planner output semantics.
+ * 把规划产物翻译成可执行的交互步骤（§10.5.2）。
  *
- * <p>The key rule here is that execution must preserve the planner's intent:
- * exact stock consumption stays exact, while unresolved direct-supply inputs stay expressed as {@link InputContent}.
+ * <p>两条入口：{@link #translate} 消费 {@link ProductionPlan}（经 {@link ExecutionPlanBridge} 的批次绑定），
+ * {@link #translateTarget} 服务无 ProductionPlan 的客户端目标配方直执行路径。</p>
  */
-public record ExecutionTranslator(InteractionApi interactionApi) {
+public final class ExecutionTranslator {
 
-    //region translation
+    private final InteractionApi interactionApi;
 
-    public InteractionExecutionPlan translate(RoutingPlan plan) {
-        MutableList<InteractionStep> steps = Lists.mutable.empty();
-        for (var action : plan.actions()) {
-            switch (action) {
-                case PlanAction.ConsumeStock consume -> translateExactConsume(consume, steps);
-                case PlanAction.PendingInput pending -> translatePendingInput(pending, steps);
-                case PlanAction.ReserveCatalyst reserve -> translateReserve(reserve, steps);
-                case PlanAction.ExecuteRecipe execute -> translateExecute(execute, steps);
-            }
+    public ExecutionTranslator(InteractionApi interactionApi) {
+        this.interactionApi = Objects.requireNonNull(interactionApi, "interactionApi");
+    }
+
+    //region plan translation
+
+    /** 规划批次 → 交互执行计划；任一配方批次无法反查 {@link RecipeEntry} 时返回空。 */
+    public Optional<InteractionExecutionPlan> translate(
+            ProductionPlan plan,
+            ExecutionPlanBridge.ExecutionOutline outline,
+            Function<CompiledRecipeKey, Optional<RecipeEntry<?>>> recipeResolver
+    ) {
+        Objects.requireNonNull(plan, "plan");
+        Objects.requireNonNull(outline, "outline");
+        Objects.requireNonNull(recipeResolver, "recipeResolver");
+        if (outline.batches().isEmpty()) {
+            return Optional.empty();
         }
-        return new InteractionExecutionPlan(plan.targetRecipe(), plan.targetTimes(), steps.toImmutable());
+        MutableList<InteractionStep> steps = Lists.mutable.empty();
+        RecipeEntry<?> target = null;
+        int targetTimes = 1;
+        for (ExecutionPlanBridge.RecipeBatch batch : outline.batches()) {
+            Optional<RecipeEntry<?>> recipe = recipeResolver.apply(batch.recipeKey());
+            if (recipe.isEmpty()) {
+                return Optional.empty();
+            }
+            steps.addAllIterable(
+                    batchSteps(recipe.get(), batch.times(), batch.inputs(), batch.outputs(), batch.catalysts()));
+            target = recipe.get();
+            targetTimes = batch.times();
+        }
+        if (target == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new InteractionExecutionPlan(target, targetTimes, steps.toImmutable()));
     }
 
     //endregion
 
-    //region action translation
+    //region target translation
 
-    /**
-     * Translates fully-resolved stock consumption.
-     */
-    private void translateExactConsume(PlanAction.ConsumeStock consume, MutableList<InteractionStep> steps) {
-        translateConsume(
-            steps,
-            new InteractionStep.AccessTarget.Resource(consume.resource()),
-            new InteractionStep.WithdrawTarget.Resource(consume.resource()),
-            consume.amount()
-        );
+    /** 客户端目标配方直执行：内容取自 routingView / 投影管线，概率字段不读取。 */
+    public Optional<InteractionExecutionPlan> translateTarget(RecipeEntry<?> recipe, int times) {
+        Objects.requireNonNull(recipe, "recipe");
+        if (times <= 0) {
+            return Optional.empty();
+        }
+        Optional<CirrusCatalogAdapter.RecipeContentSource> contentSource = CirrusCatalogAdapter.contentSource(recipe);
+        if (contentSource.isEmpty()) {
+            return Optional.empty();
+        }
+        List<InputBinding> inputs = new ArrayList<>();
+        List<InputContent> catalysts = new ArrayList<>();
+        for (InputContent input : contentSource.get().inputs()) {
+            if (input == null || input.isEmpty()) {
+                continue;
+            }
+            if (input.notConsumed()) {
+                catalysts.add(input);
+                continue;
+            }
+            if (input.amount() <= 0L) {
+                return Optional.empty();
+            }
+            inputs.add(new InputBinding(input, input.amount()));
+        }
+        List<OutputBinding> outputs = new ArrayList<>();
+        for (OutputContent output : contentSource.get().outputs()) {
+            if (output == null || output.isEmpty()) {
+                continue;
+            }
+            if (!(output instanceof dev.vfyjxf.cirrus.api.recipe.content.StackContent<?, ?> stack) || stack.amount() <= 0L) {
+                continue;
+            }
+            outputs.add(new OutputBinding(stack.content(), stack.amount()));
+        }
+        if (outputs.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new InteractionExecutionPlan(
+                recipe,
+                times,
+                batchSteps(recipe, times, inputs, outputs, catalysts)
+        ));
     }
 
-    /**
-     * Translates execution-profile direct supply that must keep the original input semantics.
-     */
-    private void translatePendingInput(PlanAction.PendingInput pending, MutableList<InteractionStep> steps) {
-        translateConsume(
-            steps,
-            new InteractionStep.AccessTarget.Input(pending.input()),
-            new InteractionStep.WithdrawTarget.Input(pending.input()),
-            pending.amount()
-        );
-    }
+    //endregion
 
-    private void translateConsume(
-        MutableList<InteractionStep> steps,
-        InteractionStep.AccessTarget accessTarget,
-        InteractionStep.WithdrawTarget withdrawTarget,
-        long amount
+    //region step synthesis
+
+    private ImmutableList<InteractionStep> batchSteps(
+            RecipeEntry<?> recipe,
+            int times,
+            List<InputBinding> perCraftInputs,
+            List<OutputBinding> perCraftOutputs,
+            List<InputContent> catalysts
     ) {
-        steps.add(new InteractionStep.EnsureAccessibleStep(
-            ExecutionSideRequirement.environmentAgnostic,
-            ExecutionCapability.storageAccess,
-            accessTarget,
-            amount
-        ));
-        steps.add(new InteractionStep.WithdrawResourceStep(
-            ExecutionSideRequirement.clientSide,
-            ExecutionCapability.inventoryTransfer,
-            withdrawTarget,
-            amount
-        ));
-    }
-
-    private void translateReserve(
-            PlanAction.ReserveCatalyst reserve,
-            MutableList<InteractionStep> steps
-    ) {
-        steps.add(new InteractionStep.EnsureAccessibleStep(
-                ExecutionSideRequirement.environmentAgnostic,
-                ExecutionCapability.storageAccess,
-                new InteractionStep.AccessTarget.Input(reserve.input()),
-                reserve.amount()
-        ));
-        steps.add(new InteractionStep.ReserveCatalystStep(
-                ExecutionSideRequirement.clientSide,
-                ExecutionCapability.inventoryTransfer,
-                reserve.input(),
-                reserve.amount()
-        ));
-    }
-
-    private void translateExecute(
-            PlanAction.ExecuteRecipe execute,
-            MutableList<InteractionStep> steps
-    ) {
-        var probe = interactionApi.probe(execute.recipe());
-        Namespace interactionId = probe instanceof InteractionProbeResult.Supported supported
-            ? supported.interactionId()
-            : execute.recipe().system().systemId();
-        boolean performerAvailable = probe instanceof InteractionProbeResult.Supported supported && supported.performerAvailable();
-
+        MutableList<InteractionStep> steps = Lists.mutable.empty();
         steps.add(new InteractionStep.OpenInteractionStep(
                 ExecutionSideRequirement.clientSide,
                 ExecutionCapability.interactionAccess,
-                execute.recipe(),
-                execute.times(),
-                interactionId
+                recipe,
+                times,
+                interactionIdOf(recipe)
         ));
-        if (!performerAvailable) {
-            steps.add(new InteractionStep.ManualCheckpointStep(
-                    ExecutionSideRequirement.manualPlayerAction,
-                    ExecutionCapability.manualCheckpoint,
-                    interactionApi.guide(execute.recipe()).guidance()
-            ));
+        for (InputContent catalyst : catalysts) {
+            reserveCatalyst(steps, catalyst);
         }
-        int remainingTimes = execute.times();
-        while (remainingTimes > 0) {
-            int batchTimes = resolveBatchTimes(execute, remainingTimes);
-            ImmutableList<PlanAction.InputBinding> batchInputs = scaleInputs(execute.boundInputs(), batchTimes, execute.times());
-            ImmutableList<PlanAction.OutputBinding> batchOutputs = scaleOutputs(execute.expectedOutputs(), batchTimes, execute.times());
-
+        ImmutableList<InputBinding> totals = scaleInputs(perCraftInputs, times);
+        ImmutableList<OutputBinding> totalOutputs = scaleOutputs(perCraftOutputs, times);
+        int remaining = times;
+        while (remaining > 0) {
+            int batchTimes = batchSize(recipe, remaining, totals, totalOutputs, times);
+            ImmutableList<InputBinding> batchInputs = scaleInputs(perCraftInputs, batchTimes);
+            ImmutableList<OutputBinding> batchOutputs = scaleOutputs(perCraftOutputs, batchTimes);
             steps.add(new InteractionStep.PrepareInputsStep(
                     ExecutionSideRequirement.clientSide,
                     ExecutionCapability.inventoryTransfer,
-                    execute.recipe(),
+                    recipe,
                     batchInputs
             ));
             steps.add(new InteractionStep.ExecuteRecipeStep(
                     ExecutionSideRequirement.clientSide,
                     ExecutionCapability.interactionPerform,
-                    execute.recipe(),
+                    recipe,
                     batchTimes,
                     batchInputs,
                     batchOutputs
@@ -151,91 +170,75 @@ public record ExecutionTranslator(InteractionApi interactionApi) {
             steps.add(new InteractionStep.CollectOutputsStep(
                     ExecutionSideRequirement.clientSide,
                     ExecutionCapability.inventoryTransfer,
-                    execute.recipe(),
+                    recipe,
                     batchOutputs
             ));
-            batchOutputs.forEach(output -> steps.add(new InteractionStep.StoreOutputsStep(
-                    ExecutionSideRequirement.clientSide,
-                    ExecutionCapability.outputStorage,
-                    output.resource(),
-                    output.amount()
-            )));
-            remainingTimes -= batchTimes;
+            for (OutputBinding output : batchOutputs) {
+                steps.add(new InteractionStep.StoreOutputsStep(
+                        ExecutionSideRequirement.clientSide,
+                        ExecutionCapability.outputStorage,
+                        output.resource(),
+                        output.amount()
+                ));
+            }
+            remaining -= batchTimes;
         }
+        return steps.toImmutable();
     }
 
-    //endregion
-
-    //region batching
-
-    private int resolveBatchTimes(PlanAction.ExecuteRecipe execute, int remainingTimes) {
-        int requestedTimes = Math.max(1, remainingTimes);
-        if (!canSplitEvenly(execute)) {
-            return requestedTimes;
-        }
-        int batchLimit = interactionApi.maxExecuteBatchSize(new InteractionContext(
-            execute.recipe(),
-            execute.times(),
-            execute.boundInputs(),
-            execute.expectedOutputs()
+    /**
+     * 催化剂按"持有 1 件"预留；Known limitation：core 未提供每批周转量（04 §4.4.2 待补）。
+     */
+    private static void reserveCatalyst(MutableList<InteractionStep> steps, InputContent catalyst) {
+        steps.add(new InteractionStep.EnsureAccessibleStep(
+                ExecutionSideRequirement.environmentAgnostic,
+                ExecutionCapability.storageAccess,
+                new InteractionStep.AccessTarget.Input(catalyst),
+                1L
         ));
-        return Math.max(1, Math.min(requestedTimes, batchLimit));
+        steps.add(new InteractionStep.ReserveCatalystStep(
+                ExecutionSideRequirement.clientSide,
+                ExecutionCapability.inventoryTransfer,
+                catalyst,
+                1L
+        ));
     }
 
-    private static boolean canSplitEvenly(PlanAction.ExecuteRecipe execute) {
-        for (PlanAction.InputBinding input : execute.boundInputs()) {
-            if (input.amount() % execute.times() != 0L) {
-                return false;
-            }
-        }
-        for (PlanAction.OutputBinding output : execute.expectedOutputs()) {
-            if (output.amount() % execute.times() != 0L) {
-                return false;
-            }
-        }
-        return true;
+    private Namespace interactionIdOf(RecipeEntry<?> recipe) {
+        InteractionProbeResult probe = interactionApi.probe(recipe);
+        return probe instanceof InteractionProbeResult.Supported supported
+                ? supported.interactionId()
+                : recipe.systemId();
     }
 
-    private static ImmutableList<PlanAction.InputBinding> scaleInputs(
-        ImmutableList<PlanAction.InputBinding> inputs,
-        int batchTimes,
-        int totalTimes
+    private int batchSize(
+            RecipeEntry<?> recipe,
+            int remaining,
+            ImmutableList<InputBinding> totals,
+            ImmutableList<OutputBinding> totalOutputs,
+            int totalTimes
     ) {
-        MutableList<PlanAction.InputBinding> scaled = Lists.mutable.empty();
-        for (PlanAction.InputBinding input : inputs) {
-            long amount = scaleAmount(input.amount(), batchTimes, totalTimes);
-            scaled.add(new PlanAction.InputBinding(input.input(), amount));
+        int requested = Math.max(1, remaining);
+        int limit = interactionApi.maxExecuteBatchSize(
+                new InteractionContext(recipe, totalTimes, totals, totalOutputs));
+        return Math.max(1, Math.min(requested, limit));
+    }
+
+    private static ImmutableList<InputBinding> scaleInputs(List<InputBinding> perCraftInputs, int batchTimes) {
+        MutableList<InputBinding> scaled = Lists.mutable.empty();
+        for (InputBinding input : perCraftInputs) {
+            scaled.add(new InputBinding(input.input(), Math.multiplyExact(input.amount(), (long) batchTimes)));
         }
         return scaled.toImmutable();
     }
 
-    private static ImmutableList<PlanAction.OutputBinding> scaleOutputs(
-        ImmutableList<PlanAction.OutputBinding> outputs,
-        int batchTimes,
-        int totalTimes
-    ) {
-        MutableList<PlanAction.OutputBinding> scaled = Lists.mutable.empty();
-        for (PlanAction.OutputBinding output : outputs) {
-            long amount = scaleAmount(output.amount(), batchTimes, totalTimes);
-            scaled.add(new PlanAction.OutputBinding(output.resource(), amount));
+    private static ImmutableList<OutputBinding> scaleOutputs(List<OutputBinding> perCraftOutputs, int batchTimes) {
+        MutableList<OutputBinding> scaled = Lists.mutable.empty();
+        for (OutputBinding output : perCraftOutputs) {
+            scaled.add(new OutputBinding(output.resource(), Math.multiplyExact(output.amount(), (long) batchTimes)));
         }
         return scaled.toImmutable();
-    }
-
-    private static long scaleAmount(long totalAmount, int batchTimes, int totalTimes) {
-        if (totalTimes <= 0) {
-            throw new IllegalArgumentException("totalTimes must be positive");
-        }
-        if (batchTimes == totalTimes) {
-            return totalAmount;
-        }
-        if (totalAmount % totalTimes != 0L) {
-            throw new IllegalArgumentException("execution binding amount must divide evenly by total recipe times");
-        }
-        long perCraftAmount = totalAmount / totalTimes;
-        return Math.multiplyExact(perCraftAmount, batchTimes);
     }
 
     //endregion
 }
-

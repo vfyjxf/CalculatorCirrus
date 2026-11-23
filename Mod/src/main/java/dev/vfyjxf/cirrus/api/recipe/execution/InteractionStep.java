@@ -4,7 +4,6 @@ import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.list.ImmutableList;
@@ -123,7 +122,7 @@ public sealed interface InteractionStep permits
         ExecutionSideRequirement requiredSide,
         ExecutionCapability requiredCapability,
         RecipeEntry<?> recipe,
-        ImmutableList<PlanAction.InputBinding> inputs
+        ImmutableList<InputBinding> inputs
     ) implements InteractionStep {}
 
     record ExecuteRecipeStep(
@@ -131,8 +130,8 @@ public sealed interface InteractionStep permits
         ExecutionCapability requiredCapability,
         RecipeEntry<?> recipe,
         int times,
-        ImmutableList<PlanAction.InputBinding> inputs,
-        ImmutableList<PlanAction.OutputBinding> expectedOutputs
+        ImmutableList<InputBinding> inputs,
+        ImmutableList<OutputBinding> expectedOutputs
     ) implements InteractionStep {
         public ExecuteRecipeStep {
             Checks.checkArgument(times > 0, "times must be positive");
@@ -143,7 +142,7 @@ public sealed interface InteractionStep permits
         ExecutionSideRequirement requiredSide,
         ExecutionCapability requiredCapability,
         RecipeEntry<?> recipe,
-        ImmutableList<PlanAction.OutputBinding> expectedOutputs
+        ImmutableList<OutputBinding> expectedOutputs
     ) implements InteractionStep {}
 
     record ManualCheckpointStep(

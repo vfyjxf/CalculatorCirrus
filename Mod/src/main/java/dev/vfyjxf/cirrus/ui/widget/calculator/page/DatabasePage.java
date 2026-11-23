@@ -61,7 +61,6 @@ import dev.vfyjxf.cloudlib.api.search.SearchParseException;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.recipe.execution.ExecutionTargetRecipeState;
-import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusScroll;
@@ -6963,8 +6962,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
 
     /**
      * Builds the system-catalog index in the background so the first page open
-     * does not pay the full resolve cost. Scheduled by the client runtime after
-     * the routing graph prewarm finishes; a later page open reuses the cached
+     * does not pay the full resolve cost. A later page open reuses the cached
      * catalog via {@link RecipeDatabaseCatalogCache}.
      */
     public static void prewarmSystemCatalogIndex(String reason) {
@@ -7257,7 +7255,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
     }
 
     public static java.nio.file.Path defaultRepositoryRoot() {
-        return RecipePathSettings.defaultDatabaseRepositoryRoot();
+        return net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve("cirrus").resolve("databases");
     }
 
     private record DatabaseContext(

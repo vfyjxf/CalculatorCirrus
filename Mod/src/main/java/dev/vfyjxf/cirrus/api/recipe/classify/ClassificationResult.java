@@ -11,9 +11,7 @@ import java.util.Set;
  * of recipe indices carrying it.
  *
  * <p>Bitsets are indexed by {@link RecipeClassifyView#index()}, which matches
- * the recipe's position in the classified catalog (and, in the mod runtime,
- * the {@code RoutingRecipeCatalog} index, so the result can seed the routing
- * {@code TagIndex} directly).
+ * the recipe's position in the classified catalog.
  */
 public final class ClassificationResult {
 

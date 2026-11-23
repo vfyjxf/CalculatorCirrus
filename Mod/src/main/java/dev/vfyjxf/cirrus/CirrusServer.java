@@ -5,6 +5,7 @@ import dev.vfyjxf.cirrus.content.ContentApiImpl;
 import dev.vfyjxf.cirrus.content.ContentRegistryBuilder;
 import dev.vfyjxf.cirrus.internal.lifecycle.CirrusLifecycleSources;
 import dev.vfyjxf.cirrus.internal.lifecycle.CirrusLifecycleStates;
+import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cloudlib.api.lifecycle.LifecycleDriver;
 import dev.vfyjxf.cloudlib.api.plugin.ProgressTracker;
 import dev.vfyjxf.cloudlib.api.util.MutableLists;
@@ -36,6 +37,16 @@ public final class CirrusServer extends Cirrus {
         var contentRegistry = new ContentRegistryBuilder();
         buildCommonContentApi(contentRegistry, tracker);
         ContentApiImpl.attach(new ContentApiImpl(contentRegistry));
+    }
+
+    @Override
+    protected void afterLifecycleLoad() {
+        CirrusPlanningRuntime.sharedOrCreate().reloadFromRuntimeAsync();
+    }
+
+    @Override
+    protected void beforeLifecycleUnload() {
+        CirrusPlanningRuntime.closeShared();
     }
 
     private void registerLifecycleDriver() {

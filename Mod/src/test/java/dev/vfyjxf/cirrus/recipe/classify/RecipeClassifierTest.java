@@ -288,7 +288,7 @@ class RecipeClassifierTest {
             "minecraft:crafting", "utilitarian:utility/redying/white_concrete_powder_single",
             List.of(stack("minecraft:red_concrete_powder"), stack("minecraft:white_dye")),
             List.of(stack("minecraft:white_concrete_powder")));
-        assertEquals(dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeUsePolicy.discouraged,
+        assertEquals(dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy.discouraged,
             classifier.hintOf(recolor));
         // plain crafting carries no hint
         RecipeClassifyView plain = view(1,

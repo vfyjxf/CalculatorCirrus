@@ -5,7 +5,7 @@ import com.mojang.serialization.Codec;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.constraint.RecipeConstraint;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
-import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeRoutingHints;
+import dev.vfyjxf.cirrus.api.recipe.screening.RecipeScreeningHints;
 import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import mezz.jei.api.recipe.RecipeType;
@@ -102,8 +102,8 @@ public interface RecipeSystem<R> {
         return RecipeConstraint.ingredientConstraint();
     }
 
-    default RecipeRoutingHints routingHints(R recipe) {
-        return RecipeRoutingHints.empty();
+    default RecipeScreeningHints routingHints(R recipe) {
+        return RecipeScreeningHints.empty();
     }
 
     /**

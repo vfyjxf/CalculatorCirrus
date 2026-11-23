@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.performance;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
-import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
+import dev.vfyjxf.cirrus.api.content.stock.Stock;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;

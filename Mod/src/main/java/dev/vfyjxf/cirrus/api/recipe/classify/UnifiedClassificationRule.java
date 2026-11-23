@@ -3,7 +3,7 @@ package dev.vfyjxf.cirrus.api.recipe.classify;
 import dev.vfyjxf.cirrus.api.recipe.rule.CatalogRuleInput;
 import dev.vfyjxf.cirrus.api.recipe.rule.RuleEngine;
 import dev.vfyjxf.cirrus.api.recipe.rule.RuleSpec;
-import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeUsePolicy;
+import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;

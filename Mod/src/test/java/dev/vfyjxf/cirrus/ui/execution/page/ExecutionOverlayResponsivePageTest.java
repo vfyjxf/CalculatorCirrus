@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.ui.execution.page;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
 
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
@@ -20,7 +22,6 @@ import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayTraceSnaps
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.OverlayTargetProgress;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowStatus;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -199,8 +200,8 @@ class ExecutionOverlayResponsivePageTest {
         var preview = new ExecutionOverlayRecipePreview(
             recipe,
             2,
-            Lists.immutable.of(new PlanAction.InputBinding(input(8L), 16L)),
-            Lists.immutable.of(new PlanAction.OutputBinding(resource(2L), 2L))
+            Lists.immutable.of(new InputBinding(input(8L), 16L)),
+            Lists.immutable.of(new OutputBinding(resource(2L), 2L))
         );
         var node = new ExecutionOverlayNode(
             "node",

@@ -1,7 +1,8 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.overlay;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
@@ -12,8 +13,8 @@ import org.eclipse.collections.api.list.ImmutableList;
 public record ExecutionOverlayRecipePreview(
     RecipeEntry<?> recipe,
     int times,
-    ImmutableList<PlanAction.InputBinding> inputs,
-    ImmutableList<PlanAction.OutputBinding> outputs
+    ImmutableList<InputBinding> inputs,
+    ImmutableList<OutputBinding> outputs
 ) {
 
     public ExecutionOverlayRecipePreview {

@@ -14,14 +14,9 @@ import dev.vfyjxf.cirrus.api.recipe.content.StackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TagStackContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TypedStackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
-import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
-import dev.vfyjxf.cirrus.api.recipe.routing.RecipeGraph;
-import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeHeuristicContext;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -31,8 +26,8 @@ import java.util.Set;
 
 /**
  * Builds the Minecraft-free {@link RecipeClassifyView} from live mod objects
- * (recipe graph nodes, heuristic contexts), so the classification core can
- * run unchanged on in-game recipes and on exported JSON data.
+ * (recipe entries and projections), so the classification core can run
+ * unchanged on in-game recipes and on exported JSON data.
  */
 public final class ClassifyViewFactory {
 
@@ -51,33 +46,6 @@ public final class ClassifyViewFactory {
     /** Drops the memoized tag member sets (world unload / datapack reload). */
     public static void clearTagMemberCache() {
         tagMemberCache.clear();
-    }
-
-    /** Builds a view for a graph node (the graph's catalog position). */
-    public static RecipeClassifyView fromNode(RecipeGraph.Node node, int index) {
-        RecipeEntry<?> entry = node.recipe();
-        ResourceLocation id = entry.id();
-        return new RecipeClassifyView(
-            index,
-            node.stableSystemId(),
-            id == null ? "" : id.toString(),
-            machineIds(node.machineEntry()),
-            inputsOf(node.mergedInputs()),
-            outputsOf(node.mergedOutputs())
-        );
-    }
-
-    /** Builds a view for a heuristic context (graph-build time; no index). */
-    public static RecipeClassifyView fromHeuristicContext(RecipeHeuristicContext context) {
-        ResourceLocation id = context.recipeId();
-        return new RecipeClassifyView(
-            -1,
-            context.systemId().toString(),
-            id == null ? "" : id.toString(),
-            machineIds(context.machineEntry()),
-            inputsOf(context.mergedInputs()),
-            outputsOf(context.mergedOutputs())
-        );
     }
 
     /**
@@ -107,34 +75,6 @@ public final class ClassifyViewFactory {
             inputs,
             outputs
         );
-    }
-
-    private static List<String> machineIds(@Nullable MachineEntry machine) {
-        if (machine == null || machine.isEmpty()) {
-            return List.of();
-        }
-        ItemStack stack = machine.toItemStack();
-        if (stack.isEmpty()) {
-            return List.of();
-        }
-        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
-        return id == null ? List.of() : List.of(id.toString());
-    }
-
-    private static List<ClassifyContent> inputsOf(Iterable<? extends InputContent> inputs) {
-        List<ClassifyContent> out = new ArrayList<>();
-        for (InputContent input : inputs) {
-            out.add(of(input));
-        }
-        return out;
-    }
-
-    private static List<ClassifyContent> outputsOf(Iterable<? extends OutputContent> outputs) {
-        List<ClassifyContent> out = new ArrayList<>();
-        for (OutputContent output : outputs) {
-            out.add(of(output));
-        }
-        return out;
     }
 
     private static ClassifyContent of(InputContent content) {
@@ -215,8 +155,7 @@ public final class ClassifyViewFactory {
 
     /**
      * The raw content id ({@code mod:path}) of a concrete single-stack input,
-     * or {@code null} for tag/list/value/complex inputs. This is the key space
-     * used by {@code GraphTopology} resource lookups.
+     * or {@code null} for tag/list/value/complex inputs.
      */
     public static @Nullable String resourceIdOf(InputContent input) {
         if (input instanceof StackContent<?, ?> stack) {

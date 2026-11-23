@@ -1,10 +1,14 @@
 package dev.vfyjxf.cirrus.internal.lifecycle;
 
+import dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer;
+import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseCatalogCache;
 import dev.vfyjxf.cirrus.internal.integration.jei.JeiIntegration;
+import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
+import dev.vfyjxf.cirrus.planning.bridge.WorldFacilityRegistry;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
+import dev.vfyjxf.cirrus.recipe.execution.ExecutionTargetRecipeState;
 import dev.vfyjxf.cirrus.recipe.classify.RecipeClassificationService;
-import dev.vfyjxf.cirrus.recipe.routing.RecipePathSettings;
 import dev.vfyjxf.cirrus.ui.process.CalculatorBuildResultCache;
 import dev.vfyjxf.cirrus.ui.widget.calculator.page.DatabasePage;
 import net.neoforged.api.distmarker.Dist;
@@ -18,10 +22,16 @@ public final class CirrusClientRuntime {
     }
 
     public static void afterLoad() {
-        // the database index build starts only after the routing graph prewarm
-        // finishes so the two big builds never compete for cpu/heap
-        RecipePathSettings.prewarmCalculatorRoutingGraph("clientLifecycleLoad")
-            .thenRun(CirrusClientRuntime::prewarmDatabaseIndexWhenSystemsReady);
+        prewarmPlanningGraph();
+        prewarmDatabaseIndexWhenSystemsReady();
+    }
+
+    /** 规划图后台编译预热：替换旧路由图预热，编译在单线程后台执行器里完成。 */
+    private static void prewarmPlanningGraph() {
+        CirrusPlanningRuntime runtime = CirrusPlanningRuntime.sharedOrCreate();
+        WorldFacilityRegistry.installed().ifPresent(registry -> registry.applyRulesTo(runtime.guidanceStore()));
+        ExecutionTargetRecipeState.setPlanStateSource(runtime::publishedVersion);
+        runtime.reloadFromRuntimeAsync();
     }
 
     /**
@@ -46,8 +56,7 @@ public final class CirrusClientRuntime {
 
     public static void beforeUnload() {
         // runs on world unload AND on datapack reload (the lifecycle driver's
-        // default reload action is unload-then-load); the catalog cache is not
-        // part of RecipePathSettings.clearRuntimeCaches, and its key only
+        // default reload action is unload-then-load); the catalog cache key only
         // fingerprints system identity — recipe content changes under stable
         // system instances on reload, so without this invalidate the prewarm
         // would hit the cache and serve the pre-reload catalog until TTL expiry
@@ -58,7 +67,10 @@ public final class CirrusClientRuntime {
         // stale memoized results must be dropped here even though the weak-keyed
         // inner maps already evaporate replaced recipe instances on their own
         RecipeApiImpl.clearEmptyContextResolveMemos();
-        RecipePathSettings.clearRuntimeCaches("clientLifecycleUnload");
+        ExecutionTargetRecipeState.setPlanStateSource(null);
+        CirrusPlanningRuntime.closeShared();
+        ComponentCanonicalizer.clear();
+        InputContent.clearIngredientMemo();
         RecipeClassificationService.clearRuntimeCaches();
         CalculatorBuildResultCache.clear();
     }

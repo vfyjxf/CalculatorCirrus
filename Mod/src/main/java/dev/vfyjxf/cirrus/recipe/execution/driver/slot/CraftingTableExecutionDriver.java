@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.recipe.execution.driver.slot;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
@@ -30,8 +32,7 @@ import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayTraceSnaps
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayViewModel;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.OverlayMaterialRequirement;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.OverlayTargetProgress;
-import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
+import dev.vfyjxf.cirrus.api.content.stock.Stock;
 import dev.vfyjxf.cirrus.helper.RecipeHelper;
 import dev.vfyjxf.cirrus.ui.CirrusUiAsync;
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayContentHelper;
@@ -406,7 +407,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
         if (targetRecipe == null) {
             return null;
         }
-        ImmutableList<PlanAction.OutputBinding> outputs = resolveTargetRecipeOutputs(sourceSession, targetRecipe);
+        ImmutableList<OutputBinding> outputs = resolveTargetRecipeOutputs(sourceSession, targetRecipe);
         if (outputs.isEmpty()) {
             outputs = resolveTargetRecipeExecuteOutputs(sourceSession, targetRecipe);
         }
@@ -516,7 +517,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
 
     private static ImmutableList<SlotFlow.Placement> resolveTracePlacements(
         @Nullable RecipeEntry<?> recipe,
-        ImmutableList<PlanAction.InputBinding> inputs,
+        ImmutableList<InputBinding> inputs,
         SlotFlow.Context context
     ) {
         ImmutableList<GridPlacement> gridPlacements = resolveGridPlacements(recipe, context, inputs, true, false);
@@ -526,11 +527,11 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
         return toSlotPlacements(gridPlacements);
     }
 
-    private static ImmutableList<PlanAction.OutputBinding> resolveTargetRecipeOutputs(ExecutionSession session, RecipeEntry<?> targetRecipe) {
+    private static ImmutableList<OutputBinding> resolveTargetRecipeOutputs(ExecutionSession session, RecipeEntry<?> targetRecipe) {
         if (session.plan().steps().isEmpty()) {
             return Lists.immutable.empty();
         }
-        MutableList<PlanAction.OutputBinding> outputs = Lists.mutable.empty();
+        MutableList<OutputBinding> outputs = Lists.mutable.empty();
         for (InteractionStep step : session.plan().steps()) {
             if (!(step instanceof InteractionStep.CollectOutputsStep collectOutputsStep)) {
                 continue;
@@ -543,11 +544,11 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
         return outputs.toImmutable();
     }
 
-    private static ImmutableList<PlanAction.OutputBinding> resolveTargetRecipeExecuteOutputs(ExecutionSession session, RecipeEntry<?> targetRecipe) {
+    private static ImmutableList<OutputBinding> resolveTargetRecipeExecuteOutputs(ExecutionSession session, RecipeEntry<?> targetRecipe) {
         if (session.plan().steps().isEmpty()) {
             return Lists.immutable.empty();
         }
-        MutableList<PlanAction.OutputBinding> outputs = Lists.mutable.empty();
+        MutableList<OutputBinding> outputs = Lists.mutable.empty();
         for (InteractionStep step : session.plan().steps()) {
             if (!(step instanceof InteractionStep.ExecuteRecipeStep executeRecipeStep)) {
                 continue;
@@ -555,7 +556,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
             if (!targetRecipe.equals(executeRecipeStep.recipe())) {
                 continue;
             }
-            for (PlanAction.OutputBinding output : executeRecipeStep.expectedOutputs()) {
+            for (OutputBinding output : executeRecipeStep.expectedOutputs()) {
                 outputs.add(output);
             }
         }
@@ -575,11 +576,11 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
 
     private static ItemStack firstOutputStack(
         @Nullable RecipeEntry<?> recipe,
-        ImmutableList<PlanAction.InputBinding> inputs,
-        @Nullable ImmutableList<PlanAction.OutputBinding> expectedOutputs
+        ImmutableList<InputBinding> inputs,
+        @Nullable ImmutableList<OutputBinding> expectedOutputs
     ) {
         if (expectedOutputs != null) {
-            for (PlanAction.OutputBinding output : expectedOutputs) {
+            for (OutputBinding output : expectedOutputs) {
                 ItemStack stack = stackFromContentResource(output.resource());
                 if (!stack.isEmpty()) {
                     stack.setCount((int) Math.max(1L, output.amount()));
@@ -593,7 +594,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
                 return result.copy();
             }
         }
-        for (PlanAction.InputBinding input : inputs) {
+        for (InputBinding input : inputs) {
             ItemStack stack = stackFromInputContent(input.input());
             if (!stack.isEmpty()) {
                 return stack;
@@ -759,7 +760,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
         public ImmutableList<SlotFlow.Placement> resolve(
                 SlotFlow.Context context,
                 @Nullable RecipeEntry<?> recipe,
-                ImmutableList<PlanAction.InputBinding> inputs
+                ImmutableList<InputBinding> inputs
         ) {
             return toSlotPlacements(resolveGridPlacements(recipe, context, inputs));
         }
@@ -770,7 +771,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
         int width,
         int height,
         SlotFlow.Context context,
-        ImmutableList<PlanAction.InputBinding> inputs
+        ImmutableList<InputBinding> inputs
     ) {
         return toSlotPlacements(resolveIngredientGridPlacements(ingredients, width, height, context, inputs, false, true));
     }
@@ -779,14 +780,14 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
         List<Ingredient> ingredients,
         int width,
         int height,
-        ImmutableList<PlanAction.InputBinding> inputs
+        ImmutableList<InputBinding> inputs
     ) {
         return toPreviewSlots(resolveIngredientGridPlacements(ingredients, width, height, null, inputs, true, true));
     }
 
     public static ImmutableList<RecipePreviewSlot> resolvePreviewSlots(
         @Nullable RecipeEntry<?> recipe,
-        ImmutableList<PlanAction.InputBinding> inputs
+        ImmutableList<InputBinding> inputs
     ) {
         return toPreviewSlots(resolveGridPlacements(recipe, null, inputs, true, true));
     }
@@ -831,12 +832,12 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
 
     //region requirement helpers
 
-    private static ImmutableList<ItemRequirement> collapseInputRequirements(ImmutableList<PlanAction.InputBinding> inputs) {
+    private static ImmutableList<ItemRequirement> collapseInputRequirements(ImmutableList<InputBinding> inputs) {
         return collapseInputRequirements(inputs, 1L);
     }
 
     private static ImmutableList<ItemRequirement> collapseInputRequirements(
-            ImmutableList<PlanAction.InputBinding> inputs,
+            ImmutableList<InputBinding> inputs,
             long multiplier
     ) {
         if (inputs.isEmpty()) {
@@ -844,7 +845,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
         }
         long normalizedMultiplier = Math.max(1L, multiplier);
         LinkedHashMap<String, RequirementAccumulator> grouped = new LinkedHashMap<>();
-        for (PlanAction.InputBinding input : inputs) {
+        for (InputBinding input : inputs) {
             ItemStack stack = stackFromInputContent(input.input());
             if (stack.isEmpty()) {
                 continue;
@@ -864,12 +865,12 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
         return out.toImmutable();
     }
 
-    private static ImmutableList<ItemRequirement> collapseOutputRequirements(ImmutableList<PlanAction.OutputBinding> outputs) {
+    private static ImmutableList<ItemRequirement> collapseOutputRequirements(ImmutableList<OutputBinding> outputs) {
         return collapseOutputRequirements(outputs, 1L);
     }
 
     private static ImmutableList<ItemRequirement> collapseOutputRequirements(
-            ImmutableList<PlanAction.OutputBinding> outputs,
+            ImmutableList<OutputBinding> outputs,
             long multiplier
     ) {
         if (outputs == null || outputs.isEmpty()) {
@@ -877,7 +878,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
         }
         long normalizedMultiplier = Math.max(1L, multiplier);
         LinkedHashMap<String, RequirementAccumulator> grouped = new LinkedHashMap<>();
-        for (PlanAction.OutputBinding output : outputs) {
+        for (OutputBinding output : outputs) {
             ItemStack stack = stackFromContentResource(output.resource());
             if (stack.isEmpty()) {
                 continue;
@@ -1007,7 +1008,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
     private static ImmutableList<GridPlacement> resolveGridPlacements(
             @Nullable RecipeEntry<?> recipe,
             @Nullable SlotFlow.Context context,
-            ImmutableList<PlanAction.InputBinding> inputs
+            ImmutableList<InputBinding> inputs
     ) {
         return resolveGridPlacements(recipe, context, inputs, false, true);
     }
@@ -1015,7 +1016,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
     private static ImmutableList<GridPlacement> resolveGridPlacements(
             @Nullable RecipeEntry<?> recipe,
             @Nullable SlotFlow.Context context,
-            ImmutableList<PlanAction.InputBinding> inputs,
+            ImmutableList<InputBinding> inputs,
             boolean ignoreAvailabilityForTemplateSelection
     ) {
         return resolveGridPlacements(recipe, context, inputs, ignoreAvailabilityForTemplateSelection, true);
@@ -1024,7 +1025,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
     private static ImmutableList<GridPlacement> resolveGridPlacements(
             @Nullable RecipeEntry<?> recipe,
             @Nullable SlotFlow.Context context,
-            ImmutableList<PlanAction.InputBinding> inputs,
+            ImmutableList<InputBinding> inputs,
             boolean ignoreAvailabilityForTemplateSelection,
             boolean useBoundInputAmounts
     ) {
@@ -1044,7 +1045,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
     private static ImmutableList<GridPlacement> resolveRecipeGridPlacements(
             @Nullable RecipeEntry<?> recipe,
             @Nullable SlotFlow.Context context,
-            ImmutableList<PlanAction.InputBinding> inputs,
+            ImmutableList<InputBinding> inputs,
             boolean ignoreAvailabilityForTemplateSelection,
             boolean useBoundInputAmounts
     ) {
@@ -1066,7 +1067,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
     private static ImmutableList<GridPlacement> resolveShapedPlacements(
             ShapedRecipe shapedRecipe,
             @Nullable SlotFlow.Context context,
-            ImmutableList<PlanAction.InputBinding> inputs,
+            ImmutableList<InputBinding> inputs,
             boolean ignoreAvailabilityForTemplateSelection,
             boolean useBoundInputAmounts
     ) {
@@ -1082,7 +1083,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
     private static ImmutableList<GridPlacement> resolveIngredientPlacements(
             List<Ingredient> ingredients,
             @Nullable SlotFlow.Context context,
-            ImmutableList<PlanAction.InputBinding> inputs,
+            ImmutableList<InputBinding> inputs,
             boolean ignoreAvailabilityForTemplateSelection,
             boolean useBoundInputAmounts
     ) {
@@ -1098,7 +1099,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
     private static ImmutableList<GridPlacement> resolveRecipeGridPlacements(
         CraftingRecipe craftingRecipe,
         @Nullable SlotFlow.Context context,
-        ImmutableList<PlanAction.InputBinding> inputs,
+        ImmutableList<InputBinding> inputs,
         boolean ignoreAvailabilityForTemplateSelection,
         boolean useBoundInputAmounts
     ) {
@@ -1125,7 +1126,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
         int width,
         int height,
         @Nullable SlotFlow.Context context,
-        ImmutableList<PlanAction.InputBinding> inputs,
+        ImmutableList<InputBinding> inputs,
         boolean ignoreAvailabilityForTemplateSelection,
         boolean useBoundInputAmounts
     ) {
@@ -1262,7 +1263,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
     private static ImmutableList<GridPlacement> resolveIngredientSlotPlacements(
         ImmutableList<IngredientSlot> ingredientSlots,
         @Nullable SlotFlow.Context context,
-        ImmutableList<PlanAction.InputBinding> inputs,
+        ImmutableList<InputBinding> inputs,
         boolean ignoreAvailabilityForTemplateSelection,
         boolean useBoundInputAmounts
     ) {
@@ -1313,7 +1314,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
         return placements.toImmutable();
     }
 
-    private static int selectMatchingInputBinding(Ingredient ingredient, ImmutableList<PlanAction.InputBinding> inputs) {
+    private static int selectMatchingInputBinding(Ingredient ingredient, ImmutableList<InputBinding> inputs) {
         int selected = -1;
         int bestScore = Integer.MIN_VALUE;
         for (int index = 0; index < inputs.size(); index++) {
@@ -1351,7 +1352,7 @@ public class CraftingTableExecutionDriver extends SlotExecutionDriver {
         return false;
     }
 
-    private static long amountPerIngredientSlot(PlanAction.InputBinding input, int slotCount) {
+    private static long amountPerIngredientSlot(InputBinding input, int slotCount) {
         if (slotCount <= 0) {
             return 0L;
         }

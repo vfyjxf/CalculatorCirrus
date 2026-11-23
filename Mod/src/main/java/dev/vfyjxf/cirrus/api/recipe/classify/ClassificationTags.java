@@ -3,18 +3,17 @@ package dev.vfyjxf.cirrus.api.recipe.classify;
 /**
  * Well-known classification tags produced by {@link RecipeClassifier}.
  *
- * <p>Classification tags are plain strings following the same naming style as
- * the routing tag index ({@code cirrus:<dimension>/<name>}). They flow into
- * the routing {@code TagIndex}, so the default source policy and the tag
- * workspace can act on them without any planner changes.
+ * <p>Classification tags are plain strings following the tag naming style
+ * ({@code cirrus:<dimension>/<name>}). They flow into screening, so the default
+ * screening policy can act on them without any planner changes.
  *
  * <p>Two dispositions exist:
  * <ul>
  *     <li><b>Exclusion tags</b> ({@link #JUNK}, {@link #DUPLICATE}) — removed
- *     from routing by the default source policy.</li>
+ *     from planning by the screening policy.</li>
  *     <li><b>Advisory tags</b> ({@link #RECOLOR}, {@link #EXCHANGE},
  *     {@link #RECYCLING}, {@link #GENERATION}) — kept available, but mapped to
- *     routing hint penalties or used by topology-aware planning.</li>
+ *     screening hint penalties or used by topology-aware planning.</li>
  * </ul>
  */
 public final class ClassificationTags {

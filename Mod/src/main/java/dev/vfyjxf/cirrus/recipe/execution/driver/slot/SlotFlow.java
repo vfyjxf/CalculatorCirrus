@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.recipe.execution.driver.slot;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
@@ -13,7 +14,6 @@ import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayViewModel;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayTraceSnapshot;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.OverlayMaterialRequirement;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.OverlayTargetProgress;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import net.minecraft.world.item.ItemStack;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.impl.factory.Lists;
@@ -129,7 +129,7 @@ public interface SlotFlow {
         ImmutableList<Placement> resolve(
             Context context,
             @Nullable RecipeEntry<?> recipe,
-            ImmutableList<PlanAction.InputBinding> inputs
+            ImmutableList<InputBinding> inputs
         );
     }
     //endregion

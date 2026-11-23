@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.overlay;
 
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
@@ -19,7 +21,6 @@ import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowViewModel;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.PlanAction;
 import dev.vfyjxf.cirrus.recipe.content.RecipeContentRendererTestBootstrap;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
@@ -67,8 +68,8 @@ class ExecutionOverlayViewModelContractTest {
             ExecutionCapability.interactionPerform,
             activeRecipe,
             1,
-            Lists.immutable.of(new PlanAction.InputBinding(input(1L), 1L)),
-            Lists.immutable.of(new PlanAction.OutputBinding(resource(4L), 4L))
+            Lists.immutable.of(new InputBinding(input(1L), 1L)),
+            Lists.immutable.of(new OutputBinding(resource(4L), 4L))
         );
         var idleWithdraw = new InteractionStep.WithdrawResourceStep(
             ExecutionSideRequirement.client,
@@ -250,15 +251,15 @@ class ExecutionOverlayViewModelContractTest {
             ExecutionSideRequirement.client,
             ExecutionCapability.inventoryTransfer,
             recipe,
-            Lists.immutable.of(new PlanAction.InputBinding(input(8L), 8L))
+            Lists.immutable.of(new InputBinding(input(8L), 8L))
         );
         var execute = new InteractionStep.ExecuteRecipeStep(
             ExecutionSideRequirement.client,
             ExecutionCapability.interactionPerform,
             recipe,
             1,
-            Lists.immutable.of(new PlanAction.InputBinding(input(8L), 8L)),
-            Lists.immutable.of(new PlanAction.OutputBinding(resource(1L), 1L))
+            Lists.immutable.of(new InputBinding(input(8L), 8L)),
+            Lists.immutable.of(new OutputBinding(resource(1L), 1L))
         );
         var root = ExecutionFlowNode.pending(
             "target",
@@ -298,15 +299,15 @@ class ExecutionOverlayViewModelContractTest {
             ExecutionSideRequirement.client,
             ExecutionCapability.inventoryTransfer,
             recipe,
-            Lists.immutable.of(new PlanAction.InputBinding(input(2L), 2L))
+            Lists.immutable.of(new InputBinding(input(2L), 2L))
         );
         var execute = new InteractionStep.ExecuteRecipeStep(
             ExecutionSideRequirement.client,
             ExecutionCapability.interactionPerform,
             recipe,
             3,
-            Lists.immutable.of(new PlanAction.InputBinding(input(2L), 6L)),
-            Lists.immutable.of(new PlanAction.OutputBinding(resource(1L), 3L))
+            Lists.immutable.of(new InputBinding(input(2L), 6L)),
+            Lists.immutable.of(new OutputBinding(resource(1L), 3L))
         );
         var root = ExecutionFlowNode.pending(
             "target",

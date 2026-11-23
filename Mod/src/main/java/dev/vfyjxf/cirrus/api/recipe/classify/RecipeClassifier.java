@@ -9,7 +9,7 @@ import dev.vfyjxf.cirrus.api.recipe.classify.structural.GenerationStructuralRule
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.MassSinkStructuralRule;
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.RecolorStructuralRule;
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.RecyclingStructuralRule;
-import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeUsePolicy;
+import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
 import dev.vfyjxf.cirrus.api.recipe.rule.RuleDocument;
 import dev.vfyjxf.cirrus.api.recipe.rule.RuleSpec;
 import org.jetbrains.annotations.Nullable;

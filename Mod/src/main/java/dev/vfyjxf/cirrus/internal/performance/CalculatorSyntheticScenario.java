@@ -8,25 +8,13 @@ import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.routing.RecipeGraph;
-import dev.vfyjxf.cirrus.api.recipe.routing.Stock;
-import dev.vfyjxf.cirrus.api.recipe.routing.heuristic.RecipeRoutingHints;
-import dev.vfyjxf.cirrus.api.recipe.routing.plan.RoutingPlan;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.DefaultRuleDefinitions;
-import dev.vfyjxf.cirrus.api.recipe.routing.rule.RuleDefinition;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingMetrics;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingOutcome;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingRequest;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingService;
-import dev.vfyjxf.cirrus.api.recipe.routing.service.RoutingStatus;
+import dev.vfyjxf.cirrus.api.recipe.screening.RecipeScreeningHints;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.system.RoutingRecipeView;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.RecipeApiRegistryBuilder;
-import dev.vfyjxf.cirrus.ui.process.CalculatorProcessGraphBuilder;
-import dev.vfyjxf.cirrus.ui.process.ProcessGraph;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
@@ -67,8 +55,7 @@ public final class CalculatorSyntheticScenario {
         SyntheticRecipeSystem system = new SyntheticRecipeSystem(recipes.toImmutable());
         ImmutableList<RecipeEntry<?>> entries = recipes.entries(system);
         RecipeEntry<SyntheticRecipe> target = RecipeEntry.of(system, recipes.require("make_target"));
-        RuleDefinition rule = DefaultRuleDefinitions.calculatorPreview();
-        return new Scenario("wide:" + competingGearRecipes, system, entries, target, outputResource(materials.target, 1), rule);
+        return new Scenario("wide:" + competingGearRecipes, system, entries, target, outputResource(materials.target, 1));
     }
 
     public static Scenario createDeepChain(int depth, int competingRecipesPerStep) {
@@ -104,14 +91,12 @@ public final class CalculatorSyntheticScenario {
         SyntheticRecipeSystem system = new SyntheticRecipeSystem(recipes.toImmutable());
         ImmutableList<RecipeEntry<?>> entries = recipes.entries(system);
         RecipeEntry<SyntheticRecipe> target = RecipeEntry.of(system, recipes.require("deep_target"));
-        RuleDefinition rule = DefaultRuleDefinitions.calculatorPreview();
         return new Scenario(
             "deep:" + safeDepth + ":" + safeCompeting,
             system,
             entries,
             target,
-            outputResource(result, 1),
-            rule
+            outputResource(result, 1)
         );
     }
 
@@ -162,14 +147,12 @@ public final class CalculatorSyntheticScenario {
         SyntheticRecipeSystem system = new SyntheticRecipeSystem(recipes.toImmutable());
         ImmutableList<RecipeEntry<?>> entries = recipes.entries(system);
         RecipeEntry<SyntheticRecipe> target = RecipeEntry.of(system, recipes.require("workbench_make_station"));
-        RuleDefinition rule = DefaultRuleDefinitions.calculatorPreview();
         return new Scenario(
             "workbench:" + safeCompeting,
             system,
             entries,
             target,
-            outputResource(station, 1),
-            rule
+            outputResource(station, 1)
         );
     }
 
@@ -224,14 +207,12 @@ public final class CalculatorSyntheticScenario {
         SyntheticRecipeSystem system = new SyntheticRecipeSystem(recipes.toImmutable());
         ImmutableList<RecipeEntry<?>> entries = recipes.entries(system);
         RecipeEntry<SyntheticRecipe> recipeTarget = RecipeEntry.of(system, recipes.require("machine_make_target"));
-        RuleDefinition rule = DefaultRuleDefinitions.calculatorPreview();
         return new Scenario(
             "machine:" + safeFamilies + ":" + safeCompeting,
             system,
             entries,
             recipeTarget,
-            outputResource(target, 1),
-            rule
+            outputResource(target, 1)
         );
     }
 
@@ -310,14 +291,12 @@ public final class CalculatorSyntheticScenario {
         SyntheticRecipeSystem system = new SyntheticRecipeSystem(recipes.toImmutable());
         ImmutableList<RecipeEntry<?>> entries = recipes.entries(system);
         RecipeEntry<SyntheticRecipe> recipeTarget = RecipeEntry.of(system, recipes.require(targetRecipeId));
-        RuleDefinition rule = DefaultRuleDefinitions.calculatorPreview();
         return new Scenario(
             "random:" + entries.size() + ":" + safeDepth + ":" + safeMaxInputs + ":" + safeNoiseFanout + ":" + seed,
             system,
             entries,
             recipeTarget,
-            outputResource(target, 1),
-            rule
+            outputResource(target, 1)
         );
     }
 
@@ -353,114 +332,9 @@ public final class CalculatorSyntheticScenario {
         SyntheticRecipeSystem system,
         ImmutableList<RecipeEntry<?>> entries,
         RecipeEntry<SyntheticRecipe> target,
-        ContentResource targetOutput,
-        RuleDefinition calculatorRule
+        ContentResource targetOutput
     ) {
-        public RecipeGraph buildGraph() {
-            return RecipeGraph.buildGraph(entries);
-        }
-
-        public RoutingService newService(RecipeGraph graph) {
-            RoutingService service = new RoutingService(graph);
-            service.registerRuleDefinition(calculatorRule);
-            return service;
-        }
-
-        public RoutingRequest request(int times) {
-            return RoutingRequest.builder()
-                .plannerMode(dev.vfyjxf.cirrus.api.recipe.routing.service.PlannerMode.standard)
-                .targetRecipe(target, Math.max(1, times))
-                .ruleProfileId(calculatorRule.profile().profileId())
-                .sourcePolicyId(calculatorRule.sourcePolicy().policyId())
-                .stock(Stock.empty())
-                .loopPolicy(dev.vfyjxf.cirrus.api.recipe.routing.service.LoopPolicy.allowBoundedAmplification)
-                .build();
-        }
-
-        public RoutingRequest outputRequest(long amount) {
-            return RoutingRequest.builder()
-                .plannerMode(dev.vfyjxf.cirrus.api.recipe.routing.service.PlannerMode.standard)
-                .targetOutput(targetOutput, Math.max(1L, amount))
-                .ruleProfileId(calculatorRule.profile().profileId())
-                .sourcePolicyId(calculatorRule.sourcePolicy().policyId())
-                .stock(Stock.empty())
-                .loopPolicy(dev.vfyjxf.cirrus.api.recipe.routing.service.LoopPolicy.allowBoundedAmplification)
-                .build();
-        }
-
-        public ProbeSample profile(int times) {
-            RecipeApiImpl previous = attachRecipeApi(system);
-            try {
-                long graphStart = System.nanoTime();
-                RecipeGraph graph = buildGraph();
-                long graphNanos = System.nanoTime() - graphStart;
-
-                RoutingService service = newService(graph);
-                long routeStart = System.nanoTime();
-                RoutingOutcome outcome = service.route(request(times));
-                long routeNanos = System.nanoTime() - routeStart;
-
-                RoutingPlan plan = outcome.plan();
-                ProcessGraph processGraph = new ProcessGraph();
-                long processGraphNanos = 0L;
-                if (plan != null) {
-                    long graphConvertStart = System.nanoTime();
-                    processGraph = CalculatorProcessGraphBuilder.fromRoutingPlan(plan);
-                    processGraphNanos = System.nanoTime() - graphConvertStart;
-                }
-
-                return new ProbeSample(
-                    times,
-                    entries.size(),
-                    graphNanos,
-                    routeNanos,
-                    processGraphNanos,
-                    outcome.status(),
-                    plan == null ? 0 : plan.actions().size(),
-                    processGraph.nodeCount(),
-                    processGraph.edgeCount(),
-                    outcome.metrics()
-                );
-            } finally {
-                restoreRecipeApi(previous);
-            }
-        }
-    }
-
-    public record ProbeSample(
-        int times,
-        int recipeCount,
-        long graphBuildNanos,
-        long routeNanos,
-        long processGraphNanos,
-        RoutingStatus status,
-        int actionCount,
-        int processGraphNodes,
-        int processGraphEdges,
-        RoutingMetrics metrics
-    ) {
-        public String diagnosticLine() {
-            return "Calculator probe: times=" + times
-                + ", recipes=" + recipeCount
-                + ", status=" + status
-                + ", actions=" + actionCount
-                + ", nodes=" + processGraphNodes
-                + ", edges=" + processGraphEdges
-                + ", graphBuildMs=" + millis(graphBuildNanos)
-                + ", routeMs=" + millis(routeNanos)
-                + ", processGraphMs=" + millis(processGraphNanos)
-                + ", expandedNodes=" + metrics.expandedNodes()
-                + ", generatedCandidates=" + metrics.generatedCandidates()
-                + ", acceptedCandidates=" + metrics.acceptedCandidates();
-        }
-
-        public long totalNanos() {
-            return graphBuildNanos + routeNanos + processGraphNanos;
-        }
-
-        private static double millis(long nanos) {
-            return nanos / 1_000_000.0d;
-        }
+        // TODO(planning-bridge): 恢复场景图/规划基准入口（旧路由已删除，待 bridge 接线）
     }
 
     public record SyntheticRecipe(
@@ -525,22 +399,22 @@ public final class CalculatorSyntheticScenario {
         }
 
         @Override
-        public RecipeRoutingHints routingHints(SyntheticRecipe recipe) {
+        public RecipeScreeningHints routingHints(SyntheticRecipe recipe) {
             if (recipe.id().startsWith("deep_step_") && recipe.id().contains("_alt_")) {
-                return RecipeRoutingHints.builder()
+                return RecipeScreeningHints.builder()
                     .lastResort()
                     .penalty(100_000)
                     .reasonKey("synthetic_noise")
                     .build();
             }
             if (recipe.id().contains("_noise_recipe_")) {
-                return RecipeRoutingHints.builder()
+                return RecipeScreeningHints.builder()
                     .lastResort()
                     .penalty(100_000)
                     .reasonKey("synthetic_noise")
                     .build();
             }
-            return RecipeRoutingHints.empty();
+            return RecipeScreeningHints.empty();
         }
 
         @Override
