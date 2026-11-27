@@ -14,8 +14,7 @@ import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.Fluids;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.FluidType;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.UnknownNullability;
+import org.jspecify.annotations.Nullable;
 
 public final class FluidStackType extends BasicStackType<Fluid, FluidStack> {
 
@@ -68,7 +67,7 @@ public final class FluidStackType extends BasicStackType<Fluid, FluidStack> {
     }
 
     @Override
-    public <C> @UnknownNullability C getComponent(FluidStack stack, DataComponentType<? extends C> componentType) {
+    public <C> @Nullable C getComponent(FluidStack stack, DataComponentType<? extends C> componentType) {
         return stack.get(componentType);
     }
 
@@ -145,12 +144,18 @@ public final class FluidStackType extends BasicStackType<Fluid, FluidStack> {
     public long mergeDiff(FluidStack stack1, FluidStack stack2, MatchStrategy strategy) {
         if (stack1 == stack2) return 0;
         if (stack1.getFluid() != stack2.getFluid()) return 0;
-        if (strategy.withComponent() && !strategy.testComponents(stack1.getComponents(), stack2.getComponents())) return 0;
+        if (strategy.withComponent() && !strategy.testComponents(stack1.getComponents(), stack2.getComponents()))
+            return 0;
         return stack1.getAmount() - stack2.getAmount();
     }
 
     @Override
-    public boolean matches(FluidStack stack1, FluidStack stack2, VariantType<Fluid, FluidStack> variantType, MatchStrategy strategy) {
+    public boolean matches(
+        FluidStack stack1,
+        FluidStack stack2,
+        VariantType<Fluid, FluidStack> variantType,
+        MatchStrategy strategy
+    ) {
         if (stack1 == stack2) return true;
         if (strategy.withIdentity() && stack1.getFluid() != stack2.getFluid()) return false;
         if (strategy.withAmount() && stack1.getAmount() != stack2.getAmount()) return false;

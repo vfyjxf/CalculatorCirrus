@@ -5,7 +5,7 @@ import dev.vfyjxf.cirrus.api.content.ContentApi;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
 import dev.vfyjxf.cirrus.api.content.type.TagType;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public abstract class BasicContentType<T> implements ContentType<T> {
 

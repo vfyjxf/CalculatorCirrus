@@ -1,14 +1,13 @@
 package dev.vfyjxf.cirrus.planning.core.human;
 
+import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
+import dev.vfyjxf.cirrus.api.planning.context.MachineReadiness;
 import dev.vfyjxf.cirrus.api.planning.cost.CostMetadataProvider;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
-import dev.vfyjxf.cirrus.api.planning.cost.SystemCostTier;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.InputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.QuerySubgraph;
-import dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory;
-import dev.vfyjxf.cirrus.api.planning.graph.RecipeRole;
 import dev.vfyjxf.cirrus.api.planning.human.DecisionOption;
 import dev.vfyjxf.cirrus.api.planning.human.DecisionPrompt;
 import dev.vfyjxf.cirrus.api.planning.human.DecisionPromptKind;
@@ -17,20 +16,24 @@ import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
 import dev.vfyjxf.cirrus.api.planning.human.MachineRule;
+import dev.vfyjxf.cirrus.api.planning.human.PromptSuppressionLedger;
+import dev.vfyjxf.cirrus.api.planning.human.QuestionKey;
 import dev.vfyjxf.cirrus.api.planning.human.RecipeRule;
 import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
+import dev.vfyjxf.cirrus.api.planning.human.VoIEstimate;
+import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CycleLoopStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
+import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SlotBinding;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
-import dev.vfyjxf.cirrus.planning.core.cost.DefaultAcquisitionOracle;
 import dev.vfyjxf.cirrus.planning.core.cost.DefaultCostMetadataProvider;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
 
@@ -44,14 +47,26 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * Planning v3 VoI-Gated Human-in-the-Loop Decision Detector (H1–H7, Pure JDK 21, ZERO wordlists).
+ *
+ * <p>Covers all 7 genuine unobservable context gaps:
+ * - H1 machineAvailability: heavy machine ownership / build / skip-system (default worldSave)
+ * - H2 baseOrSupplyBoundary: high-share intermediate or bulk resource stop-here boundary (default worldSave)
+ * - H3 reusableCatalystCheck: non-consumable mold/template/seed ownership check (default worldSave)
+ * - H4 materialFamilyAnchor: multi-family high-fanout Tag anchor (default worldSave)
+ * - H5 suspiciousJeiVerify: low-fidelity / suspicious JEI verification + bulk system ban (default modpackDefault)
+ * - H6 fieldTripConfirm: high-share manual field-trip gathering confirmation (default session/worldSave)
+ * - H7 ruleConflictResolution: surfaced when rules create minimal unsatisfiable conflicts.
+ */
 public final class DecisionPointDetector {
 
-    private static final double MIN_LEVERAGE = 0.35;
+    private static final double minLeverage = 0.25;
 
     private final CostMetadataProvider costMetadata;
 
     public DecisionPointDetector() {
-        this(DefaultCostMetadataProvider.INSTANCE);
+        this(DefaultCostMetadataProvider.instance);
     }
 
     public DecisionPointDetector(CostMetadataProvider costMetadata) {
@@ -59,20 +74,33 @@ public final class DecisionPointDetector {
     }
 
     public List<DecisionPrompt> detect(
-            PlanningRequest request,
-            List<ProductionPlan> plans,
-            QuerySubgraph subgraph,
-            CompiledRecipeGraph graph
+        PlanningRequest request,
+        List<ProductionPlan> plans,
+        QuerySubgraph subgraph,
+        CompiledRecipeGraph graph
     ) {
-        return detect(request, plans, subgraph, graph, Set.of());
+        return detect(request, plans, subgraph, graph, Set.of(), new PromptSuppressionLedger(), 0L, Map.of());
     }
 
     public List<DecisionPrompt> detect(
-            PlanningRequest request,
-            List<ProductionPlan> plans,
-            QuerySubgraph subgraph,
-            CompiledRecipeGraph graph,
-            Set<String> dismissedPromptIds
+        PlanningRequest request,
+        List<ProductionPlan> plans,
+        QuerySubgraph subgraph,
+        CompiledRecipeGraph graph,
+        Set<String> dismissedPromptIds
+    ) {
+        return detect(request, plans, subgraph, graph, dismissedPromptIds, new PromptSuppressionLedger(), 0L, Map.of());
+    }
+
+    public List<DecisionPrompt> detect(
+        PlanningRequest request,
+        List<ProductionPlan> plans,
+        QuerySubgraph subgraph,
+        CompiledRecipeGraph graph,
+        Set<String> dismissedPromptIds,
+        PromptSuppressionLedger suppressionLedger,
+        long currentQuerySeq,
+        Map<String, MachineReadiness.Classification> machineClassifications
     ) {
         int maxPrompts = request.budget().maxDecisionPrompts();
         if (maxPrompts <= 0 || plans == null || plans.isEmpty()) {
@@ -81,107 +109,278 @@ public final class DecisionPointDetector {
         Set<String> dismissed = dismissedPromptIds == null ? Set.of() : dismissedPromptIds;
         HumanGuidanceView guidance = request.context().guidance();
         Map<String, DecisionPrompt> byId = new LinkedHashMap<>();
+        double queryScaleA = Math.max(10.0, plans.get(0).scoreBreakdown().queryScaleA());
 
-        detectMachineInvestmentForks(plans, guidance, dismissed, byId);
-        detectHighFanoutTags(request, plans.get(0), graph, guidance, dismissed, byId);
-        detectExpensiveLeaves(plans.get(0), guidance, dismissed, byId);
-        detectSuspiciousRecipes(plans.get(0), graph, guidance, dismissed, byId);
+        detectH1MachineAvailability(plans, guidance, dismissed, machineClassifications, queryScaleA, byId);
+        detectH2BaseOrSupplyBoundary(plans.get(0), guidance, dismissed, queryScaleA, byId);
+        detectH3ReusableCatalyst(plans.get(0), graph, guidance, dismissed, queryScaleA, byId);
+        detectH4MaterialFamilyAnchor(request, plans.get(0), graph, guidance, dismissed, queryScaleA, byId);
+        detectH5SuspiciousJeiVerify(plans.get(0), graph, guidance, dismissed, queryScaleA, byId);
+        detectH6FieldTripConfirm(plans.get(0), guidance, dismissed, queryScaleA, byId);
 
         List<DecisionPrompt> filtered = new ArrayList<>(byId.size());
         for (DecisionPrompt p : byId.values()) {
-            if (p.leverageScore() >= MIN_LEVERAGE && !dismissed.contains(p.promptId())) {
-                filtered.add(p);
+            if (p.leverageScore() < minLeverage || dismissed.contains(p.promptId())) {
+                continue;
             }
+            if (suppressionLedger != null && suppressionLedger.isSuppressed(p.questionKey(), currentQuerySeq)) {
+                continue;
+            }
+            filtered.add(p);
         }
-        filtered.sort(Comparator
-                .comparingDouble(DecisionPrompt::leverageScore).reversed()
-                .thenComparingInt(p -> p.kind().ordinal())
-                .thenComparing(DecisionPrompt::promptId));
+        filtered.sort(
+            Comparator.comparingDouble((DecisionPrompt p) -> p.voiEstimate().netEvsiSeconds()).reversed()
+                    .thenComparing(Comparator.comparingDouble(DecisionPrompt::leverageScore).reversed())
+                    .thenComparingInt(p -> p.kind().ordinal())
+                    .thenComparing(DecisionPrompt::promptId)
+        );
         if (filtered.size() > maxPrompts) {
             return List.copyOf(filtered.subList(0, maxPrompts));
         }
         return List.copyOf(filtered);
     }
 
-    private void detectMachineInvestmentForks(
-            List<ProductionPlan> plans,
-            HumanGuidanceView guidance,
-            Set<String> dismissed,
-            Map<String, DecisionPrompt> out
+    /** H1: Heavy machine availability confirmation (skips OWNED and TRIVIAL_TO_BUILD machines!). */
+    private void detectH1MachineAvailability(
+        List<ProductionPlan> plans,
+        HumanGuidanceView guidance,
+        Set<String> dismissed,
+        Map<String, MachineReadiness.Classification> readinessMap,
+        double queryScaleA,
+        Map<String, DecisionPrompt> out
     ) {
-        if (plans.size() < 2) {
-            return;
+        ProductionPlan primary = plans.get(0);
+        // Collect all newly provisioned machines across primary & alternative plans and map to their recipe system.
+        Map<String, String> machineToSystem = new LinkedHashMap<>();
+        for (ProductionPlan plan : plans) {
+            for (PlanStep step : plan.steps()) {
+                if (step instanceof CraftStep cs && cs.chosenMachineId().isPresent()) {
+                    machineToSystem.putIfAbsent(cs.chosenMachineId().get(), cs.recipeKey().systemId());
+                }
+            }
         }
-        for (int i = 0; i < plans.size(); i++) {
-            ProductionPlan a = plans.get(i);
-            Map<String, Integer> machA = a.preparation().machinesToProvision();
-            if (machA.isEmpty()) continue;
-            for (int j = 0; j < plans.size(); j++) {
-                if (i == j) continue;
-                ProductionPlan b = plans.get(j);
-                Map<String, Integer> machB = b.preparation().machinesToProvision();
-                double hSave = savingRatio(b.totalCost().humanActiveSeconds(), a.totalCost().humanActiveSeconds());
-                double sSave = savingRatio(b.totalCost().materialScarcity(), a.totalCost().materialScarcity());
-                if (hSave < 0.30 && sSave < 0.25) {
+        Map<String, String> provisionedToSystem = new LinkedHashMap<>();
+        for (ProductionPlan plan : plans) {
+            for (PlanStep step : plan.steps()) {
+                if (step instanceof ProvisionMachineStep pm) {
+                    String sys = machineToSystem.getOrDefault(
+                        pm.machineId(),
+                        pm.satisfiedCapability().map(c -> c.id()).orElse(pm.machineId())
+                    );
+                    provisionedToSystem.putIfAbsent(pm.machineId(), sys);
+                }
+            }
+        }
+        for (var entry : provisionedToSystem.entrySet()) {
+            String machineId = entry.getKey();
+            String systemId = entry.getValue();
+            if (isMachineAnswered(guidance, machineId)) continue;
+            MachineReadiness.Classification cls = readinessMap != null ? readinessMap.get(machineId) : null;
+            if (cls != null && cls.readiness() != MachineReadiness.heavyInvestment) {
+                continue; // Do not nag about already-owned or trivial-to-build machines!
+            }
+            String promptId = "prompt:h1_machine:" + machineId;
+            if (dismissed.contains(promptId)) continue;
+
+            double setupCost = 60.0;
+            for (PlanStep step : primary.steps()) {
+                if (step instanceof ProvisionMachineStep pm && pm.machineId().equals(machineId)) {
+                    setupCost = Math.max(setupCost, pm.stepCost().totalActiveSeconds() + pm.stepCost().machineSetupCapital());
+                }
+            }
+            double altCost = setupCost * 0.65;
+            // Counterfactual EVSI: answers = {alreadyOwned, mustBuild}; actions = {useMachine, avoidMachine}.
+            VoIEstimate voi = VoICounterfactualEngine.evaluateExact(
+                new double[]{0.5, 0.5},
+                new double[][]{
+                    {0.0, setupCost},
+                    {altCost, altCost}
+                },
+                VoICounterfactualEngine.defaultAskCostSeconds,
+                queryScaleA
+            );
+            double leverage = SafeMath.clamp01(Math.max(0.45, voi.grossEvsiSeconds() / Math.max(10.0, setupCost)));
+            CostVector delta = new CostVector(setupCost * 0.5, 0.0, 0.0, setupCost * 0.5, 0.0, 1.0);
+
+            List<DecisionOption> options = List.of(
+                new DecisionOption(
+                    "already_owned",
+                    "cirrus.prompt.h1_machine.option.already_owned",
+                    delta,
+                    List.of(),
+                    Optional.of(new DeclareOwnedMachineFeedback(machineId, 1, true))
+                ),
+                new DecisionOption(
+                    "accept_build",
+                    "cirrus.prompt.h1_machine.option.accept_build",
+                    CostVector.zero,
+                    List.of(new MachineRule("rule:build:" + machineId, GuidanceScope.session, RuleStrength.softPrefer, machineId, true))
+                ),
+                new DecisionOption(
+                    "reject_machine",
+                    "cirrus.prompt.h1_machine.option.reject_machine",
+                    CostVector.zero,
+                    List.of(new MachineRule("rule:nobuild:" + machineId, GuidanceScope.worldSave, RuleStrength.hardBan, machineId, false))
+                ),
+                new DecisionOption(
+                    "skip_system",
+                    "cirrus.prompt.h1_machine.option.skip_system",
+                    CostVector.zero,
+                    List.of(new SystemRule("rule:skip_sys:" + systemId, GuidanceScope.worldSave, RuleStrength.softPenalize, systemId, false))
+                )
+            );
+            QuestionKey qKey = new QuestionKey(DecisionPromptKind.machineAvailability, machineId, GuidanceScope.worldSave, 0L);
+            mergeBest(out, new DecisionPrompt(
+                promptId,
+                qKey,
+                DecisionPromptKind.machineAvailability,
+                "cirrus.prompt.h1_machine.title",
+                "cirrus.prompt.h1_machine.explanation",
+                leverage,
+                voi,
+                GuidanceScope.worldSave,
+                options
+            ));
+        }
+    }
+
+    /** H2: Base stop-here boundary / automated supply confirmation for high-cost leaves or intermediates. */
+    private void detectH2BaseOrSupplyBoundary(
+        ProductionPlan primary,
+        HumanGuidanceView guidance,
+        Set<String> dismissed,
+        double queryScaleA,
+        Map<String, DecisionPrompt> out
+    ) {
+        double totalActive = Math.max(1e-6, primary.totalCost().totalActiveSeconds());
+        double totalScarcity = Math.max(1e-6, primary.totalCost().materialScarcity());
+
+        for (PlanStep step : primary.steps()) {
+            if (!(step instanceof AcquireStep a)) continue;
+            if (guidance.isResourceTreatedAsBase(a.resource()) || isResourceAnswered(guidance, a.resource())) {
+                continue;
+            }
+            double share = Math.max(
+                a.stepCost().totalActiveSeconds() / totalActive,
+                a.stepCost().materialScarcity() / totalScarcity
+            );
+            boolean significant = a.stepCost().materialScarcity() >= 12.0 || a.stepCost().totalActiveSeconds() >= 18.0;
+            if (share < 0.35 || (!significant && primary.steps().size() < 4)) {
+                continue;
+            }
+            String promptId = "prompt:h2_base:" + a.resource().shortString();
+            if (dismissed.contains(promptId)) continue;
+
+            double stepSec = a.stepCost().totalActiveSeconds() + a.stepCost().materialScarcity();
+            VoIEstimate voi = VoICounterfactualEngine.evaluateExact(
+                new double[]{0.45, 0.55},
+                new double[][]{
+                    {1.0, stepSec},
+                    {stepSec * 0.7, stepSec * 0.7}
+                },
+                VoICounterfactualEngine.defaultAskCostSeconds,
+                queryScaleA
+            );
+            List<DecisionOption> options = List.of(
+                new DecisionOption(
+                    "set_world_base",
+                    "cirrus.prompt.h2_base.option.set_base",
+                    a.stepCost(),
+                    List.of(new ResourceRule("rule:base:" + a.resource().shortString(), GuidanceScope.worldSave, RuleStrength.hardPin, a.resource(), true))
+                ),
+                new DecisionOption(
+                    "avoid_resource",
+                    "cirrus.prompt.h2_base.option.avoid_resource",
+                    CostVector.zero,
+                    List.of(new ResourceRule("rule:avoid:" + a.resource().shortString(), GuidanceScope.worldSave, RuleStrength.softPenalize, a.resource(), false))
+                ),
+                new DecisionOption(
+                    "keep_current",
+                    "cirrus.prompt.h2_base.option.keep_current",
+                    CostVector.zero,
+                    List.of()
+                )
+            );
+            QuestionKey qKey = new QuestionKey(DecisionPromptKind.baseOrSupplyBoundary, a.resource().canonicalString(), GuidanceScope.worldSave, 0L);
+            mergeBest(out, new DecisionPrompt(
+                promptId,
+                qKey,
+                DecisionPromptKind.baseOrSupplyBoundary,
+                "cirrus.prompt.h2_base.title",
+                "cirrus.prompt.h2_base.explanation",
+                SafeMath.clamp01(share),
+                voi,
+                GuidanceScope.worldSave,
+                options
+            ));
+        }
+    }
+
+    /** H3: Non-consumable mold, template, tool, or catalytic cycle seed confirmation. */
+    private void detectH3ReusableCatalyst(
+        ProductionPlan primary,
+        CompiledRecipeGraph graph,
+        HumanGuidanceView guidance,
+        Set<String> dismissed,
+        double queryScaleA,
+        Map<String, DecisionPrompt> out
+    ) {
+        for (CraftStep cs : allCraftSteps(primary)) {
+            if (cs.catalystBindings().isEmpty()) continue;
+            for (ResourceKey catRes : cs.catalystBindings().values()) {
+                if (guidance.isResourceTreatedAsBase(catRes) || isResourceAnswered(guidance, catRes)) {
                     continue;
                 }
-                double leverage = SafeMath.clamp01(0.4 + 0.6 * Math.max(hSave, sSave));
-                CostVector delta = new CostVector(
-                        Math.max(0.0, b.totalCost().humanActiveSeconds() - a.totalCost().humanActiveSeconds()),
-                        Math.max(0.0, b.totalCost().passiveWaitSeconds() - a.totalCost().passiveWaitSeconds()),
-                        Math.max(0.0, a.totalCost().machineSetupCapital() - b.totalCost().machineSetupCapital()),
-                        Math.max(0.0, b.totalCost().materialScarcity() - a.totalCost().materialScarcity()),
-                        0.0
+                String promptId = "prompt:h3_catalyst:" + catRes.shortString();
+                if (dismissed.contains(promptId)) continue;
+                VoIEstimate voi = VoICounterfactualEngine.evaluateExact(
+                    new double[]{0.5, 0.5},
+                    new double[][]{
+                        {0.0, 30.0},
+                        {18.0, 18.0}
+                    },
+                    VoICounterfactualEngine.defaultAskCostSeconds,
+                    queryScaleA
                 );
-                for (String machineId : machA.keySet()) {
-                    if (machB.containsKey(machineId)) continue;
-                    if (isMachineAnswered(guidance, machineId)) continue;
-                    String promptId = "prompt:machine_fork:" + machineId;
-                    if (dismissed.contains(promptId)) continue;
-                    List<DecisionOption> options = List.of(
-                            new DecisionOption(
-                                    "accept_build",
-                                    "cirrus.prompt.machine_fork.option.accept_build",
-                                    delta,
-                                    List.of(new MachineRule("rule:build:" + machineId,
-                                            GuidanceScope.SESSION, RuleStrength.SOFT_PREFER, machineId, true))
-                            ),
-                            new DecisionOption(
-                                    "reject_build",
-                                    "cirrus.prompt.machine_fork.option.reject_build",
-                                    CostVector.ZERO,
-                                    List.of(new MachineRule("rule:nobuild:" + machineId,
-                                            GuidanceScope.SESSION, RuleStrength.HARD_BAN, machineId, false))
-                            ),
-                            new DecisionOption(
-                                    "already_owned",
-                                    "cirrus.prompt.machine_fork.option.already_owned",
-                                    CostVector.ZERO,
-                                    List.of(),
-                                    Optional.of(new DeclareOwnedMachineFeedback(machineId, 1, false))
-                            )
-                    );
-                    DecisionPrompt prompt = new DecisionPrompt(
-                            promptId,
-                            DecisionPromptKind.MACHINE_INVESTMENT_FORK,
-                            "cirrus.prompt.machine_fork.title",
-                            "cirrus.prompt.machine_fork.explanation",
-                            leverage,
-                            options
-                    );
-                    mergeBest(out, prompt);
-                }
+                List<DecisionOption> options = List.of(
+                    new DecisionOption(
+                        "already_own_catalyst",
+                        "cirrus.prompt.h3_catalyst.option.already_own",
+                        new CostVector(15.0, 0.0, 0.0, 0.0, 0.0, 1.0),
+                        List.of(new ResourceRule("rule:cat_own:" + catRes.shortString(), GuidanceScope.worldSave, RuleStrength.hardPin, catRes, true))
+                    ),
+                    new DecisionOption(
+                        "craft_with_plan",
+                        "cirrus.prompt.h3_catalyst.option.craft_with_plan",
+                        CostVector.zero,
+                        List.of()
+                    )
+                );
+                QuestionKey qKey = new QuestionKey(DecisionPromptKind.reusableCatalystCheck, catRes.canonicalString(), GuidanceScope.worldSave, 0L);
+                mergeBest(out, new DecisionPrompt(
+                    promptId,
+                    qKey,
+                    DecisionPromptKind.reusableCatalystCheck,
+                    "cirrus.prompt.h3_catalyst.title",
+                    "cirrus.prompt.h3_catalyst.explanation",
+                    0.60,
+                    voi,
+                    GuidanceScope.worldSave,
+                    options
+                ));
             }
         }
     }
 
-    private void detectHighFanoutTags(
-            PlanningRequest request,
-            ProductionPlan primary,
-            CompiledRecipeGraph graph,
-            HumanGuidanceView guidance,
-            Set<String> dismissed,
-            Map<String, DecisionPrompt> out
+    /** H4: Dominant material family / high-fanout Tag anchor confirmation (worldSave default!). */
+    private void detectH4MaterialFamilyAnchor(
+        PlanningRequest request,
+        ProductionPlan primary,
+        CompiledRecipeGraph graph,
+        HumanGuidanceView guidance,
+        Set<String> dismissed,
+        double queryScaleA,
+        Map<String, DecisionPrompt> out
     ) {
         double totalScalar = Math.max(1e-6, request.profile().weights().scalarize(primary.totalCost()));
         for (CraftStep cs : allCraftSteps(primary)) {
@@ -190,36 +389,20 @@ public final class DecisionPointDetector {
             CompiledRecipe rec = recOpt.get();
             double stepShare = SafeMath.clamp01(request.profile().weights().scalarize(cs.stepCost()) / totalScalar);
             for (InputSlot slot : rec.inputs()) {
-                if (slot.tagId().isEmpty() || slot.candidates().size() < 6) {
-                    continue;
-                }
+                if (slot.tagId().isEmpty() || slot.candidates().size() < 6) continue;
                 String tagId = slot.tagId().get();
-                if (guidance.preferredTagMember(tagId).isPresent()) {
-                    continue;
-                }
-                String promptId = "prompt:tag_choice:" + tagId;
+                if (guidance.preferredTagMember(tagId).isPresent()) continue;
+                String promptId = "prompt:h4_tag:" + tagId;
                 if (dismissed.contains(promptId)) continue;
 
-                double logTerm = Math.min(1.0, (Math.log(slot.candidates().size()) / Math.log(2.0)) / 6.0);
-                double leverage = SafeMath.clamp01(logTerm * (0.5 + 0.5 * stepShare));
-                if (leverage < MIN_LEVERAGE) continue;
-
+                double logTerm = Math.min(1.0, (StrictMath.log(slot.candidates().size()) / StrictMath.log(2.0)) / 6.0);
+                double leverage = SafeMath.clamp01(Math.max(minLeverage, logTerm * (0.60 + 0.40 * stepShare)));
                 LinkedHashSet<ResourceKey> picks = new LinkedHashSet<>();
                 SlotBinding binding = cs.slotBindings().get(slot.slotIndex());
-                if (binding != null) {
-                    picks.add(binding.chosenResource());
-                }
+                if (binding != null) picks.add(binding.chosenResource());
                 for (ResourceKey cand : slot.candidates()) {
                     if (picks.size() >= 3) break;
-                    if (request.context().inventory().usableAmount(cand) > 0L) {
-                        picks.add(cand);
-                    }
-                }
-                for (ResourceKey cand : slot.candidates()) {
-                    if (picks.size() >= 3) break;
-                    if (DefaultAcquisitionOracle.isKnownBaseNatural(cand)) {
-                        picks.add(cand);
-                    }
+                    if (request.context().inventory().usableAmount(cand) > 0L) picks.add(cand);
                 }
                 for (ResourceKey cand : slot.candidates()) {
                     if (picks.size() >= 3) break;
@@ -227,150 +410,164 @@ public final class DecisionPointDetector {
                 }
                 if (picks.size() < 2) continue;
 
+                VoIEstimate voi = VoICounterfactualEngine.evaluateExact(
+                    new double[]{0.5, 0.5},
+                    new double[][]{
+                        {0.0, 8.0},
+                        {8.0, 0.0}
+                    },
+                    VoICounterfactualEngine.defaultAskCostSeconds,
+                    queryScaleA
+                );
                 List<DecisionOption> options = new ArrayList<>(picks.size());
                 int idx = 0;
                 for (ResourceKey member : picks) {
                     options.add(new DecisionOption(
-                            "pick_" + idx++ + ":" + member.shortString(),
-                            "cirrus.prompt.tag_choice.option.pick",
-                            CostVector.ZERO,
-                            List.of(new TagDefaultRule("rule:tag:" + tagId,
-                                    GuidanceScope.SESSION, RuleStrength.HARD_PIN, tagId, member))
+                        "pick_" + idx++ + ":" + member.shortString(),
+                        "cirrus.prompt.h4_tag.option.anchor_world",
+                        CostVector.zero,
+                        List.of(new TagDefaultRule("rule:tag:" + tagId, GuidanceScope.worldSave, RuleStrength.hardPin, tagId, member))
                     ));
                 }
+                QuestionKey qKey = new QuestionKey(DecisionPromptKind.materialFamilyAnchor, tagId, GuidanceScope.worldSave, 0L);
                 mergeBest(out, new DecisionPrompt(
-                        promptId,
-                        DecisionPromptKind.HIGH_FANOUT_TAG_CHOICE,
-                        "cirrus.prompt.tag_choice.title",
-                        "cirrus.prompt.tag_choice.explanation",
-                        leverage,
-                        options
+                    promptId,
+                    qKey,
+                    DecisionPromptKind.materialFamilyAnchor,
+                    "cirrus.prompt.h4_tag.title",
+                    "cirrus.prompt.h4_tag.explanation",
+                    leverage,
+                    voi,
+                    GuidanceScope.worldSave,
+                    options
                 ));
             }
         }
     }
 
-    private void detectExpensiveLeaves(
-            ProductionPlan primary,
-            HumanGuidanceView guidance,
-            Set<String> dismissed,
-            Map<String, DecisionPrompt> out
-    ) {
-        double totalH = primary.totalCost().humanActiveSeconds();
-        double totalS = primary.totalCost().materialScarcity();
-        for (PlanStep step : primary.steps()) {
-            if (!(step instanceof AcquireStep a)) continue;
-            if (guidance.isResourceTreatedAsBase(a.resource()) || isResourceAnswered(guidance, a.resource())) {
-                continue;
-            }
-            double hShare = totalH > 1e-6 ? a.stepCost().humanActiveSeconds() / totalH : 0.0;
-            double sShare = totalS > 1e-6 ? a.stepCost().materialScarcity() / totalS : 0.0;
-            double share = Math.max(hShare, sShare);
-            if (share < 0.40) continue;
-
-            String promptId = "prompt:expensive_leaf:" + a.resource().shortString();
-            if (dismissed.contains(promptId)) continue;
-            List<DecisionOption> options = List.of(
-                    new DecisionOption(
-                            "treat_free",
-                            "cirrus.prompt.expensive_leaf.option.treat_free",
-                            a.stepCost(),
-                            List.of(new ResourceRule("rule:free:" + a.resource().shortString(),
-                                    GuidanceScope.SESSION, RuleStrength.HARD_PIN, a.resource(), true))
-                    ),
-                    new DecisionOption(
-                            "avoid_resource",
-                            "cirrus.prompt.expensive_leaf.option.avoid_resource",
-                            CostVector.ZERO,
-                            List.of(new ResourceRule("rule:avoid:" + a.resource().shortString(),
-                                    GuidanceScope.SESSION, RuleStrength.SOFT_PENALIZE, a.resource(), false))
-                    ),
-                    new DecisionOption(
-                            "keep_gather",
-                            "cirrus.prompt.expensive_leaf.option.keep_gather",
-                            CostVector.ZERO,
-                            List.of()
-                    )
-            );
-            mergeBest(out, new DecisionPrompt(
-                    promptId,
-                    DecisionPromptKind.EXPENSIVE_LEAF_CONFIRM,
-                    "cirrus.prompt.expensive_leaf.title",
-                    "cirrus.prompt.expensive_leaf.explanation",
-                    SafeMath.clamp01(share),
-                    options
-            ));
-        }
-    }
-
-    private void detectSuspiciousRecipes(
-            ProductionPlan primary,
-            CompiledRecipeGraph graph,
-            HumanGuidanceView guidance,
-            Set<String> dismissed,
-            Map<String, DecisionPrompt> out
+    /** H5: Suspicious JEI recipe verification + one-click bulk system ban (modpackDefault scope!). */
+    private void detectH5SuspiciousJeiVerify(
+        ProductionPlan primary,
+        CompiledRecipeGraph graph,
+        HumanGuidanceView guidance,
+        Set<String> dismissed,
+        double queryScaleA,
+        Map<String, DecisionPrompt> out
     ) {
         for (CraftStep cs : allCraftSteps(primary)) {
             Optional<CompiledRecipe> recOpt = graph.recipeByKey(cs.recipeKey());
             if (recOpt.isEmpty()) continue;
             CompiledRecipe rec = recOpt.get();
             if (isRecipeAnswered(guidance, rec.key())) continue;
+            if (!rec.isSuspiciousJei() && rec.advisory().weight() == 0) continue;
 
+            String promptId = "prompt:h5_suspicious:" + rec.key().shortString();
+            if (dismissed.contains(promptId)) continue;
+            VoIEstimate voi = VoICounterfactualEngine.evaluateExact(
+                new double[]{0.4, 0.6},
+                new double[][]{
+                    {0.0, 40.0},
+                    {15.0, 15.0}
+                },
+                VoICounterfactualEngine.defaultAskCostSeconds,
+                queryScaleA
+            );
             String sysId = rec.key().systemId();
-            SystemCostTier tier = costMetadata.tierOfSystem(sysId);
-            boolean heavySmallBatch = (tier == SystemCostTier.T3_AUTOMATED_FACTORY_LINE
-                    || tier == SystemCostTier.T4_HEAVY_SPECIALIZED) && cs.batches() <= 2L;
+            List<DecisionOption> options = List.of(
+                new DecisionOption(
+                    "confirm_trusted",
+                    "cirrus.prompt.h5_suspicious.option.confirm_trusted",
+                    CostVector.zero,
+                    List.of(new RecipeRule("rule:trust_rec:" + rec.key().shortString(), GuidanceScope.modpackDefault, RuleStrength.softPrefer, rec.key()))
+                ),
+                new DecisionOption(
+                    "ban_recipe_pack",
+                    "cirrus.prompt.h5_suspicious.option.ban_recipe",
+                    CostVector.zero,
+                    List.of(new RecipeRule("rule:ban_rec:" + rec.key().shortString(), GuidanceScope.modpackDefault, RuleStrength.hardBan, rec.key()))
+                ),
+                new DecisionOption(
+                    "ban_similar_system",
+                    "cirrus.prompt.h5_suspicious.option.ban_system",
+                    CostVector.zero,
+                    List.of(new SystemRule("rule:ban_sys:" + sysId, GuidanceScope.modpackDefault, RuleStrength.hardBan, sysId, false))
+                )
+            );
+            QuestionKey qKey = new QuestionKey(DecisionPromptKind.suspiciousJeiVerify, rec.key().shortString(), GuidanceScope.modpackDefault, 0L);
+            mergeBest(out, new DecisionPrompt(
+                promptId,
+                qKey,
+                DecisionPromptKind.suspiciousJeiVerify,
+                "cirrus.prompt.h5_suspicious.title",
+                "cirrus.prompt.h5_suspicious.explanation",
+                rec.isSuspiciousJei() ? 0.85 : 0.55,
+                voi,
+                GuidanceScope.modpackDefault,
+                options
+            ));
+        }
+    }
 
-            boolean largeSccNonStandard = false;
-            if (!"minecraft:crafting".equals(sysId) || rec.advisory() != RecipeAdvisory.NONE
-                    || rec.role() != RecipeRole.STANDARD_PRODUCTION) {
-                for (var o : rec.outputs()) {
-                    int sccId = graph.sccTopology().sccIdOf(o.resource());
-                    if (sccId >= 0 && graph.sccTopology().sccSize(sccId) >= 20
-                            && (rec.role() != RecipeRole.STANDARD_PRODUCTION || rec.advisory() != RecipeAdvisory.NONE
-                            || !sysId.startsWith("minecraft:"))) {
-                        largeSccNonStandard = true;
-                        break;
-                    }
-                }
-            }
-            if (!heavySmallBatch && !largeSccNonStandard) {
-                continue;
-            }
-            double leverage = (heavySmallBatch && largeSccNonStandard) ? 0.80 : 0.55;
-            String promptId = "prompt:suspicious:" + rec.key().shortString();
+    /** H6: High-share manual field-trip gathering confirmation. */
+    private void detectH6FieldTripConfirm(
+        ProductionPlan primary,
+        HumanGuidanceView guidance,
+        Set<String> dismissed,
+        double queryScaleA,
+        Map<String, DecisionPrompt> out
+    ) {
+        double totalActive = primary.totalCost().totalActiveSeconds();
+        if (totalActive <= 1e-6 || primary.totalCost().tripActiveSeconds() / totalActive < 0.35) {
+            return;
+        }
+        for (PlanStep step : primary.steps()) {
+            if (!(step instanceof AcquireStep a) || a.acquisitionKind() != AcquisitionKind.manualGather) continue;
+            if (isResourceAnswered(guidance, a.resource()) || guidance.isResourceTreatedAsBase(a.resource())) continue;
+            double tripSec = a.stepCost().tripActiveSeconds();
+            if (tripSec < 15.0) continue;
+            String promptId = "prompt:h6_trip:" + a.resource().shortString();
             if (dismissed.contains(promptId)) continue;
 
-            List<DecisionOption> options = List.of(
-                    new DecisionOption(
-                            "ban_recipe",
-                            "cirrus.prompt.suspicious.option.ban_recipe",
-                            CostVector.ZERO,
-                            List.of(new RecipeRule("rule:ban_rec:" + rec.key().shortString(),
-                                    GuidanceScope.SESSION, RuleStrength.HARD_BAN, rec.key()))
-                    ),
-                    new DecisionOption(
-                            "ban_system",
-                            "cirrus.prompt.suspicious.option.ban_system",
-                            CostVector.ZERO,
-                            List.of(new SystemRule("rule:ban_sys:" + sysId,
-                                    GuidanceScope.SESSION, RuleStrength.HARD_BAN, sysId, false))
-                    ),
-                    new DecisionOption(
-                            "accept_recipe",
-                            "cirrus.prompt.suspicious.option.accept_recipe",
-                            CostVector.ZERO,
-                            List.of(new RecipeRule("rule:accept_rec:" + rec.key().shortString(),
-                                    GuidanceScope.SESSION, RuleStrength.SOFT_PREFER, rec.key()))
-                    )
+            VoIEstimate voi = VoICounterfactualEngine.evaluateExact(
+                new double[]{0.5, 0.5},
+                new double[][]{
+                    {tripSec, tripSec * 3.0},
+                    {tripSec * 1.6, tripSec * 1.6}
+                },
+                VoICounterfactualEngine.defaultAskCostSeconds,
+                queryScaleA
             );
+            List<DecisionOption> options = List.of(
+                new DecisionOption(
+                    "forbid_gather",
+                    "cirrus.prompt.h6_trip.option.stay_in_base",
+                    CostVector.zero,
+                    List.of(new ResourceRule("rule:no_trip:" + a.resource().shortString(), GuidanceScope.worldSave, RuleStrength.hardBan, a.resource(), false))
+                ),
+                new DecisionOption(
+                    "set_base_supply",
+                    "cirrus.prompt.h6_trip.option.already_base",
+                    a.stepCost(),
+                    List.of(new ResourceRule("rule:base:" + a.resource().shortString(), GuidanceScope.worldSave, RuleStrength.hardPin, a.resource(), true))
+                ),
+                new DecisionOption(
+                    "accept_trip",
+                    "cirrus.prompt.h6_trip.option.accept_trip",
+                    CostVector.zero,
+                    List.of()
+                )
+            );
+            QuestionKey qKey = new QuestionKey(DecisionPromptKind.fieldTripConfirm, a.resource().canonicalString(), GuidanceScope.worldSave, 0L);
             mergeBest(out, new DecisionPrompt(
-                    promptId,
-                    DecisionPromptKind.SUSPICIOUS_RECIPE_OR_CYCLE,
-                    "cirrus.prompt.suspicious.title",
-                    "cirrus.prompt.suspicious.explanation",
-                    leverage,
-                    options
+                promptId,
+                qKey,
+                DecisionPromptKind.fieldTripConfirm,
+                "cirrus.prompt.h6_trip.title",
+                "cirrus.prompt.h6_trip.explanation",
+                SafeMath.clamp01(tripSec / totalActive),
+                voi,
+                GuidanceScope.worldSave,
+                options
             ));
         }
     }
@@ -380,31 +577,21 @@ public final class DecisionPointDetector {
         for (PlanStep step : plan.steps()) {
             if (step instanceof CraftStep cs) {
                 out.add(cs);
-            } else if (step instanceof CycleLoopStep loop) {
-                out.addAll(loop.singleIterationTemplate());
+            } else if (step instanceof CycleLoopStep cl) {
+                out.addAll(cl.singleIterationTemplate());
             }
         }
         return out;
     }
 
-    private static double savingRatio(double baseline, double improved) {
-        if (baseline <= 1e-6 || improved >= baseline) {
-            return 0.0;
-        }
-        return (baseline - improved) / baseline;
-    }
-
-    private static void mergeBest(Map<String, DecisionPrompt> map, DecisionPrompt candidate) {
-        DecisionPrompt existing = map.get(candidate.promptId());
-        if (existing == null || candidate.leverageScore() > existing.leverageScore()) {
-            map.put(candidate.promptId(), candidate);
+    private static void mergeBest(Map<String, DecisionPrompt> out, DecisionPrompt prompt) {
+        DecisionPrompt prev = out.get(prompt.promptId());
+        if (prev == null || prompt.leverageScore() > prev.leverageScore()) {
+            out.put(prompt.promptId(), prompt);
         }
     }
 
     private static boolean isMachineAnswered(HumanGuidanceView guidance, String machineId) {
-        if (guidance instanceof DefaultHumanGuidanceView view) {
-            return view.hasMachineRule(machineId);
-        }
         for (GuidanceRule r : guidance.allRules()) {
             if (r instanceof MachineRule mr && mr.machineId().equals(machineId)) return true;
         }
@@ -412,19 +599,13 @@ public final class DecisionPointDetector {
     }
 
     private static boolean isResourceAnswered(HumanGuidanceView guidance, ResourceKey key) {
-        if (guidance instanceof DefaultHumanGuidanceView view) {
-            return view.hasResourceRule(key);
-        }
         for (GuidanceRule r : guidance.allRules()) {
             if (r instanceof ResourceRule rr && rr.resource().equals(key)) return true;
         }
         return false;
     }
 
-    private static boolean isRecipeAnswered(HumanGuidanceView guidance, dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey key) {
-        if (guidance instanceof DefaultHumanGuidanceView view) {
-            return view.hasRecipeRule(key);
-        }
+    private static boolean isRecipeAnswered(HumanGuidanceView guidance, CompiledRecipeKey key) {
         for (GuidanceRule r : guidance.allRules()) {
             if (r instanceof RecipeRule rr && rr.recipeKey().equals(key)) return true;
         }

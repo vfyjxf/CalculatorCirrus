@@ -32,15 +32,3 @@ public interface RecipeConstraint<R> {
     boolean satisfy(RecipeEntry<R> entry, InputContent expect, ContentVariant actual);
 
 }
-
-class DefaultRecipeConstraint<R> implements RecipeConstraint<R> {
-
-    static final RecipeConstraint<?> instance = new DefaultRecipeConstraint<>();
-
-    private DefaultRecipeConstraint() {}
-
-    @Override
-    public boolean satisfy(RecipeEntry<R> entry, InputContent expect, ContentVariant actual) {
-        return expect.satisfy(actual);
-    }
-}

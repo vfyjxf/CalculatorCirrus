@@ -9,6 +9,7 @@ import dev.vfyjxf.cirrus.api.content.type.VariantType;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import org.jspecify.annotations.Nullable;
 
 final class TypedContentStack<T, S> implements ContentStack<T, S> {
 
@@ -24,11 +25,10 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
      *
      * @see dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer
      */
-    private transient volatile Canonical canonical;
-    private transient volatile ComponentStackKey componentKey;
+    private transient volatile @Nullable Canonical canonical;
+    private transient volatile @Nullable ComponentStackKey componentKey;
 
-    private record Canonical(DataComponentMap components, long generation) {
-    }
+    private record Canonical(@Nullable DataComponentMap components, long generation) {}
 
     TypedContentStack(StackType<T, S> type, long amount, S value) {
         this.type = type;
@@ -69,7 +69,7 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
     }
 
     @Override
-    public DataComponentMap canonicalComponents() {
+    public @Nullable DataComponentMap canonicalComponents() {
         return canonicalHolder().components();
     }
 
@@ -148,10 +148,10 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
         if (o == null || getClass() != o.getClass()) return false;
 
         TypedContentStack<?, ?> that = (TypedContentStack<?, ?>) o;
-        return type == that.type &&
-               variantType == that.variantType &&
-               amount == that.amount &&
-               type.contentType().matches(content(), (T) that.content());
+        return type == that.type
+                && variantType == that.variantType
+                && amount == that.amount
+                && type.contentType().matches(content(), (T) that.content());
     }
 
     @Override
@@ -166,62 +166,11 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
     @Override
     public ContentStack<Item, ItemStack> cheatsStack() {
         ItemStack itemStack = type.toItemStack(this);
-        return new TypedContentStack<>(CirrusTypes.Contents.ITEM_STACK, itemStack, itemStack.getCount());
+        return new TypedContentStack<>(CirrusTypes.Contents.itemStack, itemStack, itemStack.getCount());
     }
 
     @Override
     public String toString() {
-        return "ContentStack{" +
-               "type=" + type +
-               ", amount=" + amount +
-               ", value=" + type.toString(value) +
-               '}';
-    }
-}
-
-
-final class EmptyContentStack<T, S> implements ContentStack<T, S> {
-
-    @SuppressWarnings("rawtypes")
-    static final ContentStack instance = new EmptyContentStack<>();
-
-    @Override
-    public StackType<T, S> type() {
-        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
-    }
-
-    @Override
-    public ContentType<T> contentType() {
-        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
-    }
-
-    @Override
-    public VariantType<T, S> variantType() {
-        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
-    }
-
-    @Override
-    public S value() {
-        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
-    }
-
-    @Override
-    public long amount() {
-        return 0;
-    }
-
-    @Override
-    public ContentStack<T, S> setAmount(long amount) {
-        throw new UnsupportedOperationException("This operation is not supported for an empty content stack.");
-    }
-
-    @Override
-    public ContentStack<Item, ItemStack> cheatsStack() {
-        return new TypedContentStack<>(CirrusTypes.Contents.ITEM_STACK, 0, ItemStack.EMPTY);
-    }
-
-    @Override
-    public String toString() {
-        return "empty content stack";
+        return "ContentStack{" + "type=" + type + ", amount=" + amount + ", value=" + type.toString(value) + '}';
     }
 }

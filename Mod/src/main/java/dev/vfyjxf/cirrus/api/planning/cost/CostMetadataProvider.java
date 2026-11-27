@@ -11,7 +11,11 @@ public interface CostMetadataProvider {
 
     double estimateHumanSecondsPerBatch(String systemId, Optional<String> machineId, boolean automated);
 
-    double estimatePassiveSecondsPerBatch(String systemId, Optional<String> machineId, Map<String, Double> recipeValues);
+    double estimatePassiveSecondsPerBatch(
+        String systemId,
+        Optional<String> machineId,
+        Map<String, Double> recipeValues
+    );
 
     double estimateMachineSetupHumanSeconds(String machineId, String systemId);
 

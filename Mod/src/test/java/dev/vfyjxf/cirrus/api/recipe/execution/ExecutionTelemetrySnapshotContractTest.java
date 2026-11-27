@@ -1,11 +1,10 @@
 package dev.vfyjxf.cirrus.api.recipe.execution;
 
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.core.PauseReasons;
+import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowViewModel;
-import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -15,9 +14,11 @@ import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.factory.Sets;
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,10 +36,7 @@ class ExecutionTelemetrySnapshotContractTest {
             new ExecutionGuidance(
                 Component.literal("Need attention"),
                 Component.literal("Check the bench"),
-                Lists.immutable.of(
-                    Component.literal("Open the bench"),
-                    Component.literal("Press continue")
-                ),
+                Lists.immutable.of(Component.literal("Open the bench"), Component.literal("Press continue")),
                 Sets.immutable.empty()
             )
         );
@@ -80,7 +78,12 @@ class ExecutionTelemetrySnapshotContractTest {
             null,
             ExecutionFlowViewModel.derive(
                 root,
-                new ExecutionFlowViewModel.RuntimeState(Sets.immutable.empty(), Sets.immutable.of(currentStep), null, null)
+                new ExecutionFlowViewModel.RuntimeState(
+                    Sets.immutable.empty(),
+                    Sets.immutable.of(currentStep),
+                    null,
+                    null
+                )
             )
         );
 
@@ -206,17 +209,20 @@ class ExecutionTelemetrySnapshotContractTest {
             null,
             ExecutionFlowViewModel.derive(
                 root,
-                new ExecutionFlowViewModel.RuntimeState(Sets.immutable.empty(), Sets.immutable.of(currentStep), null, null)
+                new ExecutionFlowViewModel.RuntimeState(
+                    Sets.immutable.empty(),
+                    Sets.immutable.of(currentStep),
+                    null,
+                    null
+                )
             )
         );
 
         var snapshot = ExecutionTelemetrySnapshot.from(session, 3.0d, false);
 
         assertEquals("running", snapshot.status());
-        assertTrue(snapshot.current() != null);
-        assertEquals("current", snapshot.current().id());
-        assertTrue(snapshot.next() != null);
-        assertEquals("next", snapshot.next().id());
+        assertEquals("current", Objects.requireNonNull(snapshot.current(), "current").id());
+        assertEquals("next", Objects.requireNonNull(snapshot.next(), "next").id());
         assertNull(snapshot.errorSummary());
         assertNull(snapshot.errorDetail());
         assertEquals(0.0d, snapshot.progress());
@@ -224,13 +230,8 @@ class ExecutionTelemetrySnapshotContractTest {
 
     @Test
     void fromSessionMapsCompletedStatusForEmptyPlansAndKeepsNextNull() {
-        var root = ExecutionFlowNode.pending(
-            "root",
-            Component.literal("Root"),
-            Lists.immutable.empty(),
-            null,
-            Lists.immutable.empty()
-        );
+        var root = ExecutionFlowNode
+                .pending("root", Component.literal("Root"), Lists.immutable.empty(), null, Lists.immutable.empty());
         var session = new ExecutionSession(
             new InteractionExecutionPlan(recipeEntry("completed"), 1, Lists.immutable.empty()),
             root,
@@ -240,10 +241,7 @@ class ExecutionTelemetrySnapshotContractTest {
             null,
             null,
             null,
-            ExecutionFlowViewModel.derive(
-                root,
-                ExecutionFlowViewModel.RuntimeState.empty()
-            )
+            ExecutionFlowViewModel.derive(root, ExecutionFlowViewModel.RuntimeState.empty())
         );
 
         var snapshot = ExecutionTelemetrySnapshot.from(session, 0.0d, false);
@@ -251,7 +249,7 @@ class ExecutionTelemetrySnapshotContractTest {
         assertEquals("completed", snapshot.status());
         assertTrue(snapshot.completed());
         assertEquals(1, snapshot.path().size());
-        assertEquals("root", snapshot.current().id());
+        assertEquals("root", Objects.requireNonNull(snapshot.current(), "current").id());
         assertNull(snapshot.next());
         assertNull(snapshot.errorSummary());
         assertNull(snapshot.errorDetail());
@@ -313,8 +311,7 @@ class ExecutionTelemetrySnapshotContractTest {
 
     private static final TestRecipeSystem recipeSystem = new TestRecipeSystem();
 
-    private record TestRecipe(String id) {
-    }
+    private record TestRecipe(String id) {}
 
     private static final class TestRecipeSystem implements RecipeSystem<TestRecipe> {
         private final Map<String, TestRecipe> byId = new ConcurrentHashMap<>();
@@ -336,12 +333,12 @@ class ExecutionTelemetrySnapshotContractTest {
         }
 
         @Override
-        public TestRecipe findRecipe(String uniqueId) {
+        public @Nullable TestRecipe findRecipe(String uniqueId) {
             return byId.get(uniqueId);
         }
 
         @Override
-        public TestRecipe findRecipe(ResourceLocation registryName) {
+        public @Nullable TestRecipe findRecipe(ResourceLocation registryName) {
             return byId.get(registryName.getPath());
         }
 

@@ -1,11 +1,8 @@
 package dev.vfyjxf.cirrus.api.recipe.projection.resolve;
 
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
-public record ResolveGuardResult(
-    boolean passed,
-    @Nullable String reasonCode
-) {
+public record ResolveGuardResult(boolean passed, @Nullable String reasonCode) {
     //region factory
 
     public static ResolveGuardResult pass() {

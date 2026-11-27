@@ -29,27 +29,23 @@ import java.util.Optional;
 import java.util.Set;
 
 public record ChainMetrics(
-        int actions,
-        int crafts,
-        int distinctRecipes,
-        int rawKinds,
-        int machines,
-        int depth,
-        int advisoryInPath,
-        int discouragedInPath,
-        int lastResortInPath,
-        int roundTrips,
-        int poolAmplification,
-        int rawNonLeaf,
-        int dormantAcquires,
-        int unmet
+    int actions,
+    int crafts,
+    int distinctRecipes,
+    int rawKinds,
+    int machines,
+    int depth,
+    int advisoryInPath,
+    int discouragedInPath,
+    int lastResortInPath,
+    int roundTrips,
+    int poolAmplification,
+    int rawNonLeaf,
+    int dormantAcquires,
+    int unmet
 ) {
 
-    public static ChainMetrics compute(
-            ProductionPlan plan,
-            CompiledRecipeGraph graph,
-            PlanningRequest request
-    ) {
+    public static ChainMetrics compute(ProductionPlan plan, CompiledRecipeGraph graph, PlanningRequest request) {
         Objects.requireNonNull(plan, "plan");
         Objects.requireNonNull(graph, "graph");
         Objects.requireNonNull(request, "request");
@@ -104,7 +100,7 @@ public record ChainMetrics(
                                     anyActive = true;
                                     break;
                                 }
-                                if (adm == SystemAdmission.OPT_IN_ONLY && !unlocked) {
+                                if (adm == SystemAdmission.optInOnly && !unlocked) {
                                     anyOptInLocked = true;
                                 }
                             }
@@ -118,22 +114,23 @@ public record ChainMetrics(
                 }
                 case ProvisionMachineStep prov -> machines += prov.countToBuild();
                 case SetupLineStep ignored -> machines += 1;
-                case LinePullStep ignored -> {
-                }
+                case LinePullStep ignored -> {}
                 case CraftStep craft -> {
                     crafts++;
                     recipesSeen.add(craft.recipeKey());
                     Optional<CompiledRecipe> recOpt = graph.recipeByKey(craft.recipeKey());
                     if (recOpt.isPresent()) {
                         CompiledRecipe rec = recOpt.get();
-                        if (rec.advisory() == RecipeAdvisory.DISCOURAGED) {
+                        if (rec.advisory() == RecipeAdvisory.discouraged) {
                             discouraged++;
-                        } else if (rec.advisory() == RecipeAdvisory.LAST_RESORT) {
+                        } else if (rec.advisory() == RecipeAdvisory.lastResort) {
                             lastResort++;
                         }
-                        if (rec.inputs().size() == 1 && rec.outputs().size() == 1
+                        if (rec.inputs().size() == 1
+                                && rec.outputs().size() == 1
                                 && craft.slotBindings().containsKey(rec.inputs().get(0).slotIndex())) {
-                            ResourceKey inKey = craft.slotBindings().get(rec.inputs().get(0).slotIndex()).chosenResource();
+                            ResourceKey inKey = craft.slotBindings().get(rec.inputs().get(0).slotIndex())
+                                    .chosenResource();
                             ResourceKey outKey = rec.outputs().get(0).resource();
                             if (!inKey.equals(outKey)) {
                                 forwardConversions.add(new SinglePair(inKey, outKey));
@@ -147,14 +144,16 @@ public record ChainMetrics(
                     Optional<CompiledRecipe> recOpt = graph.recipeByKey(conv.conversionRecipeKey());
                     if (recOpt.isPresent()) {
                         CompiledRecipe rec = recOpt.get();
-                        if (rec.advisory() == RecipeAdvisory.DISCOURAGED) {
+                        if (rec.advisory() == RecipeAdvisory.discouraged) {
                             discouraged++;
-                        } else if (rec.advisory() == RecipeAdvisory.LAST_RESORT) {
+                        } else if (rec.advisory() == RecipeAdvisory.lastResort) {
                             lastResort++;
                         }
-                        if (rec.inputs().size() == 1 && rec.outputs().size() == 1
+                        if (rec.inputs().size() == 1
+                                && rec.outputs().size() == 1
                                 && conv.slotBindings().containsKey(rec.inputs().get(0).slotIndex())) {
-                            ResourceKey inKey = conv.slotBindings().get(rec.inputs().get(0).slotIndex()).chosenResource();
+                            ResourceKey inKey = conv.slotBindings().get(rec.inputs().get(0).slotIndex())
+                                    .chosenResource();
                             ResourceKey outKey = rec.outputs().get(0).resource();
                             if (!inKey.equals(outKey)) {
                                 forwardConversions.add(new SinglePair(inKey, outKey));
@@ -171,9 +170,9 @@ public record ChainMetrics(
                         Optional<CompiledRecipe> recOpt = graph.recipeByKey(inner.recipeKey());
                         if (recOpt.isPresent()) {
                             RecipeAdvisory adv = recOpt.get().advisory();
-                            if (adv == RecipeAdvisory.DISCOURAGED) {
+                            if (adv == RecipeAdvisory.discouraged) {
                                 discouraged++;
-                            } else if (adv == RecipeAdvisory.LAST_RESORT) {
+                            } else if (adv == RecipeAdvisory.lastResort) {
                                 lastResort++;
                             }
                         }
@@ -202,20 +201,20 @@ public record ChainMetrics(
 
         int unmet = plan.certificate().valid() ? 0 : 1;
         return new ChainMetrics(
-                actions,
-                crafts,
-                recipesSeen.size(),
-                rawResources.size(),
-                machines,
-                maxDepth,
-                discouraged + lastResort,
-                discouraged,
-                lastResort,
-                roundTrips,
-                poolAmplification,
-                rawNonLeaf,
-                dormantAcquires,
-                unmet
+            actions,
+            crafts,
+            recipesSeen.size(),
+            rawResources.size(),
+            machines,
+            maxDepth,
+            discouraged + lastResort,
+            discouraged,
+            lastResort,
+            roundTrips,
+            poolAmplification,
+            rawNonLeaf,
+            dormantAcquires,
+            unmet
         );
     }
 
@@ -238,6 +237,5 @@ public record ChainMetrics(
         return obj;
     }
 
-    private record SinglePair(ResourceKey from, ResourceKey to) {
-    }
+    private record SinglePair(ResourceKey from, ResourceKey to) {}
 }

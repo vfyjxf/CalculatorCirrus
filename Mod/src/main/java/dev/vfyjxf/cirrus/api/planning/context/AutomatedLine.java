@@ -5,12 +5,12 @@ import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import java.util.Objects;
 
 public record AutomatedLine(
-        String lineId,
-        ResourceKey output,
-        double throughputPerMinute,
-        double humanAttentionSecondsPerPull,
-        long bufferedStock,
-        boolean continuous
+    String lineId,
+    ResourceKey output,
+    double throughputPerMinute,
+    double humanAttentionSecondsPerPull,
+    long bufferedStock,
+    boolean continuous
 ) {
 
     public AutomatedLine {

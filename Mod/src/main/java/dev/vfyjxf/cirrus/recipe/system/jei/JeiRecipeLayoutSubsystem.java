@@ -39,8 +39,7 @@ public final class JeiRecipeLayoutSubsystem<R> implements RecipeSubsystem<R> {
                     return result;
                 }
             }
-        } catch (RuntimeException ignored) {
-        }
+        } catch (RuntimeException ignored) {}
         return fallback;
     }
 

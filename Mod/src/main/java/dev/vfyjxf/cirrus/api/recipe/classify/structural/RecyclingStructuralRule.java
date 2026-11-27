@@ -6,7 +6,7 @@ import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationSink;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationTags;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassifyContent;
 import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifyView;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Set;
@@ -26,25 +26,47 @@ import java.util.Set;
 public final class RecyclingStructuralRule implements ClassificationRule {
 
     public static final RecyclingStructuralRule instance = new RecyclingStructuralRule();
-    public static final String ID = "cirrus:structural/recycling";
+    public static final String id = "cirrus:structural/recycling";
 
-    private static final Set<String> BASE_SUFFIXES = Set.of(
-        "ingot", "nugget", "dust", "gem", "scrap", "shard"
-    );
-    private static final List<String> PRODUCT_TOKENS = List.of(
-        "plate", "gear", "rod", "wire", "stick", "bolt", "ring", "spring", "foil",
-        "sword", "pickaxe", "axe", "shovel", "hoe", "hammer", "paxel", "saw",
-        "helmet", "chestplate", "leggings", "boots", "armor", "shield",
-        "gloves", "pendant", "can",
-        "pipe", "casing", "tank", "cell"
+    private static final Set<String> baseSuffixes = Set.of("ingot", "nugget", "dust", "gem", "scrap", "shard");
+    private static final List<String> productTokens = List.of(
+        "plate",
+        "gear",
+        "rod",
+        "wire",
+        "stick",
+        "bolt",
+        "ring",
+        "spring",
+        "foil",
+        "sword",
+        "pickaxe",
+        "axe",
+        "shovel",
+        "hoe",
+        "hammer",
+        "paxel",
+        "saw",
+        "helmet",
+        "chestplate",
+        "leggings",
+        "boots",
+        "armor",
+        "shield",
+        "gloves",
+        "pendant",
+        "can",
+        "pipe",
+        "casing",
+        "tank",
+        "cell"
     );
 
-    private RecyclingStructuralRule() {
-    }
+    private RecyclingStructuralRule() {}
 
     @Override
     public String id() {
-        return ID;
+        return id;
     }
 
     @Override
@@ -62,7 +84,7 @@ public final class RecyclingStructuralRule implements ClassificationRule {
                     continue;
                 }
                 if (consumesProductOf(recipe, material)) {
-                    sink.tag(ClassificationTags.RECYCLING);
+                    sink.tag(ClassificationTags.recycling);
                     return;
                 }
             }
@@ -85,7 +107,7 @@ public final class RecyclingStructuralRule implements ClassificationRule {
             return null;
         }
         String suffix = path.substring(underscore + 1);
-        if (!BASE_SUFFIXES.contains(suffix)) {
+        if (!baseSuffixes.contains(suffix)) {
             return null;
         }
         return path.substring(0, underscore);
@@ -115,7 +137,7 @@ public final class RecyclingStructuralRule implements ClassificationRule {
         if (!path.contains(material)) {
             return false;
         }
-        for (String token : PRODUCT_TOKENS) {
+        for (String token : productTokens) {
             if (path.contains(token)) {
                 return true;
             }

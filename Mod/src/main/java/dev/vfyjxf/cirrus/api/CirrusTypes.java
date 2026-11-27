@@ -36,30 +36,34 @@ import net.neoforged.neoforge.internal.versions.neoforge.NeoForgeVersion;
  */
 public final class CirrusTypes {
 
-    //NOTE:这里用大写是因为小写歧义太多，用大写去歧义
+    //NOTE: uppercase because the lowercase names carry too much ambiguity
     public final static class Contents {
 
         //region content
-        public static final ContentType<Item> ITEM = ItemContentType.instance;
-        public static final ContentType<Fluid> FLUID = FluidContentType.instance;
+        public static final ContentType<Item> item = ItemContentType.instance;
+        public static final ContentType<Fluid> fluidConst = FluidContentType.instance;
         //endregion
 
         //region stack
-        public static final StackType<Item, ItemStack> ITEM_STACK = ItemStackType.instance;
-        public static final StackType<Fluid, FluidStack> FLUID_STACK = FluidStackType.instance;
+        public static final StackType<Item, ItemStack> itemStack = ItemStackType.instance;
+        public static final StackType<Fluid, FluidStack> fluidStack = FluidStackType.instance;
         //endregion
 
         //region tag
-        public static final TagType<Item> ITEM_TAG = TagType.fromRegistry(Namespace.ofMc("tag/item"), ITEM, Registries.ITEM);
-        public static final TagType<Fluid> FLUID_TAG = TagType.fromRegistry(Namespace.ofMc("tag/fluid"), FLUID, Registries.FLUID);
+        public static final TagType<Item> itemTag = TagType
+                .fromRegistry(Namespace.ofMc("tag/item"), item, Registries.ITEM);
+        public static final TagType<Fluid> fluidTag = TagType
+                .fromRegistry(Namespace.ofMc("tag/fluid"), fluidConst, Registries.FLUID);
         //endregion
 
         //region recipe content
-        public static final ValueType<TimeValue> TIME = TimeValueType.instance;
-        public static final ValueType<EnergyValue> ENERGY = EnergyContentType.instance;
+        public static final ValueType<TimeValue> time = TimeValueType.instance;
+        public static final ValueType<EnergyValue> energy = EnergyContentType.instance;
         //endregion
 
-        private Contents() {throw new AssertionError("This class should not be instantiated!");}
+        private Contents() {
+            throw new AssertionError("This class should not be instantiated!");
+        }
     }
 
     public final static class Clauses {
@@ -72,24 +76,35 @@ public final class CirrusTypes {
 
         public static final ClauseType resolvePolicy = ResolvePolicyClause.type;
 
-        private Clauses() {throw new AssertionError("This class should not be instantiated!");}
+        private Clauses() {
+            throw new AssertionError("This class should not be instantiated!");
+        }
     }
 
     public final static class ContentResolvers {
 
-        public static final ContentResolverType<ItemStack> FLUID_CONTAINER = ContentResolverType.of(CirrusNamespaces.ofMod("fluid_container"));
-        public static final ContentResolverType<ItemStack> ITEM_CONTAINER = ContentResolverType.of(CirrusNamespaces.ofMod("item_container"));
+        public static final ContentResolverType<ItemStack> fluidContainer = ContentResolverType
+                .of(CirrusNamespaces.ofMod("fluid_container"));
+        public static final ContentResolverType<ItemStack> itemContainer = ContentResolverType
+                .of(CirrusNamespaces.ofMod("item_container"));
 
-        private ContentResolvers() {throw new AssertionError("This class should not be instantiated!");}
+        private ContentResolvers() {
+            throw new AssertionError("This class should not be instantiated!");
+        }
     }
 
     public final static class IngredientResolvers {
-        public static final IngredientResolverType<ICustomIngredient> CUSTOM = IngredientResolverType.of(Namespace.of(NeoForgeVersion.MOD_ID, "ingredient/custom"));
-        public static final IngredientResolverType<FluidIngredient> FLUID = IngredientResolverType.of(Namespace.of(NeoForgeVersion.MOD_ID, "ingredient/fluid"));
+        public static final IngredientResolverType<ICustomIngredient> custom = IngredientResolverType
+                .of(Namespace.of(NeoForgeVersion.MOD_ID, "ingredient/custom"));
+        public static final IngredientResolverType<FluidIngredient> fluidConst = IngredientResolverType
+                .of(Namespace.of(NeoForgeVersion.MOD_ID, "ingredient/fluid"));
 
-        private IngredientResolvers() {throw new AssertionError("This class should not be instantiated!");}
+        private IngredientResolvers() {
+            throw new AssertionError("This class should not be instantiated!");
+        }
     }
 
-
-    private CirrusTypes() {throw new AssertionError("This class should not be instantiated!");}
+    private CirrusTypes() {
+        throw new AssertionError("This class should not be instantiated!");
+    }
 }

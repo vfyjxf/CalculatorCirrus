@@ -18,8 +18,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class RecipeDatabaseCatalogCacheTest {
 
@@ -34,8 +34,10 @@ class RecipeDatabaseCatalogCacheTest {
         Namespace source = Namespace.of("test", "cache");
         CountingRecipeSystem system = new CountingRecipeSystem(source, List.of(new FakeRecipe("recipe_a")));
 
-        RecipeDatabaseIndex first = RecipeDatabaseCatalogCache.getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
-        RecipeDatabaseIndex second = RecipeDatabaseCatalogCache.getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
+        RecipeDatabaseIndex first = RecipeDatabaseCatalogCache
+                .getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
+        RecipeDatabaseIndex second = RecipeDatabaseCatalogCache
+                .getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
 
         assertSame(first, second);
     }
@@ -46,8 +48,10 @@ class RecipeDatabaseCatalogCacheTest {
         Namespace source = Namespace.of("test", "cache_expire");
         CountingRecipeSystem system = new CountingRecipeSystem(source, List.of(new FakeRecipe("recipe_a")));
 
-        RecipeDatabaseIndex first = RecipeDatabaseCatalogCache.getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
-        RecipeDatabaseIndex second = RecipeDatabaseCatalogCache.getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
+        RecipeDatabaseIndex first = RecipeDatabaseCatalogCache
+                .getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
+        RecipeDatabaseIndex second = RecipeDatabaseCatalogCache
+                .getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
 
         assertNotSame(first, second);
     }
@@ -61,17 +65,19 @@ class RecipeDatabaseCatalogCacheTest {
         Namespace source = Namespace.of("test", "cache_invalidate");
         CountingRecipeSystem system = new CountingRecipeSystem(source, List.of(new FakeRecipe("recipe_a")));
 
-        RecipeDatabaseIndex first = RecipeDatabaseCatalogCache.getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
-        RecipeDatabaseIndex hit = RecipeDatabaseCatalogCache.getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
+        RecipeDatabaseIndex first = RecipeDatabaseCatalogCache
+                .getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
+        RecipeDatabaseIndex hit = RecipeDatabaseCatalogCache
+                .getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
         assertSame(first, hit);
 
         RecipeDatabaseCatalogCache.invalidate();
-        RecipeDatabaseIndex rebuilt = RecipeDatabaseCatalogCache.getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
+        RecipeDatabaseIndex rebuilt = RecipeDatabaseCatalogCache
+                .getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
         assertNotSame(first, rebuilt);
     }
 
-    private record FakeRecipe(String id) {
-    }
+    private record FakeRecipe(String id) {}
 
     private static final class CountingRecipeSystem implements RecipeSystem<FakeRecipe> {
         private final Namespace systemId;

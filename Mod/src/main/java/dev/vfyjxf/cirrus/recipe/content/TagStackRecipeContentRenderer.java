@@ -2,20 +2,19 @@ package dev.vfyjxf.cirrus.recipe.content;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.BatchableRecipeContentRenderer;
-import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.TagStackContent;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipContext;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipStack;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import org.jspecify.annotations.Nullable;
 
 public final class TagStackRecipeContentRenderer implements BatchableRecipeContentRenderer<TagStackContent<?>> {
 
     public static final TagStackRecipeContentRenderer instance = new TagStackRecipeContentRenderer();
 
-    private TagStackRecipeContentRenderer() {
-    }
+    private TagStackRecipeContentRenderer() {}
 
     @Override
     public int visualCount(TagStackContent<?> content) {
@@ -23,12 +22,28 @@ public final class TagStackRecipeContentRenderer implements BatchableRecipeConte
     }
 
     @Override
-    public void render(GuiGraphics graphics, TagStackContent<?> content, int visualIndex, int width, int height, float delta) {
+    public void render(
+        GuiGraphics graphics,
+        TagStackContent<?> content,
+        int visualIndex,
+        int width,
+        int height,
+        float delta
+    ) {
         renderAt(graphics, content, visualIndex, 0, 0, width, height, delta);
     }
 
     @Override
-    public void renderAt(GuiGraphics graphics, TagStackContent<?> content, int visualIndex, int x, int y, int width, int height, float delta) {
+    public void renderAt(
+        GuiGraphics graphics,
+        TagStackContent<?> content,
+        int visualIndex,
+        int x,
+        int y,
+        int width,
+        int height,
+        float delta
+    ) {
         ContentStack<?, ?> stack = RecipeContentRenderSupport.visualStack(
             RecipeContentRenderSupport.visualAt(RecipeContentRenderSupport.enumeratedVisuals(content), visualIndex)
         );
@@ -38,12 +53,28 @@ public final class TagStackRecipeContentRenderer implements BatchableRecipeConte
     }
 
     @Override
-    public void renderDecorated(GuiGraphics graphics, TagStackContent<?> content, int visualIndex, int width, int height, float delta) {
+    public void renderDecorated(
+        GuiGraphics graphics,
+        TagStackContent<?> content,
+        int visualIndex,
+        int width,
+        int height,
+        float delta
+    ) {
         renderDecoratedAt(graphics, content, visualIndex, 0, 0, width, height, delta);
     }
 
     @Override
-    public void renderDecoratedAt(GuiGraphics graphics, TagStackContent<?> content, int visualIndex, int x, int y, int width, int height, float delta) {
+    public void renderDecoratedAt(
+        GuiGraphics graphics,
+        TagStackContent<?> content,
+        int visualIndex,
+        int x,
+        int y,
+        int width,
+        int height,
+        float delta
+    ) {
         ContentStack<?, ?> stack = RecipeContentRenderSupport.stackForTooltipDisplay(
             content,
             RecipeContentRenderSupport.visualAt(RecipeContentRenderSupport.enumeratedVisuals(content), visualIndex)
@@ -62,7 +93,15 @@ public final class TagStackRecipeContentRenderer implements BatchableRecipeConte
     }
 
     @Override
-    public void submitDecorated(Batch batch, TagStackContent<?> content, int visualIndex, int x, int y, int width, int height) {
+    public void submitDecorated(
+        Batch batch,
+        TagStackContent<?> content,
+        int visualIndex,
+        int x,
+        int y,
+        int width,
+        int height
+    ) {
         ContentStack<?, ?> stack = RecipeContentRenderSupport.stackForTooltipDisplay(
             content,
             RecipeContentRenderSupport.visualAt(RecipeContentRenderSupport.enumeratedVisuals(content), visualIndex)
@@ -71,7 +110,7 @@ public final class TagStackRecipeContentRenderer implements BatchableRecipeConte
     }
 
     @Override
-    public Tooltip tooltip(TagStackContent<?> content, int visualIndex, TooltipContext context) {
+    public @Nullable Tooltip tooltip(TagStackContent<?> content, int visualIndex, TooltipContext context) {
         ContentStack<?, ?> stack = RecipeContentRenderSupport.stackForTooltipDisplay(
             content,
             RecipeContentRenderSupport.visualAt(RecipeContentRenderSupport.enumeratedVisuals(content), visualIndex)
@@ -80,13 +119,15 @@ public final class TagStackRecipeContentRenderer implements BatchableRecipeConte
     }
 
     @Override
-    public TooltipStack<?> tooltipStack(TagStackContent<?> content, int visualIndex) {
-        return RecipeContentRenderSupport.tooltipStackForStack(
-            RecipeContentRenderSupport.stackForTooltipDisplay(
-                content,
-                RecipeContentRenderSupport.visualAt(RecipeContentRenderSupport.enumeratedVisuals(content), visualIndex)
-            )
-        );
+    public @Nullable TooltipStack<?> tooltipStack(TagStackContent<?> content, int visualIndex) {
+        return RecipeContentRenderSupport
+                .tooltipStackForStack(
+                    RecipeContentRenderSupport.stackForTooltipDisplay(
+                        content,
+                        RecipeContentRenderSupport
+                                .visualAt(RecipeContentRenderSupport.enumeratedVisuals(content), visualIndex)
+                    )
+                );
     }
 
     @Override

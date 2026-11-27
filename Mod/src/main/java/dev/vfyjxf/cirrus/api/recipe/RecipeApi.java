@@ -1,29 +1,28 @@
 package dev.vfyjxf.cirrus.api.recipe;
 
-
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolver;
 import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolverType;
 import dev.vfyjxf.cirrus.api.recipe.filter.RecipeFilter;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionTransformer;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextOption;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.system.VanillaRecipeSystem;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionTransformer;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import mezz.jei.api.recipe.RecipeType;
 import net.minecraft.world.item.crafting.Recipe;
 import org.eclipse.collections.api.RichIterable;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnmodifiableView;
+import org.jspecify.annotations.Nullable;
 
 @ApiStatus.NonExtendable
 public interface RecipeApi {
@@ -77,7 +76,10 @@ public interface RecipeApi {
      * @param <T>        the type of the recipe
      * @return the vanilla recipe system if found, null otherwise
      */
-    @Nullable <T extends Recipe<?>> VanillaRecipeSystem<T> findVanillaSystem(net.minecraft.world.item.crafting.RecipeType<T> recipeType);
+    @Nullable
+    <T extends Recipe<?>> VanillaRecipeSystem<T> findVanillaSystem(
+        net.minecraft.world.item.crafting.RecipeType<T> recipeType
+    );
 
     /**
      * Get all recipe systems tagged with the given tag
@@ -135,7 +137,9 @@ public interface RecipeApi {
      * @param <F>  the type of the clause
      * @return the transformer if found, null otherwise
      */
-    <T extends RecipeContent, F extends RecipeClause> @Nullable ContentTransformer<T, F> findContentTransformer(ClauseType type);
+    <T extends RecipeContent, F extends RecipeClause> @Nullable ContentTransformer<T, F> findContentTransformer(
+        ClauseType type
+    );
 
     /**
      * Find a projection transformer for the given clause type.
@@ -152,11 +156,13 @@ public interface RecipeApi {
 
     RichIterable<ProjectionPlugin> projectionPlugins();
 
-    @Nullable ProjectionPlugin findProjectionPlugin(Namespace id);
+    @Nullable
+    ProjectionPlugin findProjectionPlugin(Namespace id);
 
     RichIterable<ProjectionContextOption<?>> projectionContextOptions();
 
-    @Nullable ProjectionContextOption<?> findProjectionContextOption(Namespace id);
+    @Nullable
+    ProjectionContextOption<?> findProjectionContextOption(Namespace id);
 
     //endregion
 

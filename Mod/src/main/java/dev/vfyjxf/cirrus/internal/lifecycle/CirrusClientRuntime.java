@@ -3,16 +3,31 @@ package dev.vfyjxf.cirrus.internal.lifecycle;
 import dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseCatalogCache;
+import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSideRequirement;
+import dev.vfyjxf.cirrus.api.recipe.execution.driver.DriverLookup;
+import dev.vfyjxf.cirrus.api.recipe.execution.driver.ExecutionDriverHandle;
+import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.MenuContext;
+import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.ScreenContext;
+import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.SideContext;
 import dev.vfyjxf.cirrus.internal.integration.jei.JeiIntegration;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cirrus.planning.bridge.WorldFacilityRegistry;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
-import dev.vfyjxf.cirrus.recipe.execution.ExecutionTargetRecipeState;
 import dev.vfyjxf.cirrus.recipe.classify.RecipeClassificationService;
-import dev.vfyjxf.cirrus.ui.process.CalculatorBuildResultCache;
+import dev.vfyjxf.cirrus.recipe.execution.ExecutionDriverApiImpl;
+import dev.vfyjxf.cirrus.recipe.execution.ExecutionTargetRecipeState;
+import dev.vfyjxf.cirrus.recipe.execution.driver.slot.CraftingTableExecutionDriver;
+import dev.vfyjxf.cirrus.recipe.execution.interaction.CraftingTableLikeInteraction;
 import dev.vfyjxf.cirrus.ui.widget.calculator.page.DatabasePage;
+import dev.vfyjxf.cirrus.ui.workbench.flow.ExecutionChecklistWidget;
+import net.minecraft.client.gui.screens.inventory.CraftingScreen;
+import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.item.crafting.CraftingRecipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
+
+import java.util.Optional;
 
 @OnlyIn(Dist.CLIENT)
 public final class CirrusClientRuntime {
@@ -22,16 +37,51 @@ public final class CirrusClientRuntime {
     }
 
     public static void afterLoad() {
+        installExecutionChecklistProbe();
         prewarmPlanningGraph();
         prewarmDatabaseIndexWhenSystemsReady();
     }
 
-    /** 规划图后台编译预热：替换旧路由图预热，编译在单线程后台执行器里完成。 */
+    private static void installExecutionChecklistProbe() {
+        ExecutionChecklistWidget.ProbeSources.installInteractionResolver(entry -> {
+            if (entry == null) {
+                return Optional.empty();
+            }
+            Object raw = entry.recipe();
+            boolean isCrafting = (raw instanceof RecipeHolder<?> holder && holder.value() instanceof CraftingRecipe)
+                    || raw instanceof CraftingRecipe;
+            if (!isCrafting) {
+                return Optional.empty();
+            }
+            ExecutionDriverApiImpl api = ExecutionDriverApiImpl.instance();
+            if (api == null) {
+                return Optional.empty();
+            }
+            ExecutionDriverHandle handle = api.resolveClient(
+                DriverLookup.of(
+                    new SideContext(ExecutionSideRequirement.client),
+                    new ScreenContext(CraftingScreen.class),
+                    new MenuContext(CraftingMenu.class)
+                )
+            );
+            if (handle == null) {
+                return Optional.empty();
+            }
+            return Optional.of(CraftingTableLikeInteraction.automatic(CraftingTableExecutionDriver.interactionId));
+        });
+    }
+
     private static void prewarmPlanningGraph() {
         CirrusPlanningRuntime runtime = CirrusPlanningRuntime.sharedOrCreate();
         WorldFacilityRegistry.installed().ifPresent(registry -> registry.applyRulesTo(runtime.guidanceStore()));
         ExecutionTargetRecipeState.setPlanStateSource(runtime::publishedVersion);
-        runtime.reloadFromRuntimeAsync();
+        if (JeiIntegration.systemsReady() || JeiIntegration.jeiAbsent()) {
+            runtime.reloadFromRuntimeAsync();
+            return;
+        }
+        JeiIntegration.onSystemsReady(
+            () -> CirrusPlanningRuntime.shared().ifPresent(CirrusPlanningRuntime::reloadFromRuntimeAsync)
+        );
     }
 
     /**
@@ -50,8 +100,7 @@ public final class CirrusClientRuntime {
             DatabasePage.prewarmSystemCatalogIndex("clientLifecycleLoad");
             return;
         }
-        JeiIntegration.onSystemsReady(() ->
-            DatabasePage.prewarmSystemCatalogIndex("clientLifecycleLoad"));
+        JeiIntegration.onSystemsReady(() -> DatabasePage.prewarmSystemCatalogIndex("clientLifecycleLoad"));
     }
 
     public static void beforeUnload() {
@@ -67,11 +116,11 @@ public final class CirrusClientRuntime {
         // stale memoized results must be dropped here even though the weak-keyed
         // inner maps already evaporate replaced recipe instances on their own
         RecipeApiImpl.clearEmptyContextResolveMemos();
+        ExecutionChecklistWidget.ProbeSources.clear();
         ExecutionTargetRecipeState.setPlanStateSource(null);
         CirrusPlanningRuntime.closeShared();
         ComponentCanonicalizer.clear();
         InputContent.clearIngredientMemo();
         RecipeClassificationService.clearRuntimeCaches();
-        CalculatorBuildResultCache.clear();
     }
 }

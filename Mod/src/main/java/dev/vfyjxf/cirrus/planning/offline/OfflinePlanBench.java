@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.OwnedMachineGroup;
@@ -39,9 +40,10 @@ import dev.vfyjxf.cirrus.planning.core.cost.DefaultCostMetadataProvider;
 import dev.vfyjxf.cirrus.planning.core.graph.DefaultRecipeGraphCompiler;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.planning.core.service.DefaultPlanningService;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,38 +52,42 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SplittableRandom;
 
 public final class OfflinePlanBench {
 
-    private static final Gson PRETTY_GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+    // the bench is a command-line tool: its report is stdout and its errors are stderr
+    private static final PrintStream console = System.out;
+    private static final PrintStream errorConsole = System.err;
 
-    private static final List<TargetDemand> DEFAULT_TARGETS = List.of(
-            new TargetDemand(ResourceKey.item("minecraft:hopper"), 1L),
-            new TargetDemand(ResourceKey.item("minecraft:stone_bricks"), 5L),
-            new TargetDemand(ResourceKey.item("minecraft:piston"), 1L),
-            new TargetDemand(ResourceKey.item("minecraft:observer"), 1L),
-            new TargetDemand(ResourceKey.item("ae2:controller"), 1L)
+    private static final Gson prettyGson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+
+    private static final List<TargetDemand> defaultTargets = List.of(
+        new TargetDemand(ResourceKey.item("minecraft:hopper"), 1L),
+        new TargetDemand(ResourceKey.item("minecraft:stone_bricks"), 5L),
+        new TargetDemand(ResourceKey.item("minecraft:piston"), 1L),
+        new TargetDemand(ResourceKey.item("minecraft:observer"), 1L),
+        new TargetDemand(ResourceKey.item("ae2:controller"), 1L)
     );
 
     public record BenchConfig(
-            @Nullable Path exportDir,
-            @Nullable Path zipFile,
-            List<String> packs,
-            List<TargetDemand> explicitTargets,
-            @Nullable Path outPath,
-            long budgetMs,
-            int maxSubgraphNodes,
-            int maxSubgraphRecipes,
-            @Nullable String perPackMode,
-            int repeat,
-            boolean compileOnly,
-            boolean runClassifier,
-            @Nullable Path summaryPath,
-            boolean help
-    ) {
-    }
+        @Nullable Path exportDir,
+        @Nullable Path zipFile,
+        List<String> packs,
+        List<TargetDemand> explicitTargets,
+        @Nullable Path outPath,
+        long budgetMs,
+        int maxSubgraphNodes,
+        int maxSubgraphRecipes,
+        @Nullable String perPackMode,
+        int repeat,
+        boolean compileOnly,
+        boolean runClassifier,
+        @Nullable Path summaryPath,
+        boolean help
+    ) {}
 
     public static void main(String[] args) {
         try {
@@ -95,7 +101,7 @@ public final class OfflinePlanBench {
                 System.exit(code);
             }
         } catch (Exception e) {
-            System.err.println("OfflinePlanBench error: " + e.getMessage());
+            errorConsole.println("OfflinePlanBench error: " + e.getMessage());
             e.printStackTrace(System.err);
             System.exit(1);
         }
@@ -142,8 +148,10 @@ public final class OfflinePlanBench {
                 }
                 case "--out" -> outPath = Path.of(requireArg(args, ++i, "--out"));
                 case "--budget-ms" -> budgetMs = Long.parseLong(requireArg(args, ++i, "--budget-ms"));
-                case "--max-subgraph-nodes" -> maxSubgraphNodes = Integer.parseInt(requireArg(args, ++i, "--max-subgraph-nodes"));
-                case "--max-subgraph-recipes" -> maxSubgraphRecipes = Integer.parseInt(requireArg(args, ++i, "--max-subgraph-recipes"));
+                case "--max-subgraph-nodes" ->
+                    maxSubgraphNodes = Integer.parseInt(requireArg(args, ++i, "--max-subgraph-nodes"));
+                case "--max-subgraph-recipes" ->
+                    maxSubgraphRecipes = Integer.parseInt(requireArg(args, ++i, "--max-subgraph-recipes"));
                 case "--per-pack" -> perPackMode = requireArg(args, ++i, "--per-pack");
                 case "--repeat" -> repeat = Math.max(1, Integer.parseInt(requireArg(args, ++i, "--repeat")));
                 case "--compile-only" -> compileOnly = true;
@@ -157,20 +165,20 @@ public final class OfflinePlanBench {
             throw new IllegalArgumentException("Must provide --export-dir or --zip");
         }
         return new BenchConfig(
-                exportDir,
-                zipFile,
-                List.copyOf(packs),
-                List.copyOf(explicitTargets),
-                outPath,
-                budgetMs,
-                maxSubgraphNodes,
-                maxSubgraphRecipes,
-                perPackMode,
-                repeat,
-                compileOnly,
-                runClassifier,
-                summaryPath,
-                help
+            exportDir,
+            zipFile,
+            List.copyOf(packs),
+            List.copyOf(explicitTargets),
+            outPath,
+            budgetMs,
+            maxSubgraphNodes,
+            maxSubgraphRecipes,
+            perPackMode,
+            repeat,
+            compileOnly,
+            runClassifier,
+            summaryPath,
+            help
         );
     }
 
@@ -222,7 +230,10 @@ public final class OfflinePlanBench {
 
             if (!cfg.compileOnly()) {
                 List<TargetDemand> targets = selectTargets(cfg, graph);
-                DefaultPlanningService service = new DefaultPlanningService(graph, DefaultCostMetadataProvider.INSTANCE);
+                DefaultPlanningService service = new DefaultPlanningService(
+                    graph,
+                    DefaultCostMetadataProvider.instance
+                );
                 DefaultAcquisitionOracle oracle = new DefaultAcquisitionOracle(graph);
                 FacilitySnapshot defaultFac = defaultBenchFacilities();
                 PlanningBudget budget = buildBudget(cfg);
@@ -231,16 +242,16 @@ public final class OfflinePlanBench {
                 for (TargetDemand td : targets) {
                     targetsRun++;
                     PlanningRequest req = new PlanningRequest(
-                            List.of(td),
-                            new PlanningContext(
-                                    InventorySnapshot.EMPTY,
-                                    defaultFac,
-                                    oracle,
-                                    DefaultHumanGuidanceView.empty(),
-                                    ProgressionState.OVERWORLD_DEFAULT
-                            ),
-                            PlanningProfile.defaultBalanced(),
-                            budget
+                        List.of(td),
+                        new PlanningContext(
+                            InventorySnapshot.empty,
+                            defaultFac,
+                            oracle,
+                            DefaultHumanGuidanceView.empty(),
+                            ProgressionState.overworldDefault
+                        ),
+                        PlanningProfile.defaultBalanced(),
+                        budget
                     );
 
                     long pt0 = System.nanoTime();
@@ -271,9 +282,10 @@ public final class OfflinePlanBench {
                     if (targetPlansValid && !first.paretoPlans().isEmpty()) {
                         validTargets++;
                     }
-                    if (first.status() == PlanningStatus.REFINED_PARETO) {
+                    if (first.status() == PlanningStatus.feasible) {
                         refinedTargets++;
-                    } else if (first.status() == PlanningStatus.BASELINE_TIME_BUDGET_HIT) {
+                    } else if (first.status() == PlanningStatus.noPlanWithinBudget
+                            || first.status() == PlanningStatus.conditional) {
                         budgetHitTargets++;
                     }
 
@@ -319,9 +331,17 @@ public final class OfflinePlanBench {
             brief.addProperty("totalPlanMs", totalPlanMs);
             packsSummary.add(brief);
 
-            System.out.printf("pack=%s loadMs=%d compileMs=%d compiled=%d targets=%d valid=%d refined=%d planMs=%d%n",
-                    pack, loadMs, compileMs, graph.stats().compiledRecipes(),
-                    targetsRun, validTargets, refinedTargets, totalPlanMs);
+            console.printf(
+                "pack=%s loadMs=%d compileMs=%d compiled=%d targets=%d valid=%d refined=%d planMs=%d%n",
+                pack,
+                loadMs,
+                compileMs,
+                graph.stats().compiledRecipes(),
+                targetsRun,
+                validTargets,
+                refinedTargets,
+                totalPlanMs
+            );
         }
 
         summary.add("packs", packsSummary);
@@ -335,13 +355,25 @@ public final class OfflinePlanBench {
 
     public static FacilitySnapshot defaultBenchFacilities() {
         return new FacilitySnapshot(
-                List.of(
-                        new OwnedMachineGroup("minecraft:crafting_table", new MachineCapabilityId("cirrus:capability/crafting"), 1, 1.0, false),
-                        new OwnedMachineGroup("minecraft:furnace", new MachineCapabilityId("cirrus:capability/smelting"), 1, 1.0, false)
+            List.of(
+                new OwnedMachineGroup(
+                    "minecraft:crafting_table",
+                    new MachineCapabilityId("cirrus:capability/crafting"),
+                    1,
+                    1.0,
+                    false
                 ),
-                List.of(),
-                List.of(),
-                Set.of()
+                new OwnedMachineGroup(
+                    "minecraft:furnace",
+                    new MachineCapabilityId("cirrus:capability/smelting"),
+                    1,
+                    1.0,
+                    false
+                )
+            ),
+            List.of(),
+            List.of(),
+            Set.of()
         );
     }
 
@@ -349,14 +381,14 @@ public final class OfflinePlanBench {
         long hard = Math.max(1L, cfg.budgetMs());
         long soft = Math.min(hard, Math.max(80L, hard / 3L));
         return new PlanningBudget(
-                Duration.ofMillis(soft),
-                Duration.ofMillis(hard),
-                cfg.maxSubgraphNodes(),
-                cfg.maxSubgraphRecipes(),
-                3,
-                3,
-                true,
-                true
+            Duration.ofMillis(soft),
+            Duration.ofMillis(hard),
+            cfg.maxSubgraphNodes(),
+            cfg.maxSubgraphRecipes(),
+            3,
+            3,
+            true,
+            true
         );
     }
 
@@ -369,12 +401,12 @@ public final class OfflinePlanBench {
         }
         Set<ResourceKey> producible = graph.allProducibleResources();
         List<TargetDemand> chosen = new ArrayList<>();
-        for (TargetDemand td : DEFAULT_TARGETS) {
+        for (TargetDemand td : defaultTargets) {
             if (td.resource().resourceId().startsWith("minecraft:") || producible.contains(td.resource())) {
                 chosen.add(td);
             }
         }
-        return chosen.isEmpty() ? DEFAULT_TARGETS : chosen;
+        return chosen.isEmpty() ? defaultTargets : chosen;
     }
 
     private static List<TargetDemand> sampleTargets(String mode, CompiledRecipeGraph graph) {
@@ -420,7 +452,7 @@ public final class OfflinePlanBench {
             if (close > 1) {
                 String contentType = id.substring(1, close);
                 String resId = id.substring(close + 1);
-                return new TargetDemand(new ResourceKey(contentType, resId, java.util.Optional.empty()), qty);
+                return new TargetDemand(new ResourceKey(contentType, resId, Optional.empty()), qty);
             }
         }
         return new TargetDemand(ResourceKey.item(id), qty);
@@ -439,8 +471,8 @@ public final class OfflinePlanBench {
             Files.createDirectories(parent);
         }
         String canonical = CanonicalJson.canonicalize(obj);
-        JsonObject sorted = com.google.gson.JsonParser.parseString(canonical).getAsJsonObject();
-        Files.writeString(file, PRETTY_GSON.toJson(sorted) + "\n", StandardCharsets.UTF_8);
+        JsonObject sorted = JsonParser.parseString(canonical).getAsJsonObject();
+        Files.writeString(file, prettyGson.toJson(sorted) + "\n", StandardCharsets.UTF_8);
     }
 
     private static JsonObject loadStatsToJson(ExportLoadStats stats) {
@@ -476,9 +508,9 @@ public final class OfflinePlanBench {
     }
 
     private static JsonArray resultPlansToJson(
-            PlanningResult result,
-            CompiledRecipeGraph graph,
-            PlanningRequest request
+        PlanningResult result,
+        CompiledRecipeGraph graph,
+        PlanningRequest request
     ) {
         JsonArray arr = new JsonArray();
         for (ProductionPlan plan : result.paretoPlans()) {
@@ -607,10 +639,12 @@ public final class OfflinePlanBench {
     }
 
     private static void printUsage() {
-        System.out.println("Usage: OfflinePlanBench (--export-dir <dir> | --zip <file>) "
-                + "[--pack <name> | --packs a,b] [--targets id=qty,...] [--out <path>] "
-                + "[--budget-ms <n>] [--max-subgraph-nodes <n>] [--max-subgraph-recipes <n>] "
-                + "[--per-pack auto|<n>|max|seed:<n>] [--repeat <n>] [--compile-only] "
-                + "[--no-classifier] [--summary <path>]");
+        console.println(
+            "Usage: OfflinePlanBench (--export-dir <dir> | --zip <file>) "
+                    + "[--pack <name> | --packs a,b] [--targets id=qty,...] [--out <path>] "
+                    + "[--budget-ms <n>] [--max-subgraph-nodes <n>] [--max-subgraph-recipes <n>] "
+                    + "[--per-pack auto|<n>|max|seed:<n>] [--repeat <n>] [--compile-only] "
+                    + "[--no-classifier] [--summary <path>]"
+        );
     }
 }

@@ -7,7 +7,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.content.complex.FluidContainerContent;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.material.Fluid;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -134,7 +134,8 @@ public final class RecipeContentVisualCache {
             case StackListContent stackList -> addStacks(out, stackList.stacks(), content.amount());
             case TypedStackListContent<?, ?> typedList -> addStacks(out, typedList.stacks(), content.amount());
             case TagStackContent<?> tagStack -> collectEnumerable(tagStack, out, content.amount());
-            case FluidContainerContent fluidContainer -> addDecoratedStack(out, fluidContainer.sampleContainer(), content.amount());
+            case FluidContainerContent fluidContainer ->
+                addDecoratedStack(out, fluidContainer.sampleContainer(), content.amount());
             case ComplexContent complex -> collectEnumerable(complex, out, content.amount());
             default -> collectEnumerable(content, out, content.amount());
         }
@@ -148,13 +149,16 @@ public final class RecipeContentVisualCache {
             switch (variant) {
                 case ContentStack<?, ?> stack -> addDecoratedStack(out, stack, amount);
                 case ContentKind<?> kind -> addDecoratedStack(out, stackFromKind(kind), amount);
-                default -> {
-                }
+                default -> {}
             }
         }
     }
 
-    private static void addStacks(ArrayList<ContentStack<?, ?>> out, Iterable<? extends ContentStack<?, ?>> stacks, long amount) {
+    private static void addStacks(
+        ArrayList<ContentStack<?, ?>> out,
+        Iterable<? extends ContentStack<?, ?>> stacks,
+        long amount
+    ) {
         for (ContentStack<?, ?> stack : stacks) {
             addDecoratedStack(out, stack, amount);
         }
@@ -174,10 +178,10 @@ public final class RecipeContentVisualCache {
         if (kind == ContentKind.empty()) {
             return ContentStack.empty();
         }
-        if (kind.type() == CirrusTypes.Contents.ITEM) {
+        if (kind.type() == CirrusTypes.Contents.item) {
             return ContentStack.fromContent(kind.<Item>cast().value());
         }
-        if (kind.type() == CirrusTypes.Contents.FLUID) {
+        if (kind.type() == CirrusTypes.Contents.fluidConst) {
             return ContentStack.fromContent(kind.<Fluid>cast().value());
         }
         return ContentStack.empty();
@@ -192,7 +196,8 @@ public final class RecipeContentVisualCache {
             case StackContent<?, ?> stackContent -> addStackKey(keys, stackContent.content(), content.amount());
             case StackListContent stackList -> addStackKeys(keys, stackList.stacks(), content.amount());
             case TypedStackListContent<?, ?> typedList -> addStackKeys(keys, typedList.stacks(), content.amount());
-            case FluidContainerContent fluidContainer -> addStackKey(keys, fluidContainer.sampleContainer(), content.amount());
+            case FluidContainerContent fluidContainer ->
+                addStackKey(keys, fluidContainer.sampleContainer(), content.amount());
             default -> {
                 return null;
             }
@@ -200,7 +205,11 @@ public final class RecipeContentVisualCache {
         return new VisualKey(keys);
     }
 
-    private static void addStackKeys(ArrayList<StackVisualKey> out, Iterable<? extends ContentStack<?, ?>> stacks, long amount) {
+    private static void addStackKeys(
+        ArrayList<StackVisualKey> out,
+        Iterable<? extends ContentStack<?, ?>> stacks,
+        long amount
+    ) {
         for (ContentStack<?, ?> stack : stacks) {
             addStackKey(out, stack, amount);
         }
@@ -249,12 +258,7 @@ public final class RecipeContentVisualCache {
         }
 
         private static StackVisualKey of(ContentStack<?, ?> stack, long amount) {
-            return new StackVisualKey(
-                stack.type(),
-                stack.content(),
-                amount,
-                stack.componentsPatch()
-            );
+            return new StackVisualKey(stack.type(), stack.content(), amount, stack.componentsPatch());
         }
     }
 }

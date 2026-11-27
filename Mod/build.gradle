@@ -1,11 +1,19 @@
+import net.ltgt.gradle.errorprone.CheckSeverity
+
 plugins {
     id 'java-library'
     id 'eclipse'
     id 'maven-publish'
     id 'net.neoforged.moddev'
     id "me.champeau.jmh" version "0.7.2"
+    id 'dev.vfyjxf.cloudlib.style'
+    id 'dev.vfyjxf.cloudlib.pmd'
+    id "net.ltgt.errorprone" version "4.4.0"
 //    id "scala"
 }
+
+// 质量门默认开启；-PcirrusQuality=off 可临时关闭。
+def cirrusQuality = providers.gradleProperty('cirrusQuality').orNull != 'off'
 
 version = mod_version
 group = mod_group_id
@@ -16,6 +24,37 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+spotless {
+    java {
+        targetExclude 'build/generated/**'
+    }
+}
+
+// cloudstyle 在配置期把格式化配置写进 build/cloudstyle，clean 只清其余部分。
+tasks.named('clean', Delete) {
+    setDelete(fileTree('build') { exclude 'cloudstyle/**' })
+}
+
+tasks.matching { it.name.startsWith('spotless') }.configureEach { enabled = cirrusQuality }
+tasks.matching { it.name.startsWith('pmd') }.configureEach { enabled = cirrusQuality }
+tasks.matching { it.name == 'verifyPackageInfo' }.configureEach { enabled = cirrusQuality }
+
+// 测试源集无条件走测试反模式规则集；pmdMain 仍用 cloudpmd 解包出来的规则集。
+def cirrusTestLintSourceSets = ['pmdTest': 'test', 'pmdUitest': 'uitest', 'pmdTestmod': 'testmod']
+tasks.withType(Pmd).configureEach { task ->
+    def sourceSetName = cirrusTestLintSourceSets[task.name]
+    if (sourceSetName == null) {
+        return
+    }
+    def sourceSet = sourceSets.getByName(sourceSetName)
+    task.enabled = cirrusQuality
+    task.setRuleSets([])
+    task.setRuleSetFiles(files('config/pmd/cloud-test-ruleset.xml'))
+    task.setSource(sourceSet.allJava)
+    task.setClasspath(sourceSet.output + sourceSet.compileClasspath)
+    task.reports { html.required = true; xml.required = true }
+}
+
 // In-game dummy test data mod: a few items/fluids plus generated recipes so
 // the screening/planner behavior can be observed with runClient. The source
 // set is registered as a separate mod (cirrus_test) and never enters the
@@ -24,6 +63,12 @@ sourceSets {
     testmod {
         compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
         runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+    // 无头 UI 测试的场景源集；uitestMod 只放 mods.toml，同一个 mod 目录里不能出现第二份。
+    uitestMod {}
+    uitest {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
     }
 }
 
@@ -36,6 +81,22 @@ neoForge {
     }
 
     accessTransformers = project.files('src/main/resources/META-INF/accesstransformer.cfg')
+
+    // 普通 run 的固定组合：engine + dev test mod；harness 模组只由 clientTests 加载。
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+        cirrus_test {
+            sourceSet(sourceSets.testmod)
+        }
+        calculatorcirrusuitest {
+            sourceSet(sourceSets.uitest)
+            sourceSet(sourceSets.uitestMod)
+        }
+    }
+    def plainLoadedMods = [mods."${mod_id}", mods.cirrus_test]
+
     runs {
         client {
             client()
@@ -58,6 +119,7 @@ neoForge {
             // clean client for hands-on profiling: the testmod mod stays on the
             // classpath but dormant (no mimic data, no hooks) unless enabled
             systemProperty 'cirrus.test.enabled', 'false'
+            loadedMods.addAll(plainLoadedMods)
         }
 
         // testmod client: flips the testmod runtime switch so the replayed
@@ -78,6 +140,7 @@ neoForge {
             if (project.hasProperty('cirrusQuickPlay')) {
                 programArguments.addAll('--quickPlaySingleplayer', project.property('cirrusQuickPlay').toString())
             }
+            loadedMods.addAll(plainLoadedMods)
         }
 
         server {
@@ -87,11 +150,13 @@ neoForge {
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
             systemProperty 'moddev.service.port', '47812'
             systemProperty 'moddev.skill.exportRoot', rootProject.file('.codex/generated/moddev-service').absolutePath
+            loadedMods.addAll(plainLoadedMods)
         }
 
         gameTestServer {
             type = "gameTestServer"
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            loadedMods.addAll(plainLoadedMods)
         }
 
         // headless plan sampling: dedicated server + testmod + autosample hook,
@@ -108,12 +173,14 @@ neoForge {
             if (project.hasProperty('cirrusClientJvmArgs')) {
                 jvmArguments.addAll(project.property('cirrusClientJvmArgs').toString().split(';'))
             }
+            loadedMods.addAll(plainLoadedMods)
         }
 
         data {
             data()
             gameDirectory = file('runs/data')
             programArguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+            loadedMods.addAll(plainLoadedMods)
         }
 
         configureEach {
@@ -124,26 +191,25 @@ neoForge {
         }
     }
 
-    mods {
-        "${mod_id}" {
-            sourceSet(sourceSets.main)
-        }
-        cirrus_test {
-            sourceSet(sourceSets.testmod)
-        }
-    }
-
     unitTest {
         enable()
         testedMod = mods."${mod_id}"
+        loadedMods.addAll(plainLoadedMods)
     }
 
 }
+
+// 客户端测试 harness 脚本必须在 runs 块之后应用：它自己注册 clientTests run 并暂存 harness 制品。
+project.ext.cloudlibUiTestHeadlessByDefault = true
+apply from: rootProject.file('gradle/cloudlib-uitest.gradle')
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 configurations {
     runtimeClasspath.extendsFrom localRuntime
+    uitestImplementation.extendsFrom implementation
+    uitestCompileOnly.extendsFrom compileOnly
+    uitestRuntimeOnly.extendsFrom runtimeOnly
 }
 
 dependencies {
@@ -158,9 +224,13 @@ dependencies {
 //        transitive = false
 //    }
 
-    api("dev.vfyjxf:cloudlib")
+    api("dev.vfyjxf.cloudlib:cloudlib:${cloudlib_version}")
+    // harness API 只给 uitest 场景编译用；运行时由 runs/client-tests/mods 里的 harness mod 提供。
+    uitestCompileOnly "dev.vfyjxf.cloudlib:cloudlib-uitest:${cloudlib_version}"
 
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+    localRuntime "net.mezzdev.config:mezz_config-${minecraft_version}-neoforge:${mezz_config_version}"
+    localRuntime "net.mezzdev.config:mezz_config_gui-${minecraft_version}-neoforge:${mezz_config_gui_version}"
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}")
 //    jarJar(project(":Integration"))
     compileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
@@ -179,9 +249,106 @@ dependencies {
 
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testRuntimeOnly "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+    testRuntimeOnly "net.mezzdev.config:mezz_config-${minecraft_version}-neoforge:${mezz_config_version}"
+    testRuntimeOnly "net.mezzdev.config:mezz_config_gui-${minecraft_version}-neoforge:${mezz_config_gui_version}"
+    errorprone 'com.uber.nullaway:nullaway:0.12.15'
+    errorprone 'com.google.errorprone:error_prone_core:2.42.0'
     jmh "org.openjdk.jmh:jmh-core:1.37"
     jmh "org.openjdk.jmh:jmh-generator-annprocess:1.37"
     jmhAnnotationProcessor "org.openjdk.jmh:jmh-generator-annprocess:1.37"
+}
+
+// run/mod 隔离：harness run 只加载 engine + 场景 mod；普通 run 不加载 harness 模组，gameDirectory 也不得是 harness 暂存目录。
+def harnessRuns = ['clientTests': 'stageClientTestsUiTestMod']
+def harnessRunMods = harnessRuns.keySet().collectEntries { name ->
+    [(name): neoForge.runs.named(name).map { run -> run.loadedMods.get()*.name.sort().join(',') }]
+}
+def plainRunNames = neoForge.runs.collect { it.name }.findAll { !harnessRuns.containsKey(it) }.sort()
+def plainRunMods = plainRunNames.collectEntries { name ->
+    [(name): neoForge.runs.named(name).map { run -> run.loadedMods.get()*.name.sort().join(',') }]
+}
+def harnessStagingDirs = project.ext.cloudlibUiTestStagedDirs
+if (harnessStagingDirs == null) {
+    throw new GradleException('gradle/cloudlib-uitest.gradle must run before the isolation gates: it records which run directories stage the cloudlibuitest harness mod')
+}
+if (!harnessStagingDirs.keySet().containsAll(['runs/client-tests'])) {
+    throw new GradleException('every harness run must have a staging directory, found: ' + harnessStagingDirs.keySet())
+}
+harnessStagingDirs.each { runDirName, stageTaskName ->
+    if (tasks.findByName(stageTaskName) == null) {
+        throw new GradleException(runDirName + ' names the staging task ' + stageTaskName + ', which does not exist')
+    }
+}
+def plainRunDirs = plainRunNames.collectEntries { name ->
+    [(name): neoForge.runs.named(name).map { run -> run.gameDirectory.get().asFile.absolutePath }]
+}
+def harnessStagingAbsoluteDirs = harnessStagingDirs.keySet().collect { new File(projectDir, it).absolutePath }
+def expectedHarnessMods = [project.mod_id.toString(), 'calculatorcirrusuitest'].sort().join(',')
+def unitTestLoadedMods = neoForge.unitTest.loadedMods.map { mods -> mods*.name.sort().join(',') }
+tasks.register('verifyRunIsolation') {
+    group = 'verification'
+    description = 'Verifies the harness run loads only the engine and the scenario mod, and that no plain run or the unit-test executor loads the harness mod or stages the harness jar.'
+    inputs.property('harnessStagingDirs', harnessStagingDirs.collect { dir, task -> dir + '=' + task }.sort().join(','))
+    inputs.property('harnessStagingAbsoluteDirs', harnessStagingAbsoluteDirs.sort().join(','))
+    harnessRunMods.each { name, provider -> inputs.property('harnessRunMods.' + name, provider) }
+    plainRunMods.each { name, provider -> inputs.property('plainRunMods.' + name, provider) }
+    plainRunDirs.each { name, provider -> inputs.property('plainRunDir.' + name, provider) }
+    inputs.property('unitTestLoadedMods', unitTestLoadedMods)
+    doLast {
+        harnessRuns.each { runName, stageTaskName ->
+            def declared = harnessRunMods[runName].get()
+            if (declared != expectedHarnessMods) {
+                throw new GradleException('the ' + runName + ' harness run must load the engine and the scenario composition (' + expectedHarnessMods + '), found: ' + declared)
+            }
+        }
+        plainRunMods.each { name, provider ->
+            def loaded = provider.get()
+            if (loaded.tokenize(',').contains('calculatorcirrusuitest')) {
+                throw new GradleException('the ' + name + ' plain run must not load the calculatorcirrusuitest harness mod, found: [' + loaded + ']')
+            }
+        }
+        def unitTestMods = unitTestLoadedMods.get()
+        if (unitTestMods.tokenize(',').contains('calculatorcirrusuitest')) {
+            throw new GradleException('the unit-test executor must not load the calculatorcirrusuitest harness mod, found: [' + unitTestMods + ']')
+        }
+        plainRunDirs.each { name, provider ->
+            if (harnessStagingAbsoluteDirs.contains(provider.get())) {
+                throw new GradleException('the ' + name + " run's game directory must not stage the cloudlibuitest harness mod, found: " + provider.get())
+            }
+        }
+        logger.lifecycle('run isolation verified: harnessRuns=[{}] plainRunMods=[{}] plainRunDirs=[{}] unitTest=[{}]',
+                harnessRuns.keySet().collect { it + '=' + harnessRunMods[it].get() }.join(' '),
+                plainRunMods.collect { it.key + '=' + it.value.get() }.join(' '),
+                plainRunDirs.collect { it.key + '=' + it.value.get() }.join(' '),
+                unitTestLoadedMods.get())
+    }
+}
+
+// jar 纯净性：生产 jar 不得包含 uitest 场景类。
+def productionJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
+tasks.register('verifyJarPurity') {
+    group = 'verification'
+    description = 'Fails when the production jar carries dev-only UI-test scenario classes.'
+    inputs.files(productionJar)
+    doLast {
+        def forbiddenPrefix = 'dev/vfyjxf/cirrus/uitest/'
+        def offenders = []
+        def jarFile = productionJar.get().asFile
+        new java.util.zip.ZipFile(jarFile).withCloseable { zip ->
+            zip.entries().each { entry ->
+                if (entry.name.endsWith('.class') && entry.name.startsWith(forbiddenPrefix)) {
+                    offenders.add(entry.name)
+                }
+            }
+        }
+        if (!offenders.isEmpty()) {
+            throw new GradleException('the production jar carries UI-test scenario classes: ' + offenders)
+        }
+        logger.lifecycle('jar purity verified: no harness scenario classes in {}', jarFile.name)
+    }
+}
+tasks.named('check') {
+    dependsOn 'verifyRunIsolation', 'verifyJarPurity'
 }
 
 test {
@@ -190,6 +357,34 @@ test {
     maxHeapSize = "3g"
     systemProperty 'moddev.skill.exportRoot', layout.buildDirectory.dir('moddev-service').get().asFile.absolutePath
     systemProperty 'moddevmcp.project.root', rootProject.projectDir.absolutePath
+}
+
+// 无头 UI 测试：workbench 用例与 UI 契约测试的快速入口。
+tasks.register('uiHeadlessTest', Test) {
+    group = 'verification'
+    description = 'Runs the headless workbench and UI contract tests.'
+    dependsOn tasks.named('testClasses')
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    minHeapSize = "1g"
+    maxHeapSize = "3g"
+    systemProperty 'moddev.skill.exportRoot', layout.buildDirectory.dir('moddev-service').get().asFile.absolutePath
+    systemProperty 'moddevmcp.project.root', rootProject.projectDir.absolutePath
+    dependsOn 'prepareNeoForgeTestFiles', 'writeNeoForgeTestClasspath'
+    def moddevJunit = layout.buildDirectory.dir('moddev/junit')
+    workingDir = layout.buildDirectory.dir('minecraft-junit').get().asFile
+    jvmArgs = ["@${moddevJunit.get().file('vmArgs.txt').asFile.absolutePath}"]
+    systemProperty 'fml.junit.argsfile', moddevJunit.get().file('programArgs.txt').asFile.absolutePath
+    filter {
+        includeTestsMatching 'dev.vfyjxf.cirrus.ui.workbench.*'
+        includeTestsMatching 'dev.vfyjxf.cirrus.ui.CirrusLangsContractTest'
+        includeTestsMatching 'dev.vfyjxf.cirrus.ui.CirrusCalculatorTextureContractTest'
+        includeTestsMatching 'dev.vfyjxf.cirrus.ui.CirrusCssThemeContractTest'
+        includeTestsMatching 'dev.vfyjxf.cirrus.ui.CirrusThemeBindingAndClipContractTest'
+        includeTestsMatching 'dev.vfyjxf.cirrus.ui.NineSliceTextureSafetyTest'
+    }
+    outputs.upToDateWhen { false }
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
@@ -218,6 +413,48 @@ neoForge.ideSyncTask generateModMetadata
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    // javac 默认只报 100 条诊断。
+    options.compilerArgs.addAll(['-Xmaxwarns', '2000', '-Xmaxerrs', '2000'])
+    options.errorprone {
+        disableAllChecks = true
+        if (cirrusQuality) {
+            option("NullAway:OnlyNullMarked", "true")
+            option("NullAway:CastToNonNullMethod", "dev.vfyjxf.cloudlib.util.Checks.checkNotNull")
+            check("NullAway", CheckSeverity.ERROR)
+        }
+    }
+}
+
+// 测试源集的 Error Prone 检查：插件 jar 只挂在三个测试源集的注解处理路径上，main 的检查集不变。
+// disableAllChecks 之后逐条按名打开，没有整体开关。
+def cirrusTestCheckNames = [
+    'TestAssertsComponentString',
+    'TestPositiveSizeAssertion',
+    'TestConditionalAssertion',
+    'TestInstanceofAssertion',
+    'TestSelfProvingAssertion',
+    'TestVacuousStreamAssertion',
+    'TestAssertsToString',
+    'TestAssertsExceptionMessage',
+    'TestRawReflection',
+    'TestNoEffectiveAssertion',
+    'TestAllowWeakTestMisuse',
+]
+def cirrusTestCompileTasks = ['compileTestJava', 'compileUitestJava', 'compileTestmodJava']
+tasks.withType(JavaCompile).configureEach { compileTask ->
+    if (!cirrusTestCompileTasks.contains(compileTask.name)) {
+        return
+    }
+    compileTask.options.errorprone {
+        cirrusTestCheckNames.each { checkName -> check(checkName, CheckSeverity.ERROR) }
+    }
+}
+dependencies {
+    testAnnotationProcessor 'dev.vfyjxf:cloudtestplugin:0.1.0'
+    uitestAnnotationProcessor 'dev.vfyjxf:cloudtestplugin:0.1.0'
+    testmodAnnotationProcessor 'dev.vfyjxf:cloudtestplugin:0.1.0'
+    // the exemption audit reads the id list the checks publish in their jar
+    testRuntimeOnly 'dev.vfyjxf:cloudtestplugin:0.1.0'
 }
 
 // Regenerates the test mod's recipe/tag/model JSONs into src/testmod/resources.

@@ -21,10 +21,8 @@ public final class StackListContent implements InputContent {
 
     StackListContent(SequencedCollection<? extends ContentStack<?, ?>> stacks, long amount, float chance) {
         Checks.checkRangeClosed(chance, 0, 1);
-        this.stacks = CollectionAdapter.adapt(stacks)
-                                       .reject(ContentStack::isEmpty)
-                                       .<ContentStack<?, ?>>collect(ContentStack::normalize)
-                                       .toImmutableList();
+        this.stacks = CollectionAdapter.adapt(stacks).reject(ContentStack::isEmpty)
+                .<ContentStack<?, ?>>collect(ContentStack::normalize).toImmutableList();
         this.amount = amount;
         this.chance = chance;
     }
@@ -117,12 +115,9 @@ public final class StackListContent implements InputContent {
 
     @Override
     public String toString() {
-        return "StackListContent{" +
-               "stacks=" + stacks +
-               ", amount=" + amount +
-               ", chance=" + chance +
-               '}';
+        return "StackListContent{" + "stacks=" + stacks + ", amount=" + amount + ", chance=" + chance + '}';
     }
+
     @Override
     public RecipeContentType<? extends RecipeContent> recipeType() {
         return RecipeContentType.STACK_LIST;

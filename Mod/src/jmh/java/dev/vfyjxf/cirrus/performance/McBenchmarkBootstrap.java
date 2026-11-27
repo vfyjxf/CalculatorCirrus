@@ -28,8 +28,7 @@ public final class McBenchmarkBootstrap {
     private static volatile boolean bootstrapped;
     private static volatile boolean contentApiAttached;
 
-    private McBenchmarkBootstrap() {
-    }
+    private McBenchmarkBootstrap() {}
 
     public static synchronized void ensureBootstrapped() {
         if (bootstrapped) return;
@@ -62,8 +61,7 @@ public final class McBenchmarkBootstrap {
     private static void installEmptyLoadingModList() {
         try {
             Class<?> loadingModList = Class.forName("net.neoforged.fml.loading.LoadingModList");
-            Object empty = loadingModList
-                    .getMethod("of", List.class, List.class, List.class, List.class, Map.class)
+            Object empty = loadingModList.getMethod("of", List.class, List.class, List.class, List.class, Map.class)
                     .invoke(null, List.of(), List.of(), List.of(), List.of(), Map.of());
             Field instance = loadingModList.getDeclaredField("INSTANCE");
             instance.setAccessible(true);

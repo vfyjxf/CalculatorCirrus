@@ -12,22 +12,23 @@ import mezz.jei.api.gui.buttons.IIconButtonController;
 import mezz.jei.api.gui.inputs.IJeiUserInput;
 import mezz.jei.api.recipe.advanced.IRecipeButtonControllerFactory;
 import net.neoforged.fml.loading.FMLPaths;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 
 public final class JeiRecipeDatabaseButtonHelper {
 
-    private JeiRecipeDatabaseButtonHelper() {
-    }
+    private JeiRecipeDatabaseButtonHelper() {}
 
     public static IRecipeButtonControllerFactory buttonFactory() {
         return new IRecipeButtonControllerFactory() {
             @Override
-            public @Nullable <T> IIconButtonController createButtonController(IRecipeLayoutDrawable<T> recipeLayoutDrawable) {
+            public @Nullable <T> IIconButtonController createButtonController(
+                IRecipeLayoutDrawable<T> recipeLayoutDrawable
+            ) {
                 return JeiTargetRecipeBridge.resolveRecipeDatabase(recipeLayoutDrawable) == null
-                    ? null
-                    : new DatabaseButtonController(recipeLayoutDrawable);
+                        ? null
+                        : new DatabaseButtonController(recipeLayoutDrawable);
             }
         };
     }
@@ -41,8 +42,8 @@ public final class JeiRecipeDatabaseButtonHelper {
             RecipeDatabaseWorkspace workspace = activeWorkspace();
             CustomRecipeDatabase database = workspace.activeDatabase();
             return database.builtin()
-                ? CirrusLangs.Calculator.Database.builtin.component().getString()
-                : database.name();
+                    ? CirrusLangs.Calculator.Database.builtin.component().getString()
+                    : database.name();
         } catch (RuntimeException ignored) {
             return CirrusLangs.Calculator.Database.builtin.component().getString();
         }

@@ -1,10 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.system;
 
 public enum RecipeClaim {
-    none(0),
-    weak(1),
-    normal(2),
-    exact(3);
+    none(0), weak(1), normal(2), exact(3);
 
     private final int rank;
 

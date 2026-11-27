@@ -2,6 +2,8 @@ package dev.vfyjxf.cirrus.ui.execution;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Objects;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -24,7 +26,7 @@ class TargetTimesDebouncerTest {
         assertNull(debouncer.tick("recipe", 1));
 
         TargetTimesDebouncer.Commit<String> commit = debouncer.tick("recipe", 1);
-        assertEquals("recipe", commit.target());
+        assertEquals("recipe", Objects.requireNonNull(commit).target());
         assertEquals(24, commit.value());
         assertEquals(24, debouncer.visibleValue("recipe", 24));
     }
@@ -47,7 +49,7 @@ class TargetTimesDebouncerTest {
         debouncer.request("recipe", 32, 1);
 
         TargetTimesDebouncer.Commit<String> commit = debouncer.flush("recipe", 1);
-        assertEquals("recipe", commit.target());
+        assertEquals("recipe", Objects.requireNonNull(commit).target());
         assertEquals(32, commit.value());
         assertTrue(!debouncer.pending());
     }

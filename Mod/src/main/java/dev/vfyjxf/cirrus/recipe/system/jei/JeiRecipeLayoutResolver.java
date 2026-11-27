@@ -9,6 +9,7 @@ import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseFailureCapture;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
@@ -17,8 +18,9 @@ import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.system.RoutingRecipeView;
 import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
 import dev.vfyjxf.cloudlib.api.util.MutableLists;
-import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.ingredients.IIngredientTypeWithSubtypes;
+import mezz.jei.api.ingredients.ITypedIngredient;
+import mezz.jei.api.ingredients.subtypes.ISubtypeManager;
 import mezz.jei.api.recipe.IRecipeManager;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.RecipeType;
@@ -27,7 +29,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import org.eclipse.collections.api.list.MutableList;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,8 +44,7 @@ public final class JeiRecipeLayoutResolver {
     private static final Set<LayoutIgnoreClassKey> ignoredLayoutClasses = ConcurrentHashMap.newKeySet();
     private static final Set<LayoutIgnoreRecipeKey> ignoredLayoutRecipes = ConcurrentHashMap.newKeySet();
 
-    private JeiRecipeLayoutResolver() {
-    }
+    private JeiRecipeLayoutResolver() {}
 
     public static void clearIgnoredLayouts() {
         ignoredLayoutClasses.clear();
@@ -58,18 +59,25 @@ public final class JeiRecipeLayoutResolver {
         return resolve(system, recipe, manager, recipeType);
     }
 
-    public static <R> ResolveResult resolve(RecipeSystem<R> system, R recipe, IRecipeManager manager, RecipeType<R> recipeType) {
+    public static <R> ResolveResult resolve(
+        RecipeSystem<R> system,
+        R recipe,
+        IRecipeManager manager,
+        RecipeType<R> recipeType
+    ) {
         try {
             RoutingRecipeView routingView = routingView(system, recipe, manager, recipeType);
             if (routingView == null) {
                 return ResolveResult.failed(ResolveError.invalidRecipe);
             }
-            return ResolveResult.resolved(RecipeProjection.create(
-                system,
-                recipe,
-                iterableToList(routingView.inputs()),
-                iterableToList(routingView.outputs())
-            ));
+            return ResolveResult.resolved(
+                RecipeProjection.create(
+                    system,
+                    recipe,
+                    iterableToList(routingView.inputs()),
+                    iterableToList(routingView.outputs())
+                )
+            );
         } catch (RuntimeException | LinkageError exception) {
             ResourceLocation recipeId = safeRecipeId(system, recipe);
             rememberLayoutFailure(recipeType, recipe, recipeId);
@@ -111,9 +119,12 @@ public final class JeiRecipeLayoutResolver {
         List<OutputContent> outputs = new ArrayList<>();
         var contentApi = ContentApi.instance();
         for (var slotView : recipeLayout.get().getRecipeSlotsView().getSlotViews()) {
-            if (slotView.getRole() == RecipeIngredientRole.INPUT) {
-                addInput(inputs, contentApi, slotView.getAllIngredients().toList());
-            } else if (slotView.getRole() == RecipeIngredientRole.OUTPUT) {
+            RecipeIngredientRole role = slotView.getRole();
+            if (role == RecipeIngredientRole.INPUT) {
+                addInput(inputs, contentApi, slotView.getAllIngredients().toList(), false);
+            } else if (role == RecipeIngredientRole.CATALYST) {
+                addInput(inputs, contentApi, slotView.getAllIngredients().toList(), true);
+            } else if (role == RecipeIngredientRole.OUTPUT) {
                 addOutputs(outputs, contentApi, slotView.getAllIngredients().toList());
             }
         }
@@ -208,8 +219,7 @@ public final class JeiRecipeLayoutResolver {
             if (id != null) {
                 return id;
             }
-        } catch (RuntimeException | LinkageError ignored) {
-        }
+        } catch (RuntimeException | LinkageError ignored) {}
         try {
             return system.getId(recipe);
         } catch (RuntimeException | LinkageError ignored) {
@@ -230,8 +240,8 @@ public final class JeiRecipeLayoutResolver {
             @Nullable ResourceLocation recipeId
         ) {
             String key = recipeId == null
-                ? effectiveRecipeClassName(recipe) + "#" + System.identityHashCode(recipe)
-                : recipeId.toString();
+                    ? effectiveRecipeClassName(recipe) + "#" + System.identityHashCode(recipe)
+                    : recipeId.toString();
             return new LayoutIgnoreRecipeKey(recipeType.getUid(), key);
         }
     }
@@ -244,27 +254,16 @@ public final class JeiRecipeLayoutResolver {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static MatchStrategy resolveMatchStrategy(ITypedIngredient<?> ingredient) {
-        var subtypeManager = CirrusJeiPlugin.subtypeManager();
-        var type = ingredient.getType();
-        if (type instanceof IIngredientTypeWithSubtypes<?,?>) {
-            var subtypeType = (IIngredientTypeWithSubtypes) type;
-            var value = ingredient.getIngredient();
-            return subtypeManager.hasSubtypes(subtypeType, value)
-                ? MatchStrategy.identityAndComponent
-                : MatchStrategy.identity;
-        }
-        return MatchStrategy.identityAndComponent;
-    }
-
-    @SuppressWarnings({"unchecked", "rawtypes"})
     private static MatchStrategy resolveMatchStrategy(ResolvedIngredient<?> ingredient) {
-        var subtypeManager = CirrusJeiPlugin.subtypeManager();
+        ISubtypeManager subtypeManager = CirrusJeiPlugin.subtypeManagerOrNull();
+        if (subtypeManager == null) {
+            return MatchStrategy.identityAndComponent;
+        }
         var type = ingredient.ingredient().getType();
-        if (type instanceof IIngredientTypeWithSubtypes<?,?>) {
+        if (type instanceof IIngredientTypeWithSubtypes<?, ?>) {
             return subtypeManager.hasSubtypes((IIngredientTypeWithSubtypes) type, ingredient.value())
-                ? MatchStrategy.identityAndComponent
-                : MatchStrategy.identity;
+                    ? MatchStrategy.identityAndComponent
+                    : MatchStrategy.identity;
         }
         return MatchStrategy.identityAndComponent;
     }
@@ -272,27 +271,31 @@ public final class JeiRecipeLayoutResolver {
     private static void addInput(
         List<InputContent> out,
         ContentApi contentApi,
-        List<? extends ITypedIngredient<?>> ingredients
+        List<? extends ITypedIngredient<?>> ingredients,
+        boolean catalyst
     ) {
         if (ingredients.isEmpty()) {
             return;
         }
+        float chance = catalyst ? 0.0f : RecipeContent.MAX_CHANCE;
         if (ingredients.size() == 1) {
             ResolvedIngredient<?> only = ResolvedIngredient.of(ingredients.getFirst());
             var strategy = resolveMatchStrategy(only);
             ContentStack<?, ?> stack = resolveIngredient(contentApi, only);
             if (stack.notEmpty()) {
-                InputContent input = InputContent.fromStack(stack, strategy);
+                InputContent input = InputContent.fromStack(stack, chance, strategy);
                 if (!input.isEmpty()) {
                     out.add(input);
                 }
                 return;
             }
-            ContentValue<?> value = resolveValue(contentApi, only);
-            if (value != null) {
-                InputContent input = InputContent.fromValue(value);
-                if (!input.isEmpty()) {
-                    out.add(input);
+            if (!catalyst) {
+                ContentValue<?> value = resolveValue(contentApi, only);
+                if (value != null) {
+                    InputContent input = InputContent.fromValue(value);
+                    if (!input.isEmpty()) {
+                        out.add(input);
+                    }
                 }
             }
             return;
@@ -312,17 +315,25 @@ public final class JeiRecipeLayoutResolver {
         if (stacks.isEmpty()) {
             return;
         }
-        InputContent input = resolveStackList(sameStackType, stacks);
+        InputContent input = resolveStackList(sameStackType, stacks, chance);
         if (!input.isEmpty()) {
             out.add(input);
         }
     }
 
+    /**
+     * Stage J1 Carousel Output Disambiguation:
+     * a single JEI OUTPUT slot cycling through multiple alternative ingredients represents an OR carousel,
+     * NOT simultaneous multi-output production; emit only the canonical single representative per slot.
+     */
     private static void addOutputs(
         List<OutputContent> out,
         ContentApi contentApi,
         List<? extends ITypedIngredient<?>> ingredients
     ) {
+        if (ingredients.isEmpty()) {
+            return;
+        }
         for (ITypedIngredient<?> ingredient : ingredients) {
             ResolvedIngredient<?> resolved = ResolvedIngredient.of(ingredient);
             var strategy = resolveMatchStrategy(resolved);
@@ -331,37 +342,37 @@ public final class JeiRecipeLayoutResolver {
                 OutputContent output = OutputContent.fromStack(stack, strategy);
                 if (!output.isEmpty()) {
                     out.add(output);
+                    return;
                 }
                 continue;
             }
-            ContentValue<?> value = resolveValue(contentApi, ingredient);
+            ContentValue<?> value = resolveValue(contentApi, resolved);
             if (value != null) {
                 OutputContent output = OutputContent.fromValue(value);
                 if (!output.isEmpty()) {
                     out.add(output);
+                    return;
                 }
             }
         }
-    }
-
-    private static <I> ContentStack<?, I> resolveIngredient(ContentApi contentApi, ITypedIngredient<I> ingredient) {
-        var stackType = contentApi.findStackTypeForIngredientType(ingredient.getType());
-        if (stackType != null) {
-            return ContentStack.fromStack(stackType, ingredient.getIngredient());
-        }
-        return ContentStack.empty();
     }
 
     private static <I> ContentStack<?, I> resolveIngredient(ContentApi contentApi, ResolvedIngredient<I> ingredient) {
         StackType<?, I> stackType = contentApi.findStackTypeForIngredientType(ingredient.ingredient().getType());
         if (stackType != null) {
-            return ContentStack.fromStack(stackType, ingredient.value());
+            I stack = ingredient.value();
+            long amount = stackType.getAmount(stack);
+            return ContentStack.fromStack(stackType, stack, amount > 0L ? amount : stackType.quantity());
         }
         return ContentStack.empty();
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static InputContent resolveStackList(boolean sameType, MutableList<? extends ContentStack<?, ?>> stacks) {
+    private static InputContent resolveStackList(
+        boolean sameType,
+        MutableList<? extends ContentStack<?, ?>> stacks,
+        float chance
+    ) {
         var first = stacks.getFirst();
         long maybeAmount = first.amount();
         boolean allSameAmount = stacks.allSatisfy(stack -> stack.amount() == maybeAmount);
@@ -370,16 +381,12 @@ public final class JeiRecipeLayoutResolver {
             TagType tagType = first.type().tagType();
             if (tagType != null) {
                 TagKey<?> tag = TagLookup.findTagMatchStacks(tagType, (Collection) stacks);
-                if (tag != null) return InputContent.fromTag(tagType, tag, amount);
+                if (tag != null) {
+                    return InputContent.fromTag(tagType, tag, amount, chance);
+                }
             }
         }
-        return InputContent.fromStackList(stacks, amount);
-    }
-
-    private static <S> @Nullable ContentValue<?> resolveValue(ContentApi contentApi, ITypedIngredient<S> ingredient) {
-        var bridge = contentApi.findValueTypeBridge(ingredient.getType());
-        if (bridge == null) return null;
-        return bridge.resolve(ingredient.getIngredient());
+        return InputContent.fromStackList(stacks, amount, chance);
     }
 
     private static <S> @Nullable ContentValue<?> resolveValue(ContentApi contentApi, ResolvedIngredient<S> ingredient) {

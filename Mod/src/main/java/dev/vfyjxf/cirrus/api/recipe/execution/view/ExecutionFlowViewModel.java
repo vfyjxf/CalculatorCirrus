@@ -4,7 +4,7 @@ import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.set.ImmutableSet;
 import org.eclipse.collections.impl.factory.Sets;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * UI-facing execution tree with statuses derived from current runtime step state.
@@ -20,7 +20,14 @@ public record ExecutionFlowViewModel(ExecutionFlowNode root) {
     private static ExecutionFlowNode project(ExecutionFlowNode node, RuntimeState runtimeState) {
         var projectedChildren = node.children().collect(child -> project(child, runtimeState));
         var status = deriveStatus(node, projectedChildren, runtimeState);
-        return new ExecutionFlowNode(node.nodeId(), node.label(), status, node.guidance(), node.steps(), projectedChildren);
+        return new ExecutionFlowNode(
+            node.nodeId(),
+            node.label(),
+            status,
+            node.guidance(),
+            node.steps(),
+            projectedChildren
+        );
     }
 
     private static ExecutionFlowStatus deriveStatus(
@@ -48,8 +55,9 @@ public record ExecutionFlowViewModel(ExecutionFlowNode root) {
         ImmutableList<ExecutionFlowNode> projectedChildren,
         RuntimeState runtimeState
     ) {
-        return runtimeState.failedStep() != null && (node.steps().contains(runtimeState.failedStep())
-            || projectedChildren.anySatisfy(child -> child.status() == ExecutionFlowStatus.failed));
+        return runtimeState.failedStep() != null
+                && (node.steps().contains(runtimeState.failedStep())
+                        || projectedChildren.anySatisfy(child -> child.status() == ExecutionFlowStatus.failed));
     }
 
     private static boolean containsPausedStep(
@@ -58,7 +66,7 @@ public record ExecutionFlowViewModel(ExecutionFlowNode root) {
         RuntimeState runtimeState
     ) {
         return node.steps().anySatisfy(runtimeState.pausedSteps()::contains)
-            || projectedChildren.anySatisfy(child -> child.status() == ExecutionFlowStatus.paused);
+                || projectedChildren.anySatisfy(child -> child.status() == ExecutionFlowStatus.paused);
     }
 
     private static boolean containsRunningStep(
@@ -66,8 +74,9 @@ public record ExecutionFlowViewModel(ExecutionFlowNode root) {
         ImmutableList<ExecutionFlowNode> projectedChildren,
         RuntimeState runtimeState
     ) {
-        return runtimeState.runningStep() != null && (node.steps().contains(runtimeState.runningStep())
-            || projectedChildren.anySatisfy(child -> child.status() == ExecutionFlowStatus.running));
+        return runtimeState.runningStep() != null
+                && (node.steps().contains(runtimeState.runningStep())
+                        || projectedChildren.anySatisfy(child -> child.status() == ExecutionFlowStatus.running));
     }
 
     private static boolean isCompleted(
@@ -76,7 +85,8 @@ public record ExecutionFlowViewModel(ExecutionFlowNode root) {
         RuntimeState runtimeState
     ) {
         var ownStepsCompleted = node.steps().allSatisfy(runtimeState.completedSteps()::contains);
-        var childNodesCompleted = projectedChildren.allSatisfy(child -> child.status() == ExecutionFlowStatus.completed);
+        var childNodesCompleted = projectedChildren
+                .allSatisfy(child -> child.status() == ExecutionFlowStatus.completed);
         return ownStepsCompleted && childNodesCompleted && (node.steps().notEmpty() || projectedChildren.notEmpty());
     }
 

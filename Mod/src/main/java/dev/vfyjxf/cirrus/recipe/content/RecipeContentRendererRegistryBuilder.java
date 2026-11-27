@@ -13,7 +13,10 @@ public final class RecipeContentRendererRegistryBuilder implements RecipeContent
     final ConcurrentHashMap<RecipeContentType<?>, RecipeContentRenderer<?>> renderers = new ConcurrentHashMap<>();
 
     @Override
-    public <C extends RecipeContent> void registerRenderer(RecipeContentType<C> type, RecipeContentRenderer<C> renderer) {
+    public <C extends RecipeContent> void registerRenderer(
+        RecipeContentType<C> type,
+        RecipeContentRenderer<C> renderer
+    ) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(renderer, "renderer");
         if (renderers.putIfAbsent(type, renderer) != null) {

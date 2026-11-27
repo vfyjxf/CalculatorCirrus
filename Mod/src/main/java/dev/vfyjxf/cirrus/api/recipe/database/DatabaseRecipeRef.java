@@ -8,16 +8,15 @@ import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
-public record DatabaseRecipeRef(
-    Namespace system,
-    ResourceLocation recipe
-) {
-    public static final Codec<DatabaseRecipeRef> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-        Namespace.codec.fieldOf("system").forGetter(DatabaseRecipeRef::system),
-        ResourceLocation.CODEC.fieldOf("recipe").forGetter(DatabaseRecipeRef::recipe)
-    ).apply(instance, DatabaseRecipeRef::new));
+public record DatabaseRecipeRef(Namespace system, ResourceLocation recipe) {
+    public static final Codec<DatabaseRecipeRef> codec = RecordCodecBuilder.create(
+        instance -> instance.group(
+            Namespace.codec.fieldOf("system").forGetter(DatabaseRecipeRef::system),
+            ResourceLocation.CODEC.fieldOf("recipe").forGetter(DatabaseRecipeRef::recipe)
+        ).apply(instance, DatabaseRecipeRef::new)
+    );
 
     public DatabaseRecipeRef {
         Checks.checkNotNull(system, "system");

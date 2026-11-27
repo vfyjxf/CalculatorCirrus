@@ -10,12 +10,12 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 public record ConvertStep(
-        String stepId,
-        List<String> dependsOnStepIds,
-        CompiledRecipeKey conversionRecipeKey,
-        long batches,
-        Map<Integer, SlotBinding> slotBindings,
-        CostVector stepCost
+    String stepId,
+    List<String> dependsOnStepIds,
+    CompiledRecipeKey conversionRecipeKey,
+    long batches,
+    Map<Integer, SlotBinding> slotBindings,
+    CostVector stepCost
 ) implements PlanStep {
 
     public ConvertStep {

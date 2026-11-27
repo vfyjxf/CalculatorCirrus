@@ -27,5 +27,4 @@ public final class EventListeners {
         NeoForge.EVENT_BUS.unregister(listener);
     }
 
-
 }

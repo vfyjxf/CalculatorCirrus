@@ -2,16 +2,16 @@ package dev.vfyjxf.cirrus.api.recipe.system;
 
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cloudlib.util.Checks;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
-public record ResolveResult(
-    @Nullable RecipeProjection projection,
-    ResolveError error
-) {
+public record ResolveResult(@Nullable RecipeProjection projection, ResolveError error) {
 
     public ResolveResult {
         Checks.checkNotNull(error, "error");
-        Checks.checkArgument((projection == null) != (error == ResolveError.none), "Resolved result requires a projection and unresolved result requires an error");
+        Checks.checkArgument(
+            (projection == null) != (error == ResolveError.none),
+            "Resolved result requires a projection and unresolved result requires an error"
+        );
     }
 
     public static ResolveResult resolved(RecipeProjection projection) {

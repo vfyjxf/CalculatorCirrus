@@ -1,7 +1,10 @@
 package dev.vfyjxf.cirrus.ui.widget.common;
 
+import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
+import dev.vfyjxf.cirrus.ui.CirrusThemeIcons;
 import dev.vfyjxf.cirrus.ui.CirrusUiSound;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.ui.base.CompositeWidget;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
@@ -9,11 +12,12 @@ import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.api.ui.floating.FloatingEffect;
 import dev.vfyjxf.cloudlib.api.ui.floating.FloatingPlacement;
+import dev.vfyjxf.cloudlib.api.ui.style.UIStyles;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -22,8 +26,6 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.textMuted;
-import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.textPrimary;
 import static dev.vfyjxf.cloudlib.api.ui.floating.FloatingMiddlewares.flip;
 import static dev.vfyjxf.cloudlib.api.ui.floating.FloatingMiddlewares.offset;
 import static dev.vfyjxf.cloudlib.api.ui.floating.FloatingMiddlewares.shift;
@@ -35,7 +37,6 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.flexShrink;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minWidth;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.padding;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeOf;
-import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.zIndexOf;
 
 public class CirrusChoiceBoxWidget<T> extends Widget {
     private static final int controlHeight = 16;
@@ -50,7 +51,7 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
 
     private final int controlWidth;
     private final List<Option<T>> options = new ArrayList<>();
-    private T value;
+    private @Nullable T value;
     private Consumer<T> onChanged = ignored -> {};
     private @Nullable Supplier<Tooltip> tooltipSupplier;
     private @Nullable ChoicePopup popup;
@@ -60,6 +61,7 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
 
     public CirrusChoiceBoxWidget(int width) {
         this.controlWidth = Math.max(minControlWidth, width);
+        addStyleClass("cirrus-choice");
         useStyle(sizeOf(this.controlWidth, controlHeight), flexShrink(0));
         setFocusable(true);
         setClickGroup(this);
@@ -134,7 +136,7 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
         return option(value, label == null ? Component.empty() : label.component(args));
     }
 
-    public CirrusChoiceBoxWidget<T> value(T value) {
+    public CirrusChoiceBoxWidget<T> value(@Nullable T value) {
         this.value = value;
         revealSelectedOption();
         if (popup != null) {
@@ -143,7 +145,7 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
         return this;
     }
 
-    public T value() {
+    public @Nullable T value() {
         return value;
     }
 
@@ -186,7 +188,8 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
     }
 
     public static int preferredPopupWidth(int controlWidth, int widestLabelWidth, int boundaryWidth) {
-        int desired = Math.max(Math.max(minControlWidth, controlWidth), Math.max(0, widestLabelWidth) + popupTextPadding);
+        int desired = Math
+                .max(Math.max(minControlWidth, controlWidth), Math.max(0, widestLabelWidth) + popupTextPadding);
         int widthLimit = popupMaxWidth;
         if (boundaryWidth > popupScreenPadding * 2 + minControlWidth) {
             widthLimit = Math.min(widthLimit, boundaryWidth - popupScreenPadding * 2);
@@ -204,6 +207,12 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
 
     public int debugPopupRenderedRowCount() {
         return popup == null ? 0 : popup.rowCount;
+    }
+
+    public void debugMoveValue(int delta) {
+        if (!options.isEmpty()) {
+            moveValue(delta);
+        }
     }
 
     private void togglePopup() {
@@ -264,8 +273,9 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
 
     private void select(Option<T> option, boolean close) {
         if (!Objects.equals(value, option.value())) {
-            value = option.value();
-            onChanged.accept(value);
+            T picked = option.value();
+            value = picked;
+            onChanged.accept(picked);
             CirrusUiSound.playClickSound();
         }
         if (close) {
@@ -301,30 +311,32 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
         return Math.max(0, Math.min(scrollIndex, Math.max(0, options.size() - visiblePopupRows(options.size()))));
     }
 
-    private Option<T> selectedOption() {
+    private Component selectedLabel() {
         int index = selectedIndex();
         if (index >= 0) {
-            return options.get(index);
+            return options.get(index).label();
         }
-        return options.isEmpty() ? new Option<>(value, Component.empty()) : options.getFirst();
+        return options.isEmpty() ? Component.empty() : options.getFirst().label();
     }
 
     @Override
     protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
         boolean down = pressed || popup != null;
-        CirrusControlChrome.renderButtonBackground(canvas, 0, 0, width(), height(), down, hovered(), true);
+        CirrusPalette palette = CirrusUiTheme.palette(this);
+        CirrusControlChrome.renderButtonBackground(canvas, this, 0, 0, width(), height(), down, hovered(), true);
 
-        var arrow = down || hovered() ? CirrusTextures.Icon.arrowDownSelected : CirrusTextures.Icon.arrowDown;
+        var rawArrow = down || hovered() ? CirrusTextures.Icon.arrowDownSelected : CirrusTextures.Icon.arrowDown;
+        var arrow = CirrusThemeIcons.resolve(rawArrow, this);
         int arrowX = Math.max(0, width() - arrow.width() - 2);
         int arrowY = CirrusControlChrome.centeredIconY(height(), arrow.height(), down);
         canvas.texture(arrow, arrowX, arrowY, arrow.width(), arrow.height());
 
         Font font = context().font();
-        Component label = selectedOption().label();
+        Component label = selectedLabel();
         int textWidth = Math.max(0, arrowX - 5);
         Component fitted = fitLabel(font, label, textWidth);
-        int textY = Math.max(0, (height() - font.lineHeight) / 2) + (down ? 1 : 0);
-        canvas.text(fitted, 4, textY, textPrimary, false);
+        int textY = CirrusControlChrome.centeredTextY(0, height(), font) + (down ? 1 : 0);
+        canvas.text(fitted, 4, textY, palette.textPrimary(), false);
     }
 
     @Override
@@ -337,7 +349,7 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
             return super.hoverTooltip(mouseX, mouseY);
         }
         tooltip = Tooltip.create();
-        tooltip.add(selectedOption().label(), Tooltip.title);
+        tooltip.add(selectedLabel(), Tooltip.title);
         for (Option<T> option : options) {
             if (!Objects.equals(value, option.value())) {
                 tooltip.add(Component.literal("- ").append(option.label()));
@@ -363,8 +375,7 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
         return Component.literal(prefix + "...");
     }
 
-    private record Option<T>(T value, Component label) {
-    }
+    private record Option<T>(T value, Component label) {}
 
     private final class ChoicePopup extends CompositeWidget<Widget> {
         private final ArrayList<OptionRow> rows = new ArrayList<>();
@@ -373,7 +384,13 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
         private int renderedScrollIndex = -1;
 
         private ChoicePopup() {
-            useStyle(flexColumn(), minWidth(0), padding(popupPadding), boxSizingBorderBox(), zIndexOf(popupZIndex));
+            useStyle(
+                flexColumn(),
+                minWidth(0),
+                padding(popupPadding),
+                boxSizingBorderBox(),
+                UIStyles.zIndex(popupZIndex)
+            );
             onClickOutside(context -> scheduleClosePopup());
             onMouseScrolled((mouseX, mouseY, scrollX, scrollY, context) -> {
                 if (options.size() <= popupMaxRows || scrollY == 0) {
@@ -402,7 +419,7 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
                 padding(popupPadding),
                 boxSizingBorderBox(),
                 sizeOf(popupWidth, popupHeightForOptionCount(options.size())),
-                zIndexOf(popupZIndex)
+                UIStyles.zIndex(popupZIndex)
             );
             int rowWidth = Math.max(0, popupWidth - popupPadding * 2);
             for (int i = 0; i < rows.size(); i++) {
@@ -431,7 +448,7 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
 
         @Override
         protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
-            canvas.texture(CirrusTextures.Background.Outlined.flat, 0, 0, width(), height());
+            canvas.texture(CirrusUiTheme.textures(CirrusChoiceBoxWidget.this).cardSurface(), 0, 0, width(), height());
         }
     }
 
@@ -460,10 +477,12 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
             if (option == null || !lifecycle().mounted()) {
                 return;
             }
+            CirrusPalette palette = CirrusUiTheme.palette(CirrusChoiceBoxWidget.this);
             boolean selected = Objects.equals(value, option.value());
             if (selected || hovered()) {
                 CirrusControlChrome.renderButtonBackground(
                     canvas,
+                    CirrusChoiceBoxWidget.this,
                     1,
                     1,
                     Math.max(0, width() - 2),
@@ -475,8 +494,8 @@ public class CirrusChoiceBoxWidget<T> extends Widget {
             }
             Font font = context().font();
             Component fitted = fitLabel(font, option.label(), Math.max(0, width() - 8));
-            int y = Math.max(0, (height() - font.lineHeight) / 2);
-            canvas.text(fitted, 4, y, selected || hovered() ? textPrimary : textMuted, false);
+            int y = CirrusControlChrome.centeredTextY(0, height(), font);
+            canvas.text(fitted, 4, y, selected || hovered() ? palette.textPrimary() : palette.textMuted(), false);
         }
 
         @Override

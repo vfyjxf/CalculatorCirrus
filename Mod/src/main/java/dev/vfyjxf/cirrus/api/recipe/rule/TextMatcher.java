@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.api.recipe.rule;
 
 import dev.vfyjxf.cloudlib.util.Checks;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -29,11 +30,8 @@ final class TextMatcher {
     static TextMatcher compile(TextMatchOp op, List<String> values) {
         Checks.checkNotNull(op, "op");
         Checks.checkNotNull(values, "values");
-        String[] cleaned = values.stream()
-            .map(value -> value == null ? "" : value.trim())
-            .filter(value -> !value.isEmpty())
-            .distinct()
-            .toArray(String[]::new);
+        String[] cleaned = values.stream().map(value -> value == null ? "" : value.trim())
+                .filter(value -> !value.isEmpty()).distinct().toArray(String[]::new);
         if (cleaned.length == 0) {
             return new TextMatcher(op, cleaned, new Pattern[0]);
         }
@@ -43,7 +41,10 @@ final class TextMatcher {
                 try {
                     compiled[i] = op == TextMatchOp.glob ? globToRegex(cleaned[i]) : Pattern.compile(cleaned[i]);
                 } catch (PatternSyntaxException e) {
-                    throw new IllegalArgumentException("Invalid " + op + " pattern '" + cleaned[i] + "': " + e.getMessage(), e);
+                    throw new IllegalArgumentException(
+                        "Invalid " + op + " pattern '" + cleaned[i] + "': " + e.getMessage(),
+                        e
+                    );
                 }
             }
             return new TextMatcher(op, cleaned, compiled);
@@ -111,8 +112,8 @@ final class TextMatcher {
                     // glob compiles to an anchored pattern (full match);
                     // regex keeps substring (find) semantics like the old pattern rules
                     boolean hit = op == TextMatchOp.glob
-                        ? pattern.matcher(candidate).matches()
-                        : pattern.matcher(candidate).find();
+                            ? pattern.matcher(candidate).matches()
+                            : pattern.matcher(candidate).find();
                     if (hit) {
                         return true;
                     }
@@ -135,13 +136,11 @@ final class TextMatcher {
 
     @Override
     public boolean equals(Object o) {
-        return o instanceof TextMatcher other
-            && op == other.op
-            && java.util.Arrays.equals(values, other.values);
+        return o instanceof TextMatcher other && op == other.op && Arrays.equals(values, other.values);
     }
 
     @Override
     public int hashCode() {
-        return 31 * op.hashCode() + java.util.Arrays.hashCode(values);
+        return 31 * op.hashCode() + Arrays.hashCode(values);
     }
 }

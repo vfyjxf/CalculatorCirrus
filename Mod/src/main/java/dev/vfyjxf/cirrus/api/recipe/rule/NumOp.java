@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.rule;
 
 import com.mojang.serialization.Codec;
+import dev.vfyjxf.cloudlib.api.util.Codecs;
 
 /**
  * Numeric comparison for amount/slot-count/scalar/chance conditions.
@@ -8,14 +9,9 @@ import com.mojang.serialization.Codec;
  * decimals behave predictably.
  */
 public enum NumOp {
-    eq,
-    ne,
-    lt,
-    le,
-    gt,
-    ge;
+    eq, ne, lt, le, gt, ge;
 
-    public static final Codec<NumOp> CODEC = dev.vfyjxf.cloudlib.api.util.Codecs.lowerCaseEnum(NumOp.class);
+    public static final Codec<NumOp> codec = Codecs.lowerCaseEnum(NumOp.class);
 
     private static final double epsilon = 1.0e-9d;
 

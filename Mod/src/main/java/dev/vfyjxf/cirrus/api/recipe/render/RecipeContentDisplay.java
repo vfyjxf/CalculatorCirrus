@@ -1,4 +1,4 @@
 package dev.vfyjxf.cirrus.api.recipe.render;
 
-//TODO:只是防止我忘记做这里
+//TODO: placeholder so the missing implementation is not forgotten.
 public class RecipeContentDisplay {}

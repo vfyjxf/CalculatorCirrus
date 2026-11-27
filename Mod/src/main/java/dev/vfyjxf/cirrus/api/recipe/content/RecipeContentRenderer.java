@@ -8,7 +8,7 @@ import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipStack;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public interface RecipeContentRenderer<C extends RecipeContent> {
 
@@ -20,7 +20,9 @@ public interface RecipeContentRenderer<C extends RecipeContent> {
     @SuppressWarnings("unchecked")
     static <C extends RecipeContent> RecipeContentRenderer<C> getRenderer(C content) {
         Checks.checkNotNull(content, "content");
-        return (RecipeContentRenderer<C>) getRenderer((RecipeContentType<? extends RecipeContent>) content.recipeType());
+        return (RecipeContentRenderer<C>) getRenderer(
+            (RecipeContentType<? extends RecipeContent>) content.recipeType()
+        );
     }
 
     default int visualCount(C content) {
@@ -33,7 +35,16 @@ public interface RecipeContentRenderer<C extends RecipeContent> {
         render(graphics, content, 0, width, height, delta);
     }
 
-    default void renderAt(GuiGraphics graphics, C content, int visualIndex, int x, int y, int width, int height, float delta) {
+    default void renderAt(
+        GuiGraphics graphics,
+        C content,
+        int visualIndex,
+        int x,
+        int y,
+        int width,
+        int height,
+        float delta
+    ) {
         graphics.pose().pushPose();
         graphics.pose().translate(x, y, 0);
         render(graphics, content, visualIndex, width, height, delta);
@@ -44,7 +55,16 @@ public interface RecipeContentRenderer<C extends RecipeContent> {
         render(graphics, content, visualIndex, width, height, delta);
     }
 
-    default void renderDecoratedAt(GuiGraphics graphics, C content, int visualIndex, int x, int y, int width, int height, float delta) {
+    default void renderDecoratedAt(
+        GuiGraphics graphics,
+        C content,
+        int visualIndex,
+        int x,
+        int y,
+        int width,
+        int height,
+        float delta
+    ) {
         graphics.pose().pushPose();
         graphics.pose().translate(x, y, 0);
         renderDecorated(graphics, content, visualIndex, width, height, delta);

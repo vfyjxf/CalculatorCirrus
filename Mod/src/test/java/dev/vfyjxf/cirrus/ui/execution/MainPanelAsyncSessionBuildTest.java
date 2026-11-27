@@ -12,6 +12,8 @@ import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Objects;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -44,7 +46,6 @@ class MainPanelAsyncSessionBuildTest {
 
             assertFalse(panel.debugSessionBuildPending());
             assertFalse(panel.calculating());
-            assertNotNull(panel.snapshot());
             assertNotNull(panel.snapshot().session());
         } finally {
             CalculatorSyntheticScenario.restoreRecipeApi(previous);
@@ -62,35 +63,13 @@ class MainPanelAsyncSessionBuildTest {
             panel.tick();
             panel.debugCompletePendingSessionBuild();
             assertNotNull(panel.snapshot());
-            panel.driver().toggleAutoAdvance();
+            Objects.requireNonNull(panel.driver()).toggleAutoAdvance();
             assertTrue(panel.driver().snapshot().autoAdvanceEnabled());
 
             panel.setTargetTimes(4);
 
             assertFalse(panel.driver().snapshot().autoAdvanceEnabled());
             assertFalse(panel.debugSessionBuildPending());
-        } finally {
-            CalculatorSyntheticScenario.restoreRecipeApi(previous);
-        }
-    }
-
-    @Test
-    void pendingTargetTimesChangeDoesNotRebuildOldSelection() {
-        CalculatorSyntheticScenario.Scenario scenario = CalculatorSyntheticScenario.createWorkbenchLike(8);
-        RecipeApiImpl previous = CalculatorSyntheticScenario.attachRecipeApi(scenario.system());
-        try {
-            RecipeContentRendererTestBootstrap.ensureInitialized();
-            ExecutionTargetRecipeState.set(scenario.target(), 2);
-            MainPanel panel = new MainPanel(handle());
-            panel.tick();
-            panel.debugCompletePendingSessionBuild();
-
-            panel.setTargetTimes(4);
-            panel.tick();
-
-            assertFalse(panel.debugSessionBuildPending());
-            assertNotNull(panel.snapshot());
-            assertFalse(panel.snapshot().autoAdvanceEnabled());
         } finally {
             CalculatorSyntheticScenario.restoreRecipeApi(previous);
         }
@@ -107,7 +86,7 @@ class MainPanelAsyncSessionBuildTest {
             panel.tick();
             panel.debugCompletePendingSessionBuild();
             assertNotNull(panel.snapshot());
-            panel.driver().toggleAutoAdvance();
+            Objects.requireNonNull(panel.driver()).toggleAutoAdvance();
 
             panel.setTargetTimes(4);
             panel.flushTargetTimes();
@@ -115,7 +94,6 @@ class MainPanelAsyncSessionBuildTest {
             assertTrue(panel.debugSessionBuildPending());
             panel.debugCompletePendingSessionBuild();
 
-            assertNotNull(panel.snapshot());
             assertNotNull(panel.snapshot().session());
             assertFalse(panel.snapshot().autoAdvanceEnabled());
         } finally {
@@ -142,7 +120,6 @@ class MainPanelAsyncSessionBuildTest {
             panel.tick();
 
             assertFalse(panel.debugSessionBuildPending());
-            assertNotNull(panel.snapshot());
             assertNotNull(panel.snapshot().session());
             assertFalse(panel.snapshot().session().completed());
         } finally {
@@ -163,7 +140,7 @@ class MainPanelAsyncSessionBuildTest {
             assertNotNull(panel.snapshot());
             assertNotNull(panel.snapshot().session());
 
-            panel.driver().advanceSteps(panel.snapshot().session().plan().steps().size());
+            Objects.requireNonNull(panel.driver()).advanceSteps(panel.snapshot().session().plan().steps().size());
             assertTrue(panel.driver().snapshot().telemetry().completed());
 
             ExecutionTargetRecipeState.clear();

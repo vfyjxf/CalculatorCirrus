@@ -6,8 +6,8 @@ import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.helper.TagHelper;
 import net.minecraft.tags.TagKey;
 import org.eclipse.collections.api.set.MutableSet;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Unmodifiable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.Set;

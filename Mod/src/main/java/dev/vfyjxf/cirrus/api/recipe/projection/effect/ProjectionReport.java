@@ -2,13 +2,15 @@ package dev.vfyjxf.cirrus.api.recipe.projection.effect;
 
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
 import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveGuardFinding;
-import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
+import org.eclipse.collections.api.list.MutableList;
+import org.eclipse.collections.impl.collector.Collectors2;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -25,18 +27,13 @@ public record ProjectionReport(
         Checks.checkNotNull(guardFindings, "guardFindings");
     }
 
-    public ProjectionReport(
-        RecipeProjection projection,
-        ImmutableList<ProjectionEffect> effects
-    ) {
+    public ProjectionReport(RecipeProjection projection, ImmutableList<ProjectionEffect> effects) {
         this(projection, effects, true, Lists.immutable.empty());
     }
 
     public ProjectedRecipe projectedRecipe() {
-        ImmutableList<InputContent> inputs = projection.inputs()
-            .collect(content -> content.content());
-        ImmutableList<OutputContent> outputs = projection.outputs()
-            .collect(content -> content.content());
+        ImmutableList<InputContent> inputs = projection.inputs().collect(content -> content.content());
+        ImmutableList<OutputContent> outputs = projection.outputs().collect(content -> content.content());
         return new ProjectedRecipe(projection.recipe(), inputs, outputs);
     }
 
@@ -51,9 +48,7 @@ public record ProjectionReport(
             PluginAccumulator accumulator = grouped.computeIfAbsent(plugin, PluginAccumulator::new);
             accumulator.add(effect);
         }
-        return grouped.values().stream()
-            .map(PluginAccumulator::report)
-            .collect(org.eclipse.collections.impl.collector.Collectors2.toImmutableList());
+        return grouped.values().stream().map(PluginAccumulator::report).collect(Collectors2.toImmutableList());
     }
 
     public ProjectionPluginReport pluginReport(ProjectionPlugin plugin) {
@@ -77,7 +72,7 @@ public record ProjectionReport(
 
     private static final class PluginAccumulator {
         private final ProjectionPlugin plugin;
-        private final org.eclipse.collections.api.list.MutableList<ProjectionEffect> effects = Lists.mutable.empty();
+        private final MutableList<ProjectionEffect> effects = Lists.mutable.empty();
         private int inputChanges;
         private int outputChanges;
 

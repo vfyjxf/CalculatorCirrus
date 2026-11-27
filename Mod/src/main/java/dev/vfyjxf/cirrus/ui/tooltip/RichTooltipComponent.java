@@ -1,8 +1,6 @@
 package dev.vfyjxf.cirrus.ui.tooltip;
 
 import com.mojang.blaze3d.platform.Lighting;
-import com.mojang.blaze3d.systems.RenderSystem;
-import dev.vfyjxf.cirrus.api.content.render.StackRenderer;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
@@ -21,7 +19,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,8 +36,11 @@ public final class RichTooltipComponent implements TooltipComponent {
 
     public sealed interface Entry {
         record TextLine(String text, int color, boolean shadow) implements Entry {}
+
         record SlotRow(@Nullable String label, int labelColor, List<MaterialSlot> slots) implements Entry {}
+
         record Divider(int color) implements Entry {}
+
         record Gap(int height) implements Entry {}
 
         /** Section header with a colored accent bar on the left edge. */
@@ -52,14 +53,24 @@ public final class RichTooltipComponent implements TooltipComponent {
         record ProgressBar(float ratio, int fillColor, int barWidth) implements Entry {}
 
         /** 16x16 icon (item or colored fallback) followed by text. */
-        record IconText(@Nullable ItemStack icon, int fallbackColor,
-                        String text, int textColor,
-                        @Nullable String rightText, int rightColor) implements Entry {}
+        record IconText(
+            @Nullable ItemStack icon,
+            int fallbackColor,
+            String text,
+            int textColor,
+            @Nullable String rightText,
+            int rightColor
+        ) implements Entry {}
 
         /** 16x16 generic recipe-content icon followed by text. */
-        record ContentIconText(@Nullable RecipeContent content, int fallbackColor,
-                               String text, int textColor,
-                               @Nullable String rightText, int rightColor) implements Entry {
+        record ContentIconText(
+            @Nullable RecipeContent content,
+            int fallbackColor,
+            String text,
+            int textColor,
+            @Nullable String rightText,
+            int rightColor
+        ) implements Entry {
             public ContentIconText {
                 if (content != null && !content.isEmpty()) {
                     content = content.copy();
@@ -76,16 +87,21 @@ public final class RichTooltipComponent implements TooltipComponent {
         }
 
         /** 16x16 UI texture icon followed by text. */
-        record TextureIconText(@Nullable ImageTexture icon, int fallbackColor,
-                               String text, int textColor,
-                               @Nullable String rightText, int rightColor) implements Entry {}
+        record TextureIconText(
+            @Nullable ImageTexture icon,
+            int fallbackColor,
+            String text,
+            int textColor,
+            @Nullable String rightText,
+            int rightColor
+        ) implements Entry {}
 
         /** Compact recipe card entry with inputs, outputs, catalysts, and an optional machine. */
         record RecipeCard(
-                List<MaterialSlot> inputs,
-                List<MaterialSlot> outputs,
-                List<MaterialSlot> catalysts,
-                @Nullable MaterialSlot machine
+            List<MaterialSlot> inputs,
+            List<MaterialSlot> outputs,
+            List<MaterialSlot> catalysts,
+            @Nullable MaterialSlot machine
         ) implements Entry {
             static RecipeCard empty() {
                 return new RecipeCard(List.of(), List.of(), List.of(), null);
@@ -99,18 +115,18 @@ public final class RichTooltipComponent implements TooltipComponent {
          * instead of auto-expanding columns based on tooltip width.
          */
         record JeiRecipeCard(
+            List<MaterialSlot> inputs,
+            List<MaterialSlot> outputs,
+            List<MaterialSlot> catalysts,
+            @Nullable MaterialSlot machine,
+            int inputColumns,
+            int outputColumns
+        ) implements Entry {
+            JeiRecipeCard(
                 List<MaterialSlot> inputs,
                 List<MaterialSlot> outputs,
                 List<MaterialSlot> catalysts,
-                @Nullable MaterialSlot machine,
-                int inputColumns,
-                int outputColumns
-        ) implements Entry {
-            JeiRecipeCard(
-                    List<MaterialSlot> inputs,
-                    List<MaterialSlot> outputs,
-                    List<MaterialSlot> catalysts,
-                    @Nullable MaterialSlot machine
+                @Nullable MaterialSlot machine
             ) {
                 this(inputs, outputs, catalysts, machine, 3, 1);
             }
@@ -196,28 +212,36 @@ public final class RichTooltipComponent implements TooltipComponent {
             return this;
         }
 
-        public Builder iconText(@Nullable ItemStack icon, int fallback,
-                                String text, int textColor) {
+        public Builder iconText(@Nullable ItemStack icon, int fallback, String text, int textColor) {
             entries.add(new Entry.IconText(icon, fallback, text, textColor, null, 0));
             return this;
         }
 
-        public Builder iconText(@Nullable ItemStack icon, int fallback,
-                                String text, int textColor,
-                                String right, int rightColor) {
+        public Builder iconText(
+            @Nullable ItemStack icon,
+            int fallback,
+            String text,
+            int textColor,
+            String right,
+            int rightColor
+        ) {
             entries.add(new Entry.IconText(icon, fallback, text, textColor, right, rightColor));
             return this;
         }
 
-        public Builder contentIconText(@Nullable RecipeContent content, int fallback,
-                                       String text, int textColor) {
+        public Builder contentIconText(@Nullable RecipeContent content, int fallback, String text, int textColor) {
             entries.add(new Entry.ContentIconText(content, fallback, text, textColor, null, 0));
             return this;
         }
 
-        public Builder contentIconText(@Nullable RecipeContent content, int fallback,
-                                       String text, int textColor,
-                                       @Nullable String right, int rightColor) {
+        public Builder contentIconText(
+            @Nullable RecipeContent content,
+            int fallback,
+            String text,
+            int textColor,
+            @Nullable String right,
+            int rightColor
+        ) {
             entries.add(new Entry.ContentIconText(content, fallback, text, textColor, right, rightColor));
             return this;
         }
@@ -227,15 +251,19 @@ public final class RichTooltipComponent implements TooltipComponent {
             return this;
         }
 
-        public Builder textureIconText(@Nullable ImageTexture icon, int fallback,
-                                       String text, int textColor) {
+        public Builder textureIconText(@Nullable ImageTexture icon, int fallback, String text, int textColor) {
             entries.add(new Entry.TextureIconText(icon, fallback, text, textColor, null, 0));
             return this;
         }
 
-        public Builder textureIconText(@Nullable ImageTexture icon, int fallback,
-                                       String text, int textColor,
-                                       @Nullable String right, int rightColor) {
+        public Builder textureIconText(
+            @Nullable ImageTexture icon,
+            int fallback,
+            String text,
+            int textColor,
+            @Nullable String right,
+            int rightColor
+        ) {
             entries.add(new Entry.TextureIconText(icon, fallback, text, textColor, right, rightColor));
             return this;
         }
@@ -271,8 +299,7 @@ public final class RichTooltipComponent implements TooltipComponent {
         return new RecipeCardLayout(columns, inputRows, outputRows);
     }
 
-    public record RecipeCardLayout(int columns, int inputRows, int outputRows) {
-    }
+    public record RecipeCardLayout(int columns, int inputRows, int outputRows) {}
 
     // ─── Factory for event registration ───
 
@@ -284,26 +311,26 @@ public final class RichTooltipComponent implements TooltipComponent {
 
     private static final class Client implements ClientTooltipComponent {
 
-        private static final int ICON_SIZE = 16;
-        private static final int ICON_STEP = 18;
-        private static final int PAD_X = 4;
-        private static final int TEXT_H = 11;
-        private static final int TEXT_WRAP_WIDTH = 180;
-        private static final int LABEL_H = 10;
-        private static final int DIVIDER_H = 6;
-        private static final int SECTION_H = 14;
-        private static final int KV_H = 11;
-        private static final int BAR_H = 10;
-        private static final int ICON_TEXT_H = 18;
-        private static final int BAR_BG = 0xFF222244;
-        private static final int BAR_BD = 0xFF333366;
-        private static final int KV_GAP = 12;
-        private static final int RECIPE_CARD_MAX_COLS = 7;
-        private static final int RECIPE_ARROW_GAP = ICON_STEP;
-        private static final int RECIPE_SUBSECTION_GAP = 3;
-        private static final int RECIPE_CATALYST_BG = 0x241B102C;
-        private static final int RECIPE_MACHINE_BG = 0x20122A3A;
-        private static final int RECIPE_CARD_FRAME_PAD = 3;
+        private static final int iconSize = 16;
+        private static final int iconStep = 18;
+        private static final int padX = 4;
+        private static final int textH = 11;
+        private static final int textWrapWidth = 180;
+        private static final int labelH = 10;
+        private static final int dividerH = 6;
+        private static final int sectionH = 14;
+        private static final int kvH = 11;
+        private static final int barH = 10;
+        private static final int iconTextH = 18;
+        private static final int barBg = 0xFF222244;
+        private static final int barBd = 0xFF333366;
+        private static final int kvGap = 12;
+        private static final int recipeCardMaxCols = 7;
+        private static final int recipeArrowGap = iconStep;
+        private static final int recipeSubsectionGap = 3;
+        private static final int recipeCatalystBg = 0x241B102C;
+        private static final int recipeMachineBg = 0x20122A3A;
+        private static final int recipeCardFramePad = 3;
 
         private final RichTooltipComponent data;
 
@@ -316,38 +343,38 @@ public final class RichTooltipComponent implements TooltipComponent {
             int max = 0;
             for (Entry e : data.entries) {
                 int w = switch (e) {
-                    case Entry.TextLine tl -> wrappedTextWidth(font, tl.text(), TEXT_WRAP_WIDTH);
+                    case Entry.TextLine tl -> wrappedTextWidth(font, tl.text(), textWrapWidth);
                     case Entry.SlotRow sr -> {
                         int labelW = sr.label() != null ? plainTextWidth(font, sr.label()) : 0;
-                        int iconsW = sr.slots().size() * ICON_STEP;
+                        int iconsW = sr.slots().size() * iconStep;
                         yield Math.max(labelW, iconsW);
                     }
                     case Entry.Divider ignored -> 40;
                     case Entry.Gap ignored -> 0;
                     case Entry.SectionHeader sh -> plainTextWidth(font, sh.title());
-                    case Entry.KeyValue kv -> plainTextWidth(font, kv.key()) + KV_GAP + plainTextWidth(font, kv.value());
+                    case Entry.KeyValue kv -> plainTextWidth(font, kv.key()) + kvGap + plainTextWidth(font, kv.value());
                     case Entry.ProgressBar pb -> pb.barWidth();
                     case Entry.IconText it -> {
-                        int iw = ICON_SIZE + 5 + plainTextWidth(font, it.text());
+                        int iw = iconSize + 5 + plainTextWidth(font, it.text());
                         if (it.rightText() != null) iw += 10 + plainTextWidth(font, it.rightText());
                         yield iw;
                     }
                     case Entry.ContentIconText it -> {
-                        int iw = ICON_SIZE + 5 + plainTextWidth(font, it.text());
+                        int iw = iconSize + 5 + plainTextWidth(font, it.text());
                         if (it.rightText() != null) iw += 10 + plainTextWidth(font, it.rightText());
                         yield iw;
                     }
                     case Entry.ContentCandidateGrid it -> {
                         int visible = Math.min(it.count(), it.maxVisible());
                         int columns = Math.min(6, Math.max(1, visible));
-                        int width = columns * ICON_SIZE + Math.max(0, columns - 1) * 3;
+                        int width = columns * iconSize + Math.max(0, columns - 1) * 3;
                         if (it.count() > visible) {
                             width += 24;
                         }
                         yield width;
                     }
                     case Entry.TextureIconText it -> {
-                        int iw = ICON_SIZE + 5 + plainTextWidth(font, it.text());
+                        int iw = iconSize + 5 + plainTextWidth(font, it.text());
                         if (it.rightText() != null) iw += 10 + plainTextWidth(font, it.rightText());
                         yield iw;
                     }
@@ -362,7 +389,7 @@ public final class RichTooltipComponent implements TooltipComponent {
                 };
                 max = Math.max(max, w);
             }
-            return max + PAD_X * 2;
+            return max + padX * 2;
         }
 
         @Override
@@ -371,15 +398,15 @@ public final class RichTooltipComponent implements TooltipComponent {
             int h = 0;
             for (Entry e : data.entries) {
                 h += switch (e) {
-                    case Entry.TextLine tl -> wrappedTextHeight(font, tl.text(), TEXT_WRAP_WIDTH);
-                    case Entry.SlotRow sr -> (sr.label() != null ? LABEL_H : 0) + ICON_STEP;
-                    case Entry.Divider ignored -> DIVIDER_H;
+                    case Entry.TextLine tl -> wrappedTextHeight(font, tl.text(), textWrapWidth);
+                    case Entry.SlotRow sr -> (sr.label() != null ? labelH : 0) + iconStep;
+                    case Entry.Divider ignored -> dividerH;
                     case Entry.Gap g -> g.height();
-                    case Entry.SectionHeader ignored -> SECTION_H;
-                    case Entry.KeyValue ignored -> KV_H;
-                    case Entry.ProgressBar ignored -> BAR_H;
-                    case Entry.IconText ignored -> ICON_TEXT_H;
-                    case Entry.ContentIconText ignored -> ICON_TEXT_H;
+                    case Entry.SectionHeader ignored -> sectionH;
+                    case Entry.KeyValue ignored -> kvH;
+                    case Entry.ProgressBar ignored -> barH;
+                    case Entry.IconText ignored -> iconTextH;
+                    case Entry.ContentIconText ignored -> iconTextH;
                     case Entry.ContentCandidateGrid it -> {
                         int visible = Math.min(it.count(), it.maxVisible());
                         if (visible <= 0) {
@@ -387,9 +414,9 @@ public final class RichTooltipComponent implements TooltipComponent {
                         }
                         int columns = Math.min(6, visible);
                         int rows = (int) Math.ceil(visible / (double) columns);
-                        yield rows * ICON_SIZE + Math.max(0, rows - 1) * 3;
+                        yield rows * iconSize + Math.max(0, rows - 1) * 3;
                     }
-                    case Entry.TextureIconText ignored -> ICON_TEXT_H;
+                    case Entry.TextureIconText ignored -> iconTextH;
                     case Entry.RecipeCard rc -> recipeCardHeight(rc.inputs(), rc.outputs(), rc.catalysts(), null, null);
                     case Entry.JeiRecipeCard rc -> recipeCardHeight(
                         rc.inputs(),
@@ -411,92 +438,104 @@ public final class RichTooltipComponent implements TooltipComponent {
             for (Entry e : data.entries) {
                 switch (e) {
                     case Entry.TextLine tl -> {
-                        for (String line : wrappedText(font, tl.text(), TEXT_WRAP_WIDTH)) {
-                            graphics.drawString(font, line, x + PAD_X, curY, tl.color(), tl.shadow());
-                            curY += TEXT_H;
+                        for (String line : wrappedText(font, tl.text(), textWrapWidth)) {
+                            graphics.drawString(font, line, x + padX, curY, tl.color(), tl.shadow());
+                            curY += textH;
                         }
                     }
                     case Entry.SlotRow sr -> {
                         // Optional label
                         if (sr.label() != null) {
-                            graphics.drawString(font, sr.label(), x + PAD_X, curY, sr.labelColor(), true);
-                            curY += LABEL_H;
+                            graphics.drawString(font, sr.label(), x + padX, curY, sr.labelColor(), true);
+                            curY += labelH;
                         }
                         // Render each slot as an icon with a mini-slot background
-                        int iconX = x + PAD_X;
+                        int iconX = x + padX;
                         for (MaterialSlot slot : sr.slots()) {
                             renderSlot(font, graphics, slot, iconX, curY);
-                            iconX += ICON_STEP;
+                            iconX += iconStep;
                         }
-                        curY += ICON_STEP;
+                        curY += iconStep;
                     }
                     case Entry.Divider d -> {
-                        int dx = x + PAD_X;
-                        int dw = totalW - PAD_X * 2;
+                        int dx = x + padX;
+                        int dw = totalW - padX * 2;
                         graphics.fill(dx, curY + 2, dx + dw, curY + 3, d.color());
                         int cs = dx + dw / 4, ce = dx + dw * 3 / 4;
                         graphics.fill(cs, curY + 2, ce, curY + 3, brighten(d.color(), 0x22));
-                        curY += DIVIDER_H;
+                        curY += dividerH;
                     }
                     case Entry.Gap g -> curY += g.height();
                     case Entry.SectionHeader sh -> {
-                        graphics.drawString(font, sh.title(), x + PAD_X, curY + 2, sh.titleColor(), true);
-                        curY += SECTION_H;
+                        graphics.drawString(font, sh.title(), x + padX, curY + 2, sh.titleColor(), true);
+                        curY += sectionH;
                     }
                     case Entry.KeyValue kv -> {
-                        graphics.drawString(font, kv.key(), x + PAD_X, curY, kv.keyColor(), true);
+                        graphics.drawString(font, kv.key(), x + padX, curY, kv.keyColor(), true);
                         int vw = font.width(kv.value());
-                        graphics.drawString(font, kv.value(),
-                                x + totalW - PAD_X - vw, curY, kv.valueColor(), true);
-                        curY += KV_H;
+                        graphics.drawString(font, kv.value(), x + totalW - padX - vw, curY, kv.valueColor(), true);
+                        curY += kvH;
                     }
                     case Entry.ProgressBar pb -> {
-                        int bx2 = x + PAD_X;
-                        int bw = totalW - PAD_X * 2;
+                        int bx2 = x + padX;
+                        int bw = totalW - padX * 2;
                         int by = curY + 2;
-                        int bh = BAR_H - 4;
-                        graphics.fill(bx2, by, bx2 + bw, by + bh, BAR_BG);
+                        int bh = barH - 4;
+                        graphics.fill(bx2, by, bx2 + bw, by + bh, barBg);
                         int fw = Math.max(0, (int) (bw * Math.min(1.0f, pb.ratio())));
                         if (fw > 0) graphics.fill(bx2, by, bx2 + fw, by + bh, pb.fillColor());
-                        drawRect(graphics, bx2, by, bw, bh, BAR_BD);
-                        curY += BAR_H;
+                        drawRect(graphics, bx2, by, bw, bh, barBd);
+                        curY += barH;
                     }
                     case Entry.IconText it -> {
-                        int ix = x + PAD_X;
+                        int ix = x + padX;
                         int iy = curY + 1;
                         if (it.icon() != null && !it.icon().isEmpty()) {
                             graphics.renderItem(it.icon(), ix, iy);
                         } else {
-                            graphics.fill(ix + 2, iy + 2, ix + ICON_SIZE - 2,
-                                    iy + ICON_SIZE - 2, it.fallbackColor());
+                            graphics.fill(ix + 2, iy + 2, ix + iconSize - 2, iy + iconSize - 2, it.fallbackColor());
                         }
-                        int tx = ix + ICON_SIZE + 5;
-                        int ty = iy + (ICON_SIZE - 8) / 2;
+                        int tx = ix + iconSize + 5;
+                        int ty = iy + (iconSize - 8) / 2;
                         graphics.drawString(font, it.text(), tx, ty, it.textColor(), true);
                         if (it.rightText() != null) {
                             int rw = font.width(it.rightText());
-                            graphics.drawString(font, it.rightText(),
-                                    x + totalW - PAD_X - rw, ty, it.rightColor(), true);
+                            graphics.drawString(
+                                font,
+                                it.rightText(),
+                                x + totalW - padX - rw,
+                                ty,
+                                it.rightColor(),
+                                true
+                            );
                         }
-                        curY += ICON_TEXT_H;
+                        curY += iconTextH;
                     }
                     case Entry.ContentIconText it -> {
-                        int ix = x + PAD_X;
+                        int ix = x + padX;
                         int iy = curY + 1;
-                        if (it.content() != null && it.content().notEmpty() && ExecutionOverlayContentHelper.hasRenderableVisual(it.content())) {
+                        if (it.content() != null
+                                && it.content().notEmpty()
+                                && ExecutionOverlayContentHelper.hasRenderableVisual(it.content())) {
                             renderRecipeContentIcon(graphics, it.content(), ix, iy);
                         } else {
-                            graphics.fill(ix + 2, iy + 2, ix + ICON_SIZE - 2, iy + ICON_SIZE - 2, it.fallbackColor());
+                            graphics.fill(ix + 2, iy + 2, ix + iconSize - 2, iy + iconSize - 2, it.fallbackColor());
                         }
-                        int tx = ix + ICON_SIZE + 5;
-                        int ty = iy + (ICON_SIZE - 8) / 2;
+                        int tx = ix + iconSize + 5;
+                        int ty = iy + (iconSize - 8) / 2;
                         graphics.drawString(font, it.text(), tx, ty, it.textColor(), true);
                         if (it.rightText() != null) {
                             int rw = font.width(it.rightText());
-                            graphics.drawString(font, it.rightText(),
-                                x + totalW - PAD_X - rw, ty, it.rightColor(), true);
+                            graphics.drawString(
+                                font,
+                                it.rightText(),
+                                x + totalW - padX - rw,
+                                ty,
+                                it.rightColor(),
+                                true
+                            );
                         }
-                        curY += ICON_TEXT_H;
+                        curY += iconTextH;
                     }
                     case Entry.ContentCandidateGrid it -> {
                         int visible = Math.min(it.count(), it.maxVisible());
@@ -507,8 +546,8 @@ public final class RichTooltipComponent implements TooltipComponent {
                         for (int i = 0; i < visible; i++) {
                             int col = i % columns;
                             int row = i / columns;
-                            int sx = x + PAD_X + col * (ICON_SIZE + 3);
-                            int sy = curY + row * (ICON_SIZE + 3);
+                            int sx = x + padX + col * (iconSize + 3);
+                            int sy = curY + row * (iconSize + 3);
                             renderRecipeContentIcon(graphics, it.content(), i, sx, sy);
                         }
                         if (it.count() > visible) {
@@ -517,32 +556,38 @@ public final class RichTooltipComponent implements TooltipComponent {
                             graphics.drawString(
                                 font,
                                 more,
-                                x + PAD_X + columns * (ICON_SIZE + 3) + 1,
-                                curY + rows * ICON_SIZE - 8,
+                                x + padX + columns * (iconSize + 3) + 1,
+                                curY + rows * iconSize - 8,
                                 0xFF999999,
                                 false
                             );
                         }
                         int rows = (int) Math.ceil(visible / (double) columns);
-                        curY += rows * ICON_SIZE + Math.max(0, rows - 1) * 3;
+                        curY += rows * iconSize + Math.max(0, rows - 1) * 3;
                     }
                     case Entry.TextureIconText it -> {
-                        int ix = x + PAD_X;
+                        int ix = x + padX;
                         int iy = curY + 1;
                         if (it.icon() != null) {
                             renderTextureIcon(graphics, it.icon(), ix, iy);
                         } else {
-                            graphics.fill(ix + 2, iy + 2, ix + ICON_SIZE - 2, iy + ICON_SIZE - 2, it.fallbackColor());
+                            graphics.fill(ix + 2, iy + 2, ix + iconSize - 2, iy + iconSize - 2, it.fallbackColor());
                         }
-                        int tx = ix + ICON_SIZE + 5;
-                        int ty = iy + (ICON_SIZE - 8) / 2;
+                        int tx = ix + iconSize + 5;
+                        int ty = iy + (iconSize - 8) / 2;
                         graphics.drawString(font, it.text(), tx, ty, it.textColor(), true);
                         if (it.rightText() != null) {
                             int rw = font.width(it.rightText());
-                            graphics.drawString(font, it.rightText(),
-                                x + totalW - PAD_X - rw, ty, it.rightColor(), true);
+                            graphics.drawString(
+                                font,
+                                it.rightText(),
+                                x + totalW - padX - rw,
+                                ty,
+                                it.rightColor(),
+                                true
+                            );
                         }
-                        curY += ICON_TEXT_H;
+                        curY += iconTextH;
                     }
                     case Entry.RecipeCard rc -> {
                         curY += renderRecipeCard(
@@ -577,43 +622,62 @@ public final class RichTooltipComponent implements TooltipComponent {
         }
 
         private static int recipeCardWidth(
-                List<MaterialSlot> inputs,
-                List<MaterialSlot> outputs,
-                List<MaterialSlot> catalysts,
-                @Nullable Integer forcedInputColumns,
-                @Nullable Integer forcedOutputColumns
+            List<MaterialSlot> inputs,
+            List<MaterialSlot> outputs,
+            List<MaterialSlot> catalysts,
+            @Nullable Integer forcedInputColumns,
+            @Nullable Integer forcedOutputColumns
         ) {
-            RecipeCardGeometry geometry = recipeCardGeometry(inputs, outputs, catalysts, forcedInputColumns, forcedOutputColumns);
+            RecipeCardGeometry geometry = recipeCardGeometry(
+                inputs,
+                outputs,
+                catalysts,
+                forcedInputColumns,
+                forcedOutputColumns
+            );
             return geometry.frameWidth();
         }
 
         private static int recipeCardHeight(
-                List<MaterialSlot> inputs,
-                List<MaterialSlot> outputs,
-                List<MaterialSlot> catalysts,
-                @Nullable Integer forcedInputColumns,
-                @Nullable Integer forcedOutputColumns
+            List<MaterialSlot> inputs,
+            List<MaterialSlot> outputs,
+            List<MaterialSlot> catalysts,
+            @Nullable Integer forcedInputColumns,
+            @Nullable Integer forcedOutputColumns
         ) {
-            RecipeCardGeometry geometry = recipeCardGeometry(inputs, outputs, catalysts, forcedInputColumns, forcedOutputColumns);
+            RecipeCardGeometry geometry = recipeCardGeometry(
+                inputs,
+                outputs,
+                catalysts,
+                forcedInputColumns,
+                forcedOutputColumns
+            );
             return geometry.frameHeight();
         }
 
         private static int renderRecipeCard(
-                Font font,
-                GuiGraphics graphics,
-                int baseX,
-                int baseY,
-                List<MaterialSlot> inputs,
-                List<MaterialSlot> outputs,
-                List<MaterialSlot> catalysts,
-                @Nullable MaterialSlot machine,
-                @Nullable Integer forcedInputColumns,
-                @Nullable Integer forcedOutputColumns
+            Font font,
+            GuiGraphics graphics,
+            int baseX,
+            int baseY,
+            List<MaterialSlot> inputs,
+            List<MaterialSlot> outputs,
+            List<MaterialSlot> catalysts,
+            @Nullable MaterialSlot machine,
+            @Nullable Integer forcedInputColumns,
+            @Nullable Integer forcedOutputColumns
         ) {
-            RecipeCardGeometry geometry = recipeCardGeometry(inputs, outputs, catalysts, forcedInputColumns, forcedOutputColumns);
-            int frameX = baseX + PAD_X;
+            RecipeCardGeometry geometry = recipeCardGeometry(
+                inputs,
+                outputs,
+                catalysts,
+                forcedInputColumns,
+                forcedOutputColumns
+            );
+            int frameX = baseX + padX;
             int frameY = baseY;
-            CirrusTextures.Background.Outlined.flat.render(graphics, frameX, frameY, geometry.frameWidth(), geometry.frameHeight());
+            CirrusTextures.Background.Outlined.flat
+                    .render(graphics, frameX, frameY, geometry.frameWidth(), geometry.frameHeight());
             CirrusTextures.Background.dark.render(
                 graphics,
                 frameX + 1,
@@ -621,19 +685,14 @@ public final class RichTooltipComponent implements TooltipComponent {
                 Math.max(1, geometry.frameWidth() - 2),
                 Math.max(1, geometry.frameHeight() - 2)
             );
-            CirrusTextures.Background.Sign.bar.render(
-                graphics,
-                frameX + 2,
-                frameY + 2,
-                Math.max(8, geometry.frameWidth() - 4),
-                2
-            );
+            CirrusTextures.Background.Sign.bar
+                    .render(graphics, frameX + 2, frameY + 2, Math.max(8, geometry.frameWidth() - 4), 2);
 
-            int leftX = frameX + RECIPE_CARD_FRAME_PAD * 2;
+            int leftX = frameX + recipeCardFramePad * 2;
             int centerX = leftX + geometry.inputGridWidth();
-            int rightX = centerX + RECIPE_ARROW_GAP;
-            int centerW = RECIPE_ARROW_GAP;
-            int contentY = frameY + RECIPE_CARD_FRAME_PAD;
+            int rightX = centerX + recipeArrowGap;
+            int centerW = recipeArrowGap;
+            int contentY = frameY + recipeCardFramePad;
 
             renderSlotGrid(font, graphics, inputs, geometry.inputColumns(), leftX, contentY);
             renderSlotGrid(font, graphics, outputs, geometry.outputColumns(), rightX, contentY);
@@ -645,24 +704,30 @@ public final class RichTooltipComponent implements TooltipComponent {
             int arrowY = arrowCenterY;
 
             if (machine != null) {
-                int machineX = centerX + (centerW - ICON_SIZE) / 2;
+                int machineX = centerX + (centerW - iconSize) / 2;
                 int machineY = contentY;
-                graphics.fill(machineX - 1, machineY - 1, machineX + ICON_SIZE + 1, machineY + ICON_SIZE + 1, RECIPE_MACHINE_BG);
+                graphics.fill(
+                    machineX - 1,
+                    machineY - 1,
+                    machineX + iconSize + 1,
+                    machineY + iconSize + 1,
+                    recipeMachineBg
+                );
                 renderSlot(font, graphics, machine, machineX, machineY);
-                arrowY = Math.max(contentY + ICON_STEP + 1, arrowCenterY);
+                arrowY = Math.max(contentY + iconStep + 1, arrowCenterY);
             }
 
             graphics.drawString(font, arrow, arrowX, arrowY, 0xFFFFFFFF, true);
 
             if (!catalysts.isEmpty()) {
-                int catalystY = contentY + geometry.mainHeight() + RECIPE_SUBSECTION_GAP;
-                int catalystWidth = geometry.catalystColumns() * ICON_STEP;
+                int catalystY = contentY + geometry.mainHeight() + recipeSubsectionGap;
+                int catalystWidth = geometry.catalystColumns() * iconStep;
                 graphics.fill(
                     leftX - 1,
                     catalystY - 1,
                     leftX + catalystWidth + 1,
-                    catalystY + geometry.catalystRows() * ICON_STEP + 1,
-                    RECIPE_CATALYST_BG
+                    catalystY + geometry.catalystRows() * iconStep + 1,
+                    recipeCatalystBg
                 );
                 renderSlotGrid(font, graphics, catalysts, geometry.catalystColumns(), leftX, catalystY);
             }
@@ -671,39 +736,39 @@ public final class RichTooltipComponent implements TooltipComponent {
         }
 
         private static RecipeCardGeometry recipeCardGeometry(
-                List<MaterialSlot> inputs,
-                List<MaterialSlot> outputs,
-                List<MaterialSlot> catalysts,
-                @Nullable Integer forcedInputColumns,
-                @Nullable Integer forcedOutputColumns
+            List<MaterialSlot> inputs,
+            List<MaterialSlot> outputs,
+            List<MaterialSlot> catalysts,
+            @Nullable Integer forcedInputColumns,
+            @Nullable Integer forcedOutputColumns
         ) {
             int inputCount = Math.max(1, inputs.size());
             int outputCount = Math.max(1, outputs.size());
 
-            int autoColumns = Math.max(1, Math.min(RECIPE_CARD_MAX_COLS, Math.max(inputCount, outputCount)));
+            int autoColumns = Math.max(1, Math.min(recipeCardMaxCols, Math.max(inputCount, outputCount)));
             int inputColumns = clampRecipeColumns(forcedInputColumns, autoColumns, inputCount);
             int outputColumns = clampRecipeColumns(forcedOutputColumns, autoColumns, outputCount);
 
             int inputRows = Math.max(1, (int) Math.ceil(inputCount / (double) inputColumns));
             int outputRows = Math.max(1, (int) Math.ceil(outputCount / (double) outputColumns));
             int mainRows = Math.max(inputRows, outputRows);
-            int inputGridWidth = inputColumns * ICON_STEP;
-            int outputGridWidth = outputColumns * ICON_STEP;
-            int mainWidth = inputGridWidth + RECIPE_ARROW_GAP + outputGridWidth;
-            int mainHeight = mainRows * ICON_STEP;
+            int inputGridWidth = inputColumns * iconStep;
+            int outputGridWidth = outputColumns * iconStep;
+            int mainWidth = inputGridWidth + recipeArrowGap + outputGridWidth;
+            int mainHeight = mainRows * iconStep;
 
             int catalystColumns = 0;
             int catalystRows = 0;
             int catalystsHeight = 0;
             if (!catalysts.isEmpty()) {
-                int spanColumns = Math.max(1, Math.min(RECIPE_CARD_MAX_COLS, inputColumns + outputColumns));
+                int spanColumns = Math.max(1, Math.min(recipeCardMaxCols, inputColumns + outputColumns));
                 catalystColumns = Math.max(1, Math.min(spanColumns, catalysts.size()));
                 catalystRows = (int) Math.ceil(catalysts.size() / (double) catalystColumns);
-                catalystsHeight = RECIPE_SUBSECTION_GAP + catalystRows * ICON_STEP;
+                catalystsHeight = recipeSubsectionGap + catalystRows * iconStep;
             }
 
-            int frameWidth = mainWidth + RECIPE_CARD_FRAME_PAD * 2;
-            int frameHeight = mainHeight + catalystsHeight + RECIPE_CARD_FRAME_PAD * 2;
+            int frameWidth = mainWidth + recipeCardFramePad * 2;
+            int frameHeight = mainHeight + catalystsHeight + recipeCardFramePad * 2;
             return new RecipeCardGeometry(
                 inputColumns,
                 outputColumns,
@@ -722,7 +787,7 @@ public final class RichTooltipComponent implements TooltipComponent {
         }
 
         private static int clampRecipeColumns(@Nullable Integer forcedColumns, int autoColumns, int itemCount) {
-            int maxColumns = Math.max(1, Math.min(RECIPE_CARD_MAX_COLS, itemCount));
+            int maxColumns = Math.max(1, Math.min(recipeCardMaxCols, itemCount));
             int normalizedAuto = Math.max(1, Math.min(maxColumns, autoColumns));
             if (forcedColumns == null) {
                 return normalizedAuto;
@@ -735,31 +800,35 @@ public final class RichTooltipComponent implements TooltipComponent {
         }
 
         private record RecipeCardGeometry(
-                int inputColumns,
-                int outputColumns,
-                int inputRows,
-                int outputRows,
-                int mainRows,
-                int inputGridWidth,
-                int outputGridWidth,
-                int mainWidth,
-                int mainHeight,
-                int catalystColumns,
-                int catalystRows,
-                int frameWidth,
-                int frameHeight
-        ) {
-        }
+            int inputColumns,
+            int outputColumns,
+            int inputRows,
+            int outputRows,
+            int mainRows,
+            int inputGridWidth,
+            int outputGridWidth,
+            int mainWidth,
+            int mainHeight,
+            int catalystColumns,
+            int catalystRows,
+            int frameWidth,
+            int frameHeight
+        ) {}
 
-        private static void renderSlotGrid(Font font, GuiGraphics graphics,
-                                           List<MaterialSlot> slots, int columns,
-                                           int startX, int startY) {
+        private static void renderSlotGrid(
+            Font font,
+            GuiGraphics graphics,
+            List<MaterialSlot> slots,
+            int columns,
+            int startX,
+            int startY
+        ) {
             int safeCols = Math.max(1, columns);
             for (int i = 0; i < slots.size(); i++) {
                 int col = i % safeCols;
                 int row = i / safeCols;
-                int iconX = startX + col * ICON_STEP;
-                int iconY = startY + row * ICON_STEP;
+                int iconX = startX + col * iconStep;
+                int iconY = startY + row * iconStep;
                 renderSlot(font, graphics, slots.get(i), iconX, iconY);
             }
         }
@@ -776,22 +845,23 @@ public final class RichTooltipComponent implements TooltipComponent {
                 var pose = graphics.pose();
                 pose.pushPose();
                 pose.translate(iconX, iconY, 0);
-                FluidStackRenderer.instance.renderBase(
-                        graphics, fluid.value(), ICON_SIZE, ICON_SIZE, 0);
+                FluidStackRenderer.instance.renderBase(graphics, fluid.value(), iconSize, iconSize, 0);
                 pose.popPose();
                 String amt = shortAmount(slot.amount());
-                graphics.drawString(font, amt,
-                        iconX + ICON_SIZE - font.width(amt),
-                        iconY + ICON_SIZE - 8, 0xFFFFFFFF, true);
+                graphics.drawString(
+                    font,
+                    amt,
+                    iconX + iconSize - font.width(amt),
+                    iconY + iconSize - 8,
+                    0xFFFFFFFF,
+                    true
+                );
             } else {
                 int typeColor = slot.category().color();
-                graphics.fill(iconX + 1, iconY + 1,
-                        iconX + ICON_SIZE - 1, iconY + ICON_SIZE - 1, typeColor);
+                graphics.fill(iconX + 1, iconY + 1, iconX + iconSize - 1, iconY + iconSize - 1, typeColor);
                 String initial = slot.category().name().substring(0, 1);
                 int tw = font.width(initial);
-                graphics.drawString(font, initial,
-                        iconX + (ICON_SIZE - tw) / 2,
-                        iconY + 4, 0xFFFFFFFF, true);
+                graphics.drawString(font, initial, iconX + (iconSize - tw) / 2, iconY + 4, 0xFFFFFFFF, true);
             }
         }
 
@@ -849,7 +919,7 @@ public final class RichTooltipComponent implements TooltipComponent {
         }
 
         private static int wrappedTextHeight(@Nullable Font font, String text, int maxWidth) {
-            return wrappedText(font, text, maxWidth).size() * TEXT_H;
+            return wrappedText(font, text, maxWidth).size() * textH;
         }
 
         private static int plainTextWidth(@Nullable Font font, @Nullable String text) {
@@ -871,13 +941,19 @@ public final class RichTooltipComponent implements TooltipComponent {
         }
 
         @SuppressWarnings("unchecked")
-        private static void renderRecipeContentIcon(GuiGraphics graphics, RecipeContent content, int visualIndex, int x, int y) {
+        private static void renderRecipeContentIcon(
+            GuiGraphics graphics,
+            RecipeContent content,
+            int visualIndex,
+            int x,
+            int y
+        ) {
             graphics.pose().pushPose();
             graphics.pose().translate(x, y, 200.0F);
             Lighting.setupFor3DItems();
             try {
                 RecipeContentRenderer<RecipeContent> renderer = recipeContentRenderer(content);
-                renderer.render(graphics, content, Math.max(0, visualIndex), ICON_SIZE, ICON_SIZE, 0);
+                renderer.render(graphics, content, Math.max(0, visualIndex), iconSize, iconSize, 0);
             } finally {
                 Lighting.setupForFlatItems();
                 graphics.pose().popPose();
@@ -890,10 +966,10 @@ public final class RichTooltipComponent implements TooltipComponent {
         }
 
         private static void renderTextureIcon(GuiGraphics graphics, ImageTexture icon, int x, int y) {
-            int width = Math.min(ICON_SIZE - 2, icon.width());
-            int height = Math.min(ICON_SIZE - 2, icon.height());
-            int iconX = x + Math.max(1, (ICON_SIZE - width) / 2);
-            int iconY = y + Math.max(1, (ICON_SIZE - height) / 2);
+            int width = Math.min(iconSize - 2, icon.width());
+            int height = Math.min(iconSize - 2, icon.height());
+            int iconX = x + Math.max(1, (iconSize - width) / 2);
+            int iconY = y + Math.max(1, (iconSize - height) / 2);
             graphics.pose().pushPose();
             graphics.pose().translate(0.0F, 0.0F, 200.0F);
             icon.render(graphics, iconX, iconY, width, height);

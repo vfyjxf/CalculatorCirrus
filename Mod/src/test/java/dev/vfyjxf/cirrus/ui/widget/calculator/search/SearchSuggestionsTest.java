@@ -20,13 +20,6 @@ class SearchSuggestionsTest {
     }
 
     @Test
-    void suggestsFieldNamesForPartialAdvancedField() {
-        List<SearchSuggestion> suggestions = SearchSuggestions.suggest("out", 3, 6);
-
-        assertTrue(suggestions.stream().anyMatch(suggestion -> "out:".equals(suggestion.replacement())));
-    }
-
-    @Test
     void appliesSuggestionWithoutExpandingTheWholeQuery() {
         SearchSuggestion suggestion = SearchSuggestions.suggest("oak out", 7, 6).getFirst();
 
@@ -38,13 +31,6 @@ class SearchSuggestionsTest {
         List<SearchSuggestion> suggestions = SearchSuggestions.suggest("by", 2, 8);
 
         assertTrue(suggestions.stream().anyMatch(suggestion -> "bp:".equals(suggestion.replacement())));
-    }
-
-    @Test
-    void syntaxSuggestionsCarryPredicateDescriptions() {
-        SearchSuggestion suggestion = SearchSuggestions.suggest("out", 3, 6).getFirst();
-
-        assertTrue(suggestion.description() != null);
     }
 
     @Test

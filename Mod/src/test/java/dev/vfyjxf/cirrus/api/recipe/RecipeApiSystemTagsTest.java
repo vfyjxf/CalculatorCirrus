@@ -1,6 +1,5 @@
 package dev.vfyjxf.cirrus.api.recipe;
 
-import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -49,8 +48,7 @@ class RecipeApiSystemTagsTest {
         return tags;
     }
 
-    private record FakeRecipe(String id) {
-    }
+    private record FakeRecipe(String id) {}
 
     private static final class FakeSystem implements RecipeSystem<FakeRecipe> {
         private final Namespace systemId;

@@ -1,8 +1,9 @@
 package dev.vfyjxf.cirrus.planning.core.select;
 
 import dev.vfyjxf.cirrus.api.planning.cost.CostWeights;
-import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
+import dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory;
+import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -13,9 +14,12 @@ import dev.vfyjxf.cirrus.api.planning.plan.PlanVerifier;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
+import dev.vfyjxf.cirrus.api.planning.plan.SlotBinding;
 import dev.vfyjxf.cirrus.api.planning.plan.VerificationCertificate;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
+import dev.vfyjxf.cirrus.planning.core.solve.ImprovementLoop;
 import dev.vfyjxf.cirrus.planning.core.verify.DefaultPlanVerifier;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -25,12 +29,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeSet;
 
 public final class DiverseParetoSelector {
 
     private final PlanVerifier verifier;
-    private final CompiledRecipeGraph graph;
+    private final @Nullable CompiledRecipeGraph graph;
 
     public DiverseParetoSelector(PlanVerifier verifier) {
         this(verifier, null);
@@ -40,7 +43,7 @@ public final class DiverseParetoSelector {
         this(new DefaultPlanVerifier(Objects.requireNonNull(graph, "graph")), graph);
     }
 
-    public DiverseParetoSelector(PlanVerifier verifier, CompiledRecipeGraph graph) {
+    public DiverseParetoSelector(PlanVerifier verifier, @Nullable CompiledRecipeGraph graph) {
         this.verifier = Objects.requireNonNull(verifier, "verifier");
         this.graph = graph;
     }
@@ -52,24 +55,33 @@ public final class DiverseParetoSelector {
         // 1. Re-verify every candidate and stamp a fresh certificate.
         Map<String, CandidateEntry> deduped = new LinkedHashMap<>();
         CostWeights primaryWeights = request.profile().weights();
+        HumanGuidanceView guidance = request.context().guidance();
 
         for (ProductionPlan raw : candidates) {
             if (raw == null) continue;
             VerificationCertificate cert = verifier.verify(raw, request);
             if (!cert.valid()) continue;
             ProductionPlan stamped = new ProductionPlan(
-                    raw.planId(),
-                    raw.strategyLabelKey(),
-                    raw.steps(),
-                    raw.preparation(),
-                    raw.surplusByproducts(),
-                    raw.totalCost(),
-                    cert
+                raw.planId(),
+                raw.strategyLabelKey(),
+                raw.steps(),
+                raw.preparation(),
+                raw.surplusByproducts(),
+                raw.totalCost(),
+                cert
             );
             String structKey = structuralKey(stamped);
-            int advWeight = advisoryWeight(stamped);
-            double scalar = primaryWeights.scalarize(stamped.totalCost());
-            CandidateEntry entry = new CandidateEntry(stamped, structKey, featureSignature(stamped), advWeight, scalar);
+            int pinnedUsed = countPinnedRecipes(stamped, guidance);
+            int advWeight = advisoryWeight(stamped, guidance);
+            double scalar = ImprovementLoop.guidedScalar(stamped, primaryWeights, guidance);
+            CandidateEntry entry = new CandidateEntry(
+                stamped,
+                structKey,
+                featureSignature(stamped),
+                pinnedUsed,
+                advWeight,
+                scalar
+            );
             CandidateEntry existing = deduped.get(structKey);
             if (existing == null || entry.compareRank(existing) < 0) {
                 deduped.put(structKey, entry);
@@ -80,15 +92,55 @@ public final class DiverseParetoSelector {
             return List.of();
         }
 
+        List<CandidateEntry> pool = new ArrayList<>(deduped.values());
+
+        boolean hasNonLastResort = false;
+        int maxPinnedUsed = 0;
+        for (CandidateEntry c : pool) {
+            if (c.advisoryWeight < RecipeAdvisory.lastResort.weight()) {
+                hasNonLastResort = true;
+            }
+            if (c.pinnedUsed > maxPinnedUsed) {
+                maxPinnedUsed = c.pinnedUsed;
+            }
+        }
+        if (maxPinnedUsed > 0) {
+            final int bestPin = maxPinnedUsed;
+            pool.removeIf(c -> c.pinnedUsed < bestPin);
+        }
+        if (hasNonLastResort) {
+            pool.removeIf(c -> c.advisoryWeight >= RecipeAdvisory.lastResort.weight());
+        }
+
+        // Prevent higher-advisory plans from dominating cleaner plans while preserving INV-04.
+        List<CandidateEntry> cleanPool = new ArrayList<>(pool.size());
+        for (int i = 0; i < pool.size(); i++) {
+            CandidateEntry cand = pool.get(i);
+            boolean dominatesCleaner = false;
+            if (cand.advisoryWeight > 0) {
+                for (int j = 0; j < pool.size(); j++) {
+                    if (i == j) continue;
+                    CandidateEntry other = pool.get(j);
+                    if (other.advisoryWeight < cand.advisoryWeight
+                            && cand.plan.totalCost().dominates(other.plan.totalCost())) {
+                        dominatesCleaner = true;
+                        break;
+                    }
+                }
+            }
+            if (!dominatesCleaner) {
+                cleanPool.add(cand);
+            }
+        }
+
         // 2. Extract exact Pareto non-dominated frontier (INV-04).
-        List<CandidateEntry> all = new ArrayList<>(deduped.values());
-        List<CandidateEntry> frontier = new ArrayList<>(all.size());
-        for (int i = 0; i < all.size(); i++) {
-            CandidateEntry cand = all.get(i);
+        List<CandidateEntry> frontier = new ArrayList<>(cleanPool.size());
+        for (int i = 0; i < cleanPool.size(); i++) {
+            CandidateEntry cand = cleanPool.get(i);
             boolean dominated = false;
-            for (int j = 0; j < all.size(); j++) {
+            for (int j = 0; j < cleanPool.size(); j++) {
                 if (i == j) continue;
-                if (all.get(j).plan.totalCost().dominates(cand.plan.totalCost())) {
+                if (cleanPool.get(j).plan.totalCost().dominates(cand.plan.totalCost())) {
                     dominated = true;
                     break;
                 }
@@ -132,15 +184,15 @@ public final class DiverseParetoSelector {
             parts.add(switch (step) {
                 case AcquireStep a -> "A:" + a.resource().shortString() + "=" + a.amount();
                 case LinePullStep lp -> "L:" + lp.lineId() + ":" + lp.resource().shortString() + "=" + lp.amount();
-                case ProvisionMachineStep pm -> "P:" + pm.machineId() + "x" + pm.countToBuild()
-                        + ":" + pm.craftedByPredecessorSteps();
-                case SetupLineStep sl -> "S:" + sl.systemId() + ":" + sl.primaryMachineId()
-                        + ":" + sl.targetOutput().shortString();
-                case CraftStep cs -> "C:" + cs.recipeKey().shortString() + "x" + cs.batches()
-                        + ":" + cs.chosenMachineId().orElse("") + ":" + cs.executedByAutomation()
-                        + ":" + bindingsKey(cs.slotBindings());
-                case ConvertStep cv -> "V:" + cv.conversionRecipeKey().shortString() + "x" + cv.batches()
-                        + ":" + bindingsKey(cv.slotBindings());
+                case ProvisionMachineStep pm ->
+                    "P:" + pm.machineId() + "x" + pm.countToBuild() + ":" + pm.craftedByPredecessorSteps();
+                case SetupLineStep sl ->
+                    "S:" + sl.systemId() + ":" + sl.primaryMachineId() + ":" + sl.targetOutput().shortString();
+                case CraftStep cs ->
+                    "C:" + cs.recipeKey().shortString() + "x" + cs.batches() + ":" + cs.chosenMachineId().orElse("")
+                            + ":" + cs.executedByAutomation() + ":" + bindingsKey(cs.slotBindings());
+                case ConvertStep cv -> "V:" + cv.conversionRecipeKey().shortString() + "x" + cv.batches() + ":"
+                        + bindingsKey(cv.slotBindings());
                 case CycleLoopStep cl -> "Y:" + cl.macroKey().macroId() + "x" + cl.iterations();
             });
         }
@@ -148,7 +200,7 @@ public final class DiverseParetoSelector {
         return String.join("|", parts);
     }
 
-    private static String bindingsKey(Map<Integer, dev.vfyjxf.cirrus.api.planning.plan.SlotBinding> bindings) {
+    private static String bindingsKey(Map<Integer, SlotBinding> bindings) {
         if (bindings.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
         for (var e : bindings.entrySet()) {
@@ -174,23 +226,45 @@ public final class DiverseParetoSelector {
         return sig;
     }
 
-    private int advisoryWeight(ProductionPlan plan) {
+    private static int countPinnedRecipes(ProductionPlan plan, HumanGuidanceView guidance) {
+        if (guidance == null || guidance.allRules().isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (PlanStep step : plan.steps()) {
+            if (step instanceof CraftStep cs && guidance.isRecipePinned(cs.recipeKey())) {
+                count++;
+            } else if (step instanceof CycleLoopStep cl) {
+                for (CraftStep inner : cl.singleIterationTemplate()) {
+                    if (guidance.isRecipePinned(inner.recipeKey())) {
+                        count++;
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
+    private int advisoryWeight(ProductionPlan plan, HumanGuidanceView guidance) {
         if (graph == null) return 0;
         int sum = 0;
         for (PlanStep step : plan.steps()) {
             switch (step) {
-                case CraftStep cs -> sum += graph.recipeByKey(cs.recipeKey())
-                        .map(r -> r.advisory().weight()).orElse(0);
-                case ConvertStep cv -> sum += graph.recipeByKey(cv.conversionRecipeKey())
-                        .map(r -> r.advisory().weight()).orElse(0);
-                case CycleLoopStep cl -> {
-                    for (CraftStep inner : cl.singleIterationTemplate()) {
-                        sum += graph.recipeByKey(inner.recipeKey())
-                                .map(r -> r.advisory().weight()).orElse(0);
+                case CraftStep cs -> {
+                    if (guidance == null || !guidance.isRecipePinned(cs.recipeKey())) {
+                        sum += graph.recipeByKey(cs.recipeKey()).map(r -> r.advisory().weight()).orElse(0);
                     }
                 }
-                default -> {
+                case ConvertStep cv ->
+                    sum += graph.recipeByKey(cv.conversionRecipeKey()).map(r -> r.advisory().weight()).orElse(0);
+                case CycleLoopStep cl -> {
+                    for (CraftStep inner : cl.singleIterationTemplate()) {
+                        if (guidance == null || !guidance.isRecipePinned(inner.recipeKey())) {
+                            sum += graph.recipeByKey(inner.recipeKey()).map(r -> r.advisory().weight()).orElse(0);
+                        }
+                    }
                 }
+                default -> {}
             }
         }
         return sum;
@@ -213,15 +287,18 @@ public final class DiverseParetoSelector {
     }
 
     private record CandidateEntry(
-            ProductionPlan plan,
-            String structKey,
-            Set<String> features,
-            int advisoryWeight,
-            double primaryScalar
+        ProductionPlan plan,
+        String structKey,
+        Set<String> features,
+        int pinnedUsed,
+        int advisoryWeight,
+        double primaryScalar
     ) {
 
         int compareRank(CandidateEntry o) {
-            int c = Integer.compare(advisoryWeight, o.advisoryWeight);
+            int c = Integer.compare(o.pinnedUsed, pinnedUsed);
+            if (c != 0) return c;
+            c = Integer.compare(advisoryWeight, o.advisoryWeight);
             if (c != 0) return c;
             c = Double.compare(primaryScalar, o.primaryScalar);
             if (c != 0) return c;

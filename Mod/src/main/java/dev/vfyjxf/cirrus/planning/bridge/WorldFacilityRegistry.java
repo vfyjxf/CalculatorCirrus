@@ -3,7 +3,11 @@ package dev.vfyjxf.cirrus.planning.bridge;
 import com.google.gson.JsonElement;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
+import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.JsonOps;
+import com.mojang.serialization.MapCodec;
+import com.mojang.serialization.MapLike;
+import com.mojang.serialization.RecordBuilder;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.planning.context.AutomatedLine;
@@ -40,7 +44,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,15 +58,16 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 public final class WorldFacilityRegistry extends SavedData {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger("CalculatorCirrus FacilityRegistry");
+    private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus FacilityRegistry");
 
-    public static final String DATA_NAME = "calculator_cirrus_planning_facilities";
-    private static final String NBT_DATA_KEY = "planning_data";
+    public static final String dataName = "calculator_cirrus_planning_facilities";
+    private static final String nbtDataKey = "planning_data";
 
-    private static final MachineMatcher DEFAULT_MACHINE_MATCHER = new MachineMatcher() {
+    private static final MachineMatcher defaultMachineMatcher = new MachineMatcher() {
         private final Namespace id = CirrusNamespaces.ofMod("machine_matcher/component_equivalence");
 
         @Override
@@ -85,8 +90,9 @@ public final class WorldFacilityRegistry extends SavedData {
         }
     };
 
-    private static final CopyOnWriteArrayList<MachineMatcher> MACHINE_MATCHERS =
-            new CopyOnWriteArrayList<>(List.of(DEFAULT_MACHINE_MATCHER));
+    private static final CopyOnWriteArrayList<MachineMatcher> machineMatchers = new CopyOnWriteArrayList<>(
+        List.of(defaultMachineMatcher)
+    );
 
     private static volatile @Nullable WorldFacilityRegistry installed;
 
@@ -96,104 +102,114 @@ public final class WorldFacilityRegistry extends SavedData {
     private final TreeSet<String> unlockedSystems = new TreeSet<>();
     private final Map<String, GuidanceRule> worldSaveRules = new LinkedHashMap<>();
 
-    public static final Codec<ResourceKey> RESOURCE_KEY_CODEC = RecordCodecBuilder.create(inst -> inst.group(
+    public static final Codec<ResourceKey> resourceKeyCodec = RecordCodecBuilder.create(
+        inst -> inst.group(
             Codec.STRING.fieldOf("contentType").forGetter(ResourceKey::contentTypeId),
             Codec.STRING.fieldOf("id").forGetter(ResourceKey::resourceId),
             Codec.STRING.optionalFieldOf("variant").forGetter(ResourceKey::canonicalVariantHash)
-    ).apply(inst, ResourceKey::new));
+        ).apply(inst, ResourceKey::new)
+    );
 
-    public static final Codec<CompiledRecipeKey> RECIPE_KEY_CODEC = RecordCodecBuilder.create(inst -> inst.group(
+    public static final Codec<CompiledRecipeKey> recipeKeyCodec = RecordCodecBuilder.create(
+        inst -> inst.group(
             Codec.STRING.fieldOf("system").forGetter(CompiledRecipeKey::systemId),
             Codec.STRING.optionalFieldOf("explicitId").forGetter(CompiledRecipeKey::explicitRecipeId),
             Codec.LONG.fieldOf("hash").forGetter(CompiledRecipeKey::structuralHash64)
-    ).apply(inst, CompiledRecipeKey::new));
+        ).apply(inst, CompiledRecipeKey::new)
+    );
 
-    public static final Codec<MachineCapabilityId> CAPABILITY_CODEC =
-            Codec.STRING.xmap(MachineCapabilityId::new, MachineCapabilityId::id);
+    public static final Codec<MachineCapabilityId> capabilityCodec = Codec.STRING
+            .xmap(MachineCapabilityId::new, MachineCapabilityId::id);
 
-    public static final Codec<CostVector> COST_VECTOR_CODEC = RecordCodecBuilder.create(inst -> inst.group(
+    public static final Codec<CostVector> costVectorCodec = RecordCodecBuilder.create(
+        inst -> inst.group(
             Codec.DOUBLE.fieldOf("h").forGetter(CostVector::humanActiveSeconds),
             Codec.DOUBLE.fieldOf("p").forGetter(CostVector::passiveWaitSeconds),
             Codec.DOUBLE.fieldOf("k").forGetter(CostVector::machineSetupCapital),
             Codec.DOUBLE.fieldOf("s").forGetter(CostVector::materialScarcity),
             Codec.DOUBLE.fieldOf("c").forGetter(CostVector::cognitiveFriction)
-    ).apply(inst, CostVector::new));
+        ).apply(inst, CostVector::new)
+    );
 
-    public static final Codec<OwnedMachineGroup> OWNED_MACHINE_CODEC = RecordCodecBuilder.create(inst -> inst.group(
+    public static final Codec<OwnedMachineGroup> ownedMachineCodec = RecordCodecBuilder.create(
+        inst -> inst.group(
             Codec.STRING.fieldOf("machineId").forGetter(OwnedMachineGroup::machineId),
-            CAPABILITY_CODEC.fieldOf("capability").forGetter(OwnedMachineGroup::capability),
+            capabilityCodec.fieldOf("capability").forGetter(OwnedMachineGroup::capability),
             Codec.INT.fieldOf("count").forGetter(OwnedMachineGroup::count),
             Codec.DOUBLE.optionalFieldOf("speed", 1.0).forGetter(OwnedMachineGroup::passiveSpeedMultiplier),
             Codec.BOOL.optionalFieldOf("automatedFeeding", false).forGetter(OwnedMachineGroup::automatedFeeding)
-    ).apply(inst, OwnedMachineGroup::new));
+        ).apply(inst, OwnedMachineGroup::new)
+    );
 
-    public static final Codec<AutomatedLine> AUTOMATED_LINE_CODEC = RecordCodecBuilder.create(inst -> inst.group(
+    public static final Codec<AutomatedLine> automatedLineCodec = RecordCodecBuilder.create(
+        inst -> inst.group(
             Codec.STRING.fieldOf("lineId").forGetter(AutomatedLine::lineId),
-            RESOURCE_KEY_CODEC.fieldOf("output").forGetter(AutomatedLine::output),
+            resourceKeyCodec.fieldOf("output").forGetter(AutomatedLine::output),
             Codec.DOUBLE.fieldOf("throughputPerMinute").forGetter(AutomatedLine::throughputPerMinute),
-            Codec.DOUBLE.optionalFieldOf("humanAttentionSecondsPerPull", 0.0).forGetter(AutomatedLine::humanAttentionSecondsPerPull),
+            Codec.DOUBLE.optionalFieldOf("humanAttentionSecondsPerPull", 0.0)
+                    .forGetter(AutomatedLine::humanAttentionSecondsPerPull),
             Codec.LONG.optionalFieldOf("bufferedStock", 0L).forGetter(AutomatedLine::bufferedStock),
             Codec.BOOL.optionalFieldOf("continuous", true).forGetter(AutomatedLine::continuous)
-    ).apply(inst, AutomatedLine::new));
+        ).apply(inst, AutomatedLine::new)
+    );
 
-    public static final Codec<AutomatedRecipeCapability> AUTOMATED_RECIPE_CODEC = RecordCodecBuilder.create(inst -> inst.group(
-            RECIPE_KEY_CODEC.fieldOf("recipeKey").forGetter(AutomatedRecipeCapability::recipeKey),
+    public static final Codec<AutomatedRecipeCapability> automatedRecipeCodec = RecordCodecBuilder.create(
+        inst -> inst.group(
+            recipeKeyCodec.fieldOf("recipeKey").forGetter(AutomatedRecipeCapability::recipeKey),
             Codec.DOUBLE.fieldOf("passiveSecondsPerBatch").forGetter(AutomatedRecipeCapability::passiveSecondsPerBatch),
             Codec.INT.optionalFieldOf("parallelCrafters", 1).forGetter(AutomatedRecipeCapability::parallelCrafters)
-    ).apply(inst, AutomatedRecipeCapability::new));
-
-    private static final Codec<RuleStrength> STRENGTH_CODEC = Codec.STRING.comapFlatMap(
-            s -> {
-                try {
-                    return DataResult.success(RuleStrength.valueOf(s));
-                } catch (IllegalArgumentException e) {
-                    return DataResult.error(() -> "Unknown RuleStrength: " + s);
-                }
-            },
-            Enum::name
+        ).apply(inst, AutomatedRecipeCapability::new)
     );
 
-    private static final Codec<GuidanceScope> SCOPE_CODEC = Codec.STRING.comapFlatMap(
-            s -> {
-                try {
-                    return DataResult.success(GuidanceScope.valueOf(s));
-                } catch (IllegalArgumentException e) {
-                    return DataResult.error(() -> "Unknown GuidanceScope: " + s);
-                }
-            },
-            Enum::name
-    );
+    private static final Codec<RuleStrength> strengthCodec = Codec.STRING.comapFlatMap(s -> {
+        try {
+            return DataResult.success(RuleStrength.valueOf(s));
+        } catch (IllegalArgumentException e) {
+            return DataResult.error(() -> "Unknown RuleStrength: " + s);
+        }
+    }, Enum::name);
 
-    public static final Codec<GuidanceRule> GUIDANCE_RULE_CODEC = Codec.STRING.dispatch(
-            "kind",
-            WorldFacilityRegistry::ruleKind,
-            WorldFacilityRegistry::ruleCodecForKind
-    );
+    private static final Codec<GuidanceScope> scopeCodec = Codec.STRING.comapFlatMap(s -> {
+        try {
+            return DataResult.success(GuidanceScope.valueOf(s));
+        } catch (IllegalArgumentException e) {
+            return DataResult.error(() -> "Unknown GuidanceScope: " + s);
+        }
+    }, Enum::name);
+
+    public static final Codec<GuidanceRule> guidanceRuleCodec = Codec.STRING
+            .dispatch("kind", WorldFacilityRegistry::ruleKind, WorldFacilityRegistry::ruleCodecForKind);
 
     public record PersistedState(
-            List<OwnedMachineGroup> ownedMachines,
-            List<AutomatedLine> automatedLines,
-            List<AutomatedRecipeCapability> automatedRecipes,
-            List<String> unlockedSystems,
-            List<GuidanceRule> worldSaveRules
+        List<OwnedMachineGroup> ownedMachines,
+        List<AutomatedLine> automatedLines,
+        List<AutomatedRecipeCapability> automatedRecipes,
+        List<String> unlockedSystems,
+        List<GuidanceRule> worldSaveRules
     ) {
-        public static final Codec<PersistedState> CODEC = RecordCodecBuilder.create(inst -> inst.group(
-                OWNED_MACHINE_CODEC.listOf().optionalFieldOf("ownedMachines", List.of()).forGetter(PersistedState::ownedMachines),
-                AUTOMATED_LINE_CODEC.listOf().optionalFieldOf("automatedLines", List.of()).forGetter(PersistedState::automatedLines),
-                AUTOMATED_RECIPE_CODEC.listOf().optionalFieldOf("automatedRecipes", List.of()).forGetter(PersistedState::automatedRecipes),
-                Codec.STRING.listOf().optionalFieldOf("unlockedSystems", List.of()).forGetter(PersistedState::unlockedSystems),
-                GUIDANCE_RULE_CODEC.listOf().optionalFieldOf("worldSaveRules", List.of()).forGetter(PersistedState::worldSaveRules)
-        ).apply(inst, PersistedState::new));
+        public static final Codec<PersistedState> codec = RecordCodecBuilder.create(
+            inst -> inst.group(
+                ownedMachineCodec.listOf().optionalFieldOf("ownedMachines", List.of())
+                        .forGetter(PersistedState::ownedMachines),
+                automatedLineCodec.listOf().optionalFieldOf("automatedLines", List.of())
+                        .forGetter(PersistedState::automatedLines),
+                automatedRecipeCodec.listOf().optionalFieldOf("automatedRecipes", List.of())
+                        .forGetter(PersistedState::automatedRecipes),
+                Codec.STRING.listOf().optionalFieldOf("unlockedSystems", List.of())
+                        .forGetter(PersistedState::unlockedSystems),
+                guidanceRuleCodec.listOf().optionalFieldOf("worldSaveRules", List.of())
+                        .forGetter(PersistedState::worldSaveRules)
+            ).apply(inst, PersistedState::new)
+        );
     }
 
-    private static final SavedData.Factory<WorldFacilityRegistry> FACTORY = new SavedData.Factory<>(
-            WorldFacilityRegistry::new,
-            WorldFacilityRegistry::load,
-            (DataFixTypes) null
+    private static final SavedData.Factory<WorldFacilityRegistry> factory = new SavedData.Factory<>(
+        WorldFacilityRegistry::new,
+        WorldFacilityRegistry::load,
+        (DataFixTypes) null
     );
 
-    public WorldFacilityRegistry() {
-    }
+    public WorldFacilityRegistry() {}
 
     public static WorldFacilityRegistry createDetached() {
         return new WorldFacilityRegistry();
@@ -201,7 +217,7 @@ public final class WorldFacilityRegistry extends SavedData {
 
     public static WorldFacilityRegistry mount(ServerLevel overworld) {
         Objects.requireNonNull(overworld, "overworld");
-        WorldFacilityRegistry registry = overworld.getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        WorldFacilityRegistry registry = overworld.getDataStorage().computeIfAbsent(factory, dataName);
         installed = registry;
         CirrusPlanningRuntime runtime = CirrusPlanningRuntime.sharedIfCreated();
         if (runtime != null) {
@@ -220,21 +236,20 @@ public final class WorldFacilityRegistry extends SavedData {
 
     public static void registerMachineMatcher(MachineMatcher matcher) {
         Objects.requireNonNull(matcher, "matcher");
-        MACHINE_MATCHERS.addIfAbsent(matcher);
+        machineMatchers.addIfAbsent(matcher);
     }
 
     public static List<MachineMatcher> machineMatchers() {
-        return List.copyOf(MACHINE_MATCHERS);
+        return List.copyOf(machineMatchers);
     }
 
     public static boolean matchesMachine(MachineEntry owned, MachineEntry required) {
-        for (MachineMatcher matcher : MACHINE_MATCHERS) {
+        for (MachineMatcher matcher : machineMatchers) {
             try {
                 if (matcher.matches(owned, required)) {
                     return true;
                 }
-            } catch (RuntimeException ignored) {
-            }
+            } catch (RuntimeException ignored) {}
         }
         return false;
     }
@@ -250,19 +265,19 @@ public final class WorldFacilityRegistry extends SavedData {
 
     public synchronized FacilitySnapshot facilitySnapshot() {
         return new FacilitySnapshot(
-                new ArrayList<>(ownedMachines.values()),
-                new ArrayList<>(automatedLines.values()),
-                new ArrayList<>(automatedRecipes.values()),
-                Set.copyOf(unlockedSystems)
+            new ArrayList<>(ownedMachines.values()),
+            new ArrayList<>(automatedLines.values()),
+            new ArrayList<>(automatedRecipes.values()),
+            Set.copyOf(unlockedSystems)
         );
     }
 
     public synchronized void declareOwnedMachine(
-            String machineId,
-            MachineCapabilityId capability,
-            int count,
-            double passiveSpeedMultiplier,
-            boolean automatedFeeding
+        String machineId,
+        MachineCapabilityId capability,
+        int count,
+        double passiveSpeedMultiplier,
+        boolean automatedFeeding
     ) {
         Objects.requireNonNull(machineId, "machineId");
         Objects.requireNonNull(capability, "capability");
@@ -272,8 +287,10 @@ public final class WorldFacilityRegistry extends SavedData {
             }
             return;
         }
-        ownedMachines.put(machineId, new OwnedMachineGroup(
-                machineId, capability, count, passiveSpeedMultiplier, automatedFeeding));
+        ownedMachines.put(
+            machineId,
+            new OwnedMachineGroup(machineId, capability, count, passiveSpeedMultiplier, automatedFeeding)
+        );
         setDirty();
     }
 
@@ -287,9 +304,7 @@ public final class WorldFacilityRegistry extends SavedData {
             return;
         }
         OwnedMachineGroup existing = ownedMachines.get(machineId);
-        MachineCapabilityId cap = existing != null
-                ? existing.capability()
-                : inferCapabilityForMachine(machineId);
+        MachineCapabilityId cap = existing != null ? existing.capability() : inferCapabilityForMachine(machineId);
         double speed = existing != null ? existing.passiveSpeedMultiplier() : 1.0;
         boolean autoFeed = existing != null && existing.automatedFeeding();
         ownedMachines.put(machineId, new OwnedMachineGroup(machineId, cap, feedback.ownedCount(), speed, autoFeed));
@@ -359,7 +374,7 @@ public final class WorldFacilityRegistry extends SavedData {
 
     public Consumer<GuidanceRule> worldSaveListener() {
         return rule -> {
-            if (rule != null && rule.scope() == GuidanceScope.WORLD_SAVE) {
+            if (rule != null && rule.scope() == GuidanceScope.worldSave) {
                 putWorldSaveRule(rule);
             }
         };
@@ -375,11 +390,11 @@ public final class WorldFacilityRegistry extends SavedData {
 
     public synchronized PersistedState toPersistedState() {
         return new PersistedState(
-                List.copyOf(ownedMachines.values()),
-                List.copyOf(automatedLines.values()),
-                List.copyOf(automatedRecipes.values()),
-                List.copyOf(unlockedSystems),
-                List.copyOf(worldSaveRules.values())
+            List.copyOf(ownedMachines.values()),
+            List.copyOf(automatedLines.values()),
+            List.copyOf(automatedRecipes.values()),
+            List.copyOf(unlockedSystems),
+            List.copyOf(worldSaveRules.values())
         );
     }
 
@@ -407,13 +422,13 @@ public final class WorldFacilityRegistry extends SavedData {
     }
 
     public synchronized Optional<JsonElement> encodeToJson() {
-        return PersistedState.CODEC.encodeStart(JsonOps.INSTANCE, toPersistedState()).result();
+        return PersistedState.codec.encodeStart(JsonOps.INSTANCE, toPersistedState()).result();
     }
 
     public static WorldFacilityRegistry loadFromJson(JsonElement element) {
         WorldFacilityRegistry reg = new WorldFacilityRegistry();
-        PersistedState.CODEC.parse(JsonOps.INSTANCE, element)
-                .resultOrPartial(err -> LOGGER.warn("Failed decoding facility registry JSON: {}", err))
+        PersistedState.codec.parse(JsonOps.INSTANCE, element)
+                .resultOrPartial(err -> logger.warn("Failed decoding facility registry JSON: {}", err))
                 .ifPresent(reg::loadPersistedState);
         return reg;
     }
@@ -421,19 +436,19 @@ public final class WorldFacilityRegistry extends SavedData {
     @Override
     public synchronized CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
         PersistedState state = toPersistedState();
-        PersistedState.CODEC.encodeStart(NbtOps.INSTANCE, state)
-                .resultOrPartial(err -> LOGGER.error("Failed encoding facility registry NBT: {}", err))
-                .ifPresent(encoded -> tag.put(NBT_DATA_KEY, encoded));
+        PersistedState.codec.encodeStart(NbtOps.INSTANCE, state)
+                .resultOrPartial(err -> logger.error("Failed encoding facility registry NBT: {}", err))
+                .ifPresent(encoded -> tag.put(nbtDataKey, encoded));
         return tag;
     }
 
     public static WorldFacilityRegistry load(CompoundTag tag, HolderLookup.Provider registries) {
         WorldFacilityRegistry reg = new WorldFacilityRegistry();
-        if (tag != null && tag.contains(NBT_DATA_KEY)) {
-            Tag raw = tag.get(NBT_DATA_KEY);
+        if (tag != null && tag.contains(nbtDataKey)) {
+            Tag raw = tag.get(nbtDataKey);
             if (raw != null) {
-                PersistedState.CODEC.parse(NbtOps.INSTANCE, raw)
-                        .resultOrPartial(err -> LOGGER.warn("Failed decoding facility registry NBT: {}", err))
+                PersistedState.codec.parse(NbtOps.INSTANCE, raw)
+                        .resultOrPartial(err -> logger.warn("Failed decoding facility registry NBT: {}", err))
                         .ifPresent(reg::loadPersistedState);
             }
         }
@@ -449,7 +464,8 @@ public final class WorldFacilityRegistry extends SavedData {
             case "minecraft:stonecutter" -> MachineCapabilityGroups.capabilityOf("minecraft:stonecutting");
             case "minecraft:smithing_table" -> MachineCapabilityGroups.capabilityOf("minecraft:smithing");
             case "minecraft:brewing_stand" -> MachineCapabilityGroups.capabilityOf("minecraft:brewing");
-            case "minecraft:campfire", "minecraft:soul_campfire" -> MachineCapabilityGroups.capabilityOf("minecraft:campfire_cooking");
+            case "minecraft:campfire", "minecraft:soul_campfire" ->
+                MachineCapabilityGroups.capabilityOf("minecraft:campfire_cooking");
             default -> {
                 if (machineId.contains("furnace")) {
                     yield MachineCapabilityGroups.capabilityOf("minecraft:smelting");
@@ -463,18 +479,45 @@ public final class WorldFacilityRegistry extends SavedData {
     }
 
     private static GuidanceRule withWorldSaveScope(GuidanceRule rule) {
-        if (rule.scope() == GuidanceScope.WORLD_SAVE) {
+        if (rule.scope() == GuidanceScope.worldSave) {
             return rule;
         }
         return switch (rule) {
-            case RecipeRule r -> new RecipeRule(r.ruleId(), GuidanceScope.WORLD_SAVE, r.strength(), r.recipeKey());
-            case SystemRule r -> new SystemRule(r.ruleId(), GuidanceScope.WORLD_SAVE, r.strength(), r.systemId(), r.optInEnabled());
-            case MachineRule r -> new MachineRule(r.ruleId(), GuidanceScope.WORLD_SAVE, r.strength(), r.machineId(), r.willingToBuildNew());
-            case ResourceRule r -> new ResourceRule(r.ruleId(), GuidanceScope.WORLD_SAVE, r.strength(), r.resource(), r.treatAsFreeBaseSource());
-            case TagDefaultRule r -> new TagDefaultRule(r.ruleId(), GuidanceScope.WORLD_SAVE, r.strength(), r.tagId(), r.preferredMember());
-            case CycleBreakRule r -> new CycleBreakRule(r.ruleId(), GuidanceScope.WORLD_SAVE, r.strength(), r.targetResource(), r.bannedSourceRecipe());
-            case CostOverrideRule r -> new CostOverrideRule(r.ruleId(), GuidanceScope.WORLD_SAVE, r.strength(), r.resource(), r.overrideUnitCost());
-            case ModNamespaceRule r -> new ModNamespaceRule(r.ruleId(), GuidanceScope.WORLD_SAVE, r.strength(), r.modNamespace());
+            case RecipeRule r -> new RecipeRule(r.ruleId(), GuidanceScope.worldSave, r.strength(), r.recipeKey());
+            case SystemRule r ->
+                new SystemRule(r.ruleId(), GuidanceScope.worldSave, r.strength(), r.systemId(), r.optInEnabled());
+            case MachineRule r -> new MachineRule(
+                r.ruleId(),
+                GuidanceScope.worldSave,
+                r.strength(),
+                r.machineId(),
+                r.willingToBuildNew()
+            );
+            case ResourceRule r -> new ResourceRule(
+                r.ruleId(),
+                GuidanceScope.worldSave,
+                r.strength(),
+                r.resource(),
+                r.treatAsFreeBaseSource()
+            );
+            case TagDefaultRule r ->
+                new TagDefaultRule(r.ruleId(), GuidanceScope.worldSave, r.strength(), r.tagId(), r.preferredMember());
+            case CycleBreakRule r -> new CycleBreakRule(
+                r.ruleId(),
+                GuidanceScope.worldSave,
+                r.strength(),
+                r.targetResource(),
+                r.bannedSourceRecipe()
+            );
+            case CostOverrideRule r -> new CostOverrideRule(
+                r.ruleId(),
+                GuidanceScope.worldSave,
+                r.strength(),
+                r.resource(),
+                r.overrideUnitCost()
+            );
+            case ModNamespaceRule r ->
+                new ModNamespaceRule(r.ruleId(), GuidanceScope.worldSave, r.strength(), r.modNamespace());
         };
     }
 
@@ -491,65 +534,111 @@ public final class WorldFacilityRegistry extends SavedData {
         };
     }
 
-    private static com.mojang.serialization.MapCodec<? extends GuidanceRule> ruleCodecForKind(String kind) {
+    private static MapCodec<? extends GuidanceRule> ruleCodecForKind(String kind) {
         return switch (kind) {
-            case "recipe" -> RecordCodecBuilder.<RecipeRule>mapCodec(inst -> inst.group(
-                    Codec.STRING.fieldOf("ruleId").forGetter(RecipeRule::ruleId),
-                    SCOPE_CODEC.optionalFieldOf("scope", GuidanceScope.WORLD_SAVE).forGetter(RecipeRule::scope),
-                    STRENGTH_CODEC.fieldOf("strength").forGetter(RecipeRule::strength),
-                    RECIPE_KEY_CODEC.fieldOf("recipeKey").forGetter(RecipeRule::recipeKey)
-            ).apply(inst, RecipeRule::new));
-            case "system" -> RecordCodecBuilder.<SystemRule>mapCodec(inst -> inst.group(
-                    Codec.STRING.fieldOf("ruleId").forGetter(SystemRule::ruleId),
-                    SCOPE_CODEC.optionalFieldOf("scope", GuidanceScope.WORLD_SAVE).forGetter(SystemRule::scope),
-                    STRENGTH_CODEC.fieldOf("strength").forGetter(SystemRule::strength),
-                    Codec.STRING.fieldOf("systemId").forGetter(SystemRule::systemId),
-                    Codec.BOOL.optionalFieldOf("optInEnabled", false).forGetter(SystemRule::optInEnabled)
-            ).apply(inst, SystemRule::new));
-            case "machine" -> RecordCodecBuilder.<MachineRule>mapCodec(inst -> inst.group(
-                    Codec.STRING.fieldOf("ruleId").forGetter(MachineRule::ruleId),
-                    SCOPE_CODEC.optionalFieldOf("scope", GuidanceScope.WORLD_SAVE).forGetter(MachineRule::scope),
-                    STRENGTH_CODEC.fieldOf("strength").forGetter(MachineRule::strength),
-                    Codec.STRING.fieldOf("machineId").forGetter(MachineRule::machineId),
-                    Codec.BOOL.optionalFieldOf("willingToBuildNew", true).forGetter(MachineRule::willingToBuildNew)
-            ).apply(inst, MachineRule::new));
-            case "resource" -> RecordCodecBuilder.<ResourceRule>mapCodec(inst -> inst.group(
+            case "recipe" ->
+                RecordCodecBuilder
+                        .<RecipeRule>mapCodec(
+                            inst -> inst.group(
+                                Codec.STRING.fieldOf("ruleId").forGetter(RecipeRule::ruleId),
+                                scopeCodec.optionalFieldOf("scope", GuidanceScope.worldSave)
+                                        .forGetter(RecipeRule::scope),
+                                strengthCodec.fieldOf("strength").forGetter(RecipeRule::strength),
+                                recipeKeyCodec.fieldOf("recipeKey").forGetter(RecipeRule::recipeKey)
+                            ).apply(inst, RecipeRule::new)
+                        );
+            case "system" ->
+                RecordCodecBuilder
+                        .<SystemRule>mapCodec(
+                            inst -> inst.group(
+                                Codec.STRING.fieldOf("ruleId").forGetter(SystemRule::ruleId),
+                                scopeCodec.optionalFieldOf("scope", GuidanceScope.worldSave)
+                                        .forGetter(SystemRule::scope),
+                                strengthCodec.fieldOf("strength").forGetter(SystemRule::strength),
+                                Codec.STRING.fieldOf("systemId").forGetter(SystemRule::systemId),
+                                Codec.BOOL.optionalFieldOf("optInEnabled", false).forGetter(SystemRule::optInEnabled)
+                            ).apply(inst, SystemRule::new)
+                        );
+            case "machine" -> RecordCodecBuilder
+                    .<MachineRule>mapCodec(
+                        inst -> inst.group(
+                            Codec.STRING.fieldOf("ruleId").forGetter(MachineRule::ruleId),
+                            scopeCodec.optionalFieldOf("scope", GuidanceScope.worldSave).forGetter(MachineRule::scope),
+                            strengthCodec.fieldOf("strength").forGetter(MachineRule::strength),
+                            Codec.STRING.fieldOf("machineId").forGetter(MachineRule::machineId),
+                            Codec.BOOL.optionalFieldOf("willingToBuildNew", true)
+                                    .forGetter(MachineRule::willingToBuildNew)
+                        ).apply(inst, MachineRule::new)
+                    );
+            case "resource" -> RecordCodecBuilder.<ResourceRule>mapCodec(
+                inst -> inst.group(
                     Codec.STRING.fieldOf("ruleId").forGetter(ResourceRule::ruleId),
-                    SCOPE_CODEC.optionalFieldOf("scope", GuidanceScope.WORLD_SAVE).forGetter(ResourceRule::scope),
-                    STRENGTH_CODEC.fieldOf("strength").forGetter(ResourceRule::strength),
-                    RESOURCE_KEY_CODEC.fieldOf("resource").forGetter(ResourceRule::resource),
-                    Codec.BOOL.optionalFieldOf("treatAsFreeBaseSource", false).forGetter(ResourceRule::treatAsFreeBaseSource)
-            ).apply(inst, ResourceRule::new));
-            case "tag_default" -> RecordCodecBuilder.<TagDefaultRule>mapCodec(inst -> inst.group(
-                    Codec.STRING.fieldOf("ruleId").forGetter(TagDefaultRule::ruleId),
-                    SCOPE_CODEC.optionalFieldOf("scope", GuidanceScope.WORLD_SAVE).forGetter(TagDefaultRule::scope),
-                    STRENGTH_CODEC.fieldOf("strength").forGetter(TagDefaultRule::strength),
-                    Codec.STRING.fieldOf("tagId").forGetter(TagDefaultRule::tagId),
-                    RESOURCE_KEY_CODEC.fieldOf("preferredMember").forGetter(TagDefaultRule::preferredMember)
-            ).apply(inst, TagDefaultRule::new));
-            case "cycle_break" -> RecordCodecBuilder.<CycleBreakRule>mapCodec(inst -> inst.group(
-                    Codec.STRING.fieldOf("ruleId").forGetter(CycleBreakRule::ruleId),
-                    SCOPE_CODEC.optionalFieldOf("scope", GuidanceScope.WORLD_SAVE).forGetter(CycleBreakRule::scope),
-                    STRENGTH_CODEC.fieldOf("strength").forGetter(CycleBreakRule::strength),
-                    RESOURCE_KEY_CODEC.fieldOf("targetResource").forGetter(CycleBreakRule::targetResource),
-                    RECIPE_KEY_CODEC.fieldOf("bannedSourceRecipe").forGetter(CycleBreakRule::bannedSourceRecipe)
-            ).apply(inst, CycleBreakRule::new));
-            case "cost_override" -> RecordCodecBuilder.<CostOverrideRule>mapCodec(inst -> inst.group(
-                    Codec.STRING.fieldOf("ruleId").forGetter(CostOverrideRule::ruleId),
-                    SCOPE_CODEC.optionalFieldOf("scope", GuidanceScope.WORLD_SAVE).forGetter(CostOverrideRule::scope),
-                    STRENGTH_CODEC.fieldOf("strength").forGetter(CostOverrideRule::strength),
-                    RESOURCE_KEY_CODEC.fieldOf("resource").forGetter(CostOverrideRule::resource),
-                    COST_VECTOR_CODEC.fieldOf("overrideUnitCost").forGetter(CostOverrideRule::overrideUnitCost)
-            ).apply(inst, CostOverrideRule::new));
-            case "mod_namespace" -> RecordCodecBuilder.<ModNamespaceRule>mapCodec(inst -> inst.group(
-                    Codec.STRING.fieldOf("ruleId").forGetter(ModNamespaceRule::ruleId),
-                    SCOPE_CODEC.optionalFieldOf("scope", GuidanceScope.WORLD_SAVE).forGetter(ModNamespaceRule::scope),
-                    STRENGTH_CODEC.fieldOf("strength").forGetter(ModNamespaceRule::strength),
-                    Codec.STRING.fieldOf("modNamespace").forGetter(ModNamespaceRule::modNamespace)
-            ).apply(inst, ModNamespaceRule::new));
-            default -> com.mojang.serialization.MapCodec.unit(() -> {
-                throw new IllegalArgumentException("Unknown guidance rule kind: " + kind);
-            });
+                    scopeCodec.optionalFieldOf("scope", GuidanceScope.worldSave).forGetter(ResourceRule::scope),
+                    strengthCodec.fieldOf("strength").forGetter(ResourceRule::strength),
+                    resourceKeyCodec.fieldOf("resource").forGetter(ResourceRule::resource),
+                    Codec.BOOL.optionalFieldOf("treatAsFreeBaseSource", false)
+                            .forGetter(ResourceRule::treatAsFreeBaseSource)
+                ).apply(inst, ResourceRule::new)
+            );
+            case "tag_default" -> RecordCodecBuilder
+                    .<TagDefaultRule>mapCodec(
+                        inst -> inst.group(
+                            Codec.STRING.fieldOf("ruleId").forGetter(TagDefaultRule::ruleId),
+                            scopeCodec.optionalFieldOf("scope", GuidanceScope.worldSave)
+                                    .forGetter(TagDefaultRule::scope),
+                            strengthCodec.fieldOf("strength").forGetter(TagDefaultRule::strength),
+                            Codec.STRING.fieldOf("tagId").forGetter(TagDefaultRule::tagId),
+                            resourceKeyCodec.fieldOf("preferredMember").forGetter(TagDefaultRule::preferredMember)
+                        ).apply(inst, TagDefaultRule::new)
+                    );
+            case "cycle_break" -> RecordCodecBuilder
+                    .<CycleBreakRule>mapCodec(
+                        inst -> inst.group(
+                            Codec.STRING.fieldOf("ruleId").forGetter(CycleBreakRule::ruleId),
+                            scopeCodec.optionalFieldOf("scope", GuidanceScope.worldSave)
+                                    .forGetter(CycleBreakRule::scope),
+                            strengthCodec.fieldOf("strength").forGetter(CycleBreakRule::strength),
+                            resourceKeyCodec.fieldOf("targetResource").forGetter(CycleBreakRule::targetResource),
+                            recipeKeyCodec.fieldOf("bannedSourceRecipe").forGetter(CycleBreakRule::bannedSourceRecipe)
+                        ).apply(inst, CycleBreakRule::new)
+                    );
+            case "cost_override" -> RecordCodecBuilder
+                    .<CostOverrideRule>mapCodec(
+                        inst -> inst.group(
+                            Codec.STRING.fieldOf("ruleId").forGetter(CostOverrideRule::ruleId),
+                            scopeCodec.optionalFieldOf("scope", GuidanceScope.worldSave)
+                                    .forGetter(CostOverrideRule::scope),
+                            strengthCodec.fieldOf("strength").forGetter(CostOverrideRule::strength),
+                            resourceKeyCodec.fieldOf("resource").forGetter(CostOverrideRule::resource),
+                            costVectorCodec.fieldOf("overrideUnitCost").forGetter(CostOverrideRule::overrideUnitCost)
+                        ).apply(inst, CostOverrideRule::new)
+                    );
+            case "mod_namespace" -> RecordCodecBuilder
+                    .<ModNamespaceRule>mapCodec(
+                        inst -> inst.group(
+                            Codec.STRING.fieldOf("ruleId").forGetter(ModNamespaceRule::ruleId),
+                            scopeCodec.optionalFieldOf("scope", GuidanceScope.worldSave)
+                                    .forGetter(ModNamespaceRule::scope),
+                            strengthCodec.fieldOf("strength").forGetter(ModNamespaceRule::strength),
+                            Codec.STRING.fieldOf("modNamespace").forGetter(ModNamespaceRule::modNamespace)
+                        ).apply(inst, ModNamespaceRule::new)
+                    );
+            default -> new MapCodec<GuidanceRule>() {
+                @Override
+                public <T> Stream<T> keys(DynamicOps<T> ops) {
+                    return Stream.empty();
+                }
+
+                @Override
+                public <T> DataResult<GuidanceRule> decode(DynamicOps<T> ops, MapLike<T> input) {
+                    return DataResult.error(() -> "Unknown guidance rule kind: " + kind);
+                }
+
+                @Override
+                public <T> RecordBuilder<T> encode(GuidanceRule input, DynamicOps<T> ops, RecordBuilder<T> prefix) {
+                    return prefix.withErrorsFrom(DataResult.error(() -> "Unknown guidance rule kind: " + kind));
+                }
+            };
         };
     }
 }

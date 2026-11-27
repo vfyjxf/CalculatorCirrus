@@ -6,8 +6,7 @@ import net.minecraft.sounds.SoundEvents;
 
 public final class CirrusUiSound {
 
-    private CirrusUiSound() {
-    }
+    private CirrusUiSound() {}
 
     public static void playClickSound() {
         playClickSound(1f);

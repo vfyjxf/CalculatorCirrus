@@ -1,0 +1,11 @@
+{
+  "name": "Obsidian Blueprint",
+  "description": "Dark blueprint theme with cyan focus and calibrated pixel surface tinting.",
+  "css": [
+    "obsidian_blueprint.css"
+  ],
+  "extends": [
+    "calculator_cirrus:base"
+  ],
+  "default": false
+}

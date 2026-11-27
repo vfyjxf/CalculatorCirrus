@@ -10,15 +10,15 @@ import dev.vfyjxf.cloudlib.api.util.Namespace;
 @PluginMarker
 public class CirrusCloudLibClientPlugin implements CloudLibClientPlugin {
 
-	public static final Namespace id = CirrusNamespaces.ofMod("client");
+    public static final Namespace id = CirrusNamespaces.ofMod("client");
 
-	@Override
-	public Namespace pluginId() {
-		return id;
-	}
+    @Override
+    public Namespace pluginId() {
+        return id;
+    }
 
-	@Override
-	public void registerOverlay(OverlayRegister register) {
-		register.register(ExecutionOverlay.entry);
-	}
+    @Override
+    public void registerOverlay(OverlayRegister register) {
+        register.register(ExecutionOverlay.entry);
+    }
 }

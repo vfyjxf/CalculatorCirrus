@@ -4,6 +4,5 @@ public final class CirrusConstants {
 
     public static final String modId = "calculator_cirrus";
 
-    private CirrusConstants() {
-    }
+    private CirrusConstants() {}
 }

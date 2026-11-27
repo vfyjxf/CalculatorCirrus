@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.internal.integration.jei;
 
 import net.neoforged.fml.ModList;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -79,7 +79,7 @@ public final class JeiIntegration {
             toRun = pendingCallbacks;
             pendingCallbacks = List.of();
         }
-        for (Runnable callback : toRun) {
+        for (Runnable callback : toRun == null ? List.<Runnable>of() : toRun) {
             callback.run();
         }
     }

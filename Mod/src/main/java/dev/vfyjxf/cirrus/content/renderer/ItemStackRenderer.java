@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.content.renderer;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.platform.Lighting;
+import com.mojang.blaze3d.systems.RenderSystem;
 import dev.vfyjxf.cirrus.api.content.render.BatchableStackRenderer;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.mixin.ItemDecoratorHandlerAccessor;
@@ -15,8 +15,6 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.entity.ItemRenderer;
-import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.block.model.ItemOverrides;
 import net.minecraft.client.renderer.block.model.ItemTransforms;
@@ -26,13 +24,12 @@ import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.client.ItemDecoratorHandler;
 import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -44,7 +41,7 @@ import java.util.Map;
 public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack> {
 
     public static final ItemStackRenderer instance = new ItemStackRenderer();
-    private static final Map<BakedModel, SouthFaceOnlyModel> SOUTH_FACE_MODEL_CACHE = new IdentityHashMap<>();
+    private static final Map<BakedModel, SouthFaceOnlyModel> southFaceModelCache = new IdentityHashMap<>();
 
     private ItemStackRenderer() {}
 
@@ -71,7 +68,15 @@ public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack
     }
 
     @Override
-    public void renderAt(GuiGraphics graphics, ContentStack<Item, ItemStack> stack, int x, int y, int width, int height, float delta) {
+    public void renderAt(
+        GuiGraphics graphics,
+        ContentStack<Item, ItemStack> stack,
+        int x,
+        int y,
+        int width,
+        int height,
+        float delta
+    ) {
         renderBaseAt(graphics, stack.value(), x, y, width, height, delta);
         decorateAt(graphics, stack, x, y, width, height, delta);
     }
@@ -108,24 +113,47 @@ public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack
     }
 
     @Override
-    public void renderBase(GuiGraphics graphics, ContentStack<Item, ItemStack> stack, int width, int height, float delta) {
+    public void renderBase(
+        GuiGraphics graphics,
+        ContentStack<Item, ItemStack> stack,
+        int width,
+        int height,
+        float delta
+    ) {
         if (stack.isEmpty()) return;
         renderBase(graphics, stack.value(), width, height, delta);
     }
 
     @Override
-    public void renderBaseAt(GuiGraphics graphics, ContentStack<Item, ItemStack> stack, int x, int y, int width, int height, float delta) {
+    public void renderBaseAt(
+        GuiGraphics graphics,
+        ContentStack<Item, ItemStack> stack,
+        int x,
+        int y,
+        int width,
+        int height,
+        float delta
+    ) {
         if (stack.isEmpty()) return;
         renderBaseAt(graphics, stack.value(), x, y, width, height, delta);
     }
 
     @Override
-    public void renderBaseBatch(GuiGraphics graphics, List<BatchableStackRenderer.Entry<Item, ItemStack>> entries, float delta) {
+    public void renderBaseBatch(
+        GuiGraphics graphics,
+        List<BatchableStackRenderer.Entry<Item, ItemStack>> entries,
+        float delta
+    ) {
         renderBaseBatch(graphics, entries, delta, null);
     }
 
     @Override
-    public void renderBaseBatch(GuiGraphics graphics, List<BatchableStackRenderer.Entry<Item, ItemStack>> entries, float delta, @Nullable Object context) {
+    public void renderBaseBatch(
+        GuiGraphics graphics,
+        List<BatchableStackRenderer.Entry<Item, ItemStack>> entries,
+        float delta,
+        @Nullable Object context
+    ) {
         if (entries.isEmpty()) {
             return;
         }
@@ -151,7 +179,12 @@ public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack
     }
 
     @Override
-    public void decorateBatch(GuiGraphics graphics, List<BatchableStackRenderer.Entry<Item, ItemStack>> entries, float delta, @Nullable Object context) {
+    public void decorateBatch(
+        GuiGraphics graphics,
+        List<BatchableStackRenderer.Entry<Item, ItemStack>> entries,
+        float delta,
+        @Nullable Object context
+    ) {
         BatchContext batchContext = context instanceof BatchContext typed ? typed : new BatchContext();
         batchContext.resetForDecorate();
         Minecraft minecraft = batchContext.minecraft();
@@ -174,10 +207,12 @@ public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack
             }
             if (entry.width() == 16 && entry.height() == 16) {
                 String countText = countDecorationText(stack.amount());
-                float cooldown = player == null ? 0.0F : player.getCooldowns().getCooldownPercent(value.getItem(), partialTick);
+                float cooldown = player == null
+                        ? 0.0F
+                        : player.getCooldowns().getCooldownPercent(value.getItem(), partialTick);
                 boolean overlay = value.isBarVisible() || cooldown > 0.0F;
                 DecoratorState decorator = decorators.computeIfAbsent(value.getItem(), ignored -> {
-                    ItemDecoratorHandler handler = ItemDecoratorHandler.of(value);
+                    ItemDecoratorHandler handler = ItemDecoratorHandler.of(value); // NOPMD - NeoForge offers no public replacement for the internal decorator handler
                     return new DecoratorState(handler, hasItemDecorators(handler));
                 });
                 boolean customDecorators = decorator.hasCustomDecorators();
@@ -188,7 +223,18 @@ public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack
                 hasOverlay |= overlay;
                 hasCustomDecorators |= customDecorators;
                 Font font = fonts.computeIfAbsent(value.getItem(), ignored -> instance.getFont(value, minecraft));
-                batched.add(new DecorationEntry(value, entry.x(), entry.y(), countText, customDecorators, font, decorator.handler(), cooldown));
+                batched.add(
+                    new DecorationEntry(
+                        value,
+                        entry.x(),
+                        entry.y(),
+                        countText,
+                        customDecorators,
+                        font,
+                        decorator.handler(),
+                        cooldown
+                    )
+                );
             } else {
                 decorateAt(graphics, stack, entry.x(), entry.y(), entry.width(), entry.height(), delta);
             }
@@ -206,7 +252,7 @@ public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack
             if (hasCustomDecorators) {
                 for (DecorationEntry entry : batched) {
                     if (entry.customDecorators()) {
-                        entry.handler().render(graphics, entry.font(), entry.stack(), entry.x(), entry.y());
+                        entry.handler().render(graphics, entry.font(), entry.stack(), entry.x(), entry.y()); // NOPMD - same internal decorator handler
                     }
                 }
             }
@@ -222,16 +268,18 @@ public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack
         }
 
         @Override
-        public List<BakedQuad> getQuads(@Nullable BlockState state, @Nullable Direction direction, RandomSource random) {
+        public List<BakedQuad> getQuads(
+            @Nullable BlockState state,
+            @Nullable Direction direction,
+            RandomSource random
+        ) {
             if (direction != null) {
                 return Collections.emptyList();
             }
             List<BakedQuad> cached = quads;
             if (cached == null) {
-                cached = delegate.getQuads(state, null, random)
-                    .stream()
-                    .filter(quad -> quad.getDirection() == Direction.SOUTH)
-                    .toList();
+                cached = delegate.getQuads(state, null, random).stream()
+                        .filter(quad -> quad.getDirection() == Direction.SOUTH).toList();
                 quads = cached;
             }
             return cached;
@@ -279,7 +327,13 @@ public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack
         //TODO:support custom number formater,also see FluidStackRenderer
         graphics.pose().pushPose();
         graphics.pose().scale(width / 16f, height / 16f, 1f);
-        graphics.renderItemDecorations(getFont(stack, Minecraft.getInstance()), stack, 0, 0, countDecorationText(stack.getCount()));
+        graphics.renderItemDecorations(
+            getFont(stack, Minecraft.getInstance()),
+            stack,
+            0,
+            0,
+            countDecorationText(stack.getCount())
+        );
         graphics.pose().popPose();
     }
 
@@ -287,43 +341,87 @@ public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack
     public void decorateAt(GuiGraphics graphics, ItemStack stack, int x, int y, int width, int height, float delta) {
         if (stack.isEmpty()) return;
         if (width == 16 && height == 16) {
-            graphics.renderItemDecorations(getFont(stack, Minecraft.getInstance()), stack, x, y, countDecorationText(stack.getCount()));
+            graphics.renderItemDecorations(
+                getFont(stack, Minecraft.getInstance()),
+                stack,
+                x,
+                y,
+                countDecorationText(stack.getCount())
+            );
             return;
         }
         graphics.pose().pushPose();
         graphics.pose().translate(x, y, 0);
         graphics.pose().scale(width / 16f, height / 16f, 1f);
-        graphics.renderItemDecorations(getFont(stack, Minecraft.getInstance()), stack, 0, 0, countDecorationText(stack.getCount()));
+        graphics.renderItemDecorations(
+            getFont(stack, Minecraft.getInstance()),
+            stack,
+            0,
+            0,
+            countDecorationText(stack.getCount())
+        );
         graphics.pose().popPose();
     }
 
     @Override
-    public void decorate(GuiGraphics graphics, ContentStack<Item, ItemStack> stack, int width, int height, float delta) {
+    public void decorate(
+        GuiGraphics graphics,
+        ContentStack<Item, ItemStack> stack,
+        int width,
+        int height,
+        float delta
+    ) {
         if (stack.isEmpty()) return;
         graphics.pose().pushPose();
         graphics.pose().scale(width / 16f, height / 16f, 1f);
         var content = stack.value();
-        graphics.renderItemDecorations(getFont(content, Minecraft.getInstance()), content, 0, 0, countDecorationText(stack.amount()));
+        graphics.renderItemDecorations(
+            getFont(content, Minecraft.getInstance()),
+            content,
+            0,
+            0,
+            countDecorationText(stack.amount())
+        );
         graphics.pose().popPose();
     }
 
     @Override
-    public void decorateAt(GuiGraphics graphics, ContentStack<Item, ItemStack> stack, int x, int y, int width, int height, float delta) {
+    public void decorateAt(
+        GuiGraphics graphics,
+        ContentStack<Item, ItemStack> stack,
+        int x,
+        int y,
+        int width,
+        int height,
+        float delta
+    ) {
         if (stack.isEmpty()) return;
         var content = stack.value();
         if (width == 16 && height == 16) {
-            graphics.renderItemDecorations(getFont(content, Minecraft.getInstance()), content, x, y, countDecorationText(stack.amount()));
+            graphics.renderItemDecorations(
+                getFont(content, Minecraft.getInstance()),
+                content,
+                x,
+                y,
+                countDecorationText(stack.amount())
+            );
             return;
         }
         graphics.pose().pushPose();
         graphics.pose().translate(x, y, 0);
         graphics.pose().scale(width / 16f, height / 16f, 1f);
-        graphics.renderItemDecorations(getFont(content, Minecraft.getInstance()), content, 0, 0, countDecorationText(stack.amount()));
+        graphics.renderItemDecorations(
+            getFont(content, Minecraft.getInstance()),
+            content,
+            0,
+            0,
+            countDecorationText(stack.amount())
+        );
         graphics.pose().popPose();
     }
 
     private static boolean hasItemDecorators(ItemDecoratorHandler handler) {
-        return !((ItemDecoratorHandlerAccessor) (Object) handler).cirrus$getItemDecorators().isEmpty();
+        return !((ItemDecoratorHandlerAccessor) (Object) handler).cirrusGetItemDecorators().isEmpty();
     }
 
     private static void drawCountTextBatch(GuiGraphics graphics, List<DecorationEntry> entries) {
@@ -392,7 +490,15 @@ public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack
             fonts.clear();
         }
 
-        private void renderBase(GuiGraphics graphics, ItemStack stack, int x, int y, int width, int height, float delta) {
+        private void renderBase(
+            GuiGraphics graphics,
+            ItemStack stack,
+            int x,
+            int y,
+            int width,
+            int height,
+            float delta
+        ) {
             if (stack.isEmpty()) {
                 return;
             }
@@ -438,8 +544,7 @@ public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack
         }
     }
 
-    private record DecoratorState(ItemDecoratorHandler handler, boolean hasCustomDecorators) {
-    }
+    private record DecoratorState(ItemDecoratorHandler handler, boolean hasCustomDecorators) {}
 
     private record DecorationEntry(
         ItemStack stack,
@@ -450,8 +555,7 @@ public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack
         Font font,
         ItemDecoratorHandler handler,
         float cooldown
-    ) {
-    }
+    ) {}
 
     @Override
     public Font getFont(ItemStack stack, Minecraft minecraft) {
@@ -467,7 +571,10 @@ public class ItemStackRenderer implements BatchableStackRenderer<Item, ItemStack
         var lines = stack.getTooltipLines(context, context.player(), context.flag());
         for (var line : lines) tooltip.add(line);
         var tooltipImage = stack.getTooltipImage();
-        tooltipImage.ifPresent(tooltipComponent -> tooltip.insert(TooltipEntry.component(tooltipComponent), Tooltip.body, TooltipLocator.after(Tooltip.title)));
+        tooltipImage.ifPresent(
+            tooltipComponent -> tooltip
+                    .insert(TooltipEntry.component(tooltipComponent), Tooltip.body, TooltipLocator.after(Tooltip.title))
+        );
         return tooltip;
     }
 

@@ -1,7 +1,6 @@
 package dev.vfyjxf.cirrus.api.recipe.database;
 
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -22,11 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FileRecipeDatabaseRepositoryTest {
-    @TempDir
-    Path tempDir;
 
     @Test
-    void addToActiveDatabasePersistsRecipeReferenceAndDedupes() {
+    void addToActiveDatabasePersistsRecipeReferenceAndDedupes(@TempDir Path tempDir) {
         FileRecipeDatabaseRepository repository = new FileRecipeDatabaseRepository(tempDir);
         assertDoesNotThrow(() -> repository.createDatabase("Scratch"));
         TestRecipeSystem system = new TestRecipeSystem();
@@ -40,11 +37,14 @@ class FileRecipeDatabaseRepositoryTest {
         assertEquals(RecipeDatabaseAddResult.Status.alreadyPresent, duplicate.status());
         assertEquals("scratch", workspace.activeDatabaseId());
         assertEquals(1, workspace.activeDatabase().recipes().size());
-        assertEquals(ResourceLocation.fromNamespaceAndPath("test", "oak_planks"), workspace.activeDatabase().recipes().getFirst().recipe());
+        assertEquals(
+            ResourceLocation.fromNamespaceAndPath("test", "oak_planks"),
+            workspace.activeDatabase().recipes().getFirst().recipe()
+        );
     }
 
     @Test
-    void addToActiveDatabaseRejectsBuiltinDatabase() {
+    void addToActiveDatabaseRejectsBuiltinDatabase(@TempDir Path tempDir) {
         FileRecipeDatabaseRepository repository = new FileRecipeDatabaseRepository(tempDir);
         TestRecipeSystem system = new TestRecipeSystem();
         RecipeEntry<TestRecipe> entry = RecipeEntry.of(system, new TestRecipe("oak_planks"));
@@ -58,7 +58,7 @@ class FileRecipeDatabaseRepositoryTest {
     }
 
     @Test
-    void createDatabasePersistsAndSelectsUniqueDatabase() throws Exception {
+    void createDatabasePersistsAndSelectsUniqueDatabase(@TempDir Path tempDir) throws Exception {
         FileRecipeDatabaseRepository repository = new FileRecipeDatabaseRepository(tempDir);
 
         RecipeDatabaseWorkspace first = repository.createDatabase("Machine Routes");
@@ -75,7 +75,7 @@ class FileRecipeDatabaseRepositoryTest {
     }
 
     @Test
-    void deleteDatabaseRequiresNonBuiltinAndFallsBackToBuiltin() throws Exception {
+    void deleteDatabaseRequiresNonBuiltinAndFallsBackToBuiltin(@TempDir Path tempDir) throws Exception {
         FileRecipeDatabaseRepository repository = new FileRecipeDatabaseRepository(tempDir);
 
         RecipeDatabaseWorkspace created = repository.createDatabase("Scratch");
@@ -87,22 +87,23 @@ class FileRecipeDatabaseRepositoryTest {
     }
 
     @Test
-    void createDatabaseRequiresExplicitName() {
+    void createDatabaseRequiresExplicitName(@TempDir Path tempDir) {
         FileRecipeDatabaseRepository repository = new FileRecipeDatabaseRepository(tempDir);
 
         assertThrows(IllegalArgumentException.class, () -> repository.createDatabase("   "));
     }
 
     @Test
-    void saveWorkspacePersistsDisabledSourcesForExplicitRecipes() throws Exception {
+    void saveWorkspacePersistsDisabledSourcesForExplicitRecipes(@TempDir Path tempDir) throws Exception {
         FileRecipeDatabaseRepository repository = new FileRecipeDatabaseRepository(tempDir);
         RecipeDatabaseWorkspace workspace = repository.createDatabase("Scratch");
         Namespace source = Namespace.of("test", "crafting");
-        DatabaseRecipeRef ref = new DatabaseRecipeRef(source, ResourceLocation.fromNamespaceAndPath("test", "oak_planks"));
+        DatabaseRecipeRef ref = new DatabaseRecipeRef(
+            source,
+            ResourceLocation.fromNamespaceAndPath("test", "oak_planks")
+        );
 
-        CustomRecipeDatabase active = workspace.activeDatabase()
-            .withRecipe(ref)
-            .withSourceEnabled(source, false);
+        CustomRecipeDatabase active = workspace.activeDatabase().withRecipe(ref).withSourceEnabled(source, false);
         repository.saveWorkspace(workspace.withDatabase(active));
 
         RecipeDatabaseWorkspace loaded = repository.loadWorkspace();
@@ -113,8 +114,7 @@ class FileRecipeDatabaseRepositoryTest {
         assertEquals(false, loaded.activeDatabase().recipeEnabled(ref));
     }
 
-    private record TestRecipe(String id) {
-    }
+    private record TestRecipe(String id) {}
 
     private static final class TestRecipeSystem implements RecipeSystem<TestRecipe> {
         @Override

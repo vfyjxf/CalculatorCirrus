@@ -4,7 +4,7 @@ import dev.vfyjxf.cirrus.api.recipe.execution.driver.slot.SlotLayout;
 import net.minecraft.world.item.ItemStack;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public record ExecutionOverlayTraceSnapshot(
     boolean available,
@@ -19,7 +19,13 @@ public record ExecutionOverlayTraceSnapshot(
     }
 
     public static ExecutionOverlayTraceSnapshot empty() {
-        return new ExecutionOverlayTraceSnapshot(false, null, ItemStack.EMPTY, Lists.immutable.empty(), Lists.immutable.empty());
+        return new ExecutionOverlayTraceSnapshot(
+            false,
+            null,
+            ItemStack.EMPTY,
+            Lists.immutable.empty(),
+            Lists.immutable.empty()
+        );
     }
 
     public record SlotHighlight(

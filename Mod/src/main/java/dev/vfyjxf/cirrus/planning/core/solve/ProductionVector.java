@@ -32,14 +32,16 @@ public final class ProductionVector {
     public final Set<Integer> automatedLocalRecipes = new TreeSet<>();
     public final Map<ResourceKey, String> unmetReasons = new TreeMap<>();
     public final Set<String> hitRuleIds = new TreeSet<>();
-    public boolean exploded;
+    private boolean exploded;
 
-    public record ProvisionMeta(String machineId, String systemId, MachineCapabilityId capability, int count) {
-    }
+    public record ProvisionMeta(String machineId, String systemId, MachineCapabilityId capability, int count) {}
 
-    public record SetupLineMeta(String systemId, String primaryMachineId, ResourceKey targetOutput,
-                                MachineCapabilityId capability) {
-    }
+    public record SetupLineMeta(
+        String systemId,
+        String primaryMachineId,
+        ResourceKey targetOutput,
+        MachineCapabilityId capability
+    ) {}
 
     public ProductionVector(int nodeCount, int recipeCount, int totalInSlots, int totalCatSlots) {
         this.need = new long[nodeCount];
@@ -57,6 +59,14 @@ public final class ProductionVector {
 
     public boolean isFeasible() {
         return !exploded && unmetReasons.isEmpty();
+    }
+
+    public boolean exploded() {
+        return exploded;
+    }
+
+    public void markExploded() {
+        exploded = true;
     }
 
     public Map<Integer, Long> totalProducedByLocalRes() {

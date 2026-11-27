@@ -10,27 +10,35 @@ import java.util.Optional;
 import java.util.TreeMap;
 
 public record PlanningDiagnostics(
+    long elapsedMillis,
+    int subgraphNodes,
+    int subgraphRecipes,
+    int collapsedOrCandidates,
+    int coupledComponentsEvaluated,
+    boolean truncatedByNodeBudget,
+    Optional<ConflictDiagnosis> conflictDiagnosis,
+    Map<ResourceKey, String> unmetResources
+) {
+
+    public PlanningDiagnostics(
         long elapsedMillis,
         int subgraphNodes,
         int subgraphRecipes,
         int collapsedOrCandidates,
         int coupledComponentsEvaluated,
         boolean truncatedByNodeBudget,
-        Optional<ConflictDiagnosis> conflictDiagnosis,
-        Map<ResourceKey, String> unmetResources
-) {
-
-    public PlanningDiagnostics(
-            long elapsedMillis,
-            int subgraphNodes,
-            int subgraphRecipes,
-            int collapsedOrCandidates,
-            int coupledComponentsEvaluated,
-            boolean truncatedByNodeBudget,
-            Optional<ConflictDiagnosis> conflictDiagnosis
+        Optional<ConflictDiagnosis> conflictDiagnosis
     ) {
-        this(elapsedMillis, subgraphNodes, subgraphRecipes, collapsedOrCandidates,
-                coupledComponentsEvaluated, truncatedByNodeBudget, conflictDiagnosis, Map.of());
+        this(
+            elapsedMillis,
+            subgraphNodes,
+            subgraphRecipes,
+            collapsedOrCandidates,
+            coupledComponentsEvaluated,
+            truncatedByNodeBudget,
+            conflictDiagnosis,
+            Map.of()
+        );
     }
 
     public PlanningDiagnostics {

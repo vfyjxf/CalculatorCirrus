@@ -9,8 +9,8 @@ import java.util.Optional;
 public interface BatchCouplingSolver {
 
     Optional<Map<CompiledRecipeKey, Long>> refine(
-            BatchCouplingComponent component,
-            PlanningRequest request,
-            long deadlineNanos
+        BatchCouplingComponent component,
+        PlanningRequest request,
+        long deadlineNanos
     );
 }

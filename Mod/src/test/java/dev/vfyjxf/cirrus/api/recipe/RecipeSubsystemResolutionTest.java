@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.api.recipe;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
+import dev.vfyjxf.cirrus.api.recipe.system.extension.RecipeSubsystem;
 import dev.vfyjxf.cirrus.api.recipe.system.extension.SubsystemOrder;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.RecipeApiRegistryBuilder;
@@ -34,15 +35,18 @@ class RecipeSubsystemResolutionTest {
 
         new RecipeApiImpl(builder).resolve(ResolveContext.empty(), system, new TestRecipe("target"));
 
-        assertEquals(List.of(
-            "enter early",
-            "enter standard",
-            "enter late",
-            "fallback",
-            "exit late",
-            "exit standard",
-            "exit early"
-        ), events);
+        assertEquals(
+            List.of(
+                "enter early",
+                "enter standard",
+                "enter late",
+                "fallback",
+                "exit late",
+                "exit standard",
+                "exit early"
+            ),
+            events
+        );
     }
 
     @Test
@@ -51,21 +55,39 @@ class RecipeSubsystemResolutionTest {
         TestRecipeSystem system = new TestRecipeSystem(events);
         RecipeApiRegistryBuilder builder = new RecipeApiRegistryBuilder();
         builder.registerSystem(system);
-        builder.registerSubsystem(system.systemId(), id("third"), tracing("third", events), SubsystemOrder.early().after(id("second")));
-        builder.registerSubsystem(system.systemId(), id("first"), tracing("first", events), SubsystemOrder.late().before(id("second")));
-        builder.registerSubsystem(system.systemId(), id("second"), tracing("second", events), SubsystemOrder.standard());
+        builder.registerSubsystem(
+            system.systemId(),
+            id("third"),
+            tracing("third", events),
+            SubsystemOrder.early().after(id("second"))
+        );
+        builder.registerSubsystem(
+            system.systemId(),
+            id("first"),
+            tracing("first", events),
+            SubsystemOrder.late().before(id("second"))
+        );
+        builder.registerSubsystem(
+            system.systemId(),
+            id("second"),
+            tracing("second", events),
+            SubsystemOrder.standard()
+        );
 
         new RecipeApiImpl(builder).resolve(ResolveContext.empty(), system, new TestRecipe("target"));
 
-        assertEquals(List.of(
-            "enter first",
-            "enter second",
-            "enter third",
-            "fallback",
-            "exit third",
-            "exit second",
-            "exit first"
-        ), events);
+        assertEquals(
+            List.of(
+                "enter first",
+                "enter second",
+                "enter third",
+                "fallback",
+                "exit third",
+                "exit second",
+                "exit first"
+            ),
+            events
+        );
     }
 
     @Test
@@ -73,7 +95,12 @@ class RecipeSubsystemResolutionTest {
         TestRecipeSystem system = new TestRecipeSystem(new ArrayList<>());
         RecipeApiRegistryBuilder builder = new RecipeApiRegistryBuilder();
         builder.registerSystem(system);
-        builder.registerSubsystem(system.systemId(), id("only"), tracing("only", new ArrayList<>()), SubsystemOrder.standard().after(id("missing")));
+        builder.registerSubsystem(
+            system.systemId(),
+            id("only"),
+            tracing("only", new ArrayList<>()),
+            SubsystemOrder.standard().after(id("missing"))
+        );
 
         assertThrows(IllegalArgumentException.class, () -> new RecipeApiImpl(builder));
     }
@@ -83,8 +110,18 @@ class RecipeSubsystemResolutionTest {
         TestRecipeSystem system = new TestRecipeSystem(new ArrayList<>());
         RecipeApiRegistryBuilder builder = new RecipeApiRegistryBuilder();
         builder.registerSystem(system);
-        builder.registerSubsystem(system.systemId(), id("a"), tracing("a", new ArrayList<>()), SubsystemOrder.standard().after(id("b")));
-        builder.registerSubsystem(system.systemId(), id("b"), tracing("b", new ArrayList<>()), SubsystemOrder.standard().after(id("a")));
+        builder.registerSubsystem(
+            system.systemId(),
+            id("a"),
+            tracing("a", new ArrayList<>()),
+            SubsystemOrder.standard().after(id("b"))
+        );
+        builder.registerSubsystem(
+            system.systemId(),
+            id("b"),
+            tracing("b", new ArrayList<>()),
+            SubsystemOrder.standard().after(id("a"))
+        );
 
         assertThrows(IllegalArgumentException.class, () -> new RecipeApiImpl(builder));
     }
@@ -102,12 +139,10 @@ class RecipeSubsystemResolutionTest {
         return Namespace.of("test", path);
     }
 
-    private record TestRecipe(String id) {
-    }
+    private record TestRecipe(String id) {}
 
     @FunctionalInterface
-    private interface RecipeSubsystemForTest extends dev.vfyjxf.cirrus.api.recipe.system.extension.RecipeSubsystem<TestRecipe> {
-    }
+    private interface RecipeSubsystemForTest extends RecipeSubsystem<TestRecipe> {}
 
     private static final class TestRecipeSystem implements RecipeSystem<TestRecipe> {
         private final List<String> events;

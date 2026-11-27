@@ -12,25 +12,65 @@ public final class SearchSuggestions {
     private static final List<Entry> entries = List.of(
         // Field entries
         new Entry(List.of("has", "contains"), "has:", true, CirrusLangs.Calculator.Database.searchPredicateHasDesc),
-        new Entry(List.of("text", "q", "search"), "text:", true, CirrusLangs.Calculator.Database.searchPredicateTextDesc),
+        new Entry(
+            List.of("text", "q", "search"),
+            "text:",
+            true,
+            CirrusLangs.Calculator.Database.searchPredicateTextDesc
+        ),
         new Entry(List.of("mod", "@mod"), "mod:", true, CirrusLangs.Calculator.Database.searchPredicateModDesc),
         new Entry(List.of("tag", "$tag", "tags"), "tag:", true, CirrusLangs.Calculator.Database.searchPredicateTagDesc),
-        new Entry(List.of("tooltip", "#tooltip", "tip"), "tooltip:", true, CirrusLangs.Calculator.Database.searchPredicateTooltipDesc),
-        new Entry(List.of("id", "&id", "registry", "rl"), "id:", true, CirrusLangs.Calculator.Database.searchPredicateIdDesc),
+        new Entry(
+            List.of("tooltip", "#tooltip", "tip"),
+            "tooltip:",
+            true,
+            CirrusLangs.Calculator.Database.searchPredicateTooltipDesc
+        ),
+        new Entry(
+            List.of("id", "&id", "registry", "rl"),
+            "id:",
+            true,
+            CirrusLangs.Calculator.Database.searchPredicateIdDesc
+        ),
         new Entry(List.of("name", "n"), "name:", true, CirrusLangs.Calculator.Database.searchPredicateNameDesc),
-        new Entry(List.of("out", "o", "result", "results"), "out:", true, CirrusLangs.Calculator.Database.searchPredicateOutDesc),
-        new Entry(List.of("in", "i", "ingredient", "ingredients"), "in:", true, CirrusLangs.Calculator.Database.searchPredicateInDesc),
-        new Entry(List.of("system", "recipe"), "system:", true, CirrusLangs.Calculator.Database.searchPredicateSystemDesc),
+        new Entry(
+            List.of("out", "o", "result", "results"),
+            "out:",
+            true,
+            CirrusLangs.Calculator.Database.searchPredicateOutDesc
+        ),
+        new Entry(
+            List.of("in", "i", "ingredient", "ingredients"),
+            "in:",
+            true,
+            CirrusLangs.Calculator.Database.searchPredicateInDesc
+        ),
+        new Entry(
+            List.of("system", "recipe"),
+            "system:",
+            true,
+            CirrusLangs.Calculator.Database.searchPredicateSystemDesc
+        ),
         new Entry(List.of("db", "database"), "db:", true, CirrusLangs.Calculator.Database.searchPredicateDbDesc),
         new Entry(List.of("machine"), "machine:", true, CirrusLangs.Calculator.Database.searchPredicateMachineDesc),
         new Entry(List.of("time"), "time>=", true, CirrusLangs.Calculator.Database.searchPredicateTimeDesc),
         new Entry(List.of("energy"), "energy<=", true, CirrusLangs.Calculator.Database.searchPredicateEnergyDesc),
         new Entry(List.of("cat"), "cat:", true, CirrusLangs.Calculator.Database.searchPredicateCatDesc),
-        new Entry(List.of("bp", "by", "byproduct"), "bp:", true, CirrusLangs.Calculator.Database.searchPredicateByproductDesc),
+        new Entry(
+            List.of("bp", "by", "byproduct"),
+            "bp:",
+            true,
+            CirrusLangs.Calculator.Database.searchPredicateByproductDesc
+        ),
         new Entry(List.of("chance"), "chance>=", true, CirrusLangs.Calculator.Database.searchPredicateChanceDesc),
         new Entry(List.of("tier"), "tier>=", true, CirrusLangs.Calculator.Database.searchPredicateTierDesc),
         new Entry(List.of("level"), "level>=", true, CirrusLangs.Calculator.Database.searchPredicateLevelDesc),
-        new Entry(List.of("context", "%context"), "context:", true, CirrusLangs.Calculator.Database.searchPredicateContextDesc),
+        new Entry(
+            List.of("context", "%context"),
+            "context:",
+            true,
+            CirrusLangs.Calculator.Database.searchPredicateContextDesc
+        ),
         new Entry(List.of("plan"), "plan:", true, CirrusLangs.Calculator.Database.searchPredicatePlanDesc),
         new Entry(List.of("profile"), "profile:", true, CirrusLangs.Calculator.Database.searchPredicateProfileDesc),
         // JEI prefix entries
@@ -55,8 +95,7 @@ public final class SearchSuggestions {
         new Entry(List.of("("), "(", false, CirrusLangs.Calculator.Database.searchPredicateGroupDesc)
     );
 
-    private SearchSuggestions() {
-    }
+    private SearchSuggestions() {}
 
     public static List<SearchSuggestion> suggest(String query, int cursor, int limit) {
         return suggestSyntax(query, cursor, limit);
@@ -73,20 +112,23 @@ public final class SearchSuggestions {
             if (!matches(entry, prefix)) {
                 continue;
             }
-            out.add(new SearchSuggestion(
-                entry.replacement,
-                entry.replacement,
-                token.completionStart(),
-                token.end(),
-                0,
-                entry.description().component()
-            ));
+            out.add(
+                new SearchSuggestion(
+                    entry.replacement,
+                    entry.replacement,
+                    token.completionStart(),
+                    token.end(),
+                    0,
+                    entry.description().component()
+                )
+            );
         }
 
         if (!prefix.isEmpty()) {
-            out.sort(Comparator
-                .comparingInt((SearchSuggestion suggestion) -> rank(suggestion, prefix))
-                .thenComparing(SearchSuggestion::token));
+            out.sort(
+                Comparator.comparingInt((SearchSuggestion suggestion) -> rank(suggestion, prefix))
+                        .thenComparing(SearchSuggestion::token)
+            );
         }
 
         int max = Math.max(0, limit);
@@ -131,8 +173,7 @@ public final class SearchSuggestions {
         return new Token(start, end, text, negationLength);
     }
 
-    private record Entry(List<String> matchKeys, String replacement, boolean visibleOnEmpty, LangEntry description) {
-    }
+    private record Entry(List<String> matchKeys, String replacement, boolean visibleOnEmpty, LangEntry description) {}
 
     private record Token(int start, int end, String text, int negationLength) {
         int completionStart() {

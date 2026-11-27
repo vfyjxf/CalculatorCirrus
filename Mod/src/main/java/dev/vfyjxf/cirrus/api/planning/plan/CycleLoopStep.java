@@ -11,14 +11,14 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 public record CycleLoopStep(
-        String stepId,
-        List<String> dependsOnStepIds,
-        CompiledCycleMacroKey macroKey,
-        long iterations,
-        Map<ResourceKey, Long> workingSeedAmounts,
-        List<CraftStep> singleIterationTemplate,
-        Map<ResourceKey, Long> netDeltaPerIteration,
-        CostVector stepCost
+    String stepId,
+    List<String> dependsOnStepIds,
+    CompiledCycleMacroKey macroKey,
+    long iterations,
+    Map<ResourceKey, Long> workingSeedAmounts,
+    List<CraftStep> singleIterationTemplate,
+    Map<ResourceKey, Long> netDeltaPerIteration,
+    CostVector stepCost
 ) implements PlanStep {
 
     public CycleLoopStep {

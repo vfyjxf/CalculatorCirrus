@@ -1,9 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.projection.resolve;
 
 public enum ResolveScope {
-    input,
-    output,
-    both;
+    input, output, both;
 
     //region scope
 

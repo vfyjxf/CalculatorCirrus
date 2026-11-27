@@ -7,21 +7,27 @@ import dev.vfyjxf.cirrus.api.planning.graph.RawIngredientSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawOutputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeCatalogSnapshot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeRecord;
+import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
 import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmissionPolicy;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.tag.RecipeEvidenceTier;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassifyContent;
 import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifyView;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.constraint.RecipeConstraint;
 import dev.vfyjxf.cirrus.api.recipe.machine.ItemMachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
+import dev.vfyjxf.cirrus.api.recipe.screening.RecipeScreeningHints;
+import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.system.RoutingRecipeView;
@@ -30,17 +36,19 @@ import dev.vfyjxf.cirrus.helper.RecipeHelper;
 import dev.vfyjxf.cirrus.planning.adapter.ClassifierVerdictBridge;
 import dev.vfyjxf.cirrus.planning.adapter.DropReason;
 import dev.vfyjxf.cirrus.planning.core.graph.DefaultSystemAdmissionPolicy;
+import dev.vfyjxf.cirrus.planning.normalize.JeiNormalizationPatch;
+import dev.vfyjxf.cirrus.planning.normalize.JeiRecipeNormalizer;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.classify.RecipeClassificationService;
 import dev.vfyjxf.cirrus.recipe.clause.DurabilityCostClause;
 import dev.vfyjxf.cirrus.recipe.system.jei.JeiCategoryRecipeSystem;
+import dev.vfyjxf.cirrus.util.CirrusNamespaces;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import org.eclipse.collections.api.RichIterable;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,12 +68,14 @@ import java.util.function.BooleanSupplier;
 
 public final class CirrusCatalogAdapter {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger("CalculatorCirrus PlannerBridge");
+    private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus PlannerBridge");
+    private static final int jeiCircuitBreakerThreshold = 8;
+    private static final Namespace recyclingRole = CirrusNamespaces.ofInternal("screening/role/recycling");
 
     public record RecipeContentSource(
-            List<InputContent> inputs,
-            List<OutputContent> outputs,
-            Map<Integer, DurabilityCostClause> durabilityClauses
+        List<InputContent> inputs,
+        List<OutputContent> outputs,
+        Map<Integer, DurabilityCostClause> durabilityClauses
     ) {
         public RecipeContentSource(List<InputContent> inputs, List<OutputContent> outputs) {
             this(inputs, outputs, Map.of());
@@ -80,39 +90,42 @@ public final class CirrusCatalogAdapter {
         }
     }
 
-    public record SystemSnapshot(RecipeSystem<?> system, List<String> machineIds) {
+    public record SystemSnapshot(RecipeSystem<?> system, List<String> machineIds, Set<String> systemTags) {
+        public SystemSnapshot(RecipeSystem<?> system, List<String> machineIds) {
+            this(system, machineIds, Set.of());
+        }
+
         public SystemSnapshot {
             Objects.requireNonNull(system, "system");
             machineIds = List.copyOf(Objects.requireNonNull(machineIds, "machineIds"));
+            systemTags = systemTags == null || systemTags.isEmpty()
+                    ? Set.of()
+                    : Collections.unmodifiableSet(new TreeSet<>(systemTags));
         }
     }
 
-    public record SystemCapturePlan(long attachEpoch, List<SystemSnapshot> systems) {
-    }
+    public record SystemCapturePlan(long attachEpoch, List<SystemSnapshot> systems) {}
 
     public record CaptureStats(
-            int systemsVisited,
-            int systemsFailed,
-            int recipesVisited,
-            int recipesKept,
-            int recipesResolveFailed,
-            int recipesExceptionFailed,
-            int unresolvedOutputsRecorded,
-            Map<DropReason, Integer> droppedByReason
-    ) {
-    }
+        int systemsVisited,
+        int systemsFailed,
+        int recipesVisited,
+        int recipesKept,
+        int recipesResolveFailed,
+        int recipesExceptionFailed,
+        int unresolvedOutputsRecorded,
+        Map<DropReason, Integer> droppedByReason
+    ) {}
 
     public record CapturedCatalog(
-            long attachEpoch,
-            RawRecipeCatalogSnapshot snapshot,
-            SystemAdmissionPolicy policy,
-            List<RecipeEntry<?>> entriesBySourceRef,
-            CaptureStats stats
-    ) {
-    }
+        long attachEpoch,
+        RawRecipeCatalogSnapshot snapshot,
+        SystemAdmissionPolicy policy,
+        List<RecipeEntry<?>> entriesBySourceRef,
+        CaptureStats stats
+    ) {}
 
-    public CirrusCatalogAdapter() {
-    }
+    public CirrusCatalogAdapter() {}
 
     public SystemCapturePlan prepareCapturePlan() {
         long epoch = RecipeApiImpl.attachEpoch();
@@ -120,16 +133,13 @@ public final class CirrusCatalogAdapter {
         List<SystemSnapshot> snapshots = new ArrayList<>();
         for (RecipeSystem<?> system : api.allSystems()) {
             List<String> machines = extractSystemMachines(api, system);
-            snapshots.add(new SystemSnapshot(system, machines));
+            Set<String> tags = extractSystemTags(api, system);
+            snapshots.add(new SystemSnapshot(system, machines, tags));
         }
         return new SystemCapturePlan(epoch, List.copyOf(snapshots));
     }
 
-    public Optional<CapturedCatalog> capture(
-            SystemCapturePlan plan,
-            long catalogVersion,
-            BooleanSupplier cancelled
-    ) {
+    public Optional<CapturedCatalog> capture(SystemCapturePlan plan, long catalogVersion, BooleanSupplier cancelled) {
         Objects.requireNonNull(plan, "plan");
         Objects.requireNonNull(cancelled, "cancelled");
         if (cancelled.getAsBoolean() || RecipeApiImpl.attachEpoch() != plan.attachEpoch()) {
@@ -139,8 +149,10 @@ public final class CirrusCatalogAdapter {
         List<RawRecipeRecord> records = new ArrayList<>(4096);
         List<RecipeEntry<?>> entriesByRef = new ArrayList<>(4096);
         List<RecipeClassifyView> classifyViews = new ArrayList<>(4096);
+        Map<Long, RecipeUsePolicy> systemHintPolicies = new HashMap<>();
         Set<ResourceKey> unresolvedOutputs = new TreeSet<>();
         EnumMap<DropReason, Integer> drops = new EnumMap<>(DropReason.class);
+        DefaultSystemAdmissionPolicy defaultPolicy = DefaultSystemAdmissionPolicy.defaults();
 
         int systemsVisited = 0;
         int systemsFailed = 0;
@@ -154,22 +166,30 @@ public final class CirrusCatalogAdapter {
             }
             systemsVisited++;
             RecipeSystem<?> rawSystem = sysSnap.system();
+            String systemId = rawSystem.systemId().toString();
+            String sourceKind = sourceKindOf(rawSystem);
+            if (defaultPolicy.classify(systemId, sourceKind) == SystemAdmission.excludedDisplay
+                    || sysSnap.systemTags().contains(RecipeSystemTags.displayOnly.toString())
+                    || sysSnap.systemTags().contains(RecipeSystemTags.mirrorDuplicate.toString())) {
+                continue;
+            }
+
             RichIterable<?> allRecipes;
             try {
                 allRecipes = rawSystem.allRecipes();
             } catch (RuntimeException | LinkageError e) {
                 systemsFailed++;
-                LOGGER.warn("Failed enumerating recipes for system {}: {}", rawSystem.systemId(), e.toString());
+                logger.warn("Failed enumerating recipes for system {}: {}", rawSystem.systemId(), e.toString());
                 continue;
             }
             if (allRecipes == null) {
                 continue;
             }
 
-            String systemId = rawSystem.systemId().toString();
-            String sourceKind = sourceKindOf(rawSystem);
             boolean isJeiSystem = rawSystem instanceof JeiCategoryRecipeSystem<?>;
             boolean isVanillaSystem = rawSystem instanceof VanillaRecipeSystem<?>;
+            int sysSuccesses = 0;
+            int consecutiveExceptions = 0;
 
             for (Object rawRecipe : allRecipes) {
                 if (cancelled.getAsBoolean()) {
@@ -181,7 +201,7 @@ public final class CirrusCatalogAdapter {
                 recipesVisited++;
                 try {
                     RecipeEntry<?> entry = createEntryUnchecked(rawSystem, rawRecipe);
-                    Optional<RecipeContentSource> sourceOpt = extractContentSourceSafe(entry, isJeiSystem);
+                    Optional<RecipeContentSource> sourceOpt = extractContentSourceOrThrow(entry, isJeiSystem);
                     if (sourceOpt.isEmpty()) {
                         recipesResolveFailed++;
                         if (isVanillaSystem) {
@@ -189,24 +209,43 @@ public final class CirrusCatalogAdapter {
                         }
                         continue;
                     }
+                    long sourceRef = entriesByRef.size() + 1L;
                     AdaptOutcome adapted = adaptEntry(
-                            entry,
-                            systemId,
-                            sourceKind,
-                            sysSnap.machineIds(),
-                            sourceOpt.get(),
-                            entriesByRef.size() + 1L,
-                            classifyViews.size()
+                        entry,
+                        systemId,
+                        sourceKind,
+                        sysSnap.machineIds(),
+                        sysSnap.systemTags(),
+                        sourceOpt.get(),
+                        sourceRef,
+                        classifyViews.size()
                     );
+                    sysSuccesses++;
+                    consecutiveExceptions = 0;
                     if (adapted.record != null) {
                         records.add(adapted.record);
                         entriesByRef.add(entry);
                         classifyViews.add(adapted.classifyView);
+                        RecipeUsePolicy hintPolicy = extractRoutingHintPolicy(entry);
+                        if (hintPolicy != null && hintPolicy != RecipeUsePolicy.normal) {
+                            systemHintPolicies.put(sourceRef, hintPolicy);
+                        }
                     } else if (adapted.dropReason != null) {
                         drops.merge(adapted.dropReason, 1, Integer::sum);
                     }
                 } catch (RuntimeException | LinkageError e) {
                     recipesExceptionFailed++;
+                    consecutiveExceptions++;
+                    if (isJeiSystem && sysSuccesses == 0 && consecutiveExceptions >= jeiCircuitBreakerThreshold) {
+                        systemsFailed++;
+                        logger.warn(
+                            "Circuit-breaking JEI recipe system {} after {} consecutive exceptions: {}",
+                            systemId,
+                            consecutiveExceptions,
+                            e.toString()
+                        );
+                        break;
+                    }
                 }
             }
         }
@@ -215,40 +254,45 @@ public final class CirrusCatalogAdapter {
             return Optional.empty();
         }
 
-        long[] sourceRefs = new long[records.size()];
-        for (int i = 0; i < records.size(); i++) {
-            sourceRefs[i] = records.get(i).sourceRef();
+        // Stage J1-J4 universal JEI normalization, dual-layer canonical tagging, and SPI enrichers.
+        JeiRecipeNormalizer.NormalizationResult normalized = JeiRecipeNormalizer.normalize(
+            records,
+            List.of(),
+            PlanningExtensionRegistry.instance().recipeEnrichers()
+        );
+        List<RawRecipeRecord> finalRecords = normalized.normalizedRecords();
+
+        long[] sourceRefs = new long[finalRecords.size()];
+        for (int i = 0; i < finalRecords.size(); i++) {
+            sourceRefs[i] = finalRecords.get(i).sourceRef();
         }
         SystemAdmissionPolicy policy = ClassifierVerdictBridge.classifyToPolicy(
-                DefaultSystemAdmissionPolicy.defaults(),
-                RecipeClassificationService.classifier(),
-                classifyViews,
-                sourceRefs
+            defaultPolicy,
+            RecipeClassificationService.classifier(),
+            classifyViews,
+            sourceRefs,
+            systemHintPolicies
         );
 
-        RawRecipeCatalogSnapshot snapshot = new RawRecipeCatalogSnapshot(catalogVersion, records, unresolvedOutputs);
+        RawRecipeCatalogSnapshot snapshot = new RawRecipeCatalogSnapshot(catalogVersion, finalRecords, unresolvedOutputs);
         CaptureStats stats = new CaptureStats(
-                systemsVisited,
-                systemsFailed,
-                recipesVisited,
-                records.size(),
-                recipesResolveFailed,
-                recipesExceptionFailed,
-                unresolvedOutputs.size(),
-                Collections.unmodifiableMap(drops)
+            systemsVisited,
+            systemsFailed,
+            recipesVisited,
+            finalRecords.size(),
+            recipesResolveFailed,
+            recipesExceptionFailed,
+            unresolvedOutputs.size(),
+            Collections.unmodifiableMap(drops)
         );
-        return Optional.of(new CapturedCatalog(
-                plan.attachEpoch(),
-                snapshot,
-                policy,
-                Collections.unmodifiableList(entriesByRef),
-                stats
-        ));
+        return Optional.of(
+            new CapturedCatalog(plan.attachEpoch(), snapshot, policy, Collections.unmodifiableList(entriesByRef), stats)
+        );
     }
 
     public static Map<CompiledRecipeKey, RecipeEntry<?>> buildRecipeIndex(
-            CompiledRecipeGraph graph,
-            List<RecipeEntry<?>> entriesBySourceRef
+        CompiledRecipeGraph graph,
+        List<RecipeEntry<?>> entriesBySourceRef
     ) {
         Objects.requireNonNull(graph, "graph");
         Objects.requireNonNull(entriesBySourceRef, "entriesBySourceRef");
@@ -272,16 +316,19 @@ public final class CirrusCatalogAdapter {
         return extractContentSourceSafe(entry, entry.system() instanceof JeiCategoryRecipeSystem<?>);
     }
 
-    private static Optional<RecipeContentSource> extractContentSourceSafe(
-            RecipeEntry<?> entry,
-            boolean isJeiSystem
-    ) {
-        RoutingRecipeView view;
+    private static Optional<RecipeContentSource> extractContentSourceSafe(RecipeEntry<?> entry, boolean isJeiSystem) {
         try {
-            view = routingViewUnchecked(entry);
+            return extractContentSourceOrThrow(entry, isJeiSystem);
         } catch (RuntimeException | LinkageError e) {
             return Optional.empty();
         }
+    }
+
+    private static Optional<RecipeContentSource> extractContentSourceOrThrow(
+        RecipeEntry<?> entry,
+        boolean isJeiSystem
+    ) {
+        RoutingRecipeView view = routingViewUnchecked(entry);
         if (view != null) {
             List<InputContent> inputs = toList(view.inputs());
             List<OutputContent> outputs = toList(view.outputs());
@@ -290,12 +337,7 @@ public final class CirrusCatalogAdapter {
         if (isJeiSystem) {
             return Optional.empty();
         }
-        ResolveResult resolved;
-        try {
-            resolved = entry.resolveResult(ResolveContext.empty());
-        } catch (RuntimeException | LinkageError e) {
-            return Optional.empty();
-        }
+        ResolveResult resolved = entry.resolveResult(ResolveContext.empty());
         if (resolved == null || !resolved.resolved()) {
             return Optional.empty();
         }
@@ -323,24 +365,41 @@ public final class CirrusCatalogAdapter {
         for (ClausedContent<OutputContent> claused : projection.outputs()) {
             outputs.add(claused.content());
         }
-        return Optional.of(new RecipeContentSource(
-                inputs,
-                outputs,
-                durabilityClauses == null ? Map.of() : durabilityClauses
-        ));
+        return Optional
+                .of(new RecipeContentSource(inputs, outputs, durabilityClauses == null ? Map.of() : durabilityClauses));
+    }
+
+    private static @Nullable RecipeUsePolicy extractRoutingHintPolicy(RecipeEntry<?> entry) {
+        try {
+            RecipeScreeningHints hints = routingHintsUnchecked(entry);
+            if (hints == null || hints.isEmpty()) {
+                return null;
+            }
+            RecipeUsePolicy policy = hints.usePolicy();
+            if (policy == RecipeUsePolicy.disabledByDefault || policy == RecipeUsePolicy.lastResort) {
+                return policy;
+            }
+            if (hints.roles().contains(recyclingRole)) {
+                return RecipeUsePolicy.lastResort;
+            }
+            return policy == RecipeUsePolicy.normal ? null : policy;
+        } catch (RuntimeException | LinkageError ignored) {
+            return null;
+        }
     }
 
     private static AdaptOutcome adaptEntry(
-            RecipeEntry<?> entry,
-            String systemId,
-            String sourceKind,
-            List<String> machineIds,
-            RecipeContentSource source,
-            long sourceRef,
-            int classifyIndex
+        RecipeEntry<?> entry,
+        String systemId,
+        String sourceKind,
+        List<String> machineIds,
+        Set<String> systemTags,
+        RecipeContentSource source,
+        long sourceRef,
+        int classifyIndex
     ) {
         if (source.inputs().isEmpty() || source.outputs().isEmpty()) {
-            return AdaptOutcome.dropped(DropReason.EMPTY_SLOT_LISTS);
+            return AdaptOutcome.dropped(DropReason.emptySlotLists);
         }
         List<RawIngredientSlot> inputs = new ArrayList<>(source.inputs().size());
         List<RawOutputSlot> outputs = new ArrayList<>(source.outputs().size());
@@ -361,7 +420,9 @@ public final class CirrusCatalogAdapter {
                     recipeValues = new LinkedHashMap<>();
                 }
                 recipeValues.merge(mapped.valueTypeId(), mapped.valueAmount(), Math::max);
-                cInputs.add(new ClassifyContent(ClassifyContent.Kind.value, Set.of(), null, mapped.valueAmount(), in.chance()));
+                cInputs.add(
+                    new ClassifyContent(ClassifyContent.Kind.value, Set.of(), null, mapped.valueAmount(), in.chance())
+                );
             } else if (mapped.slot() != null) {
                 inputs.add(mapped.slot());
                 if (mapped.catalystReturnOutput() != null) {
@@ -375,7 +436,7 @@ public final class CirrusCatalogAdapter {
         }
 
         if (inputs.isEmpty()) {
-            return AdaptOutcome.dropped(DropReason.NO_INPUT_AFTER_VALUES);
+            return AdaptOutcome.dropped(DropReason.noInputAfterValues);
         }
 
         for (OutputContent out : source.outputs()) {
@@ -388,15 +449,19 @@ public final class CirrusCatalogAdapter {
                     recipeValues = new LinkedHashMap<>();
                 }
                 recipeValues.merge(mapped.valueTypeId(), mapped.valueAmount(), Math::max);
-                cOutputs.add(new ClassifyContent(ClassifyContent.Kind.value, Set.of(), null, mapped.valueAmount(), out.chance()));
+                cOutputs.add(
+                    new ClassifyContent(ClassifyContent.Kind.value, Set.of(), null, mapped.valueAmount(), out.chance())
+                );
             } else if (mapped.slot() != null) {
                 outputs.add(mapped.slot());
-                cOutputs.add(ClassifyContent.stack(mapped.slot().resource().resourceId(), mapped.slot().amount(), out.chance()));
+                cOutputs.add(
+                    ClassifyContent.stack(mapped.slot().resource().resourceId(), mapped.slot().amount(), out.chance())
+                );
             }
         }
 
         if (outputs.isEmpty()) {
-            return AdaptOutcome.dropped(DropReason.NO_OUTPUT_AFTER_VALUES);
+            return AdaptOutcome.dropped(DropReason.noOutputAfterValues);
         }
         if (catalystReturns != null) {
             outputs.addAll(catalystReturns);
@@ -405,27 +470,38 @@ public final class CirrusCatalogAdapter {
         ResourceLocation rawId = null;
         try {
             rawId = entry.id();
-        } catch (RuntimeException | LinkageError ignored) {
-        }
+        } catch (RuntimeException | LinkageError ignored) {}
         String explicitId = rawId == null ? "" : rawId.toString();
 
+        boolean opaqueConstraint = hasOpaqueRecipeConstraint(entry);
+        RecipeEvidenceTier evidenceTier = "vanilla".equals(sourceKind) || "mod_native".equals(sourceKind)
+                ? RecipeEvidenceTier.tierA
+                : RecipeEvidenceTier.tierC;
+        double initialFidelity = evidenceTier == RecipeEvidenceTier.tierA ? (opaqueConstraint ? 0.65 : 1.0) : 0.70;
+
         RawRecipeRecord record = new RawRecipeRecord(
-                systemId,
-                sourceKind,
-                explicitId.isEmpty() ? Optional.empty() : Optional.of(explicitId),
-                machineIds,
-                inputs,
-                outputs,
-                recipeValues == null ? Map.of() : recipeValues,
-                sourceRef
+            systemId,
+            sourceKind,
+            explicitId.isEmpty() ? Optional.empty() : Optional.of(explicitId),
+            machineIds,
+            inputs,
+            outputs,
+            recipeValues == null ? Map.of() : recipeValues,
+            sourceRef,
+            systemTags,
+            Set.of(),
+            evidenceTier,
+            initialFidelity,
+            Optional.empty(),
+            opaqueConstraint
         );
         RecipeClassifyView view = new RecipeClassifyView(
-                classifyIndex,
-                systemId,
-                explicitId,
-                machineIds,
-                cInputs,
-                cOutputs
+            classifyIndex,
+            systemId,
+            explicitId,
+            machineIds,
+            cInputs,
+            cOutputs
         );
         return AdaptOutcome.kept(record, view);
     }
@@ -455,8 +531,7 @@ public final class CirrusCatalogAdapter {
         try {
             ItemStack result = RecipeHelper.getOutput(holder.value());
             CirrusContentBridge.toResourceKey(result).ifPresent(unresolvedOutputs::add);
-        } catch (RuntimeException | LinkageError ignored) {
-        }
+        } catch (RuntimeException | LinkageError ignored) {}
     }
 
     private static List<String> extractSystemMachines(RecipeApi api, RecipeSystem<?> system) {
@@ -464,15 +539,13 @@ public final class CirrusCatalogAdapter {
         try {
             MachineEntry convention = system.conventionMachine();
             extractMachineItemId(convention).ifPresent(ids::add);
-        } catch (RuntimeException | LinkageError ignored) {
-        }
+        } catch (RuntimeException | LinkageError ignored) {}
         try {
             Namespace systemId = system.systemId();
             for (MachineEntry entry : api.getMachines(systemId, true)) {
                 extractMachineItemId(entry).ifPresent(ids::add);
             }
-        } catch (RuntimeException | LinkageError ignored) {
-        }
+        } catch (RuntimeException | LinkageError ignored) {}
         return ids.isEmpty() ? List.of() : List.copyOf(ids);
     }
 
@@ -481,19 +554,45 @@ public final class CirrusCatalogAdapter {
             return Optional.empty();
         }
         if (entry instanceof ItemMachineEntry itemEntry) {
-            ResourceLocation loc = BuiltInRegistries.ITEM.getKey(itemEntry.machineStack().content());
-            if (loc != null && !loc.equals(BuiltInRegistries.ITEM.getDefaultKey())) {
-                return Optional.of(loc.toString());
+            Optional<ResourceKey> key = CirrusContentBridge.toConcreteResourceKey(itemEntry.machineStack());
+            if (key.isPresent()) {
+                return Optional.of(key.get().resourceId());
             }
         }
         ItemStack stack = entry.toItemStack();
         if (stack != null && !stack.isEmpty()) {
-            ResourceLocation loc = BuiltInRegistries.ITEM.getKey(stack.getItem());
-            if (loc != null && !loc.equals(BuiltInRegistries.ITEM.getDefaultKey())) {
-                return Optional.of(loc.toString());
-            }
+            return CirrusContentBridge.toResourceKey(stack).map(ResourceKey::resourceId);
         }
         return Optional.empty();
+    }
+
+    private static Set<String> extractSystemTags(RecipeApi api, RecipeSystem<?> system) {
+        TreeSet<String> tags = new TreeSet<>();
+        try {
+            api.getSystemTags(system.systemId()).forEach(ns -> {
+                if (ns != null) {
+                    tags.add(ns.toString());
+                }
+            });
+        } catch (RuntimeException | LinkageError ignored) {}
+        if (system instanceof VanillaRecipeSystem<?>) {
+            tags.add(RecipeSystemTags.vanilla.toString());
+        } else if (system instanceof JeiCategoryRecipeSystem<?> || system.systemId().toString().startsWith("jei:")) {
+            tags.add(RecipeSystemTags.jeiFallback.toString());
+        } else {
+            tags.add(RecipeSystemTags.modNative.toString());
+        }
+        return tags.isEmpty() ? Set.of() : Collections.unmodifiableSet(tags);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <R> boolean hasOpaqueRecipeConstraint(RecipeEntry<R> entry) {
+        try {
+            RecipeConstraint<R> constraint = entry.system().getRecipeConstraint(entry.recipe());
+            return constraint != null && constraint != RecipeConstraint.ingredientConstraint();
+        } catch (RuntimeException | LinkageError ignored) {
+            return false;
+        }
     }
 
     private static String sourceKindOf(RecipeSystem<?> system) {
@@ -501,10 +600,10 @@ public final class CirrusCatalogAdapter {
             return "vanilla";
         }
         if (system instanceof JeiCategoryRecipeSystem<?>) {
-            return "jei";
+            return "jei_fallback";
         }
         String id = system.systemId().toString();
-        return id.startsWith("jei:") ? "jei" : "custom";
+        return id.startsWith("jei:") ? "jei_fallback" : "mod_native";
     }
 
     @SuppressWarnings("unchecked")
@@ -515,6 +614,11 @@ public final class CirrusCatalogAdapter {
     @SuppressWarnings("unchecked")
     private static <R> @Nullable RoutingRecipeView routingViewUnchecked(RecipeEntry<R> entry) {
         return entry.system().routingView(ResolveContext.empty(), entry.recipe());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <R> @Nullable RecipeScreeningHints routingHintsUnchecked(RecipeEntry<R> entry) {
+        return entry.system().routingHints(entry.recipe());
     }
 
     private static <T> List<T> toList(Iterable<? extends T> iterable) {
@@ -529,9 +633,9 @@ public final class CirrusCatalogAdapter {
     }
 
     private record AdaptOutcome(
-            @Nullable RawRecipeRecord record,
-            @Nullable RecipeClassifyView classifyView,
-            @Nullable DropReason dropReason
+        @Nullable RawRecipeRecord record,
+        @Nullable RecipeClassifyView classifyView,
+        @Nullable DropReason dropReason
     ) {
         static AdaptOutcome kept(RawRecipeRecord record, RecipeClassifyView view) {
             return new AdaptOutcome(record, view, null);

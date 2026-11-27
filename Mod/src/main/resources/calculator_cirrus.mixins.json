@@ -4,6 +4,13 @@
   "compatibilityLevel": "JAVA_21",
   "minVersion": "0.8",
   "mixins": [
+    "AxeItemAccessor",
+    "ConcretePowderBlockAccessor",
+    "PotionBrewingAccessor",
+    "PotionBrewingMixAccessor",
+    "ShovelItemAccessor",
+    "SmithingTransformRecipeAccessor",
+    "SmithingTrimRecipeAccessor"
   ],
   "client": [
     "ItemDecoratorHandlerAccessor",

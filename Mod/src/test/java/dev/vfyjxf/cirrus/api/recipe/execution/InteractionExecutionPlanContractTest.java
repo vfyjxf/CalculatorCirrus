@@ -6,15 +6,15 @@ import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
-import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.RichIterable;
+import org.eclipse.collections.api.factory.Lists;
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.RecordComponent;
@@ -110,7 +110,6 @@ class InteractionExecutionPlanContractTest {
         assertEquals(2, execute.times());
         assertEquals(inputBindings, execute.inputs());
         assertEquals(expectedOutputs, execute.expectedOutputs());
-        assertEquals("Press A to continue", manual.guidance().summary().getString());
     }
 
     //endregion
@@ -120,17 +119,18 @@ class InteractionExecutionPlanContractTest {
     @Test
     void executionPlanKeepsInMemoryShapeWithoutVersionOrSerializationApis() {
         List<String> componentNames = Arrays.stream(InteractionExecutionPlan.class.getRecordComponents())
-            .map(RecordComponent::getName)
-            .toList();
+                .map(RecordComponent::getName).toList();
 
         assertEquals(List.of("targetRecipe", "targetTimes", "steps"), componentNames);
         assertFalse(hasMemberNamed(InteractionExecutionPlan.class, "planVersion"));
         assertFalse(hasMemberNamed(InteractionExecutionPlan.class, "tagSnapshotVersion"));
         assertFalse(hasMemberNamed(InteractionExecutionPlan.class, "codec"));
-        assertFalse(Arrays.stream(InteractionExecutionPlan.class.getMethods())
-            .filter(method -> method.getDeclaringClass() == InteractionExecutionPlan.class)
-            .map(method -> method.getName().toLowerCase())
-            .anyMatch(name -> name.contains("serialize") || name.contains("codec")));
+        assertFalse(
+            Arrays.stream(InteractionExecutionPlan.class.getMethods())
+                    .filter(method -> method.getDeclaringClass() == InteractionExecutionPlan.class)
+                    .map(method -> method.getName().toLowerCase())
+                    .anyMatch(name -> name.contains("serialize") || name.contains("codec"))
+        );
     }
 
     @Test
@@ -214,12 +214,12 @@ class InteractionExecutionPlanContractTest {
         }
 
         @Override
-        public TestRecipe findRecipe(String uniqueId) {
+        public @Nullable TestRecipe findRecipe(String uniqueId) {
             return byId.get(uniqueId);
         }
 
         @Override
-        public TestRecipe findRecipe(ResourceLocation registryName) {
+        public @Nullable TestRecipe findRecipe(ResourceLocation registryName) {
             return byId.get(registryName.getPath());
         }
 

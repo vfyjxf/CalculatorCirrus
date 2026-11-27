@@ -18,19 +18,20 @@ import org.eclipse.collections.api.list.ImmutableList;
 import java.util.Collection;
 
 public record RecipeProjection(
-        RecipeEntry<?> recipe,
-        ImmutableList<ClausedContent<InputContent>> inputs,
-        ImmutableList<ClausedContent<OutputContent>> outputs,
-        ProjectionSchema schema,
-        ClauseSet clauses
+    RecipeEntry<?> recipe,
+    ImmutableList<ClausedContent<InputContent>> inputs,
+    ImmutableList<ClausedContent<OutputContent>> outputs,
+    ProjectionSchema schema,
+    ClauseSet clauses
 ) {
 
     //region factory
 
     public static <R> RecipeProjection create(
-            RecipeSystem<R> system, R recipe,
-            Collection<? extends InputContent> inputs,
-            Collection<? extends OutputContent> outputs
+        RecipeSystem<R> system,
+        R recipe,
+        Collection<? extends InputContent> inputs,
+        Collection<? extends OutputContent> outputs
     ) {
         Checks.checkNotNull(system, "system");
         Checks.checkNotNull(recipe, "recipe");
@@ -38,9 +39,9 @@ public record RecipeProjection(
     }
 
     public static <R> RecipeProjection create(
-            RecipeEntry<R> entry,
-            Collection<? extends InputContent> inputs,
-            Collection<? extends OutputContent> outputs
+        RecipeEntry<R> entry,
+        Collection<? extends InputContent> inputs,
+        Collection<? extends OutputContent> outputs
     ) {
         Checks.checkNotNull(entry, "entry");
         Checks.checkNotNull(inputs, "inputs");
@@ -49,15 +50,17 @@ public record RecipeProjection(
         Checks.checkArgument(!outputs.isEmpty(), "outputs cannot be empty");
 
         return new RecipeProjection(
-                entry,
-                clausedInputs(inputs),
-                clausedOutputs(outputs),
-                ProjectionSchema.empty(),
-                ClauseSet.create()
+            entry,
+            clausedInputs(inputs),
+            clausedOutputs(outputs),
+            ProjectionSchema.empty(),
+            ClauseSet.create()
         );
     }
 
-    private static ImmutableList<ClausedContent<InputContent>> clausedInputs(Collection<? extends InputContent> inputs) {
+    private static ImmutableList<ClausedContent<InputContent>> clausedInputs(
+        Collection<? extends InputContent> inputs
+    ) {
         var out = Lists.mutable.<ClausedContent<InputContent>>ofInitialCapacity(inputs.size());
         for (InputContent input : inputs) {
             out.add(ClausedContent.from(input));
@@ -65,7 +68,9 @@ public record RecipeProjection(
         return out.toImmutable();
     }
 
-    private static ImmutableList<ClausedContent<OutputContent>> clausedOutputs(Collection<? extends OutputContent> outputs) {
+    private static ImmutableList<ClausedContent<OutputContent>> clausedOutputs(
+        Collection<? extends OutputContent> outputs
+    ) {
         var out = Lists.mutable.<ClausedContent<OutputContent>>ofInitialCapacity(outputs.size());
         for (OutputContent output : outputs) {
             out.add(ClausedContent.from(output));
@@ -129,12 +134,7 @@ public record RecipeProjection(
 
     @Override
     public String toString() {
-        return "RecipeProjection{" +
-                "recipe=" + recipe +
-                ", inputs=" + inputs +
-                ", outputs=" + outputs +
-                ", schema=" + schema +
-                ", clauses=" + clauses +
-                '}';
+        return "RecipeProjection{" + "recipe=" + recipe + ", inputs=" + inputs + ", outputs=" + outputs + ", schema="
+                + schema + ", clauses=" + clauses + '}';
     }
 }

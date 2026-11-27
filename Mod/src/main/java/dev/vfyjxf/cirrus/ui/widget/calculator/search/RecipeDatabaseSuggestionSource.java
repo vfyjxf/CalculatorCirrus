@@ -1,12 +1,12 @@
 package dev.vfyjxf.cirrus.ui.widget.calculator.search;
 
-import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseIndex;
-import dev.vfyjxf.cloudlib.api.search.SearchExpression;
-import dev.vfyjxf.cloudlib.api.search.SearchField;
-import dev.vfyjxf.cloudlib.api.search.SearchParseException;
-import dev.vfyjxf.cloudlib.api.search.SearchParser;
-import dev.vfyjxf.cloudlib.api.search.SearchSuggestionValue;
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
+import dev.vfyjxf.cirrus.api.search.SearchExpression;
+import dev.vfyjxf.cirrus.api.search.SearchField;
+import dev.vfyjxf.cirrus.api.search.SearchParseException;
+import dev.vfyjxf.cirrus.api.search.SearchSuggestionValue;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -40,7 +40,7 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
         } else if (context.field() != null) {
             addFieldValues(out, candidateIndex, input, token, context.field(), max * 3);
         } else if (isPrefixToken(token.body())) {
-            SearchField field = CirrusSearchFields.SET.byJeiPrefix(token.body().charAt(0));
+            SearchField field = CirrusSearchFields.set.byJeiPrefix(token.body().charAt(0));
             if (field != null) {
                 addPrefixValues(out, candidateIndex, token, field, max * 3);
             }
@@ -48,10 +48,11 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
             addGeneralValues(out, candidateIndex, token, max * 3);
         }
         String prefix = token.valuePrefix().toLowerCase(Locale.ROOT);
-        out.sort(Comparator
-            .comparingInt((SearchSuggestion suggestion) -> rank(suggestion, prefix))
-            .thenComparing(Comparator.comparingInt(SearchSuggestion::count).reversed())
-            .thenComparing(SearchSuggestion::token));
+        out.sort(
+            Comparator.comparingInt((SearchSuggestion suggestion) -> rank(suggestion, prefix))
+                    .thenComparing(Comparator.comparingInt(SearchSuggestion::count).reversed())
+                    .thenComparing(SearchSuggestion::token)
+        );
         return out.stream().distinct().limit(max).toList();
     }
 
@@ -60,7 +61,14 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
         return expression == null ? index : index.filtered(expression);
     }
 
-    private void addFieldValues(ArrayList<SearchSuggestion> out, RecipeDatabaseIndex candidateIndex, String input, Token token, SearchField field, int limit) {
+    private void addFieldValues(
+        ArrayList<SearchSuggestion> out,
+        RecipeDatabaseIndex candidateIndex,
+        String input,
+        Token token,
+        SearchField field,
+        int limit
+    ) {
         String fieldPrefix = input.substring(token.start(), token.valueStart());
         String valuePrefix = token.valuePrefix().toLowerCase(Locale.ROOT);
         for (String value : candidateIndex.textCandidates(field, limit * 2)) {
@@ -81,7 +89,15 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
                 if (isNumericTextCandidate(value.value()) || containsToken(out, value.value())) {
                     continue;
                 }
-                out.add(new SearchSuggestion(fieldPrefix + value.value(), fieldPrefix + value.value(), token.start(), token.end(), value.count()));
+                out.add(
+                    new SearchSuggestion(
+                        fieldPrefix + value.value(),
+                        fieldPrefix + value.value(),
+                        token.start(),
+                        token.end(),
+                        value.count()
+                    )
+                );
             }
         }
     }
@@ -95,7 +111,13 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
         return false;
     }
 
-    private void addPrefixValues(ArrayList<SearchSuggestion> out, RecipeDatabaseIndex candidateIndex, Token token, SearchField field, int limit) {
+    private void addPrefixValues(
+        ArrayList<SearchSuggestion> out,
+        RecipeDatabaseIndex candidateIndex,
+        Token token,
+        SearchField field,
+        int limit
+    ) {
         String prefix = token.leading() + token.body().substring(0, 1);
         String valuePrefix = token.body().substring(1).toLowerCase(Locale.ROOT);
         for (String value : candidateIndex.textCandidates(field, limit)) {
@@ -105,10 +127,25 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
         }
     }
 
-    private void addGeneralValues(ArrayList<SearchSuggestion> out, RecipeDatabaseIndex candidateIndex, Token token, int limit) {
+    private void addGeneralValues(
+        ArrayList<SearchSuggestion> out,
+        RecipeDatabaseIndex candidateIndex,
+        Token token,
+        int limit
+    ) {
         String valuePrefix = token.body().toLowerCase(Locale.ROOT);
         Map<SearchField, List<String>> values = candidateIndex.textCandidateMap(Math.max(4, limit));
-        for (SearchField field : List.of(CirrusSearchFields.out, CirrusSearchFields.name, CirrusSearchFields.id, CirrusSearchFields.in, CirrusSearchFields.cat, CirrusSearchFields.mod, CirrusSearchFields.tag, CirrusSearchFields.db, CirrusSearchFields.system)) {
+        for (SearchField field : List.of(
+            CirrusSearchFields.out,
+            CirrusSearchFields.name,
+            CirrusSearchFields.id,
+            CirrusSearchFields.in,
+            CirrusSearchFields.cat,
+            CirrusSearchFields.mod,
+            CirrusSearchFields.tag,
+            CirrusSearchFields.db,
+            CirrusSearchFields.system
+        )) {
             for (String value : values.getOrDefault(field, List.of())) {
                 if (isContentField(field) && isNumericTextCandidate(value)) {
                     continue;
@@ -132,7 +169,13 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
         }
     }
 
-    private void addStandaloneAmountValues(ArrayList<SearchSuggestion> out, RecipeDatabaseIndex candidateIndex, Token token, SearchField field, int limit) {
+    private void addStandaloneAmountValues(
+        ArrayList<SearchSuggestion> out,
+        RecipeDatabaseIndex candidateIndex,
+        Token token,
+        SearchField field,
+        int limit
+    ) {
         AmountPrefix amount = amountPrefix(token.body());
         for (String value : candidateIndex.numberCandidates(field, limit)) {
             if (!amount.numberPrefix().isEmpty() && !value.startsWith(amount.numberPrefix())) {
@@ -143,7 +186,7 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
         }
     }
 
-    private static SearchExpression previousFilterExpression(String input, int tokenStart) {
+    private static @Nullable SearchExpression previousFilterExpression(String input, int tokenStart) {
         String completed = completedQueryBefore(input, tokenStart);
         if (completed.isBlank()) {
             return new SearchExpression.All();
@@ -185,12 +228,12 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
         int colon = body.indexOf(':');
         if (colon > 0) {
             String alias = body.substring(0, colon);
-            if (CirrusSearchFields.SET.isKnownAlias(alias)) {
-                return new Context(CirrusSearchFields.SET.byAlias(alias));
+            if (CirrusSearchFields.set.isKnownAlias(alias)) {
+                return new Context(CirrusSearchFields.set.byAlias(alias));
             }
         }
         if (body.length() > 1) {
-            SearchField prefixed = CirrusSearchFields.SET.byJeiPrefix(body.charAt(0));
+            SearchField prefixed = CirrusSearchFields.set.byJeiPrefix(body.charAt(0));
             if (prefixed != null) {
                 return new Context(prefixed);
             }
@@ -199,7 +242,7 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
     }
 
     private static boolean isPrefixToken(String text) {
-        return text != null && !text.isBlank() && CirrusSearchFields.SET.byJeiPrefix(text.charAt(0)) != null;
+        return text != null && !text.isBlank() && CirrusSearchFields.set.byJeiPrefix(text.charAt(0)) != null;
     }
 
     private static boolean isAmountModifierToken(String text) {
@@ -216,7 +259,7 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
         return new AmountPrefix("", suffix);
     }
 
-    private static SearchField previousContentField(String input, int tokenStart) {
+    private static @Nullable SearchField previousContentField(String input, int tokenStart) {
         Token previous = previousToken(input, tokenStart);
         if (previous == null) {
             return null;
@@ -239,10 +282,10 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
             }
         }
         int colon = body.indexOf(':');
-        return colon <= 0 || !CirrusSearchFields.SET.isKnownAlias(body.substring(0, colon));
+        return colon <= 0 || !CirrusSearchFields.set.isKnownAlias(body.substring(0, colon));
     }
 
-    private static Token previousToken(String input, int tokenStart) {
+    private static @Nullable Token previousToken(String input, int tokenStart) {
         int end = Math.max(0, Math.min(tokenStart, input.length()));
         while (end > 0 && Character.isWhitespace(input.charAt(end - 1))) {
             end--;
@@ -257,7 +300,7 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
         return tokenAt(input, end);
     }
 
-    private static boolean isContentField(SearchField field) {
+    private static boolean isContentField(@Nullable SearchField field) {
         if (field == null) {
             return false;
         }
@@ -305,11 +348,9 @@ public final class RecipeDatabaseSuggestionSource implements SearchSuggestionSou
         return new Token(start, end, text, negationLength, Math.min(end, valueStart));
     }
 
-    private record Context(SearchField field) {
-    }
+    private record Context(@Nullable SearchField field) {}
 
-    private record AmountPrefix(String operator, String numberPrefix) {
-    }
+    private record AmountPrefix(String operator, String numberPrefix) {}
 
     private record Token(int start, int end, String text, int negationLength, int valueStart) {
         String leading() {

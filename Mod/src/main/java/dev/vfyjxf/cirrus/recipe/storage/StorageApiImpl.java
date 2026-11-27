@@ -13,14 +13,13 @@ import org.eclipse.collections.api.factory.Maps;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.map.ImmutableMap;
 import org.eclipse.collections.api.map.MutableMap;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnmodifiableView;
+import org.jspecify.annotations.Nullable;
 
 public class StorageApiImpl implements StorageApi {
-    private static StorageApiImpl instance;
+    private static @Nullable StorageApiImpl instance;
 
     private final ImmutableMap<Namespace, StorageSourceType<?>> storageTypes;
-
 
     private final MutableMap<Object, StorageSource> sources = Maps.mutable.empty();
     private final MutableMap<TagKey<StorageSource>, MutableList<StorageSource>> taggedSources = Maps.mutable.empty();

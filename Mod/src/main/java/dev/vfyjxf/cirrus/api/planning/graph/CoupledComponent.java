@@ -8,10 +8,10 @@ import java.util.Set;
 import java.util.TreeSet;
 
 public record CoupledComponent(
-        CoupledKind kind,
-        Set<ResourceKey> resources,
-        Set<Integer> recipeCompactIds,
-        Set<String> candidateNewMachines
+    CoupledKind kind,
+    Set<ResourceKey> resources,
+    Set<Integer> recipeCompactIds,
+    Set<String> candidateNewMachines
 ) {
 
     public CoupledComponent {

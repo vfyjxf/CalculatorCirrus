@@ -7,28 +7,28 @@ import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContextKey;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseSet;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.BooleanProjectionContextOption;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ChoiceProjectionContextOption;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.LongProjectionContextOption;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextChoice;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridIndex;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridSize;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemas;
 import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveEffect;
 import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveGuard;
 import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveGuardResult;
 import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolvePolicy;
 import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveScope;
-import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridIndex;
+import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridSize;
+import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
+import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemas;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.register.MachineEntryRegister;
@@ -50,15 +50,15 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.material.Fluids;
-import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.neoforge.fluids.FluidStack;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Unmodifiable;
+import org.jspecify.annotations.Nullable;
 
-import java.util.Comparator;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @PluginMarker
@@ -81,47 +81,45 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
     public static final ExecutionContextKey<Boolean> extraOutputKey = key("extra_output", Boolean.class, false);
     public static final ExecutionContextKey<String> channelKey = key("channel", String.class, "input");
     public static final Namespace resolveGuardFailId = Namespace.of(CirrusConstants.modId, "debug/resolve_guard_fail");
-    public static final Namespace resolveBoostInputId = Namespace.of(CirrusConstants.modId, "debug/resolve_boost_input");
+    public static final Namespace resolveBoostInputId = Namespace
+            .of(CirrusConstants.modId, "debug/resolve_boost_input");
     public static final int longChainDepth = 72;
     public static final String longChainTargetId = "debug_chain_target";
-    public static final ContentTransformer<StackContent<Item, ItemStack>, DebugProjectionClause> transformer = ContentTransformer.of(
-        plugin,
-        (context, projection, content, asInput) -> debugEnabled() && content instanceof StackContent<?, ?> stack && stack.isItem(),
-        (context, recipe, content, facet, asInput, increment, decrement) -> {
-            long scale = Math.max(1L, context.get(scaleKey));
-            String channel = context.get(channelKey);
-            if ("input".equals(channel) && asInput && scale != 1L) {
-                content.content().setAmount(Math.multiplyExact(content.amount(), scale));
-            }
-            if ("output".equals(channel) && !asInput && scale != 1L) {
-                content.content().setAmount(Math.multiplyExact(content.amount(), scale));
-            }
-            if (context.get(extraOutputKey) && asInput) {
-                increment.injectOutput(OutputContent.fromItemStack(new ItemStack(Items.LIGHTNING_ROD)));
-            }
-            return ContentTransformer.ActionResult.RETAIN;
-        }
-    );
-    public static final ResolveGuard failingGuard = ResolveGuard.of(
-        resolveGuardFailId,
-        (context, recipe) -> ResolveGuardResult.fail("debug_guard_failed")
-    );
+    public static final ContentTransformer<StackContent<Item, ItemStack>, DebugProjectionClause> transformer = ContentTransformer
+            .of(
+                plugin,
+                (context, projection, content, asInput) -> debugEnabled()
+                        && content instanceof StackContent<?, ?> stack
+                        && stack.isItem(),
+                (context, recipe, content, facet, asInput, increment, decrement) -> {
+                    long scale = Math.max(1L, context.get(scaleKey));
+                    String channel = context.get(channelKey);
+                    if ("input".equals(channel) && asInput && scale != 1L) {
+                        content.content().setAmount(Math.multiplyExact(content.amount(), scale));
+                    }
+                    if ("output".equals(channel) && !asInput && scale != 1L) {
+                        content.content().setAmount(Math.multiplyExact(content.amount(), scale));
+                    }
+                    if (context.get(extraOutputKey) && asInput) {
+                        increment.injectOutput(OutputContent.fromItemStack(new ItemStack(Items.LIGHTNING_ROD)));
+                    }
+                    return ContentTransformer.ActionResult.retain;
+                }
+            );
+    public static final ResolveGuard failingGuard = ResolveGuard
+            .of(resolveGuardFailId, (context, recipe) -> ResolveGuardResult.fail("debug_guard_failed"));
     public static final ResolveGuard passingGuard = ResolveGuard.of(
         Namespace.of(CirrusConstants.modId, "debug/resolve_guard_pass"),
         (context, recipe) -> ResolveGuardResult.pass()
     );
-    public static final ResolveEffect boostFirstInput = ResolveEffect.of(
-        resolveBoostInputId,
-        0,
-        ResolveScope.input,
-        (context, inputs, outputs) -> {
-            if (inputs.isEmpty()) {
-                return;
-            }
-            InputContent first = inputs.getFirst();
-            inputs.set(0, (InputContent) first.copyWithAmount(first.amount() + 3L));
-        }
-    );
+    public static final ResolveEffect boostFirstInput = ResolveEffect
+            .of(resolveBoostInputId, 0, ResolveScope.input, (context, inputs, outputs) -> {
+                if (inputs.isEmpty()) {
+                    return;
+                }
+                InputContent first = inputs.getFirst();
+                inputs.set(0, (InputContent) first.copyWithAmount(first.amount() + 3L));
+            });
 
     @Override
     public Namespace pluginId() {
@@ -160,34 +158,40 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
         if (!debugEnabled()) {
             return;
         }
-        register.registerProjectionContextOption(new LongProjectionContextOption(
-            Namespace.of(CirrusConstants.modId, "debug/projection_scale"),
-            plugin,
-            scaleKey,
-            "cirrus.ui.calculator.database.debug_plugin.scale",
-            "cirrus.ui.calculator.database.debug_plugin.scale.desc",
-            1L,
-            8L,
-            1L
-        ));
-        register.registerProjectionContextOption(new BooleanProjectionContextOption(
-            Namespace.of(CirrusConstants.modId, "debug/projection_extra_output"),
-            plugin,
-            extraOutputKey,
-            "cirrus.ui.calculator.database.debug_plugin.extra_output",
-            "cirrus.ui.calculator.database.debug_plugin.extra_output.desc"
-        ));
-        register.registerProjectionContextOption(new ChoiceProjectionContextOption<>(
-            Namespace.of(CirrusConstants.modId, "debug/projection_channel"),
-            plugin,
-            channelKey,
-            "cirrus.ui.calculator.database.debug_plugin.channel",
-            "cirrus.ui.calculator.database.debug_plugin.channel.desc",
-            List.of(
-                new ProjectionContextChoice<>("input", "cirrus.ui.calculator.database.debug_plugin.channel.input"),
-                new ProjectionContextChoice<>("output", "cirrus.ui.calculator.database.debug_plugin.channel.output")
+        register.registerProjectionContextOption(
+            new LongProjectionContextOption(
+                Namespace.of(CirrusConstants.modId, "debug/projection_scale"),
+                plugin,
+                scaleKey,
+                "cirrus.ui.calculator.database.debug_plugin.scale",
+                "cirrus.ui.calculator.database.debug_plugin.scale.desc",
+                1L,
+                8L,
+                1L
             )
-        ));
+        );
+        register.registerProjectionContextOption(
+            new BooleanProjectionContextOption(
+                Namespace.of(CirrusConstants.modId, "debug/projection_extra_output"),
+                plugin,
+                extraOutputKey,
+                "cirrus.ui.calculator.database.debug_plugin.extra_output",
+                "cirrus.ui.calculator.database.debug_plugin.extra_output.desc"
+            )
+        );
+        register.registerProjectionContextOption(
+            new ChoiceProjectionContextOption<>(
+                Namespace.of(CirrusConstants.modId, "debug/projection_channel"),
+                plugin,
+                channelKey,
+                "cirrus.ui.calculator.database.debug_plugin.channel",
+                "cirrus.ui.calculator.database.debug_plugin.channel.desc",
+                List.of(
+                    new ProjectionContextChoice<>("input", "cirrus.ui.calculator.database.debug_plugin.channel.input"),
+                    new ProjectionContextChoice<>("output", "cirrus.ui.calculator.database.debug_plugin.channel.output")
+                )
+            )
+        );
     }
 
     @Override
@@ -210,8 +214,7 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
     }
 
     public static final class DebugProjectionClause implements RecipeClause {
-        private DebugProjectionClause() {
-        }
+        private DebugProjectionClause() {}
 
         @Override
         public Namespace id() {
@@ -230,14 +233,7 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
         }
 
         public enum Kind {
-            debugTransformer,
-            fluidContainerUnpack,
-            durabilityCost,
-            guaranteedOutput,
-            resolvePolicyEffect,
-            resolvePolicyGuard,
-            longChainStep,
-            longChainTarget
+            debugTransformer, fluidContainerUnpack, durabilityCost, guaranteedOutput, resolvePolicyEffect, resolvePolicyGuard, longChainStep, longChainTarget
         }
 
         public RecipeProjection toProjection() {
@@ -254,9 +250,13 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
         }
 
         private RecipeProjection debugTransformerProjection() {
-            ClausedContent<InputContent> input = input(InputContent.fromItemStack(new ItemStack(Items.COPPER_INGOT, 2)));
+            ClausedContent<InputContent> input = input(
+                InputContent.fromItemStack(new ItemStack(Items.COPPER_INGOT, 2))
+            );
             input.addClause(clause);
-            ClausedContent<OutputContent> output = output(OutputContent.fromItemStack(new ItemStack(Items.COPPER_BLOCK)));
+            ClausedContent<OutputContent> output = output(
+                OutputContent.fromItemStack(new ItemStack(Items.COPPER_BLOCK))
+            );
             output.addClause(clause);
             return projection(List.of(input), List.of(output));
         }
@@ -264,10 +264,7 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
         private RecipeProjection fluidContainerUnpackProjection() {
             ClausedContent<InputContent> input = input(InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)));
             input.addClause(FluidContainerUnpackClause.instance);
-            return projection(
-                List.of(input),
-                List.of(output(OutputContent.fromItemStack(new ItemStack(Items.STONE))))
-            );
+            return projection(List.of(input), List.of(output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))));
         }
 
         private RecipeProjection durabilityCostProjection() {
@@ -298,11 +295,15 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
                 List.of(input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)))),
                 List.of(output(OutputContent.fromItemStack(new ItemStack(Items.TORCH))))
             );
-            projection.addClause(new ResolvePolicyClause(new ResolvePolicy(
-                Lists.immutable.with(passingGuard),
-                Lists.immutable.with(boostFirstInput),
-                Comparator.comparingInt(ResolveEffect::order)
-            )));
+            projection.addClause(
+                new ResolvePolicyClause(
+                    new ResolvePolicy(
+                        Lists.immutable.with(passingGuard),
+                        Lists.immutable.with(boostFirstInput),
+                        Comparator.comparingInt(ResolveEffect::order)
+                    )
+                )
+            );
             return projection;
         }
 
@@ -311,10 +312,11 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
                 List.of(input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)))),
                 List.of(output(OutputContent.fromItemStack(new ItemStack(Items.REDSTONE_TORCH))))
             );
-            projection.addClause(new ResolvePolicyClause(new ResolvePolicy(
-                Lists.immutable.with(failingGuard),
-                Lists.immutable.with(boostFirstInput)
-            )));
+            projection.addClause(
+                new ResolvePolicyClause(
+                    new ResolvePolicy(Lists.immutable.with(failingGuard), Lists.immutable.with(boostFirstInput))
+                )
+            );
             return projection;
         }
 
@@ -326,20 +328,28 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
             ArrayList<ClausedContent<InputContent>> inputs = new ArrayList<>();
             ArrayList<ClausedContent<OutputContent>> outputs = new ArrayList<>();
             InputContent stageInput = chainIndex == 0
-                ? InputContent.fromItemStack(new ItemStack(Items.COPPER_INGOT), 1)
-                : InputContent.fromItemStack(chainStack(chainIndex), 1);
+                    ? InputContent.fromItemStack(new ItemStack(Items.COPPER_INGOT), 1)
+                    : InputContent.fromItemStack(chainStack(chainIndex), 1);
             inputs.add(chainInput(stageInput, 0));
             if (chainIndex % 3 == 0) {
                 inputs.add(chainInput(InputContent.fromItemStack(new ItemStack(Items.REDSTONE), 1), 1));
             }
             if (chainIndex % 5 == 0) {
-                inputs.add(chainInput(InputContent.fromItemStack(new ItemStack(Items.GLASS_BOTTLE), 1, RecipeContent.MIN_CHANCE), 2));
+                inputs.add(
+                    chainInput(
+                        InputContent.fromItemStack(new ItemStack(Items.GLASS_BOTTLE), 1, RecipeContent.MIN_CHANCE),
+                        2
+                    )
+                );
             }
             if (chainIndex % 8 == 0) {
                 inputs.add(chainInput(InputContent.fromFluidStack(new FluidStack(Fluids.WATER, 250)), 3));
             }
 
-            ClausedContent<OutputContent> primary = chainOutput(OutputContent.fromItemStack(chainStack(chainIndex + 1), 1), 0);
+            ClausedContent<OutputContent> primary = chainOutput(
+                OutputContent.fromItemStack(chainStack(chainIndex + 1), 1),
+                0
+            );
             if (chainIndex % 4 == 0) {
                 primary.addClause(clause);
             }
@@ -369,10 +379,14 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
             ArrayList<ClausedContent<InputContent>> inputs = new ArrayList<>();
             inputs.add(chainInput(InputContent.fromItemStack(chainStack(longChainDepth), 1), 0));
             inputs.add(chainInput(InputContent.fromItemStack(new ItemStack(Items.DIAMOND), 2), 1));
-            inputs.add(chainInput(InputContent.fromItemStack(new ItemStack(Items.BLAZE_ROD), 1, RecipeContent.MIN_CHANCE), 2));
+            inputs.add(
+                chainInput(InputContent.fromItemStack(new ItemStack(Items.BLAZE_ROD), 1, RecipeContent.MIN_CHANCE), 2)
+            );
 
             ArrayList<ClausedContent<OutputContent>> outputs = new ArrayList<>();
-            outputs.add(chainOutput(OutputContent.fromItemStack(namedStack(Items.NETHER_STAR, "Debug chain result"), 1), 0));
+            outputs.add(
+                chainOutput(OutputContent.fromItemStack(namedStack(Items.NETHER_STAR, "Debug chain result"), 1), 0)
+            );
             outputs.add(chainOutput(OutputContent.fromEnergy(64_000L), 1));
             outputs.add(chainOutput(OutputContent.fromTimeTick(240), 2));
 
@@ -381,11 +395,15 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
                 outputs,
                 ProjectionSchema.empty().with(ProjectionSchemas.gridSize, new GridSize(3, 3))
             );
-            projection.addClause(new ResolvePolicyClause(new ResolvePolicy(
-                Lists.immutable.with(passingGuard),
-                Lists.immutable.with(boostFirstInput),
-                Comparator.comparingInt(ResolveEffect::order)
-            )));
+            projection.addClause(
+                new ResolvePolicyClause(
+                    new ResolvePolicy(
+                        Lists.immutable.with(passingGuard),
+                        Lists.immutable.with(boostFirstInput),
+                        Comparator.comparingInt(ResolveEffect::order)
+                    )
+                )
+            );
             return projection;
         }
 
@@ -456,13 +474,17 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
         private static List<DebugProjectionRecipe> createRecipes() {
             ArrayList<DebugProjectionRecipe> out = new ArrayList<>();
             out.add(new DebugProjectionRecipe("projection_probe", DebugProjectionRecipe.Kind.debugTransformer));
-            out.add(new DebugProjectionRecipe("fluid_container_unpack", DebugProjectionRecipe.Kind.fluidContainerUnpack));
+            out.add(
+                new DebugProjectionRecipe("fluid_container_unpack", DebugProjectionRecipe.Kind.fluidContainerUnpack)
+            );
             out.add(new DebugProjectionRecipe("durability_cost", DebugProjectionRecipe.Kind.durabilityCost));
             out.add(new DebugProjectionRecipe("guaranteed_output", DebugProjectionRecipe.Kind.guaranteedOutput));
             out.add(new DebugProjectionRecipe("resolve_policy_effect", DebugProjectionRecipe.Kind.resolvePolicyEffect));
             out.add(new DebugProjectionRecipe("resolve_policy_guard", DebugProjectionRecipe.Kind.resolvePolicyGuard));
             for (int i = 0; i < longChainDepth; i++) {
-                out.add(new DebugProjectionRecipe("debug_chain_step_" + i, DebugProjectionRecipe.Kind.longChainStep, i));
+                out.add(
+                    new DebugProjectionRecipe("debug_chain_step_" + i, DebugProjectionRecipe.Kind.longChainStep, i)
+                );
             }
             out.add(new DebugProjectionRecipe(longChainTargetId, DebugProjectionRecipe.Kind.longChainTarget));
             return List.copyOf(out);
@@ -481,7 +503,8 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
         @Override
         public @Nullable DebugProjectionRecipe findRecipe(String uniqueId) {
             for (DebugProjectionRecipe recipe : recipes) {
-                if (recipe.id().equals(uniqueId) || getId(recipe).toString().equals(uniqueId)) {
+                ResourceLocation id = getId(recipe);
+                if (recipe.id().equals(uniqueId) || (id != null && id.toString().equals(uniqueId))) {
                     return recipe;
                 }
             }
@@ -491,7 +514,7 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
         @Override
         public @Nullable DebugProjectionRecipe findRecipe(ResourceLocation registryName) {
             for (DebugProjectionRecipe recipe : recipes) {
-                if (getId(recipe).equals(registryName)) {
+                if (registryName.equals(getId(recipe))) {
                     return recipe;
                 }
             }

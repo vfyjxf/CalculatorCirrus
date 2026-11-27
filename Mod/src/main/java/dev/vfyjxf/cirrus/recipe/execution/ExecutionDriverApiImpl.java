@@ -9,21 +9,23 @@ import dev.vfyjxf.cirrus.api.recipe.execution.driver.ExecutionDriverHandle;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.DriverContext;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.SideContext;
 import dev.vfyjxf.cirrus.recipe.execution.ExecutionDriverRegistry.Entry;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Comparator;
 import java.util.List;
 
 public class ExecutionDriverApiImpl implements ExecutionDriverApi {
 
-    private static ExecutionDriverApiImpl instance;
+    private static @Nullable ExecutionDriverApiImpl instance;
 
     private final ImmutableList<Entry> clientEntries;
     private final ImmutableList<Entry> serverEntries;
 
     public ExecutionDriverApiImpl(ExecutionDriverRegistry registry) {
-        clientEntries = registry.clientEntries.stream().sorted(Comparator.comparingLong(Entry::order).reversed()).collect(ImmutableList.toImmutableList());
-        serverEntries = registry.serverEntries.stream().sorted(Comparator.comparingLong(Entry::order).reversed()).collect(ImmutableList.toImmutableList());
+        clientEntries = registry.clientEntries.stream().sorted(Comparator.comparingLong(Entry::order).reversed())
+                .collect(ImmutableList.toImmutableList());
+        serverEntries = registry.serverEntries.stream().sorted(Comparator.comparingLong(Entry::order).reversed())
+                .collect(ImmutableList.toImmutableList());
     }
 
     public static void attach(ExecutionDriverApiImpl api) {

@@ -5,6 +5,7 @@ import dev.vfyjxf.cirrus.api.plugin.CirrusPlugin;
 import dev.vfyjxf.cirrus.content.ContentRegistryBuilder;
 import dev.vfyjxf.cirrus.internal.debug.CirrusDiagnosticsCommands;
 import dev.vfyjxf.cirrus.network.CirrusPayloads;
+import dev.vfyjxf.cirrus.planning.bridge.PlanningExtensionRegistry;
 import dev.vfyjxf.cirrus.planning.bridge.WorldFacilityRegistry;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.RecipeApiRegistryBuilder;
@@ -35,23 +36,30 @@ public sealed abstract class Cirrus permits CirrusClient, CirrusServer {
     protected final ForkJoinPool pluginExecutor;
 
     public Cirrus(IEventBus modBus) {
-        var pluginsWithBuiltin = PluginLoader.loadPlugin(logger, "Cirrus Plugin", AnnotationPluginLookup.of(CirrusPlugin.class));
+        var pluginsWithBuiltin = PluginLoader
+                .loadPlugin(logger, "Cirrus Plugin", AnnotationPluginLookup.of(CirrusPlugin.class));
         pluginsWithBuiltin.addAll(builtinPlugins());
-        pluginExecutor = new ForkJoinPool(
-                Math.max(1, Runtime.getRuntime().availableProcessors() - 1),
-                pool -> {
-                    var thread = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
-                    thread.setName("cirrus-plugin-" + thread.getPoolIndex());
-                    thread.setDaemon(true);
-                    return thread;
-                },
-                null, false
-        );
+        pluginExecutor = new ForkJoinPool(Math.max(1, Runtime.getRuntime().availableProcessors() - 1), pool -> {
+            var thread = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
+            thread.setName("cirrus-plugin-" + thread.getPoolIndex());
+            thread.setDaemon(true);
+            return thread;
+        }, null, false);
         plugins = PluginDispatcher.create(pluginsWithBuiltin, pluginExecutor);
         modBus.addListener(CirrusPayloads::register);
         NeoForge.EVENT_BUS.addListener(CirrusDiagnosticsCommands::register);
-        NeoForge.EVENT_BUS.addListener((ServerStartedEvent event) ->
-                WorldFacilityRegistry.mount(event.getServer().overworld()));
+        NeoForge.EVENT_BUS.addListener((ServerStartedEvent event) -> {
+            try {
+                var overworld = event.getServer().overworld();
+                if (overworld == null) {
+                    logger.warn("world not fully loaded; facility registry not mounted");
+                    return;
+                }
+                WorldFacilityRegistry.mount(overworld);
+            } catch (RuntimeException e) {
+                logger.warn("world not fully loaded; facility registry not mounted", e);
+            }
+        });
         NeoForge.EVENT_BUS.addListener((ServerStoppingEvent event) -> WorldFacilityRegistry.unmount());
     }
 
@@ -67,52 +75,52 @@ public sealed abstract class Cirrus permits CirrusClient, CirrusServer {
             var recipeApiRegistry = new RecipeApiRegistryBuilder();
             var recipeContentRendererRegistry = new RecipeContentRendererRegistryBuilder();
             plugins.dispatchLogged(
-                    plugin -> plugin.registerRecipeSystem(recipeApiRegistry),
-                    "Registering Recipe Systems",
-                    logger,
-                    tracker.phase("Registering Recipe Systems")
+                plugin -> plugin.registerRecipeSystem(recipeApiRegistry),
+                "Registering Recipe Systems",
+                logger,
+                tracker.phase("Registering Recipe Systems")
             );
             plugins.dispatchLogged(
-                    plugin -> plugin.registerRecipeSystemTag(recipeApiRegistry),
-                    "Registering Recipe System Tags",
-                    logger,
-                    tracker.phase("Registering Recipe System Tags")
+                plugin -> plugin.registerRecipeSystemTag(recipeApiRegistry),
+                "Registering Recipe System Tags",
+                logger,
+                tracker.phase("Registering Recipe System Tags")
             );
             plugins.dispatchLogged(
-                    plugin -> plugin.registerJeiRecipeTypeBridge(recipeApiRegistry),
-                    "Registering JEI Recipe Type Bridges",
-                    logger,
-                    tracker.phase("Registering JEI Recipe Type Bridges")
+                plugin -> plugin.registerJeiRecipeTypeBridge(recipeApiRegistry),
+                "Registering JEI Recipe Type Bridges",
+                logger,
+                tracker.phase("Registering JEI Recipe Type Bridges")
             );
             plugins.dispatchLogged(
-                    plugin -> plugin.registerMachineEntry(recipeApiRegistry),
-                    "Registering Machine Entries",
-                    logger,
-                    tracker.phase("Registering Machine Entries")
+                plugin -> plugin.registerMachineEntry(recipeApiRegistry),
+                "Registering Machine Entries",
+                logger,
+                tracker.phase("Registering Machine Entries")
             );
             plugins.dispatchLogged(
-                    plugin -> plugin.registerProjectionPlugin(recipeApiRegistry),
-                    "Registering Projection Plugins",
-                    logger,
-                    tracker.phase("Registering Projection Plugins")
+                plugin -> plugin.registerProjectionPlugin(recipeApiRegistry),
+                "Registering Projection Plugins",
+                logger,
+                tracker.phase("Registering Projection Plugins")
             );
             plugins.dispatchLogged(
-                    plugin -> plugin.registerRecipeClause(recipeApiRegistry),
-                    "Registering Recipe Facets",
-                    logger,
-                    tracker.phase("Registering Recipe Facets")
+                plugin -> plugin.registerRecipeClause(recipeApiRegistry),
+                "Registering Recipe Facets",
+                logger,
+                tracker.phase("Registering Recipe Facets")
             );
             plugins.dispatchLogged(
-                    plugin -> plugin.registerProjectionContextOption(recipeApiRegistry),
-                    "Registering Projection Context Options",
-                    logger,
-                    tracker.phase("Registering Projection Context Options")
+                plugin -> plugin.registerProjectionContextOption(recipeApiRegistry),
+                "Registering Projection Context Options",
+                logger,
+                tracker.phase("Registering Projection Context Options")
             );
             plugins.dispatchLogged(
-                    plugin -> plugin.registerRecipeContentRenderer(recipeContentRendererRegistry),
-                    "Registering Recipe Content Renderers",
-                    logger,
-                    tracker.phase("Registering Recipe Content Renderers")
+                plugin -> plugin.registerRecipeContentRenderer(recipeContentRendererRegistry),
+                "Registering Recipe Content Renderers",
+                logger,
+                tracker.phase("Registering Recipe Content Renderers")
             );
             RecipeApiImpl.attach(new RecipeApiImpl(recipeApiRegistry));
             RecipeContentRendererApi.attach(new RecipeContentRendererApi(recipeContentRendererRegistry));
@@ -123,10 +131,10 @@ public sealed abstract class Cirrus permits CirrusClient, CirrusServer {
         {
             var storageApiRegistry = new StorageApiBuilder();
             plugins.dispatchLogged(
-                    plugin -> plugin.registerStorageType(storageApiRegistry),
-                    "Registering Storage Types",
-                    logger,
-                    tracker.phase("Registering Storage Types")
+                plugin -> plugin.registerStorageType(storageApiRegistry),
+                "Registering Storage Types",
+                logger,
+                tracker.phase("Registering Storage Types")
             );
             StorageApiImpl.attach(new StorageApiImpl(storageApiRegistry));
         }
@@ -136,13 +144,26 @@ public sealed abstract class Cirrus permits CirrusClient, CirrusServer {
         {
             var driverRegistry = new ExecutionDriverRegistry();
             plugins.dispatchLogged(
-                    plugin -> plugin.registerExecutionDriver(driverRegistry),
-                    "Registering Execution Drivers",
-                    logger,
-                    tracker.phase("Registering Execution Drivers")
+                plugin -> plugin.registerExecutionDriver(driverRegistry),
+                "Registering Execution Drivers",
+                logger,
+                tracker.phase("Registering Execution Drivers")
             );
             buildExecutionDriverApi(driverRegistry, tracker);
             ExecutionDriverApiImpl.attach(new ExecutionDriverApiImpl(driverRegistry));
+        }
+        //endregion
+
+        //region planning extensions
+        {
+            var planningExtensionRegistry = new PlanningExtensionRegistry();
+            plugins.dispatchLogged(
+                plugin -> plugin.registerPlanningExtension(planningExtensionRegistry),
+                "Registering Planning Extensions",
+                logger,
+                tracker.phase("Registering Planning Extensions")
+            );
+            PlanningExtensionRegistry.attach(planningExtensionRegistry);
         }
         //endregion
         tracker.logTimings(logger, "Cirrus Loading");
@@ -163,33 +184,32 @@ public sealed abstract class Cirrus permits CirrusClient, CirrusServer {
 
     protected abstract void buildContentApi(ProgressTracker tracker);
 
-    protected void buildExecutionDriverApi(ExecutionDriverRegistry driverRegistry, ProgressTracker tracker) {
-    }
+    protected void buildExecutionDriverApi(ExecutionDriverRegistry driverRegistry, ProgressTracker tracker) {}
 
     protected final void buildCommonContentApi(ContentRegistryBuilder contentRegistry, ProgressTracker tracker) {
         plugins.dispatchLogged(
-                plugin -> plugin.registerContentType(contentRegistry),
-                "Registering Content Types",
-                logger,
-                tracker.phase("Registering Content Types")
+            plugin -> plugin.registerContentType(contentRegistry),
+            "Registering Content Types",
+            logger,
+            tracker.phase("Registering Content Types")
         );
         plugins.dispatchLogged(
-                plugin -> plugin.registerContentVariant(contentRegistry),
-                "Registering Content Variants",
-                logger,
-                tracker.phase("Registering Content Variants")
+            plugin -> plugin.registerContentVariant(contentRegistry),
+            "Registering Content Variants",
+            logger,
+            tracker.phase("Registering Content Variants")
         );
         plugins.dispatchLogged(
-                plugin -> plugin.registerContentResolver(contentRegistry),
-                "Registering Content Resolvers",
-                logger,
-                tracker.phase("Registering Content Resolvers")
+            plugin -> plugin.registerContentResolver(contentRegistry),
+            "Registering Content Resolvers",
+            logger,
+            tracker.phase("Registering Content Resolvers")
         );
         plugins.dispatchLogged(
-                plugin -> plugin.registerJeiTypeBridge(contentRegistry),
-                "Registering JEI Ingredient Type Bridges",
-                logger,
-                tracker.phase("Registering JEI Ingredient Type Bridges")
+            plugin -> plugin.registerJeiTypeBridge(contentRegistry),
+            "Registering JEI Ingredient Type Bridges",
+            logger,
+            tracker.phase("Registering JEI Ingredient Type Bridges")
         );
     }
 }

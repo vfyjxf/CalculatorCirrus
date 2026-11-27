@@ -15,8 +15,12 @@ import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
 import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
+import dev.vfyjxf.cirrus.api.planning.tag.CanonicalRecipeTag;
+import dev.vfyjxf.cirrus.api.planning.tag.RecipeEvidenceTier;
+import dev.vfyjxf.cirrus.api.planning.tag.RecipeSemanticKey;
 import dev.vfyjxf.cirrus.planning.core.lang.Fnv1a64;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -24,6 +28,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,26 +40,11 @@ import java.util.TreeSet;
 
 public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
 
-    public static final long MAX_SENSIBLE_AMOUNT = 1_000_000_000L;
-    private static final int JEI_MULTI_OUTPUT_SPLIT_THRESHOLD = 4;
-    private static final int MASS_SINK_THRESHOLD = 64;
+    public static final long maxSensibleAmount = 1_000_000_000L;
+    private static final int jeiMultiOutputSplitThreshold = 4;
+    private static final int massSinkThreshold = 64;
 
-    private static final Set<String> COLORS = Set.of(
-            "white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray",
-            "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"
-    );
-    private static final Set<String> RECYCLING_OUTPUT_SUFFIXES = Set.of(
-            "ingot", "nugget", "dust", "gem", "scrap", "shard"
-    );
-    private static final Set<String> RECYCLING_PRODUCT_TOKENS = Set.of(
-            "plate", "gear", "rod", "wire", "sword", "pickaxe", "axe", "shovel", "hoe",
-            "helmet", "chestplate", "leggings", "boots", "armor", "horse_armor", "shield",
-            "door", "trapdoor", "bars", "chain", "bucket", "cauldron", "hopper", "minecart",
-            "rail", "lantern", "anvil", "block", "slab", "stairs", "wall", "fence", "tool"
-    );
-
-    public DefaultRecipeGraphCompiler() {
-    }
+    public DefaultRecipeGraphCompiler() {}
 
     @Override
     public IndexedRecipeGraph compile(RawRecipeCatalogSnapshot rawCatalog, SystemAdmissionPolicy policy) {
@@ -71,6 +61,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
 
         Map<String, SystemAdmission> admissionCache = new HashMap<>();
         ResourceDictionary.Builder dictBuilder = new ResourceDictionary.Builder();
+        IdentityHashMap<List<ResourceKey>, int[]> rawCandListCache = new IdentityHashMap<>(2048);
         List<StageRecord> staged = new ArrayList<>(totalRaw);
 
         for (RawRecipeRecord raw : rawCatalog.recipes()) {
@@ -78,16 +69,19 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                 excludedInvalid++;
                 continue;
             }
-            SystemAdmission sysAdm = admissionCache.computeIfAbsent(
-                    raw.systemId(), s -> policy.classify(s, raw.sourceKind()));
-            if (sysAdm == SystemAdmission.EXCLUDED_DISPLAY) {
+            SystemAdmission sysAdm = admissionCache
+                    .computeIfAbsent(raw.systemId(), s -> policy.classify(s, raw.sourceKind()));
+            if (sysAdm == SystemAdmission.excludedDisplay) {
                 excludedDisplay++;
                 continue;
             }
             SystemAdmission recAdm = policy.classifyRecipe(raw);
-            if (recAdm == SystemAdmission.EXCLUDED_DISPLAY) {
+            if (recAdm == SystemAdmission.excludedDisplay) {
                 excludedByPolicy++;
                 continue;
+            }
+            if (recAdm == SystemAdmission.optInOnly && sysAdm == SystemAdmission.enabled) {
+                admissionCache.put(raw.systemId(), SystemAdmission.optInOnly);
             }
             if (raw.outputs().isEmpty()) {
                 excludedInvalid++;
@@ -103,18 +97,17 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                     invalid = true;
                     break;
                 }
-                if (out.amount() > MAX_SENSIBLE_AMOUNT) {
+                if (out.amount() > maxSensibleAmount) {
                     insane = true;
                     break;
                 }
-                ResourceKey normKey = ResourceDictionary.normalizeOrNull(out.resource(), normalizedIds);
-                if (normKey == null) {
+                int resTempId = dictBuilder.internRaw(out.resource(), normalizedIds);
+                if (resTempId < 0) {
                     invalid = true;
                     break;
                 }
-                int resTempId = dictBuilder.intern(normKey);
                 long sum = SafeMath.addSaturating(mergedOuts.getOrDefault(resTempId, 0L), out.amount());
-                if (sum > MAX_SENSIBLE_AMOUNT) {
+                if (sum > maxSensibleAmount) {
                     insane = true;
                     break;
                 }
@@ -141,24 +134,29 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                     invalid = true;
                     break;
                 }
-                if (in.amount() > MAX_SENSIBLE_AMOUNT) {
+                if (in.amount() > maxSensibleAmount) {
                     insane = true;
                     break;
                 }
-                int[] candTempIds = new int[in.candidates().size()];
-                int validCount = 0;
-                for (ResourceKey cand : in.candidates()) {
-                    ResourceKey normKey = ResourceDictionary.normalizeOrNull(cand, normalizedIds);
-                    if (normKey != null) {
-                        candTempIds[validCount++] = dictBuilder.intern(normKey);
+                List<ResourceKey> rawCands = in.candidates();
+                int[] candTempIds = rawCandListCache.get(rawCands);
+                if (candTempIds == null) {
+                    int[] buf = new int[rawCands.size()];
+                    int validCount = 0;
+                    for (int ci = 0; ci < rawCands.size(); ci++) {
+                        int tid = dictBuilder.internRaw(rawCands.get(ci), normalizedIds);
+                        if (tid >= 0) {
+                            buf[validCount++] = tid;
+                        }
+                    }
+                    candTempIds = validCount == buf.length ? buf : Arrays.copyOf(buf, validCount);
+                    if (rawCands.size() > 1) {
+                        rawCandListCache.put(rawCands, candTempIds);
                     }
                 }
-                if (validCount == 0) {
+                if (candTempIds.length == 0) {
                     invalid = true;
                     break;
-                }
-                if (validCount < candTempIds.length) {
-                    candTempIds = Arrays.copyOf(candTempIds, validCount);
                 }
                 if (in.amount() == 0L) {
                     // Explicit non-consumed catalyst slot from runtime notConsumed() or durability clause.
@@ -174,12 +172,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                     parsedCats.add(new TempCat(candTempIds, in.durabilityCostPerBatch(), in.maxDurability()));
                     continue;
                 }
-                parsedInputs.add(new TempInput(
-                        in.tagId().orElse(null),
-                        candTempIds,
-                        in.amount(),
-                        in.matchMode()
-                ));
+                parsedInputs.add(new TempInput(in.tagId().orElse(null), candTempIds, in.amount(), in.matchMode()));
             }
             if (insane) {
                 excludedInsane++;
@@ -193,18 +186,33 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
             RecipeAdvisory baseAdvisory = policy.advisoryOf(raw);
             MachineCapabilityId cap = policy.capabilityOf(raw.systemId());
             List<String> orderedMachines = policy.orderMachinesForCapability(raw.systemId(), raw.machineIds());
-            boolean hand = MachineCapabilityGroups.isHandCraftable(raw.systemId(), orderedMachines, parsedInputs.size());
+            boolean hand = MachineCapabilityGroups
+                    .isHandCraftable(raw.systemId(), raw.systemTags(), orderedMachines, parsedInputs.size());
             String explicitId = raw.explicitId().filter(s -> !s.isEmpty()).orElse(null);
 
             // JEI cycling-output display slots (>= 4 distinct outputs) represent alternatives, not co-production.
-            if ("jei".equalsIgnoreCase(raw.sourceKind()) && mergedOuts.size() >= JEI_MULTI_OUTPUT_SPLIT_THRESHOLD) {
-                RecipeAdvisory splitAdv = RecipeAdvisory.max(baseAdvisory, RecipeAdvisory.DISCOURAGED);
+            if ("jei".equalsIgnoreCase(raw.sourceKind()) && mergedOuts.size() >= jeiMultiOutputSplitThreshold) {
+                RecipeAdvisory splitAdv = RecipeAdvisory.max(baseAdvisory, RecipeAdvisory.discouraged);
                 for (var outEntry : mergedOuts.entrySet()) {
                     LinkedHashMap<Integer, Long> singleOut = new LinkedHashMap<>(2);
                     singleOut.put(outEntry.getKey(), outEntry.getValue());
                     StageRecord sr = buildStageRecord(
-                            raw.systemId(), explicitId, raw.sourceRef(), splitAdv, cap, orderedMachines,
-                            hand, raw.recipeValues(), parsedInputs, parsedCats, singleOut
+                        raw.systemId(),
+                        explicitId,
+                        raw.sourceRef(),
+                        splitAdv,
+                        cap,
+                        orderedMachines,
+                        hand,
+                        raw.recipeValues(),
+                        raw.systemTags(),
+                        raw.canonicalTags(),
+                        raw.evidenceTier(),
+                        raw.structuralFidelity(),
+                        raw.semanticKey().orElse(null),
+                        parsedInputs,
+                        parsedCats,
+                        singleOut
                     );
                     if (sr == null) {
                         excludedNoInputs++;
@@ -214,8 +222,22 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                 }
             } else {
                 StageRecord sr = buildStageRecord(
-                        raw.systemId(), explicitId, raw.sourceRef(), baseAdvisory, cap, orderedMachines,
-                        hand, raw.recipeValues(), parsedInputs, parsedCats, mergedOuts
+                    raw.systemId(),
+                    explicitId,
+                    raw.sourceRef(),
+                    baseAdvisory,
+                    cap,
+                    orderedMachines,
+                    hand,
+                    raw.recipeValues(),
+                    raw.systemTags(),
+                    raw.canonicalTags(),
+                    raw.evidenceTier(),
+                    raw.structuralFidelity(),
+                    raw.semanticKey().orElse(null),
+                    parsedInputs,
+                    parsedCats,
+                    mergedOuts
                 );
                 if (sr == null) {
                     excludedNoInputs++;
@@ -241,10 +263,11 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
 
         // Remap staged records to canonical resource IDs, intern candidate lists, and compute FNV-1a keys.
         CandidateTable.Builder candBuilder = new CandidateTable.Builder();
+        IdentityHashMap<int[], Integer> tempCandToListId = new IdentityHashMap<>(2048);
         List<CanonicalRecord> canonicalRecords = new ArrayList<>(staged.size());
 
         for (StageRecord sr : staged) {
-            CanonicalRecord cr = canonicalize(sr, perm, dict, candBuilder);
+            CanonicalRecord cr = canonicalize(sr, perm, dict, candBuilder, tempCandToListId);
             if (cr != null) {
                 canonicalRecords.add(cr);
             } else {
@@ -260,8 +283,8 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         Map<String, Map<Long, List<CanonicalRecord>>> hashBucketsBySystem = new HashMap<>();
 
         for (CanonicalRecord cr : canonicalRecords) {
-            Map<Long, List<CanonicalRecord>> byHash = hashBucketsBySystem.computeIfAbsent(
-                    cr.systemId, ignored -> new HashMap<>());
+            Map<Long, List<CanonicalRecord>> byHash = hashBucketsBySystem
+                    .computeIfAbsent(cr.systemId, ignored -> new HashMap<>());
             List<CanonicalRecord> bucket = byHash.computeIfAbsent(cr.structuralHash64, ignored -> new ArrayList<>(1));
             boolean duplicate = false;
             for (CanonicalRecord existing : bucket) {
@@ -290,25 +313,25 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         // Final sort by CompiledRecipeKey for deterministic compactId assignment.
         deduped.sort(Comparator.comparing(cr -> cr.key));
 
-        // Colony mirror exclusion: minecolonies recipe whose primary output also has a non-colony producer.
-        boolean[] hasNonColonyProducer = new boolean[dict.size()];
+        // Generic tag-driven mirror/duplicate exclusion (zero hardcoded mod names):
+        // recipes marked as junkOrDuplicate are excluded when a clean producer exists for their primary output;
+        // if no clean producer exists, keep them as discouraged so unique items remain reachable.
+        boolean[] hasNonMirrorProducer = new boolean[dict.size()];
         for (CanonicalRecord cr : deduped) {
-            String normSys = DefaultSystemAdmissionPolicy.normalizeSystemId(cr.systemId);
-            if (!normSys.startsWith("jei:category/minecolonies/")) {
+            if (!cr.canonicalTags.contains(CanonicalRecipeTag.junkOrDuplicate)) {
                 for (int outRes : cr.outRes) {
-                    hasNonColonyProducer[outRes] = true;
+                    hasNonMirrorProducer[outRes] = true;
                 }
             }
         }
         List<CanonicalRecord> finalRecords = new ArrayList<>(deduped.size());
         for (CanonicalRecord cr : deduped) {
-            String normSys = DefaultSystemAdmissionPolicy.normalizeSystemId(cr.systemId);
-            if (normSys.startsWith("jei:category/minecolonies/")) {
-                if (cr.outRes.length > 0 && hasNonColonyProducer[cr.outRes[0]]) {
+            if (cr.canonicalTags.contains(CanonicalRecipeTag.junkOrDuplicate)) {
+                if (cr.outRes.length > 0 && hasNonMirrorProducer[cr.outRes[0]]) {
                     excludedByPolicy++;
                     continue;
                 }
-                cr = cr.withAdvisory(RecipeAdvisory.max(cr.advisory, RecipeAdvisory.DISCOURAGED));
+                cr = cr.withAdvisory(RecipeAdvisory.max(cr.advisory, RecipeAdvisory.discouraged));
             }
             finalRecords.add(cr);
         }
@@ -327,6 +350,13 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         List<String>[] compatMachines = (List<String>[]) new List<?>[n];
         @SuppressWarnings("unchecked")
         Map<String, Double>[] recipeValues = (Map<String, Double>[]) new Map<?, ?>[n];
+        @SuppressWarnings("unchecked")
+        Set<String>[] systemTags = (Set<String>[]) new Set<?>[n];
+        @SuppressWarnings("unchecked")
+        Set<CanonicalRecipeTag>[] canonicalTags = (Set<CanonicalRecipeTag>[]) new Set<?>[n];
+        RecipeEvidenceTier[] evidenceTiers = new RecipeEvidenceTier[n];
+        double[] structuralFidelities = new double[n];
+        @Nullable RecipeSemanticKey[] semanticKeys = new RecipeSemanticKey[n];
 
         int totalIn = 0, totalCat = 0, totalOut = 0;
         for (CanonicalRecord cr : finalRecords) {
@@ -358,13 +388,18 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         for (int r = 0; r < n; r++) {
             CanonicalRecord cr = finalRecords.get(r);
             recipeKeys[r] = cr.key;
-            roles[r] = (byte) RecipeRole.STANDARD_PRODUCTION.ordinal();
+            roles[r] = (byte) RecipeRole.standardProduction.ordinal();
             advisories[r] = (byte) cr.advisory.ordinal();
             sourceRefs[r] = cr.sourceRef;
             handCraftable[r] = cr.handCraftable;
             capabilities[r] = cr.capability;
             compatMachines[r] = cr.orderedMachines;
             recipeValues[r] = cr.recipeValues;
+            systemTags[r] = cr.systemTags;
+            canonicalTags[r] = cr.canonicalTags;
+            evidenceTiers[r] = cr.evidenceTier;
+            structuralFidelities[r] = cr.structuralFidelity;
+            semanticKeys[r] = cr.semanticKey;
 
             inStart[r] = inCur;
             for (int i = 0; i < cr.inCandList.length; i++) {
@@ -530,63 +565,133 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
 
         // Structural role and advisory detection directly on CSR.
         int reversibleCount = detectRolesAndAdvisories(
-                dict, candTable, sccIndex, n, recipeKeys, roles, advisories,
-                inStart, inCandList, inAmount, inTagId, outStart, outRes, outAmount
+            dict,
+            candTable,
+            sccIndex,
+            n,
+            recipeKeys,
+            roles,
+            advisories,
+            inStart,
+            inCandList,
+            inAmount,
+            inTagId,
+            outStart,
+            outRes,
+            outAmount
         );
 
         int discouragedCount = 0;
         int lastResortCount = 0;
         for (int r = 0; r < n; r++) {
-            if (advisories[r] == RecipeAdvisory.DISCOURAGED.ordinal()) {
+            if (advisories[r] == RecipeAdvisory.discouraged.ordinal()) {
                 discouragedCount++;
-            } else if (advisories[r] == RecipeAdvisory.LAST_RESORT.ordinal()) {
+            } else if (advisories[r] == RecipeAdvisory.lastResort.ordinal()) {
                 lastResortCount++;
             }
         }
 
         GraphCompilationStats initialStats = new GraphCompilationStats(
-                totalRaw, n, excludedInvalid, excludedDisplay, deduplicated,
-                reversibleCount, 0, sccIndex.largestSccSize(),
-                excludedByPolicy, excludedInsane, excludedNoInputs,
-                normalizedIds[0], discouragedCount, lastResortCount
+            totalRaw,
+            n,
+            excludedInvalid,
+            excludedDisplay,
+            deduplicated,
+            reversibleCount,
+            0,
+            sccIndex.largestSccSize(),
+            excludedByPolicy,
+            excludedInsane,
+            excludedNoInputs,
+            normalizedIds[0],
+            discouragedCount,
+            lastResortCount
         );
 
         IndexedRecipeGraph graph = new IndexedRecipeGraph(
-                rawCatalog.version(), policy, Map.copyOf(admissionCache), dict, candTable, sccIndex,
-                initialStats, Collections.unmodifiableSet(normalizedUnresolved),
-                recipeKeys, roles, advisories, sourceRefs, handCraftable, capabilities,
-                compatMachines, recipeValues,
-                inStart, inSlotIndex, inCandList, inAmount, inMatchMode, inTagId,
-                catStart, catSlotIndex, catCandList, catDurCost, catMaxDur,
-                outStart, outRes, outAmount, prodStart, prodRecipe, consStart, consRecipe, exactConsumerCount
+            rawCatalog.version(),
+            policy,
+            Map.copyOf(admissionCache),
+            dict,
+            candTable,
+            sccIndex,
+            initialStats,
+            Collections.unmodifiableSet(normalizedUnresolved),
+            recipeKeys,
+            roles,
+            advisories,
+            sourceRefs,
+            handCraftable,
+            capabilities,
+            compatMachines,
+            recipeValues,
+            systemTags,
+            canonicalTags,
+            evidenceTiers,
+            structuralFidelities,
+            semanticKeys,
+            inStart,
+            inSlotIndex,
+            inCandList,
+            inAmount,
+            inMatchMode,
+            inTagId,
+            catStart,
+            catSlotIndex,
+            catCandList,
+            catDurCost,
+            catMaxDur,
+            outStart,
+            outRes,
+            outAmount,
+            prodStart,
+            prodRecipe,
+            consStart,
+            consRecipe,
+            exactConsumerCount
         );
 
         List<CompiledCycleMacro> macros = CycleMacroMiner.mine(graph, selfAmpSeedsByRecipe);
         graph.attachMacros(macros);
         if (!macros.isEmpty()) {
             GraphCompilationStats finalStats = new GraphCompilationStats(
-                    totalRaw, n, excludedInvalid, excludedDisplay, deduplicated,
-                    reversibleCount, macros.size(), sccIndex.largestSccSize(),
-                    excludedByPolicy, excludedInsane, excludedNoInputs,
-                    normalizedIds[0], discouragedCount, lastResortCount
+                totalRaw,
+                n,
+                excludedInvalid,
+                excludedDisplay,
+                deduplicated,
+                reversibleCount,
+                macros.size(),
+                sccIndex.largestSccSize(),
+                excludedByPolicy,
+                excludedInsane,
+                excludedNoInputs,
+                normalizedIds[0],
+                discouragedCount,
+                lastResortCount
             );
             return graph.withUpdatedStats(finalStats);
         }
         return graph;
     }
 
-    private static StageRecord buildStageRecord(
-            String systemId,
-            String explicitId,
-            long sourceRef,
-            RecipeAdvisory advisory,
-            MachineCapabilityId cap,
-            List<String> orderedMachines,
-            boolean handCraftable,
-            Map<String, Double> recipeValues,
-            List<TempInput> rawInputs,
-            List<TempCat> existingCats,
-            LinkedHashMap<Integer, Long> mergedOuts
+    private static @Nullable StageRecord buildStageRecord(
+        String systemId,
+        @Nullable String explicitId,
+        long sourceRef,
+        RecipeAdvisory advisory,
+        MachineCapabilityId cap,
+        List<String> orderedMachines,
+        boolean handCraftable,
+        Map<String, Double> recipeValues,
+        Set<String> systemTags,
+        Set<CanonicalRecipeTag> canonicalTags,
+        RecipeEvidenceTier evidenceTier,
+        double structuralFidelity,
+        @Nullable RecipeSemanticKey semanticKey,
+        List<TempInput> rawInputs,
+        List<TempCat> existingCats,
+        LinkedHashMap<Integer, Long> mergedOuts
     ) {
         // Coalesce identical single-candidate inputs before catalyst promotion.
         LinkedHashMap<Integer, Long> singleInAmounts = new LinkedHashMap<>();
@@ -611,8 +716,8 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                 if (!handledSingles.add(resTempId)) {
                     continue;
                 }
-                long inAmt = singleInAmounts.get(resTempId);
-                long outAmt = outsAfter.get(resTempId);
+                long inAmt = Objects.requireNonNull(singleInAmounts.get(resTempId));
+                long outAmt = Objects.requireNonNull(outsAfter.get(resTempId));
                 if (inAmt == outAmt) {
                     outsAfter.remove(resTempId);
                     promotedCats.add(new TempCat(new int[]{resTempId}, 0, 0));
@@ -642,75 +747,154 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         }
 
         return new StageRecord(
-                systemId, explicitId, sourceRef, advisory, cap, orderedMachines,
-                handCraftable, recipeValues, finalInputs, promotedCats, outsAfter, selfAmpSeeds
+            systemId,
+            explicitId,
+            sourceRef,
+            advisory,
+            cap,
+            orderedMachines,
+            handCraftable,
+            recipeValues,
+            systemTags,
+            canonicalTags,
+            evidenceTier,
+            structuralFidelity,
+            semanticKey,
+            finalInputs,
+            promotedCats,
+            outsAfter,
+            selfAmpSeeds
         );
     }
 
-    private static CanonicalRecord canonicalize(
-            StageRecord sr,
-            int[] perm,
-            ResourceDictionary dict,
-            CandidateTable.Builder candBuilder
+    private static int internTempCand(
+        int[] tempCands,
+        int[] perm,
+        ResourceDictionary dict,
+        CandidateTable.Builder candBuilder,
+        IdentityHashMap<int[], Integer> tempCandToListId
     ) {
-        // Remap, sort, dedupe, and coalesce inputs with identical (tagId, candList, matchMode).
-        Map<InputCoalesceKey, Long> coalescedInputs = new TreeMap<>();
-        for (TempInput ti : sr.inputs) {
-            int[] mapped = remapSortDedupe(ti.cands, perm);
-            int listId = candBuilder.internSortedUnique(mapped);
-            InputCoalesceKey ck = new InputCoalesceKey(ti.tagId, listId, ti.matchMode, mapped);
-            coalescedInputs.merge(ck, ti.amount, SafeMath::addSaturating);
+        if (tempCands.length > 1) {
+            Integer cached = tempCandToListId.get(tempCands);
+            if (cached != null) {
+                return cached;
+            }
+            int[] mapped = remapSortDedupe(tempCands, perm);
+            int listId = candBuilder.internSortedUnique(mapped, dict);
+            tempCandToListId.put(tempCands, listId);
+            return listId;
         }
+        int[] mapped = new int[]{perm[tempCands[0]]};
+        return candBuilder.internSortedUnique(mapped, dict);
+    }
 
-        int inCount = coalescedInputs.size();
-        int[] inCandList = new int[inCount];
-        long[] inAmount = new long[inCount];
-        byte[] inMatchMode = new byte[inCount];
-        String[] inTagId = new String[inCount];
-        int[][] inMembersForHash = new int[inCount][];
-        int idx = 0;
-        for (var e : coalescedInputs.entrySet()) {
-            InputCoalesceKey ck = e.getKey();
-            inCandList[idx] = ck.listId;
-            inAmount[idx] = e.getValue();
-            inMatchMode[idx] = (byte) ck.matchMode.ordinal();
-            inTagId[idx] = ck.tagId;
-            inMembersForHash[idx] = ck.members;
-            idx++;
+    private static CanonicalRecord canonicalize(
+        StageRecord sr,
+        int[] perm,
+        ResourceDictionary dict,
+        CandidateTable.Builder candBuilder,
+        IdentityHashMap<int[], Integer> tempCandToListId
+    ) {
+        int rawInCount = sr.inputs.size();
+        int[] inCandList;
+        long[] inAmount;
+        byte[] inMatchMode;
+        String[] inTagId;
+        int inCount;
+        if (rawInCount == 0) {
+            inCount = 0;
+            inCandList = new int[0];
+            inAmount = new long[0];
+            inMatchMode = new byte[0];
+            inTagId = new String[0];
+        } else if (rawInCount == 1) {
+            TempInput ti = sr.inputs.get(0);
+            inCount = 1;
+            inCandList = new int[]{internTempCand(ti.cands, perm, dict, candBuilder, tempCandToListId)};
+            inAmount = new long[]{ti.amount};
+            inMatchMode = new byte[]{(byte) ti.matchMode.ordinal()};
+            inTagId = new String[]{ti.tagId};
+        } else {
+            // Remap, sort, dedupe, and coalesce inputs with identical (tagId, candList, matchMode).
+            Map<InputCoalesceKey, Long> coalescedInputs = new TreeMap<>();
+            for (int i = 0; i < rawInCount; i++) {
+                TempInput ti = sr.inputs.get(i);
+                int listId = internTempCand(ti.cands, perm, dict, candBuilder, tempCandToListId);
+                InputCoalesceKey ck = new InputCoalesceKey(
+                    ti.tagId,
+                    listId,
+                    ti.matchMode,
+                    candBuilder.membersOf(listId)
+                );
+                coalescedInputs.merge(ck, ti.amount, SafeMath::addSaturating);
+            }
+            inCount = coalescedInputs.size();
+            inCandList = new int[inCount];
+            inAmount = new long[inCount];
+            inMatchMode = new byte[inCount];
+            inTagId = new String[inCount];
+            int idx = 0;
+            for (var e : coalescedInputs.entrySet()) {
+                InputCoalesceKey ck = e.getKey();
+                inCandList[idx] = ck.listId;
+                inAmount[idx] = e.getValue();
+                inMatchMode[idx] = (byte) ck.matchMode.ordinal();
+                inTagId[idx] = ck.tagId;
+                idx++;
+            }
         }
 
         // Remap and sort catalysts.
-        List<CanonCat> canonCats = new ArrayList<>(sr.cats.size());
-        for (TempCat tc : sr.cats) {
-            int[] mapped = remapSortDedupe(tc.cands, perm);
-            int listId = candBuilder.internSortedUnique(mapped);
-            canonCats.add(new CanonCat(listId, mapped, tc.durCost, tc.maxDur));
-        }
-        canonCats.sort(CanonCat::compareTo);
-        int catCount = canonCats.size();
-        int[] catCandList = new int[catCount];
-        int[] catDurCost = new int[catCount];
-        int[] catMaxDur = new int[catCount];
-        for (int i = 0; i < catCount; i++) {
-            CanonCat cc = canonCats.get(i);
-            catCandList[i] = cc.listId;
-            catDurCost[i] = cc.durCost;
-            catMaxDur[i] = cc.maxDur;
+        int catCount = sr.cats.size();
+        int[] catCandList;
+        int[] catDurCost;
+        int[] catMaxDur;
+        if (catCount == 0) {
+            catCandList = new int[0];
+            catDurCost = new int[0];
+            catMaxDur = new int[0];
+        } else if (catCount == 1) {
+            TempCat tc = sr.cats.get(0);
+            catCandList = new int[]{internTempCand(tc.cands, perm, dict, candBuilder, tempCandToListId)};
+            catDurCost = new int[]{tc.durCost};
+            catMaxDur = new int[]{tc.maxDur};
+        } else {
+            List<CanonCat> canonCats = new ArrayList<>(catCount);
+            for (TempCat tc : sr.cats) {
+                int listId = internTempCand(tc.cands, perm, dict, candBuilder, tempCandToListId);
+                canonCats.add(new CanonCat(listId, candBuilder.membersOf(listId), tc.durCost, tc.maxDur));
+            }
+            canonCats.sort(CanonCat::compareTo);
+            catCandList = new int[catCount];
+            catDurCost = new int[catCount];
+            catMaxDur = new int[catCount];
+            for (int i = 0; i < catCount; i++) {
+                CanonCat cc = canonCats.get(i);
+                catCandList[i] = cc.listId;
+                catDurCost[i] = cc.durCost;
+                catMaxDur[i] = cc.maxDur;
+            }
         }
 
         // Remap and sort outputs by canonical resource id.
         int outCount = sr.outs.size();
         int[] outRes = new int[outCount];
         long[] outAmount = new long[outCount];
-        TreeMap<Integer, Long> sortedOuts = new TreeMap<>();
-        for (var e : sr.outs.entrySet()) {
-            sortedOuts.put(perm[e.getKey()], e.getValue());
-        }
-        idx = 0;
-        for (var e : sortedOuts.entrySet()) {
-            outRes[idx] = e.getKey();
-            outAmount[idx] = e.getValue();
-            idx++;
+        if (outCount == 1) {
+            var e = sr.outs.entrySet().iterator().next();
+            outRes[0] = perm[e.getKey()];
+            outAmount[0] = e.getValue();
+        } else {
+            TreeMap<Integer, Long> sortedOuts = new TreeMap<>();
+            for (var e : sr.outs.entrySet()) {
+                sortedOuts.put(perm[e.getKey()], e.getValue());
+            }
+            int idx = 0;
+            for (var e : sortedOuts.entrySet()) {
+                outRes[idx] = e.getKey();
+                outAmount[idx] = e.getValue();
+                idx++;
+            }
         }
 
         Map<Integer, Long> canonSelfSeeds = null;
@@ -721,7 +905,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
             }
         }
 
-        // Streaming FNV-1a 64-bit structural fingerprint per spec 02 §2.1.3.
+        // Streaming FNV-1a 64-bit structural fingerprint using cached per-list hashes.
         long h = Fnv1a64.initial();
         h = Fnv1a64.mixString(h, "SYS:");
         h = Fnv1a64.mixString(h, sr.systemId);
@@ -730,22 +914,14 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
             if (i > 0) h = Fnv1a64.mixByte(h, ';');
             if (inTagId[i] != null) h = Fnv1a64.mixString(h, inTagId[i]);
             h = Fnv1a64.mixByte(h, ':');
-            int[] members = inMembersForHash[i];
-            for (int j = 0; j < members.length; j++) {
-                if (j > 0) h = Fnv1a64.mixByte(h, ',');
-                h = Fnv1a64.mixString(h, dict.shortStringOf(members[j]));
-            }
+            h = Fnv1a64.mixLong(h, candBuilder.hash64Of(inCandList[i]));
             h = Fnv1a64.mixByte(h, '*');
             h = Fnv1a64.mixLong(h, inAmount[i]);
         }
         h = Fnv1a64.mixString(h, "|CAT:");
         for (int i = 0; i < catCount; i++) {
             if (i > 0) h = Fnv1a64.mixByte(h, ';');
-            int[] members = canonCats.get(i).members;
-            for (int j = 0; j < members.length; j++) {
-                if (j > 0) h = Fnv1a64.mixByte(h, ',');
-                h = Fnv1a64.mixString(h, dict.shortStringOf(members[j]));
-            }
+            h = Fnv1a64.mixLong(h, candBuilder.hash64Of(catCandList[i]));
             h = Fnv1a64.mixByte(h, ':');
             h = Fnv1a64.mixLong(h, catDurCost[i]);
         }
@@ -768,11 +944,31 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
 
         CompiledRecipeKey key = new CompiledRecipeKey(sr.systemId, Optional.ofNullable(sr.explicitId), h);
         return new CanonicalRecord(
-                sr.systemId, sr.explicitId, h, key, sr.sourceRef, sr.advisory,
-                sr.capability, sr.orderedMachines, sr.handCraftable, sr.recipeValues,
-                inCandList, inAmount, inMatchMode, inTagId,
-                catCandList, catDurCost, catMaxDur,
-                outRes, outAmount, canonSelfSeeds
+            sr.systemId,
+            sr.explicitId,
+            h,
+            key,
+            sr.sourceRef,
+            sr.advisory,
+            sr.capability,
+            sr.orderedMachines,
+            sr.handCraftable,
+            sr.recipeValues,
+            sr.systemTags,
+            sr.canonicalTags,
+            sr.evidenceTier,
+            sr.structuralFidelity,
+            sr.semanticKey,
+            inCandList,
+            inAmount,
+            inMatchMode,
+            inTagId,
+            catCandList,
+            catDurCost,
+            catMaxDur,
+            outRes,
+            outAmount,
+            canonSelfSeeds
         );
     }
 
@@ -795,7 +991,11 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         return w == len ? out : Arrays.copyOf(out, w);
     }
 
-    private static boolean hasKeyCollision(Map<Long, List<CanonicalRecord>> byHash, String explicitId, long hash) {
+    private static boolean hasKeyCollision(
+        Map<Long, List<CanonicalRecord>> byHash,
+        @Nullable String explicitId,
+        long hash
+    ) {
         List<CanonicalRecord> bucket = byHash.get(hash);
         if (bucket == null) {
             return false;
@@ -809,20 +1009,20 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
     }
 
     private static int detectRolesAndAdvisories(
-            ResourceDictionary dict,
-            CandidateTable cands,
-            IterativeTarjanScc scc,
-            int n,
-            CompiledRecipeKey[] keys,
-            byte[] roles,
-            byte[] advisories,
-            int[] inStart,
-            int[] inCandList,
-            long[] inAmount,
-            String[] inTagId,
-            int[] outStart,
-            int[] outRes,
-            long[] outAmount
+        ResourceDictionary dict,
+        CandidateTable cands,
+        IterativeTarjanScc scc,
+        int n,
+        CompiledRecipeKey[] keys,
+        byte[] roles,
+        byte[] advisories,
+        int[] inStart,
+        int[] inCandList,
+        long[] inAmount,
+        String[] inTagId,
+        int[] outStart,
+        int[] outRes,
+        long[] outAmount
     ) {
         // 1. Index single-input single-output recipes for REVERSIBLE_PACKING & CONTAINER_CONVERSION.
         Map<SinglePairKey, List<Integer>> singlePairs = new HashMap<>();
@@ -834,8 +1034,8 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                     int y = outRes[outStart[r]];
                     if (x != y) {
                         singlePairs.computeIfAbsent(
-                                new SinglePairKey(x, inAmount[inStart[r]], y, outAmount[outStart[r]]),
-                                ignored -> new ArrayList<>(1)
+                            new SinglePairKey(x, inAmount[inStart[r]], y, outAmount[outStart[r]]),
+                            ignored -> new ArrayList<>(1)
                         ).add(r);
                     }
                 }
@@ -846,11 +1046,18 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         for (var e : singlePairs.entrySet()) {
             SinglePairKey fwd = e.getKey();
             SinglePairKey rev = new SinglePairKey(fwd.outRes, fwd.outAmt, fwd.inRes, fwd.inAmt);
-            if (singlePairs.containsKey(rev)
+            List<Integer> revRecipes = singlePairs.get(rev);
+            if (revRecipes != null
                     && scc.sccIdOf(fwd.inRes) >= 0
                     && scc.sccIdOf(fwd.inRes) == scc.sccIdOf(fwd.outRes)) {
+                boolean isPackingRatio = fwd.inAmt != fwd.outAmt;
+                if (!isPackingRatio) {
+                    if (!hasSharedSystem(e.getValue(), revRecipes, keys)) {
+                        continue;
+                    }
+                }
                 for (int r : e.getValue()) {
-                    roles[r] = (byte) RecipeRole.REVERSIBLE_PACKING.ordinal();
+                    roles[r] = (byte) RecipeRole.reversiblePacking.ordinal();
                     reversibleCount++;
                 }
             }
@@ -869,21 +1076,11 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                 massSinkGroups.computeIfAbsent(sok, ignored -> new ArrayList<>(2)).add(r);
             }
 
-            if (roles[r] != RecipeRole.STANDARD_PRODUCTION.ordinal()) {
+            if (roles[r] != RecipeRole.standardProduction.ordinal()) {
                 continue;
             }
 
-            // CONTAINER_CONVERSION: single-in single-out bucket/bottle pair.
-            if (inCnt == 1 && outCnt == 1 && cands.sizeOf(inCandList[inS]) == 1) {
-                String inId = dict.keyOf(cands.membersOf(inCandList[inS])[0]).resourceId();
-                String outId = dict.keyOf(outRes[outS]).resourceId();
-                if (isContainerPair(inId, outId)) {
-                    roles[r] = (byte) RecipeRole.CONTAINER_CONVERSION.ordinal();
-                    continue;
-                }
-            }
-
-            // REVERSIBLE_RECOLORING: output appears inside a multi-candidate input slot, or color token swap.
+            // REVERSIBLE_RECOLORING / EXCHANGE: purely structural self-inclusion in multi-candidate input slot.
             if (outCnt == 1) {
                 int y = outRes[outS];
                 boolean selfInMultiSlot = false;
@@ -895,12 +1092,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                     }
                 }
                 if (selfInMultiSlot) {
-                    roles[r] = (byte) RecipeRole.REVERSIBLE_RECOLORING.ordinal();
-                    reversibleCount++;
-                    continue;
-                }
-                if (isLexicalRecolor(dict, cands, inS, inE, inCandList, y)) {
-                    roles[r] = (byte) RecipeRole.REVERSIBLE_RECOLORING.ordinal();
+                    roles[r] = (byte) RecipeRole.reversibleRecoloring.ordinal();
                     reversibleCount++;
                     continue;
                 }
@@ -919,19 +1111,13 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                 }
             }
             if (exchange) {
-                advisories[r] = (byte) Math.max(advisories[r], RecipeAdvisory.DISCOURAGED.ordinal());
-            }
-
-            // RECYCLING: output is base metal/dust/nugget form and input is a crafted product of that material.
-            if (outCnt == 1 && isRecyclingRecipe(dict, cands, keys[r].systemId(), inS, inE, inCandList, inTagId, outRes[outS])) {
-                roles[r] = (byte) RecipeRole.RECYCLING.ordinal();
-                advisories[r] = (byte) RecipeAdvisory.LAST_RESORT.ordinal();
+                advisories[r] = (byte) Math.max(advisories[r], RecipeAdvisory.discouraged.ordinal());
             }
         }
 
         // 3. MASS_SINK structural advisory: >= 64 recipes in same system -> same primary output, mostly non-tag inputs.
         for (List<Integer> group : massSinkGroups.values()) {
-            if (group.size() < MASS_SINK_THRESHOLD) {
+            if (group.size() < massSinkThreshold) {
                 continue;
             }
             int tagRecipes = 0;
@@ -949,7 +1135,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
             }
             if (tagRecipes * 2 < group.size()) {
                 for (int r : group) {
-                    advisories[r] = (byte) RecipeAdvisory.LAST_RESORT.ordinal();
+                    advisories[r] = (byte) RecipeAdvisory.lastResort.ordinal();
                 }
             }
         }
@@ -957,154 +1143,49 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         return reversibleCount;
     }
 
-    private static boolean isContainerPair(String a, String b) {
-        return a.equals(b + "_bucket") || b.equals(a + "_bucket")
-                || a.equals(b + "_bottle") || b.equals(a + "_bottle");
-    }
-
-    private static boolean isLexicalRecolor(
-            ResourceDictionary dict, CandidateTable cands, int inS, int inE, int[] inCandList, int outRes
-    ) {
-        ColorSplit outSplit = splitColor(dict.keyOf(outRes).resourceId());
-        if (outSplit == null) {
-            return false;
-        }
-        for (int si = inS; si < inE; si++) {
-            int[] members = cands.membersOf(inCandList[si]);
-            if (members.length != 1) {
-                continue;
-            }
-            ColorSplit inSplit = splitColor(dict.keyOf(members[0]).resourceId());
-            if (inSplit != null && !inSplit.color.equals(outSplit.color) && inSplit.base.equals(outSplit.base)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static ColorSplit splitColor(String id) {
-        int colon = id.indexOf(':');
-        if (colon < 0) return null;
-        String ns = id.substring(0, colon);
-        String path = id.substring(colon + 1);
-        for (String c : COLORS) {
-            if (path.startsWith(c + "_")) {
-                return new ColorSplit(c, ns + ":" + path.substring(c.length() + 1));
-            }
-            if (path.endsWith("_" + c)) {
-                return new ColorSplit(c, ns + ":" + path.substring(0, path.length() - c.length() - 1));
-            }
-        }
-        return null;
-    }
-
-    private static boolean isRecyclingRecipe(
-            ResourceDictionary dict,
-            CandidateTable cands,
-            String systemId,
-            int inS,
-            int inE,
-            int[] inCandList,
-            String[] inTagId,
-            int outRes
-    ) {
-        String outPath = pathOf(dict.keyOf(outRes).resourceId());
-        String material = extractMaterialPrefix(outPath);
-        if (material == null) {
-            return false;
-        }
-        boolean recyclingSystem = systemId.contains("smelting") || systemId.contains("blasting")
-                || systemId.contains("crushing") || systemId.contains("milling")
-                || systemId.contains("pulveriz") || systemId.contains("salvag")
-                || systemId.contains("arc_furnace") || systemId.contains("disassembl")
-                || systemId.contains("grind");
-        if (!recyclingSystem) {
-            return false;
-        }
-        for (int si = inS; si < inE; si++) {
-            String tag = inTagId[si];
-            if (tag != null && tag.contains(material) && containsProductToken(tag)) {
-                return true;
-            }
-            int[] members = cands.membersOf(inCandList[si]);
-            if (members.length <= 4) {
-                for (int u : members) {
-                    String inPath = pathOf(dict.keyOf(u).resourceId());
-                    if (!inPath.equals(outPath) && inPath.contains(material) && containsProductToken(inPath)) {
-                        return true;
-                    }
+    private static boolean hasSharedSystem(List<Integer> fwd, List<Integer> rev, CompiledRecipeKey[] keys) {
+        for (int a : fwd) {
+            String sysA = keys[a].systemId();
+            for (int b : rev) {
+                if (sysA.equals(keys[b].systemId())) {
+                    return true;
                 }
             }
         }
         return false;
     }
 
-    private static String extractMaterialPrefix(String path) {
-        for (String suf : RECYCLING_OUTPUT_SUFFIXES) {
-            if (path.endsWith("_" + suf) && path.length() > suf.length() + 2) {
-                return path.substring(0, path.length() - suf.length() - 1);
-            }
-            if (path.startsWith(suf + "_") && path.length() > suf.length() + 2) {
-                return path.substring(suf.length() + 1);
-            }
-        }
-        return null;
-    }
+    private record SinglePairKey(int inRes, long inAmt, int outRes, long outAmt) {}
 
-    private static boolean containsProductToken(String text) {
-        int start = 0;
-        for (int i = 0; i <= text.length(); i++) {
-            if (i == text.length() || text.charAt(i) == '_' || text.charAt(i) == '/' || text.charAt(i) == ':') {
-                if (i > start) {
-                    String tok = text.substring(start, i);
-                    if (RECYCLING_PRODUCT_TOKENS.contains(tok)) {
-                        return true;
-                    }
-                }
-                start = i + 1;
-            }
-        }
-        return false;
-    }
+    private record SysOutKey(String systemId, int outRes) {}
 
-    private static String pathOf(String id) {
-        int colon = id.indexOf(':');
-        return colon >= 0 ? id.substring(colon + 1) : id;
-    }
+    private record TempInput(@Nullable String tagId, int[] cands, long amount, SlotMatchMode matchMode) {}
 
-    private record ColorSplit(String color, String base) {
-    }
-
-    private record SinglePairKey(int inRes, long inAmt, int outRes, long outAmt) {
-    }
-
-    private record SysOutKey(String systemId, int outRes) {
-    }
-
-    private record TempInput(String tagId, int[] cands, long amount, SlotMatchMode matchMode) {
-    }
-
-    private record TempCat(int[] cands, int durCost, int maxDur) {
-    }
+    private record TempCat(int[] cands, int durCost, int maxDur) {}
 
     private record StageRecord(
-            String systemId,
-            String explicitId,
-            long sourceRef,
-            RecipeAdvisory advisory,
-            MachineCapabilityId capability,
-            List<String> orderedMachines,
-            boolean handCraftable,
-            Map<String, Double> recipeValues,
-            List<TempInput> inputs,
-            List<TempCat> cats,
-            LinkedHashMap<Integer, Long> outs,
-            Map<Integer, Long> selfAmpSeeds
-    ) {
-    }
+        String systemId,
+        @Nullable String explicitId,
+        long sourceRef,
+        RecipeAdvisory advisory,
+        MachineCapabilityId capability,
+        List<String> orderedMachines,
+        boolean handCraftable,
+        Map<String, Double> recipeValues,
+        Set<String> systemTags,
+        Set<CanonicalRecipeTag> canonicalTags,
+        RecipeEvidenceTier evidenceTier,
+        double structuralFidelity,
+        @Nullable RecipeSemanticKey semanticKey,
+        List<TempInput> inputs,
+        List<TempCat> cats,
+        LinkedHashMap<Integer, Long> outs,
+        @Nullable Map<Integer, Long> selfAmpSeeds
+    ) {}
 
-    private record InputCoalesceKey(String tagId, int listId, SlotMatchMode matchMode, int[] members)
-            implements Comparable<InputCoalesceKey> {
+    private record InputCoalesceKey(@Nullable String tagId, int listId, SlotMatchMode matchMode, int[] members)
+            implements
+                Comparable<InputCoalesceKey> {
 
         @Override
         public int compareTo(InputCoalesceKey o) {
@@ -1142,26 +1223,31 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
     }
 
     private record CanonicalRecord(
-            String systemId,
-            String explicitId,
-            long structuralHash64,
-            CompiledRecipeKey key,
-            long sourceRef,
-            RecipeAdvisory advisory,
-            MachineCapabilityId capability,
-            List<String> orderedMachines,
-            boolean handCraftable,
-            Map<String, Double> recipeValues,
-            int[] inCandList,
-            long[] inAmount,
-            byte[] inMatchMode,
-            String[] inTagId,
-            int[] catCandList,
-            int[] catDurCost,
-            int[] catMaxDur,
-            int[] outRes,
-            long[] outAmount,
-            Map<Integer, Long> selfAmpSeeds
+        String systemId,
+        @Nullable String explicitId,
+        long structuralHash64,
+        CompiledRecipeKey key,
+        long sourceRef,
+        RecipeAdvisory advisory,
+        MachineCapabilityId capability,
+        List<String> orderedMachines,
+        boolean handCraftable,
+        Map<String, Double> recipeValues,
+        Set<String> systemTags,
+        Set<CanonicalRecipeTag> canonicalTags,
+        RecipeEvidenceTier evidenceTier,
+        double structuralFidelity,
+        @Nullable RecipeSemanticKey semanticKey,
+        int[] inCandList,
+        long[] inAmount,
+        byte[] inMatchMode,
+        String[] inTagId,
+        int[] catCandList,
+        int[] catDurCost,
+        int[] catMaxDur,
+        int[] outRes,
+        long[] outAmount,
+        @Nullable Map<Integer, Long> selfAmpSeeds
     ) {
 
         int compareCanonical(CanonicalRecord o) {
@@ -1193,20 +1279,61 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
 
         CanonicalRecord withFinalHash(long newHash) {
             return new CanonicalRecord(
-                    systemId, explicitId, newHash,
-                    new CompiledRecipeKey(systemId, Optional.ofNullable(explicitId), newHash),
-                    sourceRef, advisory, capability, orderedMachines, handCraftable, recipeValues,
-                    inCandList, inAmount, inMatchMode, inTagId,
-                    catCandList, catDurCost, catMaxDur, outRes, outAmount, selfAmpSeeds
+                systemId,
+                explicitId,
+                newHash,
+                new CompiledRecipeKey(systemId, Optional.ofNullable(explicitId), newHash),
+                sourceRef,
+                advisory,
+                capability,
+                orderedMachines,
+                handCraftable,
+                recipeValues,
+                systemTags,
+                canonicalTags,
+                evidenceTier,
+                structuralFidelity,
+                semanticKey,
+                inCandList,
+                inAmount,
+                inMatchMode,
+                inTagId,
+                catCandList,
+                catDurCost,
+                catMaxDur,
+                outRes,
+                outAmount,
+                selfAmpSeeds
             );
         }
 
         CanonicalRecord withAdvisory(RecipeAdvisory newAdvisory) {
             return new CanonicalRecord(
-                    systemId, explicitId, structuralHash64, key, sourceRef, newAdvisory,
-                    capability, orderedMachines, handCraftable, recipeValues,
-                    inCandList, inAmount, inMatchMode, inTagId,
-                    catCandList, catDurCost, catMaxDur, outRes, outAmount, selfAmpSeeds
+                systemId,
+                explicitId,
+                structuralHash64,
+                key,
+                sourceRef,
+                newAdvisory,
+                capability,
+                orderedMachines,
+                handCraftable,
+                recipeValues,
+                systemTags,
+                canonicalTags,
+                evidenceTier,
+                structuralFidelity,
+                semanticKey,
+                inCandList,
+                inAmount,
+                inMatchMode,
+                inTagId,
+                catCandList,
+                catDurCost,
+                catMaxDur,
+                outRes,
+                outAmount,
+                selfAmpSeeds
             );
         }
     }

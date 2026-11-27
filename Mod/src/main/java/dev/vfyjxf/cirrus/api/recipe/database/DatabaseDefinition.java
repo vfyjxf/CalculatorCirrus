@@ -15,14 +15,16 @@ public record DatabaseDefinition(
     int priority,
     List<Namespace> sources
 ) {
-    public static final Codec<DatabaseDefinition> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-        Codec.STRING.fieldOf("id").forGetter(DatabaseDefinition::id),
-        Codec.STRING.fieldOf("name").forGetter(DatabaseDefinition::name),
-        DatabaseKind.CODEC.fieldOf("kind").forGetter(DatabaseDefinition::kind),
-        Codec.BOOL.fieldOf("enabled").forGetter(DatabaseDefinition::enabled),
-        Codec.INT.fieldOf("priority").forGetter(DatabaseDefinition::priority),
-        Namespace.codec.listOf().fieldOf("sources").forGetter(DatabaseDefinition::sources)
-    ).apply(instance, DatabaseDefinition::new));
+    public static final Codec<DatabaseDefinition> codec = RecordCodecBuilder.create(
+        instance -> instance.group(
+            Codec.STRING.fieldOf("id").forGetter(DatabaseDefinition::id),
+            Codec.STRING.fieldOf("name").forGetter(DatabaseDefinition::name),
+            DatabaseKind.codec.fieldOf("kind").forGetter(DatabaseDefinition::kind),
+            Codec.BOOL.fieldOf("enabled").forGetter(DatabaseDefinition::enabled),
+            Codec.INT.fieldOf("priority").forGetter(DatabaseDefinition::priority),
+            Namespace.codec.listOf().fieldOf("sources").forGetter(DatabaseDefinition::sources)
+        ).apply(instance, DatabaseDefinition::new)
+    );
 
     public DatabaseDefinition {
         Checks.checkNotNull(id, "id");

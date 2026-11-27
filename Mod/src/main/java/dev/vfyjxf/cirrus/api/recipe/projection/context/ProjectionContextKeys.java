@@ -27,8 +27,7 @@ public final class ProjectionContextKeys {
         CalculatorProjectionContext.none()
     );
 
-    private ProjectionContextKeys() {
-    }
+    private ProjectionContextKeys() {}
 
     private static <T> ExecutionContextKey<T> key(String path, Class<T> type, T defaultValue) {
         return ExecutionContextKey.create(

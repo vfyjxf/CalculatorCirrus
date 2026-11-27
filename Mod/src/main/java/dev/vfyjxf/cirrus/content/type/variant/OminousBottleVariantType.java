@@ -15,9 +15,8 @@ public class OminousBottleVariantType extends BasicVariantType<Item, ItemStack> 
     public static final OminousBottleVariantType instance = new OminousBottleVariantType();
 
     private OminousBottleVariantType() {
-        super(Namespace.ofMc("ominous_bottle"), CirrusTypes.Contents.ITEM_STACK);
+        super(Namespace.ofMc("ominous_bottle"), CirrusTypes.Contents.itemStack);
     }
-
 
     @Override
     public ItemStack copyWithIdentity(ItemStack stack) {

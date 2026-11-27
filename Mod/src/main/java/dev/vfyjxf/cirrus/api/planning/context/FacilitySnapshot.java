@@ -13,13 +13,13 @@ import java.util.Set;
 import java.util.TreeSet;
 
 public record FacilitySnapshot(
-        List<OwnedMachineGroup> ownedMachines,
-        List<AutomatedLine> automatedLines,
-        List<AutomatedRecipeCapability> automatedRecipes,
-        Set<String> unlockedSystems
+    List<OwnedMachineGroup> ownedMachines,
+    List<AutomatedLine> automatedLines,
+    List<AutomatedRecipeCapability> automatedRecipes,
+    Set<String> unlockedSystems
 ) {
 
-    public static final FacilitySnapshot EMPTY = new FacilitySnapshot(List.of(), List.of(), List.of(), Set.of());
+    public static final FacilitySnapshot empty = new FacilitySnapshot(List.of(), List.of(), List.of(), Set.of());
 
     public FacilitySnapshot {
         Objects.requireNonNull(ownedMachines, "ownedMachines");

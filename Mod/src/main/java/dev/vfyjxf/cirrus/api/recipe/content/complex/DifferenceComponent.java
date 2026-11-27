@@ -1,10 +1,10 @@
 package dev.vfyjxf.cirrus.api.recipe.content.complex;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
-import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
@@ -79,9 +79,9 @@ public final class DifferenceComponent implements ComplexContent {
 
     @Override
     public boolean mergeable(RecipeContent other) {
-        return other instanceof DifferenceComponent o &&
-               required.mergeable(o.required) &&
-               rejected.mergeable(o.rejected);
+        return other instanceof DifferenceComponent o
+                && required.mergeable(o.required)
+                && rejected.mergeable(o.rejected);
     }
 
     @Override

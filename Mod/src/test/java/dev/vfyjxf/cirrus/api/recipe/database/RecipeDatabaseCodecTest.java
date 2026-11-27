@@ -21,8 +21,8 @@ class RecipeDatabaseCodecTest {
             List.of(Namespace.of("test", "crafting"), Namespace.of("test", "smelting"))
         );
 
-        var encoded = DatabaseDefinition.CODEC.encodeStart(JsonOps.INSTANCE, definition).result().orElseThrow();
-        DatabaseDefinition decoded = DatabaseDefinition.CODEC.parse(JsonOps.INSTANCE, encoded).result().orElseThrow();
+        var encoded = DatabaseDefinition.codec.encodeStart(JsonOps.INSTANCE, definition).result().orElseThrow();
+        DatabaseDefinition decoded = DatabaseDefinition.codec.parse(JsonOps.INSTANCE, encoded).result().orElseThrow();
 
         assertEquals(definition, decoded);
     }
@@ -35,8 +35,9 @@ class RecipeDatabaseCodecTest {
         );
         DatabaseSelectionState state = new DatabaseSelectionState(definitions);
 
-        var encoded = DatabaseSelectionState.CODEC.encodeStart(JsonOps.INSTANCE, state).result().orElseThrow();
-        DatabaseSelectionState decoded = DatabaseSelectionState.CODEC.parse(JsonOps.INSTANCE, encoded).result().orElseThrow();
+        var encoded = DatabaseSelectionState.codec.encodeStart(JsonOps.INSTANCE, state).result().orElseThrow();
+        DatabaseSelectionState decoded = DatabaseSelectionState.codec.parse(JsonOps.INSTANCE, encoded).result()
+                .orElseThrow();
 
         assertEquals(List.of("a", "b"), decoded.ordered().stream().map(DatabaseDefinition::id).toList());
         assertEquals(List.of(0, 1), decoded.ordered().stream().map(DatabaseDefinition::priority).toList());
@@ -47,16 +48,19 @@ class RecipeDatabaseCodecTest {
         CustomRecipeDatabase database = new CustomRecipeDatabase(
             CustomRecipeDatabase.builtinId,
             CustomRecipeDatabase.builtinName,
-            List.of(new DatabaseRecipeRef(
-                Namespace.of("minecraft", "crafting"),
-                ResourceLocation.fromNamespaceAndPath("minecraft", "oak_planks")
-            )),
+            List.of(
+                new DatabaseRecipeRef(
+                    Namespace.of("minecraft", "crafting"),
+                    ResourceLocation.fromNamespaceAndPath("minecraft", "oak_planks")
+                )
+            ),
             List.of(Namespace.of("minecraft", "crafting")),
             List.of(Namespace.of("minecraft", "smelting"))
         );
 
-        var encoded = CustomRecipeDatabase.CODEC.encodeStart(JsonOps.INSTANCE, database).result().orElseThrow();
-        CustomRecipeDatabase decoded = CustomRecipeDatabase.CODEC.parse(JsonOps.INSTANCE, encoded).result().orElseThrow();
+        var encoded = CustomRecipeDatabase.codec.encodeStart(JsonOps.INSTANCE, database).result().orElseThrow();
+        CustomRecipeDatabase decoded = CustomRecipeDatabase.codec.parse(JsonOps.INSTANCE, encoded).result()
+                .orElseThrow();
 
         assertEquals(database, decoded);
         assertEquals("custom:builtin", decoded.definitionId());
@@ -78,8 +82,9 @@ class RecipeDatabaseCodecTest {
             List.of(source)
         );
 
-        var encoded = CustomRecipeDatabase.CODEC.encodeStart(JsonOps.INSTANCE, database).result().orElseThrow();
-        CustomRecipeDatabase decoded = CustomRecipeDatabase.CODEC.parse(JsonOps.INSTANCE, encoded).result().orElseThrow();
+        var encoded = CustomRecipeDatabase.codec.encodeStart(JsonOps.INSTANCE, database).result().orElseThrow();
+        CustomRecipeDatabase decoded = CustomRecipeDatabase.codec.parse(JsonOps.INSTANCE, encoded).result()
+                .orElseThrow();
 
         assertEquals(database, decoded);
         assertEquals(List.of(source), decoded.disabledSources());

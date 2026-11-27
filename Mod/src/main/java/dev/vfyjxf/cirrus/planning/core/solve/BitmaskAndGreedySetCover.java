@@ -23,11 +23,10 @@ public final class BitmaskAndGreedySetCover {
         }
     }
 
-    private static final int EXACT_DP_MAX_STEPS = 14;
-    private static final int EXACT_DP_MAX_MACHINES = 64;
+    private static final int exactDpMaxSteps = 14;
+    private static final int exactDpMaxMachines = 64;
 
-    public BitmaskAndGreedySetCover() {
-    }
+    public BitmaskAndGreedySetCover() {}
 
     public Set<String> solve(int kSteps, List<CandidateMachine> candidates) {
         if (kSteps <= 0 || candidates == null || candidates.isEmpty()) {
@@ -55,7 +54,7 @@ public final class BitmaskAndGreedySetCover {
             return Set.of();
         }
 
-        if (kSteps <= EXACT_DP_MAX_STEPS && sorted.size() <= EXACT_DP_MAX_MACHINES) {
+        if (kSteps <= exactDpMaxSteps && sorted.size() <= exactDpMaxMachines) {
             return solveExactDp(kSteps, sorted);
         }
         return solveGreedyBitSetLocalSearch(kSteps, sorted);
@@ -163,8 +162,7 @@ public final class BitmaskAndGreedySetCover {
             }
             // Try 1-for-2 replacement.
             int[] selIdx = selectedIndices(selected);
-            outer:
-            for (int aPos = 0; aPos < selIdx.length; aPos++) {
+            outer : for (int aPos = 0; aPos < selIdx.length; aPos++) {
                 int a = selIdx[aPos];
                 for (int bPos = aPos + 1; bPos < selIdx.length; bPos++) {
                     int b = selIdx[bPos];

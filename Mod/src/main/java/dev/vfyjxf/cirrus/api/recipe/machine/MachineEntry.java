@@ -17,8 +17,12 @@ public interface MachineEntry {
 
     boolean isEmpty();
 
-    default MachineConstraint constraint() {return MachineConstraint.empty;}
+    default MachineConstraint constraint() {
+        return MachineConstraint.empty;
+    }
 
-    default ItemStack toItemStack() {return ItemStack.EMPTY;}
+    default ItemStack toItemStack() {
+        return ItemStack.EMPTY;
+    }
 
 }

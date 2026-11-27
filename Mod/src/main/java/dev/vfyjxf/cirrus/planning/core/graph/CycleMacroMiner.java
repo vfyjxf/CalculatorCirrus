@@ -9,9 +9,9 @@ import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.planning.core.lang.Fnv1a64;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -22,17 +22,16 @@ import java.util.TreeMap;
 
 final class CycleMacroMiner {
 
-    private static final int MAX_LEN2_MULT = 8;
-    private static final int MAX_LONGER_DEGREE = 64;
-    private static final int MAX_LONGER_EXPANSIONS = 120_000;
-    private static final int MAX_MACROS = 16_384;
+    private static final int maxLen2Mult = 8;
+    private static final int maxLongerDegree = 64;
+    private static final int maxLongerExpansions = 120_000;
+    private static final int maxMacros = 16_384;
 
-    private CycleMacroMiner() {
-    }
+    private CycleMacroMiner() {}
 
     static List<CompiledCycleMacro> mine(
-            IndexedRecipeGraph graph,
-            Map<Integer, Map<Integer, Long>> selfAmplifyingSeedsByRecipe
+        IndexedRecipeGraph graph,
+        Map<Integer, Map<Integer, Long>> selfAmplifyingSeedsByRecipe
     ) {
         ResourceDictionary dict = graph.resourceDict();
         CandidateTable cands = graph.candidateTable();
@@ -97,7 +96,7 @@ final class CycleMacroMiner {
 
         // 3. Length-2 regenerative catalyst cycles.
         Set<Long> seenRecipePairs = new HashSet<>();
-        for (int a = 0; a < nRes && mined.size() < MAX_MACROS; a++) {
+        for (int a = 0; a < nRes && mined.size() < maxMacros; a++) {
             List<EdgeInfo> fwdList = outEdges.get(a);
             if (fwdList == null) {
                 continue;
@@ -128,7 +127,7 @@ final class CycleMacroMiner {
                     CompiledCycleMacro macro = buildMacro(graph, new int[]{e1.recipe, e2.recipe}, mults, null);
                     if (macro != null && hasPositiveExternalOutput(macro, dict.keyOf(a), dict.keyOf(b))) {
                         mined.putIfAbsent(macro.macroKey(), macro);
-                        if (mined.size() >= MAX_MACROS) {
+                        if (mined.size() >= maxMacros) {
                             break;
                         }
                     }
@@ -138,13 +137,13 @@ final class CycleMacroMiner {
 
         // 4. Bounded length-3 and length-4 regenerative catalyst cycles on low-degree SCC vertices.
         int expansions = 0;
-        for (int a = 0; a < nRes && mined.size() < MAX_MACROS && expansions < MAX_LONGER_EXPANSIONS; a++) {
+        for (int a = 0; a < nRes && mined.size() < maxMacros && expansions < maxLongerExpansions; a++) {
             List<EdgeInfo> l1 = outEdges.get(a);
-            if (l1 == null || l1.size() > MAX_LONGER_DEGREE) {
+            if (l1 == null || l1.size() > maxLongerDegree) {
                 continue;
             }
             for (EdgeInfo e1 : l1) {
-                if (expansions >= MAX_LONGER_EXPANSIONS || mined.size() >= MAX_MACROS) {
+                if (expansions >= maxLongerExpansions || mined.size() >= maxMacros) {
                     break;
                 }
                 int b = e1.toRes;
@@ -152,12 +151,12 @@ final class CycleMacroMiner {
                     continue;
                 }
                 List<EdgeInfo> l2 = outEdges.get(b);
-                if (l2 == null || l2.size() > MAX_LONGER_DEGREE) {
+                if (l2 == null || l2.size() > maxLongerDegree) {
                     continue;
                 }
                 for (EdgeInfo e2 : l2) {
                     expansions++;
-                    if (expansions >= MAX_LONGER_EXPANSIONS || mined.size() >= MAX_MACROS) {
+                    if (expansions >= maxLongerExpansions || mined.size() >= maxMacros) {
                         break;
                     }
                     int c = e2.toRes;
@@ -173,9 +172,18 @@ final class CycleMacroMiner {
                             }
                             if (e1.outAmt >= e2.inAmt && e2.outAmt >= e3.inAmt && e3.outAmt >= e1.inAmt) {
                                 CompiledCycleMacro macro = buildMacro(
-                                        graph, new int[]{e1.recipe, e2.recipe, e3.recipe}, new long[]{1L, 1L, 1L}, null);
-                                if (macro != null && hasPositiveExternalOutput(
-                                        macro, dict.keyOf(a), dict.keyOf(b), dict.keyOf(c))) {
+                                    graph,
+                                    new int[]{e1.recipe, e2.recipe, e3.recipe},
+                                    new long[]{1L, 1L, 1L},
+                                    null
+                                );
+                                if (macro != null
+                                        && hasPositiveExternalOutput(
+                                            macro,
+                                            dict.keyOf(a),
+                                            dict.keyOf(b),
+                                            dict.keyOf(c)
+                                        )) {
                                     mined.putIfAbsent(macro.macroKey(), macro);
                                 }
                             }
@@ -183,12 +191,12 @@ final class CycleMacroMiner {
                     }
                     // Try closing length 4: c -> d -> a.
                     List<EdgeInfo> l3 = outEdges.get(c);
-                    if (l3 == null || l3.size() > MAX_LONGER_DEGREE) {
+                    if (l3 == null || l3.size() > maxLongerDegree) {
                         continue;
                     }
                     for (EdgeInfo e3 : l3) {
                         expansions++;
-                        if (expansions >= MAX_LONGER_EXPANSIONS || mined.size() >= MAX_MACROS) {
+                        if (expansions >= maxLongerExpansions || mined.size() >= maxMacros) {
                             break;
                         }
                         int d = e3.toRes;
@@ -201,16 +209,24 @@ final class CycleMacroMiner {
                                 if (e4.recipe == e1.recipe || e4.recipe == e2.recipe || e4.recipe == e3.recipe) {
                                     continue;
                                 }
-                                if (e1.outAmt >= e2.inAmt && e2.outAmt >= e3.inAmt
-                                        && e3.outAmt >= e4.inAmt && e4.outAmt >= e1.inAmt) {
+                                if (e1.outAmt >= e2.inAmt
+                                        && e2.outAmt >= e3.inAmt
+                                        && e3.outAmt >= e4.inAmt
+                                        && e4.outAmt >= e1.inAmt) {
                                     CompiledCycleMacro macro = buildMacro(
-                                            graph,
-                                            new int[]{e1.recipe, e2.recipe, e3.recipe, e4.recipe},
-                                            new long[]{1L, 1L, 1L, 1L},
-                                            null
+                                        graph,
+                                        new int[]{e1.recipe, e2.recipe, e3.recipe, e4.recipe},
+                                        new long[]{1L, 1L, 1L, 1L},
+                                        null
                                     );
-                                    if (macro != null && hasPositiveExternalOutput(
-                                            macro, dict.keyOf(a), dict.keyOf(b), dict.keyOf(c), dict.keyOf(d))) {
+                                    if (macro != null
+                                            && hasPositiveExternalOutput(
+                                                macro,
+                                                dict.keyOf(a),
+                                                dict.keyOf(b),
+                                                dict.keyOf(c),
+                                                dict.keyOf(d)
+                                            )) {
                                         mined.putIfAbsent(macro.macroKey(), macro);
                                     }
                                 }
@@ -228,12 +244,12 @@ final class CycleMacroMiner {
 
     private static boolean isEligibleForMacro(IndexedRecipeGraph graph, int r) {
         RecipeRole role = graph.roleOf(r);
-        if (role == RecipeRole.REVERSIBLE_PACKING
-                || role == RecipeRole.REVERSIBLE_RECOLORING
-                || role == RecipeRole.RECYCLING) {
+        if (role == RecipeRole.reversiblePacking
+                || role == RecipeRole.reversibleRecoloring
+                || role == RecipeRole.recycling) {
             return false;
         }
-        return graph.advisoryOf(r) != RecipeAdvisory.LAST_RESORT;
+        return graph.advisoryOf(r) != RecipeAdvisory.lastResort;
     }
 
     private static boolean isSingleCandidateRecipe(IndexedRecipeGraph graph, CandidateTable cands, int r) {
@@ -250,11 +266,11 @@ final class CycleMacroMiner {
         return graph.outEnd(r) > graph.outStart(r);
     }
 
-    private static long[] findMinimalLen2Multipliers(long a1, long b1, long b2, long a2) {
-        for (int sum = 2; sum <= MAX_LEN2_MULT * 2; sum++) {
-            for (int m1 = 1; m1 <= Math.min(MAX_LEN2_MULT, sum - 1); m1++) {
+    private static long @Nullable [] findMinimalLen2Multipliers(long a1, long b1, long b2, long a2) {
+        for (int sum = 2; sum <= maxLen2Mult * 2; sum++) {
+            for (int m1 = 1; m1 <= Math.min(maxLen2Mult, sum - 1); m1++) {
                 int m2 = sum - m1;
-                if (m2 < 1 || m2 > MAX_LEN2_MULT) {
+                if (m2 < 1 || m2 > maxLen2Mult) {
                     continue;
                 }
                 if (SafeMath.mulSaturating(m1, b1) >= SafeMath.mulSaturating(m2, b2)
@@ -267,11 +283,11 @@ final class CycleMacroMiner {
     }
 
     /** Computes exact netDelta and peak intra-iteration draw as workingSeeds. */
-    private static CompiledCycleMacro buildMacro(
-            IndexedRecipeGraph graph,
-            int[] recipeIds,
-            long[] multipliers,
-            Map<Integer, Long> explicitMinSeeds
+    private static @Nullable CompiledCycleMacro buildMacro(
+        IndexedRecipeGraph graph,
+        int[] recipeIds,
+        long[] multipliers,
+        @Nullable Map<Integer, Long> explicitMinSeeds
     ) {
         ResourceDictionary dict = graph.resourceDict();
         CandidateTable cands = graph.candidateTable();
@@ -296,7 +312,9 @@ final class CycleMacroMiner {
                 int catRes = members[0];
                 int dur = graph.catDurCost(ci);
                 int maxDur = graph.catMaxDur(ci);
-                long needed = (dur > 0 && maxDur > 0) ? SafeMath.ceilDiv(SafeMath.mulSaturating(mult, dur), maxDur) : 1L;
+                long needed = (dur > 0 && maxDur > 0)
+                        ? SafeMath.ceilDiv(SafeMath.mulSaturating(mult, dur), maxDur)
+                        : 1L;
                 long cur = running.getOrDefault(catRes, 0L);
                 long reqAtStart = Math.max(needed, needed - cur);
                 catalystMin.merge(catRes, reqAtStart, Math::max);
@@ -336,7 +354,9 @@ final class CycleMacroMiner {
         for (int resId : allTouched) {
             long delta = running.getOrDefault(resId, 0L);
             ResourceKey rk = dict.keyOf(resId);
-            if (delta != 0L || peakDraw.containsKey(resId) || catalystMin.containsKey(resId)
+            if (delta != 0L
+                    || peakDraw.containsKey(resId)
+                    || catalystMin.containsKey(resId)
                     || (explicitMinSeeds != null && explicitMinSeeds.containsKey(resId))) {
                 netDelta.put(rk, delta);
             }
@@ -405,6 +425,5 @@ final class CycleMacroMiner {
         return false;
     }
 
-    private record EdgeInfo(int recipe, int fromRes, long inAmt, int toRes, long outAmt) {
-    }
+    private record EdgeInfo(int recipe, int fromRes, long inAmt, int toRes, long outAmt) {}
 }

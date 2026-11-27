@@ -1,8 +1,9 @@
 package dev.vfyjxf.cirrus.api.recipe.screening;
 
+import dev.vfyjxf.cirrus.util.CirrusNamespaces;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -42,9 +43,9 @@ public record RecipeScreeningHints(
 
     public boolean isEmpty() {
         return usePolicy == RecipeUsePolicy.normal
-            && penalty == 0
-            && roles.isEmpty()
-            && (reasonKey == null || reasonKey.isBlank());
+                && penalty == 0
+                && roles.isEmpty()
+                && (reasonKey == null || reasonKey.isBlank());
     }
 
     public RecipeScreeningHints merge(RecipeScreeningHints other) {
@@ -87,10 +88,9 @@ public record RecipeScreeningHints(
         private RecipeUsePolicy usePolicy = RecipeUsePolicy.normal;
         private int penalty;
         private final LinkedHashSet<Namespace> roles = new LinkedHashSet<>();
-        private String reasonKey;
+        private @Nullable String reasonKey;
 
-        private Builder() {
-        }
+        private Builder() {}
 
         public Builder policy(RecipeUsePolicy policy) {
             this.usePolicy = Checks.checkNotNull(policy, "policy");
@@ -114,7 +114,7 @@ public record RecipeScreeningHints(
         }
 
         public Builder recycling() {
-            roles.add(Namespace.of("cirrus", "screening/role/recycling"));
+            roles.add(CirrusNamespaces.ofInternal("screening/role/recycling"));
             return this;
         }
 

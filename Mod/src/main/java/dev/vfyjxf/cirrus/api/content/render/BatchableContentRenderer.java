@@ -17,7 +17,15 @@ public interface BatchableContentRenderer<T> extends ContentRenderer<T> {
         graphics.pose().popPose();
     }
 
-    default void renderAt(GuiGraphics graphics, ContentKind<T> content, int x, int y, int width, int height, float delta) {
+    default void renderAt(
+        GuiGraphics graphics,
+        ContentKind<T> content,
+        int x,
+        int y,
+        int width,
+        int height,
+        float delta
+    ) {
         renderAt(graphics, content.value(), x, y, width, height, delta);
     }
 
@@ -27,14 +35,7 @@ public interface BatchableContentRenderer<T> extends ContentRenderer<T> {
         }
     }
 
-    record Entry<T>(
-        ContentKind<T> content,
-        int x,
-        int y,
-        int width,
-        int height
-    ) {
-    }
+    record Entry<T>(ContentKind<T> content, int x, int y, int width, int height) {}
 
     final class Batch {
         private final GuiGraphics graphics;
@@ -56,7 +57,7 @@ public interface BatchableContentRenderer<T> extends ContentRenderer<T> {
             }
             ContentRenderer<?> renderer = ContentRenderer.getContentRenderer(content);
             entries.computeIfAbsent(renderer, ignored -> new ArrayList<>())
-                .add(new Entry<>(content, x, y, width, height));
+                    .add(new Entry<>(content, x, y, width, height));
         }
 
         public boolean isEmpty() {

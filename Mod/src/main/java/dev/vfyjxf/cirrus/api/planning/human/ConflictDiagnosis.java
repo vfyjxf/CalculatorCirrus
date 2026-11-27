@@ -6,9 +6,9 @@ import java.util.List;
 import java.util.Objects;
 
 public record ConflictDiagnosis(
-        ResourceKey blockedResource,
-        List<String> minimalConflictRuleIds,
-        String suggestedResolutionKey
+    ResourceKey blockedResource,
+    List<String> minimalConflictRuleIds,
+    String suggestedResolutionKey
 ) {
 
     public ConflictDiagnosis {

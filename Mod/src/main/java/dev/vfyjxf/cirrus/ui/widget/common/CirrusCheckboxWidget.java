@@ -1,7 +1,8 @@
 package dev.vfyjxf.cirrus.ui.widget.common;
 
-import dev.vfyjxf.cirrus.ui.CirrusTextures;
+import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusUiSound;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
@@ -21,6 +22,7 @@ public class CirrusCheckboxWidget extends Widget {
     public CirrusCheckboxWidget(BooleanSupplier selected, Consumer<Boolean> setter) {
         this.selected = selected == null ? () -> false : selected;
         this.setter = setter == null ? ignored -> {} : setter;
+        addStyleClass("cirrus-button");
         useStyle(sizeOf(defaultSize, defaultSize));
         onMouseClick((input, clickCount, context) -> {
             if (!input.isLeftClick()) {
@@ -56,18 +58,22 @@ public class CirrusCheckboxWidget extends Widget {
     @Override
     protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
         boolean checked = selected();
-        CirrusControlChrome.renderButtonBackground(canvas, 0, 0, width(), height(), false, hovered(), true);
-        var icon = checked
-            ? hovered() ? CirrusTextures.Toggle.Checked.selectHover : CirrusTextures.Toggle.Checked.select
-            : hovered() ? CirrusTextures.Toggle.Checked.unselectHover : CirrusTextures.Toggle.Checked.unselect;
-        int iconWidth = Math.min(icon.width(), Math.max(1, width() - iconPadding));
-        int iconHeight = Math.min(icon.height(), Math.max(1, height() - iconPadding));
-        canvas.texture(
-            icon,
-            Math.max(0, CirrusControlChrome.centeredIconX(width(), iconWidth)),
-            Math.max(0, CirrusControlChrome.centeredCheckboxIconY(height(), iconHeight)),
-            iconWidth,
-            iconHeight
-        );
+        CirrusPalette palette = CirrusUiTheme.palette(this);
+        if (checked) {
+            canvas.texture(CirrusUiTheme.textures(this).ctaPrimary(), 0, 0, width(), height());
+            int cx = width() / 2;
+            int cy = height() / 2;
+            canvas.fill(cx - 3, cy, 2, 1, palette.textOnAccent());
+            canvas.fill(cx - 2, cy + 1, 2, 1, palette.textOnAccent());
+            canvas.fill(cx - 1, cy + 2, 2, 1, palette.textOnAccent());
+            canvas.fill(cx, cy, 2, 2, palette.textOnAccent());
+            canvas.fill(cx + 1, cy - 1, 2, 2, palette.textOnAccent());
+            canvas.fill(cx + 2, cy - 2, 2, 2, palette.textOnAccent());
+        } else {
+            canvas.texture(CirrusUiTheme.textures(this).recessed(), 0, 0, width(), height());
+            if (hovered()) {
+                canvas.strokeRect(0, 0, width(), height(), palette.focusRing(), 1);
+            }
+        }
     }
 }

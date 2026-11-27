@@ -9,7 +9,8 @@ public final class CirrusLifecycleStates {
 
     private static final LifecycleStates states = LifecycleStates.create(CirrusConstants.modId);
 
-    public static final LifecycleState<Connection> clientConnection = states.context("client_connection", Connection.class);
+    public static final LifecycleState<Connection> clientConnection = states
+            .context("client_connection", Connection.class);
     public static final LifecycleState<Void> tagsReady = states.event("tags_ready");
     public static final LifecycleState<Void> recipesReady = states.event("recipes_ready");
     public static final LifecycleState<Void> dataMapsReady = states.event("data_maps_ready");

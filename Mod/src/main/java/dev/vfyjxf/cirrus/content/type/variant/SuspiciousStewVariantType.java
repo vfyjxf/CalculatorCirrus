@@ -15,21 +15,24 @@ public class SuspiciousStewVariantType extends BasicVariantType<Item, ItemStack>
     public static final SuspiciousStewVariantType instance = new SuspiciousStewVariantType();
 
     private SuspiciousStewVariantType() {
-        super(Namespace.ofMc("suspicious_stew"), CirrusTypes.Contents.ITEM_STACK);
+        super(Namespace.ofMc("suspicious_stew"), CirrusTypes.Contents.itemStack);
     }
 
     @Override
     public ItemStack copyWithIdentity(ItemStack stack) {
         if (stack.getItem() != Items.SUSPICIOUS_STEW) return ItemStack.EMPTY;
         ItemStack ret = new ItemStack(Items.SUSPICIOUS_STEW, stack.getCount());
-        ret.set(DataComponents.SUSPICIOUS_STEW_EFFECTS, stack.getOrDefault(DataComponents.SUSPICIOUS_STEW_EFFECTS, SuspiciousStewEffects.EMPTY));
+        ret.set(
+            DataComponents.SUSPICIOUS_STEW_EFFECTS,
+            stack.getOrDefault(DataComponents.SUSPICIOUS_STEW_EFFECTS, SuspiciousStewEffects.EMPTY)
+        );
         return ret;
     }
 
     @Override
     public boolean matchesVariantIdentity(ItemStack stack1, ItemStack stack2) {
         return stack1.getOrDefault(DataComponents.SUSPICIOUS_STEW_EFFECTS, SuspiciousStewEffects.EMPTY)
-                     .equals(stack2.getOrDefault(DataComponents.SUSPICIOUS_STEW_EFFECTS, SuspiciousStewEffects.EMPTY));
+                .equals(stack2.getOrDefault(DataComponents.SUSPICIOUS_STEW_EFFECTS, SuspiciousStewEffects.EMPTY));
     }
 
     @Override

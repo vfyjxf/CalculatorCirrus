@@ -5,7 +5,7 @@ import dev.vfyjxf.cirrus.api.content.type.VariantType;
 import dev.vfyjxf.cirrus.api.content.value.ContentKind;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import net.minecraft.core.component.DataComponentMap;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.function.BiPredicate;
 
@@ -25,11 +25,11 @@ import java.util.function.BiPredicate;
  * @see VariantType
  */
 public record MatchStrategy(
-        boolean withIdentity,
-        boolean withAmount,
-        boolean withComponent,
-        BiPredicate<DataComponentMap, DataComponentMap> componentMatcher,
-        boolean usesExactComponents
+    boolean withIdentity,
+    boolean withAmount,
+    boolean withComponent,
+    BiPredicate<DataComponentMap, DataComponentMap> componentMatcher,
+    boolean usesExactComponents
 ) {
 
     //region Extra Component Match Strategies
@@ -47,10 +47,10 @@ public record MatchStrategy(
     //endregion
 
     public MatchStrategy(
-            boolean withIdentity,
-            boolean withAmount,
-            boolean withComponent,
-            BiPredicate<DataComponentMap, DataComponentMap> componentMatcher
+        boolean withIdentity,
+        boolean withAmount,
+        boolean withComponent,
+        BiPredicate<DataComponentMap, DataComponentMap> componentMatcher
     ) {
         this(withIdentity, withAmount, withComponent, componentMatcher, withComponent && componentMatcher == same);
     }
@@ -66,11 +66,7 @@ public record MatchStrategy(
         };
     }
 
-    public MatchStrategy(
-            boolean withIdentity,
-            boolean withAmount,
-            boolean withComponent
-    ) {
+    public MatchStrategy(boolean withIdentity, boolean withAmount, boolean withComponent) {
         this(withIdentity, withAmount, withComponent, withComponent ? same : nothing);
     }
 

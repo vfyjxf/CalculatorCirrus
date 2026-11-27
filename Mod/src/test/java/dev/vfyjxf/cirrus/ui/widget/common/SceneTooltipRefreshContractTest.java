@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.widget.common;
 
+import dev.vfyjxf.cirrus.testutil.Reflect;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.ui.base.Scene;
 import dev.vfyjxf.cloudlib.api.ui.base.SceneContext;
@@ -12,7 +13,6 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -24,8 +24,9 @@ class SceneTooltipRefreshContractTest {
     void hoverTooltipRefreshesAfterClickWithoutMouseMove() throws Exception {
         AtomicBoolean enabled = new AtomicBoolean(false);
         TestRoot root = new TestRoot();
-        root.onHoverTooltip((mouseX, mouseY) -> Tooltip.create()
-            .add(Component.literal(enabled.get() ? "enabled" : "disabled")));
+        root.onHoverTooltip(
+            (mouseX, mouseY) -> Tooltip.create().add(Component.literal(enabled.get() ? "enabled" : "disabled"))
+        );
         root.onMouseClick((input, clickCount, context) -> {
             enabled.set(!enabled.get());
             context.consume();
@@ -46,13 +47,9 @@ class SceneTooltipRefreshContractTest {
         assertEquals(List.of("enabled"), hoverTooltipLines(scene));
     }
 
-    private static List<String> hoverTooltipLines(Scene scene) throws Exception {
-        Field field = Scene.class.getDeclaredField("hoverTooltip");
-        field.setAccessible(true);
-        Tooltip tooltip = (Tooltip) field.get(scene);
-        return tooltip.flatEntries().stream()
-            .map(SceneTooltipRefreshContractTest::entryText)
-            .toList();
+    private static List<String> hoverTooltipLines(Scene scene) {
+        Tooltip tooltip = Reflect.field(scene, "hoverTooltip", Tooltip.class);
+        return tooltip.flatEntries().stream().map(SceneTooltipRefreshContractTest::entryText).toList();
     }
 
     private static String entryText(TooltipEntry entry) {
@@ -60,12 +57,15 @@ class SceneTooltipRefreshContractTest {
             case TooltipEntry.TextEntry text -> text.text().getString();
             case TooltipEntry.DynamicEntry dynamic -> dynamic.provider().get().getString();
             case TooltipEntry.ComponentEntry ignored -> "";
+            case TooltipEntry.RichTextEntry rich -> rich.text().toComponent().getString();
         };
     }
 
     private static SceneHost testSceneHost() {
         return new SceneHost() {
             @Override
+            // Headless host: no Minecraft Font exists in unit tests, and the paths under test never read it.
+            @SuppressWarnings("NullAway")
             public Font font() {
                 return null;
             }

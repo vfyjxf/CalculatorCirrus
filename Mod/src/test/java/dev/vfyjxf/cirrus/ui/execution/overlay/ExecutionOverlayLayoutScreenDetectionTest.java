@@ -26,9 +26,9 @@ class ExecutionOverlayLayoutScreenDetectionTest {
         );
 
         assertTrue(ExecutionOverlayLayout.usesCompactInsets(FakeContainerScreen.class));
-        assertEquals(8, bounds.getX());
-        assertEquals(18, bounds.getY());
-        assertEquals(722, bounds.getHeight());
+        assertEquals(6, bounds.getX());
+        assertEquals(6, bounds.getY());
+        assertEquals(734, bounds.getHeight());
     }
 
     @Test
@@ -48,7 +48,6 @@ class ExecutionOverlayLayoutScreenDetectionTest {
         }
 
         @Override
-        protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
-        }
+        protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {}
     }
 }

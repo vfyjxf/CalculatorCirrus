@@ -14,7 +14,7 @@ public class EnchantedBookVariantType extends BasicVariantType<Item, ItemStack> 
     public static final EnchantedBookVariantType instance = new EnchantedBookVariantType();
 
     private EnchantedBookVariantType() {
-        super(Namespace.ofMc("enchanted_book"), CirrusTypes.Contents.ITEM_STACK);
+        super(Namespace.ofMc("enchanted_book"), CirrusTypes.Contents.itemStack);
     }
 
     @Override
@@ -41,4 +41,3 @@ public class EnchantedBookVariantType extends BasicVariantType<Item, ItemStack> 
     }
 
 }
-

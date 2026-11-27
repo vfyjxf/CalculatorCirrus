@@ -4,10 +4,10 @@ import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
-import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -31,10 +31,8 @@ public final class FluidContainerContent implements ComplexContent {
         if (amount <= 0 || sampleContainer.isEmpty() || requiredFluids.isEmpty()) {
             return empty;
         }
-        ImmutableList<ContentStack<Fluid, FluidStack>> fluids = Lists.immutable
-            .ofAll(requiredFluids)
-            .reject(ContentStack::isEmpty)
-            .collect(ContentStack::copy);
+        ImmutableList<ContentStack<Fluid, FluidStack>> fluids = Lists.immutable.ofAll(requiredFluids)
+                .reject(ContentStack::isEmpty).collect(ContentStack::copy);
         if (fluids.isEmpty()) {
             return empty;
         }
@@ -134,7 +132,8 @@ public final class FluidContainerContent implements ComplexContent {
                 if (fluid.isEmpty()) {
                     continue;
                 }
-                ContentStack<Fluid, FluidStack> candidate = ContentStack.fromStack(CirrusTypes.Contents.FLUID_STACK, fluid, fluid.getAmount());
+                ContentStack<Fluid, FluidStack> candidate = ContentStack
+                        .fromStack(CirrusTypes.Contents.fluidStack, fluid, fluid.getAmount());
                 if (candidate.matches(required, MatchStrategy.identityAndComponent)) {
                     found += candidate.amount();
                 }
@@ -153,12 +152,8 @@ public final class FluidContainerContent implements ComplexContent {
 
     @Override
     public String toString() {
-        return "FluidContainerContent{" +
-               "sampleContainer=" + sampleContainer +
-               ", requiredFluids=" + requiredFluids +
-               ", amount=" + amount +
-               ", chance=" + chance +
-               '}';
+        return "FluidContainerContent{" + "sampleContainer=" + sampleContainer + ", requiredFluids=" + requiredFluids
+                + ", amount=" + amount + ", chance=" + chance + '}';
     }
 
     @Override

@@ -2,10 +2,12 @@ package dev.vfyjxf.cirrus.api.content.util;
 
 import dev.vfyjxf.cirrus.api.content.type.TagType;
 import dev.vfyjxf.cloudlib.api.util.MutableLists;
+import net.minecraft.core.Holder;
 import net.minecraft.tags.TagKey;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.set.MutableSet;
 import org.eclipse.collections.impl.factory.Sets;
+import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -18,7 +20,7 @@ final class TagLookupImpl<T> implements TagLookup<T> {
     private final LinkedHashSet<T> includes = new LinkedHashSet<>();
     private final LinkedHashSet<T> excludes = new LinkedHashSet<>();
     private final MutableList<Predicate<T>> customPredicates = MutableLists.empty();
-    private Set<T> exactSet;
+    private @Nullable Set<T> exactSet;
 
     TagLookupImpl(TagType<T> tagType) {
         this.tagType = tagType;
@@ -82,7 +84,7 @@ final class TagLookupImpl<T> implements TagLookup<T> {
         int count = 0;
         for (Object rawHolder : holders) {
             @SuppressWarnings("unchecked")
-            T value = ((net.minecraft.core.Holder<T>) rawHolder).value();
+            T value = ((Holder<T>) rawHolder).value();
             count++;
             if (excludes.contains(value)) {
                 return false;
@@ -105,8 +107,7 @@ final class TagLookupImpl<T> implements TagLookup<T> {
         return remainingIncludes == null || remainingIncludes.isEmpty();
     }
 
-    private sealed interface QueryPredicate {
-    }
+    private sealed interface QueryPredicate {}
 
     private record Include<T>(T target) implements QueryPredicate {}
 

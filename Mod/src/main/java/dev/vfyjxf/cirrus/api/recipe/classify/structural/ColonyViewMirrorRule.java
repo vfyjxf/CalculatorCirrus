@@ -23,14 +23,13 @@ import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifyView;
 public final class ColonyViewMirrorRule implements ClassificationRule {
 
     public static final ColonyViewMirrorRule instance = new ColonyViewMirrorRule();
-    public static final String ID = "cirrus:structural/colony_view_mirror";
+    public static final String id = "cirrus:structural/colony_view_mirror";
 
-    private ColonyViewMirrorRule() {
-    }
+    private ColonyViewMirrorRule() {}
 
     @Override
     public String id() {
-        return ID;
+        return id;
     }
 
     @Override
@@ -59,14 +58,14 @@ public final class ColonyViewMirrorRule implements ClassificationRule {
             }
         }
         if (hasOtherProducer) {
-            sink.tag(ClassificationTags.DUPLICATE);
+            sink.tag(ClassificationTags.duplicate);
         } else {
-            sink.tag(ClassificationTags.EXCHANGE);
+            sink.tag(ClassificationTags.exchange);
         }
     }
 
     private static boolean isColonyViewSystem(String systemId) {
         return systemId.startsWith("jei:category/minecolonies/")
-            || systemId.startsWith("cirrus_test:jei__category/minecolonies/");
+                || systemId.startsWith("cirrus_test:jei__category/minecolonies/");
     }
 }

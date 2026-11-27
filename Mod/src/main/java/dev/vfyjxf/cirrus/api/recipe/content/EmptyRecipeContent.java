@@ -78,8 +78,9 @@ public final class EmptyRecipeContent implements InputContent, OutputContent {
     public String toString() {
         return "empty content";
     }
+
     @Override
     public RecipeContentType<? extends RecipeContent> recipeType() {
-        return RecipeContentType.EMPTY;
+        return RecipeContentType.empty;
     }
 }

@@ -17,11 +17,8 @@ class ProjectionContextOptionRegistryTest {
 
     @Test
     void recipeApiExposesProjectionContextOptionsForPreviewUi() {
-        ExecutionContextKey<Long> key = ExecutionContextKey.create(
-            ResourceLocation.fromNamespaceAndPath("test", "projection_context/overclock"),
-            Long.class,
-            1L
-        );
+        ExecutionContextKey<Long> key = ExecutionContextKey
+                .create(ResourceLocation.fromNamespaceAndPath("test", "projection_context/overclock"), Long.class, 1L);
         LongProjectionContextOption option = new LongProjectionContextOption(
             Namespace.of("test", "projection_context/overclock"),
             ProjectionPlugin.builtin,

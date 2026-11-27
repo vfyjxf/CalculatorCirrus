@@ -1,12 +1,15 @@
 package dev.vfyjxf.cirrus.api.content;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
+import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.alchemy.Potion;
 import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.world.item.component.CustomData;
@@ -33,11 +36,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MatchStrategyCanonicalFastPathTest {
 
     /** Semantically identical to {@link MatchStrategy#identityAndComponent} but fast-path ineligible. */
-    private static final MatchStrategy SLOW_REFERENCE =
-            new MatchStrategy(true, false, true, (a, b) -> Objects.equals(a, b));
+    private static final MatchStrategy slowReference = new MatchStrategy(
+        true,
+        false,
+        true,
+        (a, b) -> Objects.equals(a, b)
+    );
 
     @Test
-    void fastPathAgreesWithSlowPath(net.minecraft.server.MinecraftServer server) {
+    void fastPathAgreesWithSlowPath(MinecraftServer server) {
         for (ItemStack left : fixtures()) {
             for (ItemStack right : fixtures()) {
                 ContentStack<Item, ItemStack> leftStack = ContentStack.fromStack(left);
@@ -45,7 +52,7 @@ class MatchStrategyCanonicalFastPathTest {
 
                 boolean expected = ItemStack.isSameItemSameComponents(left, right);
                 boolean fast = leftStack.matches(rightStack, MatchStrategy.identityAndComponent);
-                boolean slow = leftStack.matches(rightStack, SLOW_REFERENCE);
+                boolean slow = leftStack.matches(rightStack, slowReference);
 
                 assertEquals(expected, fast, describe(left) + " vs " + describe(right) + " (fast path)");
                 assertEquals(expected, slow, describe(left) + " vs " + describe(right) + " (slow reference)");
@@ -54,7 +61,7 @@ class MatchStrategyCanonicalFastPathTest {
     }
 
     @Test
-    void randomizedDifferentialAgreesWithVanilla(net.minecraft.server.MinecraftServer server) {
+    void randomizedDifferentialAgreesWithVanilla(MinecraftServer server) {
         SplittableRandom random = new SplittableRandom(0xC1CA5);
         for (int i = 0; i < 500; i++) {
             ItemStack left = randomStack(random, i);
@@ -62,16 +69,14 @@ class MatchStrategyCanonicalFastPathTest {
             ItemStack right = random.nextBoolean() ? left.copy() : randomStack(random, i);
 
             boolean expected = ItemStack.isSameItemSameComponents(left, right);
-            boolean actual = ContentStack.fromStack(left).matches(
-                    ContentStack.fromStack(right),
-                    MatchStrategy.identityAndComponent
-            );
+            boolean actual = ContentStack.fromStack(left)
+                    .matches(ContentStack.fromStack(right), MatchStrategy.identityAndComponent);
             assertEquals(expected, actual, "random case " + i + ": " + describe(left) + " vs " + describe(right));
         }
     }
 
     @Test
-    void amountStrategiesStillRespectAmount(net.minecraft.server.MinecraftServer server) {
+    void amountStrategiesStillRespectAmount(MinecraftServer server) {
         ContentStack<Item, ItemStack> left = ContentStack.fromStack(new ItemStack(Items.DIAMOND, 3));
         ContentStack<Item, ItemStack> right = ContentStack.fromStack(new ItemStack(Items.DIAMOND, 5));
 
@@ -81,7 +86,7 @@ class MatchStrategyCanonicalFastPathTest {
     }
 
     @Test
-    void customComponentMatcherIsNotFastPathed(net.minecraft.server.MinecraftServer server) {
+    void customComponentMatcherIsNotFastPathed(MinecraftServer server) {
         // A non-exact matcher keeps its own semantics: component-blind "nothing" must match
         // different components when combined with identity.
         MatchStrategy componentBlind = new MatchStrategy(true, false, true, MatchStrategy.nothing);
@@ -97,27 +102,29 @@ class MatchStrategyCanonicalFastPathTest {
     }
 
     @Test
-    void potionVariantsDifferThroughComponents(net.minecraft.server.MinecraftServer server) {
+    void potionVariantsDifferThroughComponents(MinecraftServer server) {
         ContentStack<Item, ItemStack> healing = ContentStack.fromStack(potion(Potions.HEALING));
         ContentStack<Item, ItemStack> regeneration = ContentStack.fromStack(potion(Potions.REGENERATION));
 
         assertFalse(healing.matches(regeneration, MatchStrategy.identityAndComponent));
-        assertTrue(healing.matches(ContentStack.fromStack(potion(Potions.HEALING)), MatchStrategy.identityAndComponent));
+        assertTrue(
+            healing.matches(ContentStack.fromStack(potion(Potions.HEALING)), MatchStrategy.identityAndComponent)
+        );
     }
 
     //region fixtures
 
     private static List<ItemStack> fixtures() {
         return List.of(
-                new ItemStack(Items.STONE),
-                new ItemStack(Items.DIAMOND_SWORD),
-                sword("Fire"),
-                sword("Frost"),
-                swordWithDamage("Fire", 7),
-                potion(Potions.HEALING),
-                potion(Potions.REGENERATION),
-                container("Diamond"),
-                container("Emerald")
+            new ItemStack(Items.STONE),
+            new ItemStack(Items.DIAMOND_SWORD),
+            sword("Fire"),
+            sword("Frost"),
+            swordWithDamage("Fire", 7),
+            potion(Potions.HEALING),
+            potion(Potions.REGENERATION),
+            container("Diamond"),
+            container("Emerald")
         );
     }
 
@@ -135,7 +142,7 @@ class MatchStrategyCanonicalFastPathTest {
         return stack;
     }
 
-    private static ItemStack potion(net.minecraft.core.Holder<net.minecraft.world.item.alchemy.Potion> potion) {
+    private static ItemStack potion(Holder<Potion> potion) {
         ItemStack stack = new ItemStack(Items.POTION);
         stack.set(DataComponents.POTION_CONTENTS, new PotionContents(potion));
         return stack;

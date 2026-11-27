@@ -28,9 +28,6 @@ record TypedContentValue<T>(ValueType<T> type, T content) implements ContentValu
 
     @Override
     public String toString() {
-        return "TypedContentValue{" +
-               "type=" + type.typeId() +
-               ", content=" + type.toString(content) +
-               '}';
+        return "TypedContentValue{" + "type=" + type.typeId() + ", content=" + type.toString(content) + '}';
     }
 }

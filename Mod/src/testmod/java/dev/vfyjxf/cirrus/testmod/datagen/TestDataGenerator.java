@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.testmod.datagen;
 
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
+import dev.vfyjxf.cirrus.testmod.TestMod;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -36,19 +37,17 @@ import java.util.TreeSet;
  *
  * <p>Run with {@code bash gradlew :Mod:generateTestModData}. The export
  * directory is expected at {@code /tmp/cirrus_exports} (unzip
- * {@code exports_副本.7z} there); when absent, bulk generation is skipped and
+ * {@code exports_副本.7z} there); when absent, bulk generation is skipped and // NOPMD - literal file name
  * only the showcase data is written.
  */
 public final class TestDataGenerator {
 
-    private static final String NS = dev.vfyjxf.cirrus.testmod.TestMod.MOD_ID;
-    private static final Path EXPORT_ROOT = Path.of("/tmp/cirrus_exports");
+    private static final String ns = TestMod.modId;
+    private static final Path exportRoot = Path.of("/tmp/cirrus_exports");
 
-    private static final String[] MODEL_TEXTURES = {
-        "minecraft:item/iron_ingot", "minecraft:item/brick", "minecraft:item/coal",
-        "minecraft:item/redstone", "minecraft:item/emerald", "minecraft:item/lapis_lazuli",
-        "minecraft:item/quartz", "minecraft:item/slime_ball"
-    };
+    private static final String[] modelTextures = {"minecraft:item/iron_ingot", "minecraft:item/brick",
+            "minecraft:item/coal", "minecraft:item/redstone", "minecraft:item/emerald", "minecraft:item/lapis_lazuli",
+            "minecraft:item/quartz", "minecraft:item/slime_ball"};
 
     public static void main(String[] args) throws IOException {
         Path resources = locateResources();
@@ -66,12 +65,12 @@ public final class TestDataGenerator {
 
     /** Everything under these paths is generator-owned; wipe before regenerating. */
     private static void cleanGenerated(Path resources) throws IOException {
-        deleteRecursively(resources.resolve("assets/" + NS + "/models/item"));
-        deleteRecursively(resources.resolve("data/" + NS + "/recipe"));
-        deleteRecursively(resources.resolve("data/" + NS + "/tags"));
-        Files.deleteIfExists(resources.resolve("assets/" + NS + "/lang/en_us.json"));
-        Files.deleteIfExists(resources.resolve("data/" + NS + "/bulk_recipes.json"));
-        Files.deleteIfExists(resources.resolve("data/" + NS + "/mimic_manifest.json"));
+        deleteRecursively(resources.resolve("assets/" + ns + "/models/item"));
+        deleteRecursively(resources.resolve("data/" + ns + "/recipe"));
+        deleteRecursively(resources.resolve("data/" + ns + "/tags"));
+        Files.deleteIfExists(resources.resolve("assets/" + ns + "/lang/en_us.json"));
+        Files.deleteIfExists(resources.resolve("data/" + ns + "/bulk_recipes.json"));
+        Files.deleteIfExists(resources.resolve("data/" + ns + "/mimic_manifest.json"));
     }
 
     private static void deleteRecursively(Path dir) throws IOException {
@@ -89,25 +88,37 @@ public final class TestDataGenerator {
     //region showcase (hand-designed demo shapes)
 
     private static void generateShowcase(Path resources, List<String> written) throws IOException {
-        shapeless(written, resources, "dye_red", item(NS, "dummy_block_white"), result(NS, "dummy_block_red", 1));
-        shapeless(written, resources, "dye_blue", item(NS, "dummy_block_red"), result(NS, "dummy_block_blue", 1));
-        shapeless(written, resources, "dye_green", item(NS, "dummy_block_blue"), result(NS, "dummy_block_green", 1));
-        shapeless(written, resources, "dye_white", item(NS, "dummy_block_green"), result(NS, "dummy_block_white", 1));
-        shapeless(written, resources, "green_direct", item("minecraft", "glowstone"), result(NS, "dummy_block_green", 1));
+        shapeless(written, resources, "dye_red", item(ns, "dummy_block_white"), result(ns, "dummy_block_red", 1));
+        shapeless(written, resources, "dye_blue", item(ns, "dummy_block_red"), result(ns, "dummy_block_blue", 1));
+        shapeless(written, resources, "dye_green", item(ns, "dummy_block_blue"), result(ns, "dummy_block_green", 1));
+        shapeless(written, resources, "dye_white", item(ns, "dummy_block_green"), result(ns, "dummy_block_white", 1));
+        shapeless(
+            written,
+            resources,
+            "green_direct",
+            item("minecraft", "glowstone"),
+            result(ns, "dummy_block_green", 1)
+        );
 
-        shapeless(written, resources, "plate_from_ingot", item(NS, "dummy_ingot"), result(NS, "dummy_plate", 2));
-        shapeless(written, resources, "ingot_recycling_from_plate", item(NS, "dummy_plate"), result(NS, "dummy_ingot", 1));
+        shapeless(written, resources, "plate_from_ingot", item(ns, "dummy_ingot"), result(ns, "dummy_plate", 2));
+        shapeless(
+            written,
+            resources,
+            "ingot_recycling_from_plate",
+            item(ns, "dummy_plate"),
+            result(ns, "dummy_ingot", 1)
+        );
 
-        tag(written, resources, "charms", NS, "dummy_charm_a", "dummy_charm_b");
-        shapeless(written, resources, "charm_a_from_tag", tagIngredient(NS, "charms"), result(NS, "dummy_charm_a", 1));
-        shapeless(written, resources, "charm_b_from_tag", tagIngredient(NS, "charms"), result(NS, "dummy_charm_b", 1));
+        tag(written, resources, "charms", ns, "dummy_charm_a", "dummy_charm_b");
+        shapeless(written, resources, "charm_a_from_tag", tagIngredient(ns, "charms"), result(ns, "dummy_charm_a", 1));
+        shapeless(written, resources, "charm_b_from_tag", tagIngredient(ns, "charms"), result(ns, "dummy_charm_b", 1));
 
-        shapeless(written, resources, "z_final_via_mid", item(NS, "chain_mid"), result(NS, "dummy_final", 1));
-        shapeless(written, resources, "z_mid_from_raw_a", item(NS, "chain_raw_a"), result(NS, "chain_mid", 1));
-        shapeless(written, resources, "a_final_via_x3", item(NS, "chain_x3"), result(NS, "dummy_final", 1));
-        shapeless(written, resources, "a_x3_from_x2", item(NS, "chain_x2"), result(NS, "chain_x3", 1));
-        shapeless(written, resources, "a_x2_from_x1", item(NS, "chain_x1"), result(NS, "chain_x2", 1));
-        shapeless(written, resources, "a_x1_from_raw_b", item(NS, "chain_raw_b"), result(NS, "chain_x1", 1));
+        shapeless(written, resources, "z_final_via_mid", item(ns, "chain_mid"), result(ns, "dummy_final", 1));
+        shapeless(written, resources, "z_mid_from_raw_a", item(ns, "chain_raw_a"), result(ns, "chain_mid", 1));
+        shapeless(written, resources, "a_final_via_x3", item(ns, "chain_x3"), result(ns, "dummy_final", 1));
+        shapeless(written, resources, "a_x3_from_x2", item(ns, "chain_x2"), result(ns, "chain_x3", 1));
+        shapeless(written, resources, "a_x2_from_x1", item(ns, "chain_x1"), result(ns, "chain_x2", 1));
+        shapeless(written, resources, "a_x1_from_raw_b", item(ns, "chain_raw_b"), result(ns, "chain_x1", 1));
 
         model(written, resources, "dummy_block_white", "minecraft:block/white_concrete");
         model(written, resources, "dummy_block_red", "minecraft:block/red_concrete");
@@ -192,30 +203,31 @@ public final class TestDataGenerator {
         StringBuilder out = new StringBuilder(value.length());
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
-            boolean valid = c == '_' || c == '-' || c == '.' || c == '/'
-                || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+            boolean valid = c == '_'
+                    || c == '-'
+                    || c == '.'
+                    || c == '/'
+                    || (c >= 'a' && c <= 'z')
+                    || (c >= '0' && c <= '9');
             out.append(valid ? c : '_');
         }
         return out.toString();
     }
 
     private static String mimicId(String rawId) {
-        return NS + ":" + mimicName(rawId);
+        return ns + ":" + mimicName(rawId);
     }
 
     private static int generateBulk(Path resources, List<String> written, Map<String, String> lang) throws IOException {
-        Path packDir = EXPORT_ROOT.resolve(exportPack());
+        Path packDir = exportRoot.resolve(exportPack());
         if (!Files.isDirectory(packDir)) {
             System.out.println("export pack not found at " + packDir + ", skipping bulk generation");
             return 0;
         }
         Path recipesFile;
         try (var stream = Files.list(packDir)) {
-            recipesFile = stream
-                .filter(path -> path.getFileName().toString().startsWith("recipes-"))
-                .filter(path -> path.getFileName().toString().endsWith(".json"))
-                .findFirst()
-                .orElse(null);
+            recipesFile = stream.filter(path -> path.getFileName().toString().startsWith("recipes-"))
+                    .filter(path -> path.getFileName().toString().endsWith(".json")).findFirst().orElse(null);
         }
         if (recipesFile == null) {
             System.out.println("no recipes-*.json in " + packDir + ", skipping bulk generation");
@@ -258,11 +270,11 @@ public final class TestDataGenerator {
 
         // pass 2: rewrite the recipes onto mimic ids
         int[] count = {0};
-        Path bulkOut = resources.resolve("data/" + NS + "/bulk_recipes.json");
+        Path bulkOut = resources.resolve("data/" + ns + "/bulk_recipes.json");
         Files.createDirectories(bulkOut.getParent());
         Map<String, Set<String>> usedIds = new HashMap<>();
         try (JsonReader reader = new JsonReader(Files.newBufferedReader(recipesFile));
-             JsonWriter writer = new JsonWriter(Files.newBufferedWriter(bulkOut))) {
+                JsonWriter writer = new JsonWriter(Files.newBufferedWriter(bulkOut))) {
             writer.beginObject();
             writer.name("pack").value(exportPack());
             writer.name("recipes").beginArray();
@@ -288,16 +300,21 @@ public final class TestDataGenerator {
         writeManifest(resources, written, registryItems, registryFluids, systemMachine);
         writeTags(resources, written, tagMembers, fluidTags);
         for (String rawId : registryItems) {
-            lang.put("item." + NS + "." + mimicName(rawId), rawId);
-            model(written, resources, mimicName(rawId), MODEL_TEXTURES[Math.floorMod(rawId.hashCode(), MODEL_TEXTURES.length)]);
+            lang.put("item." + ns + "." + mimicName(rawId), rawId);
+            model(
+                written,
+                resources,
+                mimicName(rawId),
+                modelTextures[Math.floorMod(rawId.hashCode(), modelTextures.length)]
+            );
         }
         for (String rawId : registryFluids) {
-            lang.put("fluid_type." + NS + "." + mimicName(rawId), rawId);
+            lang.put("fluid_type." + ns + "." + mimicName(rawId), rawId);
         }
         System.out.println(
             "mimic content: " + registryItems.size() + " items, " + registryFluids.size() + " fluids, "
-                + (tagMembers.size() - fluidTags.size()) + " item tags, " + fluidTags.size() + " fluid tags, "
-                + systemMachine.size() + " systems"
+                    + (tagMembers.size() - fluidTags.size()) + " item tags, " + fluidTags.size() + " fluid tags, "
+                    + systemMachine.size() + " systems"
         );
         return count[0];
     }
@@ -373,7 +390,10 @@ public final class TestDataGenerator {
     }
 
     private static void scanContentArray(
-        JsonReader reader, Set<String> items, Set<String> fluids, Map<String, Set<String>> tagMembers
+        JsonReader reader,
+        Set<String> items,
+        Set<String> fluids,
+        Map<String, Set<String>> tagMembers
     ) throws IOException {
         reader.beginArray();
         while (reader.hasNext()) {
@@ -383,7 +403,12 @@ public final class TestDataGenerator {
         reader.endArray();
     }
 
-    private static void collectSlot(SlotBuffer slot, Set<String> items, Set<String> fluids, Map<String, Set<String>> tagMembers) {
+    private static void collectSlot(
+        SlotBuffer slot,
+        Set<String> items,
+        Set<String> fluids,
+        Map<String, Set<String>> tagMembers
+    ) {
         switch (slot.kind) {
             case "stack" -> collectStack(slot.stack, items, fluids);
             case "tag" -> {
@@ -396,8 +421,7 @@ public final class TestDataGenerator {
                     collectStack(stack, items, fluids);
                 }
             }
-            default -> {
-            }
+            default -> {}
         }
     }
 
@@ -467,9 +491,7 @@ public final class TestDataGenerator {
     }
 
     private static String uniqueRecipeId(String system, String rawId, int ordinal, Map<String, Set<String>> usedIds) {
-        String base = rawId == null || rawId.isBlank()
-            ? "r" + ordinal
-            : sanitize(rawId.replace(':', '/'));
+        String base = rawId == null || rawId.isBlank() ? "r" + ordinal : sanitize(rawId.replace(':', '/'));
         Set<String> used = usedIds.computeIfAbsent(system, key -> new HashSet<>());
         String candidate = base;
         int suffix = 2;
@@ -503,8 +525,7 @@ public final class TestDataGenerator {
                         }
                     }
                 }
-                default -> {
-                }
+                default -> {}
             }
         }
         return converted;
@@ -531,7 +552,8 @@ public final class TestDataGenerator {
             }
             case "tag" -> {
                 String kind = fluidTags.contains(slot.tagId) ? "ft" : "t";
-                writer.beginArray().value(kind).value(slot.tagId).value(Math.max(1, Math.round(slot.amount))).value(slot.chance).endArray();
+                writer.beginArray().value(kind).value(slot.tagId).value(Math.max(1, Math.round(slot.amount)))
+                        .value(slot.chance).endArray();
             }
             case "any", "typedAny" -> {
                 writer.beginArray().value("a").value(Math.max(1, Math.round(slot.amount))).value(slot.chance);
@@ -635,7 +657,7 @@ public final class TestDataGenerator {
         Set<String> fluids,
         Map<String, String> systemMachine
     ) throws IOException {
-        Path out = resources.resolve("data/" + NS + "/mimic_manifest.json");
+        Path out = resources.resolve("data/" + ns + "/mimic_manifest.json");
         try (JsonWriter writer = new JsonWriter(Files.newBufferedWriter(out))) {
             writer.beginObject();
             writer.name("pack").value(exportPack());
@@ -683,7 +705,7 @@ public final class TestDataGenerator {
                     values.append('"').append(mimicId(member)).append('"');
                 }
             }
-            Path file = resources.resolve("data/" + NS + "/tags/" + kind + "/" + mimicName(entry.getKey()) + ".json");
+            Path file = resources.resolve("data/" + ns + "/tags/" + kind + "/" + mimicName(entry.getKey()) + ".json");
             write(written, file, "{ \"values\": [" + values + "] }\n");
         }
     }
@@ -707,7 +729,7 @@ public final class TestDataGenerator {
             buffer.write(++i < lang.size() ? ",\n" : "\n");
         }
         buffer.write("}\n");
-        write(written, resources.resolve("assets/" + NS + "/lang/en_us.json"), buffer.toString());
+        write(written, resources.resolve("assets/" + ns + "/lang/en_us.json"), buffer.toString());
     }
 
     private static Path locateResources() {
@@ -734,19 +756,21 @@ public final class TestDataGenerator {
         return "{\"id\": \"" + namespace + ":" + id + "\", \"count\": " + count + "}";
     }
 
-    private static void shapeless(List<String> written, Path resources, String name, String ingredient, String result) throws IOException {
+    private static void shapeless(List<String> written, Path resources, String name, String ingredient, String result)
+            throws IOException {
         String json = """
-            {
-              "type": "minecraft:crafting_shapeless",
-              "category": "misc",
-              "ingredients": [%s],
-              "result": %s
-            }
-            """.formatted(ingredient, result);
-        write(written, resources.resolve("data/" + NS + "/recipe/" + name + ".json"), json);
+                {
+                  "type": "minecraft:crafting_shapeless",
+                  "category": "misc",
+                  "ingredients": [%s],
+                  "result": %s
+                }
+                """.formatted(ingredient, result);
+        write(written, resources.resolve("data/" + ns + "/recipe/" + name + ".json"), json);
     }
 
-    private static void tag(List<String> written, Path resources, String name, String namespace, String... members) throws IOException {
+    private static void tag(List<String> written, Path resources, String name, String namespace, String... members)
+            throws IOException {
         StringBuilder values = new StringBuilder();
         for (int i = 0; i < members.length; i++) {
             if (i > 0) {
@@ -754,17 +778,21 @@ public final class TestDataGenerator {
             }
             values.append('"').append(namespace).append(':').append(members[i]).append('"');
         }
-        write(written, resources.resolve("data/" + NS + "/tags/item/" + name + ".json"), "{ \"values\": [" + values + "] }\n");
+        write(
+            written,
+            resources.resolve("data/" + ns + "/tags/item/" + name + ".json"),
+            "{ \"values\": [" + values + "] }\n"
+        );
     }
 
     private static void model(List<String> written, Path resources, String name, String texture) throws IOException {
         String json = """
-            {
-              "parent": "minecraft:item/generated",
-              "textures": { "layer0": "%s" }
-            }
-            """.formatted(texture);
-        write(written, resources.resolve("assets/" + NS + "/models/item/" + name + ".json"), json);
+                {
+                  "parent": "minecraft:item/generated",
+                  "textures": { "layer0": "%s" }
+                }
+                """.formatted(texture);
+        write(written, resources.resolve("assets/" + ns + "/models/item/" + name + ".json"), json);
     }
 
     private static void write(List<String> written, Path file, String content) throws IOException {

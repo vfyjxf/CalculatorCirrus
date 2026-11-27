@@ -7,17 +7,17 @@ import java.util.List;
 import java.util.Objects;
 
 public record BatchCouplingComponent(
-        ResourceKey targetResource,
-        long demand,
-        List<CandidateRecipe> candidates,
-        double seedUpperBoundCost
+    ResourceKey targetResource,
+    long demand,
+    List<CandidateRecipe> candidates,
+    double seedUpperBoundCost
 ) {
 
     public record CandidateRecipe(
-            CompiledRecipeKey recipeKey,
-            long outputPerBatch,
-            double perBatchCost,
-            boolean multiOutput
+        CompiledRecipeKey recipeKey,
+        long outputPerBatch,
+        double perBatchCost,
+        boolean multiOutput
     ) {
         public CandidateRecipe {
             Objects.requireNonNull(recipeKey, "recipeKey");

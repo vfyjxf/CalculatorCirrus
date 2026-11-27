@@ -1,7 +1,8 @@
 package dev.vfyjxf.cirrus.api.recipe.rule;
 
+import dev.vfyjxf.cirrus.api.recipe.classify.ClassifyContent;
 import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifyView;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -29,7 +30,7 @@ public final class CatalogRuleInput implements RuleInput {
         this.outputIds = union(outputSlots);
     }
 
-    private static List<Slot> adapt(List<dev.vfyjxf.cirrus.api.recipe.classify.ClassifyContent> slots) {
+    private static List<Slot> adapt(List<ClassifyContent> slots) {
         List<Slot> out = new ArrayList<>(slots.size());
         for (var content : slots) {
             out.add(new Slot(content.ids(), content.tagId(), content.amount(), content.chance()));
@@ -80,6 +81,7 @@ public final class CatalogRuleInput implements RuleInput {
         return outputIds;
     }
 
-    private record Slot(Set<String> ids, @Nullable String tagId, double amount, double chance) implements RuleInput.Slot {
-    }
+    private record Slot(Set<String> ids, @Nullable String tagId, double amount, double chance)
+            implements
+                RuleInput.Slot {}
 }

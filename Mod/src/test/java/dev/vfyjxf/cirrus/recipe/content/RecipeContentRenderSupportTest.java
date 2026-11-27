@@ -21,7 +21,8 @@ class RecipeContentRenderSupportTest {
         ContentStack<Item, ItemStack> stack = ContentStack.fromStack(Items.COBBLESTONE.getDefaultInstance());
 
         ContentStack<Item, ItemStack> visual = RecipeContentRenderSupport.visualStack(stack).cast();
-        ContentStack<Item, ItemStack> tooltip = RecipeContentRenderSupport.stackForTooltipDisplay(content, stack).cast();
+        ContentStack<Item, ItemStack> tooltip = RecipeContentRenderSupport.stackForTooltipDisplay(content, stack)
+                .cast();
 
         assertEquals(1L, visual.amount());
         assertEquals(9L, tooltip.amount());

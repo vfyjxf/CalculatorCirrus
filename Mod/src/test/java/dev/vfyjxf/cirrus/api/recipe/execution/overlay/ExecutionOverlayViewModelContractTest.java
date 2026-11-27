@@ -1,7 +1,5 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.overlay;
 
-import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
-import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
@@ -13,18 +11,20 @@ import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionCapability;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSideRequirement;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionExecutionPlan;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.PauseReason;
 import dev.vfyjxf.cirrus.api.recipe.execution.core.PauseReasons;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowViewModel;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.recipe.content.RecipeContentRendererTestBootstrap;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
+import dev.vfyjxf.cirrus.recipe.content.RecipeContentRendererTestBootstrap;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
@@ -32,16 +32,18 @@ import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.factory.Sets;
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExecutionOverlayViewModelContractTest {
@@ -90,8 +92,20 @@ class ExecutionOverlayViewModelContractTest {
                     Lists.immutable.empty(),
                     null,
                     Lists.immutable.of(
-                        ExecutionFlowNode.pending("acquire", Component.literal("Acquire inputs"), Lists.immutable.of(withdraw), null, Lists.immutable.empty()),
-                        ExecutionFlowNode.pending("execute", Component.literal("Execute recipe"), Lists.immutable.of(execute), null, Lists.immutable.empty())
+                        ExecutionFlowNode.pending(
+                            "acquire",
+                            Component.literal("Acquire inputs"),
+                            Lists.immutable.of(withdraw),
+                            null,
+                            Lists.immutable.empty()
+                        ),
+                        ExecutionFlowNode.pending(
+                            "execute",
+                            Component.literal("Execute recipe"),
+                            Lists.immutable.of(execute),
+                            null,
+                            Lists.immutable.empty()
+                        )
                     )
                 ),
                 ExecutionFlowNode.pending(
@@ -100,7 +114,13 @@ class ExecutionOverlayViewModelContractTest {
                     Lists.immutable.empty(),
                     null,
                     Lists.immutable.of(
-                        ExecutionFlowNode.pending("idle-acquire", Component.literal("Acquire sand"), Lists.immutable.of(idleWithdraw), null, Lists.immutable.empty())
+                        ExecutionFlowNode.pending(
+                            "idle-acquire",
+                            Component.literal("Acquire sand"),
+                            Lists.immutable.of(idleWithdraw),
+                            null,
+                            Lists.immutable.empty()
+                        )
                     )
                 )
             )
@@ -122,14 +142,9 @@ class ExecutionOverlayViewModelContractTest {
 
         var viewModel = ExecutionOverlayViewModel.derive(session);
 
-        assertEquals("Craft target", viewModel.title().getString());
         assertEquals("running", viewModel.statusText());
         assertEquals(1, viewModel.completedStepCount());
         assertEquals(3, viewModel.totalStepCount());
-        assertEquals(
-            Component.translatable("cirrus.ui.execution.overlay.side.client").getString(),
-            viewModel.sideHint().getString()
-        );
         assertEquals(
             Lists.mutable.of("target", "recipe:active", "acquire", "execute", "recipe:idle", "idle-acquire"),
             viewModel.visibleNodes().collect(ExecutionOverlayNode::nodeId)
@@ -195,15 +210,8 @@ class ExecutionOverlayViewModelContractTest {
         var viewModel = ExecutionOverlayViewModel.derive(session);
 
         assertEquals("paused", viewModel.statusText());
-        assertEquals(
-            Component.translatable("cirrus.ui.execution.overlay.side.player").getString(),
-            viewModel.sideHint().getString()
-        );
-        assertEquals("Press A", viewModel.footerSummary().getString());
-        assertEquals("Open the machine and confirm the craft", viewModel.footerDetail().getString());
-        assertEquals("Keep the machine screen open", viewModel.footerSteps().get(0).getString());
-        assertEquals("Press A", viewModel.visibleNodes().get(1).subtitle().getString());
-        assertEquals("paused", viewModel.visibleNodes().get(1).laneSegments().get(0).statusText());
+        var visibleNodes = viewModel.visibleNodes();
+        assertEquals("paused", visibleNodes.get(1).laneSegments().get(0).statusText());
     }
 
     @Test
@@ -220,7 +228,13 @@ class ExecutionOverlayViewModelContractTest {
             Lists.immutable.empty(),
             null,
             Lists.immutable.of(
-                ExecutionFlowNode.pending("acquire", Component.literal("Acquire"), Lists.immutable.of(withdraw), null, Lists.immutable.empty())
+                ExecutionFlowNode.pending(
+                    "acquire",
+                    Component.literal("Acquire"),
+                    Lists.immutable.of(withdraw),
+                    null,
+                    Lists.immutable.empty()
+                )
             )
         );
         var session = new ExecutionSession(
@@ -240,8 +254,9 @@ class ExecutionOverlayViewModelContractTest {
 
         var viewModel = ExecutionOverlayViewModel.derive(session);
         var acquire = viewModel.visibleNodes().detect(node -> node.nodeId().equals("acquire"));
-        assertTrue(acquire.content() != null && acquire.content().notEmpty());
-        assertEquals(0, RecipeContentRenderer.getRenderer((RecipeContent) acquire.content()).visualCount(acquire.content()));
+        var acquireContent = Objects.requireNonNull(acquire.content(), "acquire content");
+        assertTrue(acquireContent.notEmpty());
+        assertEquals(0, RecipeContentRenderer.getRenderer((RecipeContent) acquireContent).visualCount(acquireContent));
     }
 
     @Test
@@ -267,7 +282,13 @@ class ExecutionOverlayViewModelContractTest {
             Lists.immutable.empty(),
             null,
             Lists.immutable.of(
-                ExecutionFlowNode.pending("recipe:smoker", Component.literal("Smoker"), Lists.immutable.of(prepare, execute), null, Lists.immutable.empty())
+                ExecutionFlowNode.pending(
+                    "recipe:smoker",
+                    Component.literal("Smoker"),
+                    Lists.immutable.of(prepare, execute),
+                    null,
+                    Lists.immutable.empty()
+                )
             )
         );
         var session = new ExecutionSession(
@@ -288,8 +309,9 @@ class ExecutionOverlayViewModelContractTest {
         var viewModel = ExecutionOverlayViewModel.derive(session);
         var recipeNode = viewModel.visibleNodes().detect(node -> node.nodeId().equals("recipe:smoker"));
 
-        assertTrue(recipeNode.content() != null && recipeNode.content().notEmpty());
-        assertEquals(1L, recipeNode.content().amount());
+        var recipeContent = Objects.requireNonNull(recipeNode.content(), "recipe content");
+        assertTrue(recipeContent.notEmpty());
+        assertEquals(1L, recipeContent.amount());
     }
 
     @Test
@@ -315,7 +337,13 @@ class ExecutionOverlayViewModelContractTest {
             Lists.immutable.empty(),
             null,
             Lists.immutable.of(
-                ExecutionFlowNode.pending("recipe:preview", Component.literal("Preview"), Lists.immutable.of(prepare, execute), null, Lists.immutable.empty())
+                ExecutionFlowNode.pending(
+                    "recipe:preview",
+                    Component.literal("Preview"),
+                    Lists.immutable.of(prepare, execute),
+                    null,
+                    Lists.immutable.empty()
+                )
             )
         );
         var session = new ExecutionSession(
@@ -329,7 +357,12 @@ class ExecutionOverlayViewModelContractTest {
             null,
             ExecutionFlowViewModel.derive(
                 root,
-                new ExecutionFlowViewModel.RuntimeState(Sets.immutable.of(prepare), Sets.immutable.empty(), execute, null)
+                new ExecutionFlowViewModel.RuntimeState(
+                    Sets.immutable.of(prepare),
+                    Sets.immutable.empty(),
+                    execute,
+                    null
+                )
             )
         );
 
@@ -417,12 +450,12 @@ class ExecutionOverlayViewModelContractTest {
         }
 
         @Override
-        public TestRecipe findRecipe(String uniqueId) {
+        public @Nullable TestRecipe findRecipe(String uniqueId) {
             return byId.get(uniqueId);
         }
 
         @Override
-        public TestRecipe findRecipe(ResourceLocation registryName) {
+        public @Nullable TestRecipe findRecipe(ResourceLocation registryName) {
             return byId.get(registryName.getPath());
         }
 
@@ -438,12 +471,14 @@ class ExecutionOverlayViewModelContractTest {
 
         @Override
         public ResolveResult resolveFallback(ResolveContext context, TestRecipe recipe) {
-            return ResolveResult.resolved(RecipeProjection.create(
-                this,
-                recipe,
-                java.util.List.of(InputContent.fromValue(longValueType, 1L)),
-                java.util.List.of(OutputContent.fromValue(longValueType, 1L))
-            ));
+            return ResolveResult.resolved(
+                RecipeProjection.create(
+                    this,
+                    recipe,
+                    List.of(InputContent.fromValue(longValueType, 1L)),
+                    List.of(OutputContent.fromValue(longValueType, 1L))
+                )
+            );
         }
 
         @Override

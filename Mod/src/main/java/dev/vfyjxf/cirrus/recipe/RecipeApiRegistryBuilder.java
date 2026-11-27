@@ -6,14 +6,14 @@ import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolverType;
 import dev.vfyjxf.cirrus.api.recipe.filter.RecipeFilter;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionTransformer;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextOption;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.extension.RecipeSubsystem;
 import dev.vfyjxf.cirrus.api.recipe.system.extension.SubsystemOrder;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionTransformer;
 import dev.vfyjxf.cirrus.api.register.IngredientResolverRegister;
 import dev.vfyjxf.cirrus.api.register.JeiRecipeTypeBridgeRegister;
 import dev.vfyjxf.cirrus.api.register.MachineEntryRegister;
@@ -34,15 +34,16 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @ApiStatus.Internal
 public class RecipeApiRegistryBuilder
-        implements RecipeSystemRegister,
-                   RecipeClauseRegister,
-                   MachineEntryRegister,
-                   IngredientResolverRegister,
-                   JeiRecipeTypeBridgeRegister,
-                   RecipeSystemTagRegister,
-                   RecipeFilterRegister,
-                   ProjectionPluginRegister,
-                   ProjectionContextOptionRegister {
+        implements
+            RecipeSystemRegister,
+            RecipeClauseRegister,
+            MachineEntryRegister,
+            IngredientResolverRegister,
+            JeiRecipeTypeBridgeRegister,
+            RecipeSystemTagRegister,
+            RecipeFilterRegister,
+            ProjectionPluginRegister,
+            ProjectionContextOptionRegister {
 
     final ConcurrentHashMap<Namespace, RecipeSystem<?>> recipeSystems = new ConcurrentHashMap<>();
     final ConcurrentHashMap<Namespace, ClauseType> clauses = new ConcurrentHashMap<>();
@@ -57,6 +58,7 @@ public class RecipeApiRegistryBuilder
     final ConcurrentHashMap<Namespace, ProjectionContextOption<?>> projectionContextOptions = new ConcurrentHashMap<>();
     final ConcurrentHashMap<SubsystemKey, SubsystemEntry<?>> recipeSubsystems = new ConcurrentHashMap<>();
 
+    @Override
     public void registerSystem(RecipeSystem<?> system) {
         if (recipeSystems.containsKey(system.systemId())) {
             throw new IllegalArgumentException("Recipe system with id: " + system.systemId() + " already registered");
@@ -79,18 +81,28 @@ public class RecipeApiRegistryBuilder
         SubsystemEntry<R> entry = new SubsystemEntry<>(systemId, subsystemId, subsystem, order);
         SubsystemEntry<?> existing = recipeSubsystems.putIfAbsent(key, entry);
         if (existing != null) {
-            throw new IllegalArgumentException("Recipe subsystem with id: " + subsystemId + " already registered for system: " + systemId);
+            throw new IllegalArgumentException(
+                "Recipe subsystem with id: " + subsystemId + " already registered for system: " + systemId
+            );
         }
     }
 
-    public <T extends RecipeContent, F extends RecipeClause> void registerContentTransformer(ClauseType type, ContentTransformer<T, F> transformer) {
+    @Override
+    public <T extends RecipeContent, F extends RecipeClause> void registerContentTransformer(
+        ClauseType type,
+        ContentTransformer<T, F> transformer
+    ) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(transformer, "transformer");
-        Checks.checkArgument(type.plugin().equals(transformer.plugin()), "Content transformer plugin must match clause type plugin");
+        Checks.checkArgument(
+            type.plugin().equals(transformer.plugin()),
+            "Content transformer plugin must match clause type plugin"
+        );
         registerClauseType(type);
         contentTransformers.put(type, transformer);
     }
 
+    @Override
     public void registerClauseType(ClauseType type) {
         Checks.checkNotNull(type, "type");
         registerProjectionPlugin(type.plugin());
@@ -100,14 +112,22 @@ public class RecipeApiRegistryBuilder
         }
     }
 
-
-    public <F extends RecipeClause> void registerProjectionTransformer(ClauseType type, ProjectionTransformer<F> transformer) {
+    @Override
+    public <F extends RecipeClause> void registerProjectionTransformer(
+        ClauseType type,
+        ProjectionTransformer<F> transformer
+    ) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(transformer, "transformer");
-        Checks.checkArgument(type.plugin().equals(transformer.plugin()), "Projection transformer plugin must match clause type plugin");
+        Checks.checkArgument(
+            type.plugin().equals(transformer.plugin()),
+            "Projection transformer plugin must match clause type plugin"
+        );
         registerClauseType(type);
         if (projectionTransformers.containsKey(type)) {
-            throw new IllegalArgumentException("Projection transformer for clause with id: " + type.id() + " already registered");
+            throw new IllegalArgumentException(
+                "Projection transformer for clause with id: " + type.id() + " already registered"
+            );
         }
         projectionTransformers.put(type, transformer);
     }
@@ -127,7 +147,9 @@ public class RecipeApiRegistryBuilder
         registerProjectionPlugin(option.plugin());
         ProjectionContextOption<?> existing = projectionContextOptions.putIfAbsent(option.id(), option);
         if (existing != null && !existing.equals(option)) {
-            throw new IllegalArgumentException("Projection context option with id: " + option.id() + " already registered");
+            throw new IllegalArgumentException(
+                "Projection context option with id: " + option.id() + " already registered"
+            );
         }
     }
 
@@ -135,24 +157,21 @@ public class RecipeApiRegistryBuilder
     public void registerMachineForSystem(Namespace systemId, MachineEntry... entries) {
         Checks.checkNotNull(systemId, "systemId");
         Checks.checkNotNull(entries, "entries");
-        handlerEntries.computeIfAbsent(systemId, k -> ConcurrentHashMap.newKeySet())
-                      .addAll(Set.of(entries));
+        handlerEntries.computeIfAbsent(systemId, k -> ConcurrentHashMap.newKeySet()).addAll(Set.of(entries));
     }
 
     @Override
     public void registerMachineForSystem(Namespace systemId, Collection<? extends MachineEntry> entries) {
         Checks.checkNotNull(systemId, "systemId");
         Checks.checkNotNull(entries, "entries");
-        handlerEntries.computeIfAbsent(systemId, k -> ConcurrentHashMap.newKeySet())
-                      .addAll(entries);
+        handlerEntries.computeIfAbsent(systemId, k -> ConcurrentHashMap.newKeySet()).addAll(entries);
     }
 
     @Override
     public void registerRecipeTypeForSystem(Namespace systemId, RecipeType<?> recipeType) {
         Checks.checkNotNull(systemId, "systemId");
         Checks.checkNotNull(recipeType, "recipeType");
-        jeiRecipeTypes.computeIfAbsent(systemId, k -> ConcurrentHashMap.newKeySet())
-                      .add(recipeType);
+        jeiRecipeTypes.computeIfAbsent(systemId, k -> ConcurrentHashMap.newKeySet()).add(recipeType);
     }
 
     @Override
@@ -170,8 +189,7 @@ public class RecipeApiRegistryBuilder
     public <T> void registerIngredientResolver(IngredientResolverType<T> type, IngredientResolver<T> resolver) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(resolver, "resolver");
-        ingredientResolvers.computeIfAbsent(type, k -> ConcurrentHashMap.newKeySet())
-                           .add(resolver);
+        ingredientResolvers.computeIfAbsent(type, k -> ConcurrentHashMap.newKeySet()).add(resolver);
     }
 
     @Override
@@ -179,26 +197,19 @@ public class RecipeApiRegistryBuilder
         Checks.checkNotNull(filterId, "filterId");
         Checks.checkNotNull(systemId, "systemId");
         recipeFilters.computeIfAbsent(new FilterEntryType(filterId, systemId), k -> ConcurrentHashMap.newKeySet())
-                     .add(filter);
+                .add(filter);
     }
 
     @Override
     public void registerSystemTagEntry(Namespace tag, Namespace system) {
         Checks.checkNotNull(tag, "tag");
         Checks.checkNotNull(system, "system");
-        recipeSystemTags.computeIfAbsent(tag, k -> ConcurrentHashMap.newKeySet())
-                        .add(system);
+        recipeSystemTags.computeIfAbsent(tag, k -> ConcurrentHashMap.newKeySet()).add(system);
     }
 
-    record FilterEntryType(
-            Namespace filterId,
-            Namespace systemId
-    ) {}
+    record FilterEntryType(Namespace filterId, Namespace systemId) {}
 
-    record SubsystemKey(
-        Namespace systemId,
-        Namespace subsystemId
-    ) {}
+    record SubsystemKey(Namespace systemId, Namespace subsystemId) {}
 
     record SubsystemEntry<R>(
         Namespace systemId,

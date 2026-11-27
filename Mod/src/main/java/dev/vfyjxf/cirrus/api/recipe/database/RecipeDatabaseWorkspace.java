@@ -10,16 +10,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public record RecipeDatabaseWorkspace(
-    List<CustomRecipeDatabase> customDatabases,
-    String activeDatabaseId
-) {
+public record RecipeDatabaseWorkspace(List<CustomRecipeDatabase> customDatabases, String activeDatabaseId) {
     public RecipeDatabaseWorkspace {
         Checks.checkNotNull(customDatabases, "customDatabases");
         customDatabases = normalize(customDatabases);
         activeDatabaseId = activeDatabaseId == null || activeDatabaseId.isBlank()
-            ? customDatabases.getFirst().id()
-            : activeDatabaseId;
+                ? customDatabases.getFirst().id()
+                : activeDatabaseId;
         boolean exists = false;
         for (CustomRecipeDatabase database : customDatabases) {
             if (database.id().equals(activeDatabaseId)) {
@@ -33,7 +30,10 @@ public record RecipeDatabaseWorkspace(
     }
 
     public static RecipeDatabaseWorkspace defaults() {
-        return new RecipeDatabaseWorkspace(List.of(CustomRecipeDatabase.builtinDatabase()), CustomRecipeDatabase.builtinId);
+        return new RecipeDatabaseWorkspace(
+            List.of(CustomRecipeDatabase.builtinDatabase()),
+            CustomRecipeDatabase.builtinId
+        );
     }
 
     public CustomRecipeDatabase activeDatabase() {

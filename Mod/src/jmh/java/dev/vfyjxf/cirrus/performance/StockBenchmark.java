@@ -1,8 +1,9 @@
 package dev.vfyjxf.cirrus.performance;
 
-import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.stock.Stock;
+import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
@@ -134,7 +135,7 @@ public class StockBenchmark {
 
     private static Item[] plainItemPool() {
         List<Item> items = new ArrayList<>();
-        for (Item item : net.minecraft.core.registries.BuiltInRegistries.ITEM) {
+        for (Item item : BuiltInRegistries.ITEM) {
             if (item != Items.AIR) items.add(item);
         }
         return items.toArray(new Item[0]);

@@ -15,7 +15,7 @@ public class FireworkRocketVariantType extends BasicVariantType<Item, ItemStack>
     public static final FireworkRocketVariantType instance = new FireworkRocketVariantType();
 
     private FireworkRocketVariantType() {
-        super(Namespace.ofMc("firework"), CirrusTypes.Contents.ITEM_STACK);
+        super(Namespace.ofMc("firework"), CirrusTypes.Contents.itemStack);
     }
 
     @Override

@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.api.recipe.classify;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -55,7 +56,7 @@ public final class ClassificationResult {
 
     /** All tags attached to the recipe at {@code index}. */
     public Set<String> tagsOf(int index) {
-        Set<String> out = new java.util.LinkedHashSet<>();
+        Set<String> out = new LinkedHashSet<>();
         tagToRecipes.forEach((tag, bits) -> {
             if (bits.get(index)) {
                 out.add(tag);

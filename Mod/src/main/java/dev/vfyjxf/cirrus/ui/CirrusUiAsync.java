@@ -21,18 +21,14 @@ public final class CirrusUiAsync {
         Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors() / 2)),
         daemonThreadFactory("cirrus-recipe-worker-", threadIds)
     );
-    private static final ExecutorService databaseIndexExecutor = Executors.newSingleThreadExecutor(
-        daemonThreadFactory("cirrus-database-index-", databaseIndexThreadIds)
-    );
+    private static final ExecutorService databaseIndexExecutor = Executors
+            .newSingleThreadExecutor(daemonThreadFactory("cirrus-database-index-", databaseIndexThreadIds));
     private static final AtomicInteger computeThreadIds = new AtomicInteger();
     private static final int computeWorkers = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
-    private static final ExecutorService computeExecutor = Executors.newFixedThreadPool(
-        computeWorkers,
-        daemonThreadFactory("cirrus-compute-", computeThreadIds)
-    );
+    private static final ExecutorService computeExecutor = Executors
+            .newFixedThreadPool(computeWorkers, daemonThreadFactory("cirrus-compute-", computeThreadIds));
 
-    private CirrusUiAsync() {
-    }
+    private CirrusUiAsync() {}
 
     public static <T> CompletableFuture<T> recipeTask(Supplier<T> task) {
         return CompletableFuture.supplyAsync(task, recipeExecutor);

@@ -4,7 +4,7 @@ import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import net.minecraft.network.chat.Component;
 import org.eclipse.collections.api.list.ImmutableList;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Immutable tree node used to visualize translated execution progress.

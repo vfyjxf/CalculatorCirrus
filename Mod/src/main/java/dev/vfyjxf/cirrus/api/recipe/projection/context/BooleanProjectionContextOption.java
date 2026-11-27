@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContextKey;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
+import org.jspecify.annotations.Nullable;
 
 public record BooleanProjectionContextOption(
     Namespace id,
@@ -21,7 +22,7 @@ public record BooleanProjectionContextOption(
     }
 
     @Override
-    public Boolean normalize(Object value) {
+    public Boolean normalize(@Nullable Object value) {
         return value instanceof Boolean booleanValue ? booleanValue : defaultValue();
     }
 }

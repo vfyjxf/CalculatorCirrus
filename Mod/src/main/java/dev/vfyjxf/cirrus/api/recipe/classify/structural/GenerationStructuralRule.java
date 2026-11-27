@@ -21,14 +21,13 @@ import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifyView;
 public final class GenerationStructuralRule implements ClassificationRule {
 
     public static final GenerationStructuralRule instance = new GenerationStructuralRule();
-    public static final String ID = "cirrus:structural/generation";
+    public static final String id = "cirrus:structural/generation";
 
-    private GenerationStructuralRule() {
-    }
+    private GenerationStructuralRule() {}
 
     @Override
     public String id() {
-        return ID;
+        return id;
     }
 
     @Override
@@ -40,7 +39,7 @@ public final class GenerationStructuralRule implements ClassificationRule {
         }
         for (ClassifyContent output : recipe.outputs()) {
             if (output.hasIds()) {
-                sink.tag(ClassificationTags.GENERATION);
+                sink.tag(ClassificationTags.generation);
                 return;
             }
         }

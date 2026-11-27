@@ -2,8 +2,10 @@ package dev.vfyjxf.cirrus.internal.integration.jei;
 
 import dev.vfyjxf.cirrus.CirrusConstants;
 import dev.vfyjxf.cirrus.api.plugin.CirrusPlugin;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
 import dev.vfyjxf.cirrus.api.register.JeiRecipeTypeBridgeRegister;
 import dev.vfyjxf.cirrus.api.register.RecipeSystemRegister;
+import dev.vfyjxf.cirrus.api.register.RecipeSystemTagRegister;
 import dev.vfyjxf.cirrus.recipe.system.jei.JeiCategoryRecipeSystem;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import mezz.jei.api.constants.RecipeTypes;
@@ -12,6 +14,7 @@ import mezz.jei.api.recipe.RecipeType;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 
 public final class JeiFallbackRecipeSystemPlugin implements CirrusPlugin {
     public static final Namespace id = Namespace.of(CirrusConstants.modId, "jei_fallback_recipe_systems");
@@ -30,6 +33,8 @@ public final class JeiFallbackRecipeSystemPlugin implements CirrusPlugin {
         RecipeTypes.COMPOSTING
     );
 
+    private static final Set<RecipeType<?>> nativeVanillaMirrors = Set.copyOf(defaultRecipeTypes);
+
     @Override
     public Namespace pluginId() {
         return id;
@@ -37,18 +42,28 @@ public final class JeiFallbackRecipeSystemPlugin implements CirrusPlugin {
 
     @Override
     public void registerRecipeSystem(RecipeSystemRegister register) {
-        recipeTypes().stream()
-            .map(JeiCategoryRecipeSystem::create)
-            .forEach(register::registerSystem);
+        recipeTypes().stream().map(JeiCategoryRecipeSystem::create).forEach(register::registerSystem);
+    }
+
+    @Override
+    public void registerRecipeSystemTag(RecipeSystemTagRegister register) {
+        for (RecipeType<?> recipeType : recipeTypes()) {
+            Namespace systemId = JeiCategoryRecipeSystem.systemId(recipeType);
+            register.registerSystemTagEntry(RecipeSystemTags.jeiFallback, systemId);
+            if (nativeVanillaMirrors.contains(recipeType)) {
+                register.registerSystemTagEntry(RecipeSystemTags.mirrorDuplicate, systemId);
+            }
+            if (RecipeTypes.FUELING.equals(recipeType)) {
+                register.registerSystemTagEntry(RecipeSystemTags.displayOnly, systemId);
+            }
+        }
     }
 
     @Override
     public void registerJeiRecipeTypeBridge(JeiRecipeTypeBridgeRegister register) {
-        recipeTypes().stream()
-            .forEach(recipeType -> register.registerRecipeTypeForSystem(
-                JeiCategoryRecipeSystem.systemId(recipeType),
-                recipeType
-            ));
+        recipeTypes().forEach(
+            recipeType -> register.registerRecipeTypeForSystem(JeiCategoryRecipeSystem.systemId(recipeType), recipeType)
+        );
     }
 
     private static Collection<RecipeType<?>> recipeTypes() {

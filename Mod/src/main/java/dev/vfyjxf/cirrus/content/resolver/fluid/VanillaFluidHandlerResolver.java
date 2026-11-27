@@ -10,12 +10,11 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-
 /**
- * TODO:考虑重新设计resolve返回值，因为对于BottleItem这类没有Capability的容器物品，
- *  它无法被{@link dev.vfyjxf.cirrus.recipe.facet.UnwrapFluidHandlerFacet}内置使用的
- *  {@link net.neoforged.neoforge.fluids.capability.IFluidHandlerItem}进行处理，因为它实际上还涉及到目前还未动工的UnitApi，不然我们无法准确表达
- *  容器物品的容量和实际存储量，因为水瓶是分数值，水桶是整数值。
+ * TODO: redesign the resolve return value: a capability-less container item such as a bottle
+ *  cannot go through the {@link net.neoforged.neoforge.fluids.capability.IFluidHandlerItem} that
+ *  {@link dev.vfyjxf.cirrus.recipe.facet.UnwrapFluidHandlerFacet} uses internally, because it also needs the
+ *  not-yet-started UnitApi to express fractional contents (a water bottle) against whole units (a bucket).
  *
  */
 public class VanillaFluidHandlerResolver implements StackResolver<Item, ItemStack, ItemStack> {
@@ -26,12 +25,12 @@ public class VanillaFluidHandlerResolver implements StackResolver<Item, ItemStac
 
     @Override
     public ContentResolverType<ItemStack> type() {
-        return CirrusTypes.ContentResolvers.FLUID_CONTAINER;
+        return CirrusTypes.ContentResolvers.fluidContainer;
     }
 
     @Override
     public StackType<Item, ItemStack> stackType() {
-        return CirrusTypes.Contents.ITEM_STACK;
+        return CirrusTypes.Contents.itemStack;
     }
 
     @Override

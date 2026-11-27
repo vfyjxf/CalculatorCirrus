@@ -18,18 +18,21 @@ import org.eclipse.collections.api.list.MutableList;
 public class PlayerInventorySource implements StorageSource {
 
     private static final Codec<PlayerInventorySource> codec = RecordCodecBuilder.create(
-        instance -> instance.group(
-            Codec.STRING.fieldOf("player").forGetter(source -> source.inventory.player.getStringUUID())
-        ).apply(instance, uuid -> {
-            for (AbstractClientPlayer player : Minecraft.getInstance().level.players()) {
-                if (player.getStringUUID().equals(uuid))
-                    return new PlayerInventorySource(player.getInventory());
-            }
-            return null;
-        })
+        instance -> instance
+                .group(Codec.STRING.fieldOf("player").forGetter(source -> source.inventory.player.getStringUUID()))
+                .apply(instance, uuid -> {
+                    for (AbstractClientPlayer player : Minecraft.getInstance().level.players()) {
+                        if (player.getStringUUID().equals(uuid))
+                            return new PlayerInventorySource(player.getInventory());
+                    }
+                    return null;
+                })
     );
 
-    public static final StorageSourceType<PlayerInventorySource> type = new StorageSourceType<>(CirrusNamespaces.ofMod("player_inventory"), codec);
+    public static final StorageSourceType<PlayerInventorySource> type = new StorageSourceType<>(
+        CirrusNamespaces.ofMod("player_inventory"),
+        codec
+    );
 
     private final Inventory inventory;
 

@@ -20,8 +20,8 @@ import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.impl.collection.mutable.CollectionAdapter;
 import org.eclipse.collections.impl.set.mutable.SetAdapter;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnmodifiableView;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -34,7 +34,7 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
 
     //region instance
 
-    private static volatile ContentApiImpl instance = null;
+    private static volatile @Nullable ContentApiImpl instance = null;
 
     public static @Nullable ContentApiImpl instance() {
         return instance;
@@ -89,22 +89,16 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
             return Pair.of(new ContentWithType(content, contentType), entry.getValue());
         }).collect(Collectors.toMap(Pair::getKey, Pair::getValue));
 
-        this.fallbackVariantTypes = stackTypesById.values()
-                                                  .stream()
-                                                  .map(VariantType::fallback)
-                                                  .collect(Collectors.toMap(VariantType::stackType, Function.identity()));
+        this.fallbackVariantTypes = stackTypesById.values().stream().map(VariantType::fallback)
+                .collect(Collectors.toMap(VariantType::stackType, Function.identity()));
 
         this.contentResolvers = new HashMap<>(builder.contentResolvers);
         this.stackResolvers = new HashMap<>(builder.stackResolvers);
 
-        this.stackTypeByIngredientType =
-            builder.stackTypeIngredientTypeBridges.entrySet()
-                                                  .stream()
-                                                  .map(entry -> {
-                                                      var stackType = findStackType(entry.getKey());
-                                                      return Pair.of(entry.getValue(), stackType);
-                                                  }).filter(pair -> pair.getValue() != null)
-                                                  .collect(Collectors.toMap(Pair::getKey, Pair::getValue));
+        this.stackTypeByIngredientType = builder.stackTypeIngredientTypeBridges.entrySet().stream().map(entry -> {
+            var stackType = findStackType(entry.getKey());
+            return Pair.of(entry.getValue(), stackType);
+        }).filter(pair -> pair.getValue() != null).collect(Collectors.toMap(Pair::getKey, Pair::getValue));
 
         this.valueTypeByIngredientType = new HashMap<>(builder.valueTypeBridges);
     }
@@ -118,7 +112,6 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
         return contentTypes.containsKey(typeId);
     }
 
-
     @Override
     @SuppressWarnings("unchecked")
     public <T> ContentType<T> getContentType(Namespace typeId) {
@@ -131,7 +124,7 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
 
     @Override
     @SuppressWarnings("unchecked")
-    public <T> ContentType<T> findContentType(Namespace typeId) {
+    public <T> @Nullable ContentType<T> findContentType(Namespace typeId) {
         return (ContentType<T>) contentTypes.get(typeId);
     }
     //endregion
@@ -170,7 +163,7 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
 
     @Override
     @SuppressWarnings("unchecked")
-    public <T, S> StackType<T, S> findStackType(Namespace typeId) {
+    public <T, S> @Nullable StackType<T, S> findStackType(Namespace typeId) {
         return (StackType<T, S>) stackTypesById.get(typeId);
 
     }
@@ -196,7 +189,7 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
 
     @Override
     @SuppressWarnings("unchecked")
-    public <S> ValueType<S> findValueType(Namespace typeId) {
+    public <S> @Nullable ValueType<S> findValueType(Namespace typeId) {
         return (ValueType<S>) valueTypeById.get(typeId);
     }
 
@@ -280,7 +273,7 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
         if (ret == null || ret.stackType() != stackType) {
             ret = (VariantType<T, S>) fallbackVariantTypes.get(stackType);
         }
-        return ret;
+        return ret == null ? VariantType.fallback(stackType) : ret;
     }
 
     //endregion
@@ -299,26 +292,32 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     @Override
-    public @UnmodifiableView <T, R> RichIterable<ContentResolver<T, R>> getResolver(ContentResolverType<R> type, ContentType<T> contentType) {
+    public @UnmodifiableView <T, R> RichIterable<ContentResolver<T, R>> getResolver(
+        ContentResolverType<R> type,
+        ContentType<T> contentType
+    ) {
         var resolvers = contentResolvers.get(type);
         if (resolvers == null) return MutableSets.empty();
-        return (RichIterable) SetAdapter.adapt(resolvers)
-                                        .select(r -> r.contentType() == contentType)
-                                        .asUnmodifiable();
+        return (RichIterable) SetAdapter.adapt(resolvers).select(r -> r.contentType() == contentType).asUnmodifiable();
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     @Override
-    public @UnmodifiableView <T, S, R> RichIterable<StackResolver<T, S, R>> getStackResolver(ContentResolverType<R> type, StackType<T, S> stackType) {
+    public @UnmodifiableView <T, S, R> RichIterable<StackResolver<T, S, R>> getStackResolver(
+        ContentResolverType<R> type,
+        StackType<T, S> stackType
+    ) {
         var resolvers = stackResolvers.get(type);
         if (resolvers == null) return MutableSets.empty();
-        return (RichIterable) SetAdapter.adapt(resolvers)
-                                        .select(r -> r.stackType() == stackType)
-                                        .asUnmodifiable();
+        return (RichIterable) SetAdapter.adapt(resolvers).select(r -> r.stackType() == stackType).asUnmodifiable();
     }
 
     @Override
-    public @Nullable <T, S, R> StackResolver<T, S, R> findStackResolver(ContentResolverType<R> type, StackType<T, S> stackType, S stack) {
+    public @Nullable <T, S, R> StackResolver<T, S, R> findStackResolver(
+        ContentResolverType<R> type,
+        StackType<T, S> stackType,
+        S stack
+    ) {
         var resolvers = stackResolvers.get(type);
         if (resolvers == null) return null;
         var content = stackType.getContent(stack);
@@ -331,7 +330,11 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
     }
 
     @Override
-    public @Nullable <T, R> ContentResolver<T, R> findContentResolver(ContentResolverType<R> type, ContentType<T> contentType, T content) {
+    public @Nullable <T, R> ContentResolver<T, R> findContentResolver(
+        ContentResolverType<R> type,
+        ContentType<T> contentType,
+        T content
+    ) {
         var resolvers = contentResolvers.get(type);
         if (resolvers == null) return null;
         for (var resolver : resolvers) {
@@ -348,7 +351,9 @@ public sealed class ContentApiImpl implements ContentApi permits ClientContentAp
 
     @SuppressWarnings("unchecked")
     @Override
-    public @Nullable <T, S> StackType<T, S> findStackTypeForIngredientType(IIngredientTypeWithSubtypes<T, S> ingredientType) {
+    public @Nullable <T, S> StackType<T, S> findStackTypeForIngredientType(
+        IIngredientTypeWithSubtypes<T, S> ingredientType
+    ) {
         return (StackType<T, S>) stackTypeByIngredientType.get(ingredientType);
     }
 

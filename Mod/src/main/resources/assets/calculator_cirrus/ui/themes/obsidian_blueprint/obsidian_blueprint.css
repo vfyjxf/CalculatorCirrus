@@ -1,0 +1,136 @@
+/* Obsidian Blueprint v3.2 — lifted dark OreUI slate palette with pure non-PNG sharp textures. */
+
+:root {
+    /* Surfaces and inks */
+    --cirrus-backdrop-scrim: #0D1016CC;
+    --cirrus-canvas-void: #1E232DFF;
+    --cirrus-canvas-grid-minor: #E6EDF714;
+    --cirrus-canvas-grid-major: #E6EDF72A;
+    --cirrus-dock-surface: #292F3BF7;
+    --cirrus-card-surface: #343B4AFF;
+    --cirrus-card-surface-hover: #3F485AFF;
+    --cirrus-card-surface-selected: #3B4659FF;
+    --cirrus-recessed-surface: #222834FF;
+    --cirrus-popover-surface: #2D3442FA;
+    --cirrus-hairline-border: #434C5EFF;
+    --cirrus-hairline-highlight: #FFFFFF24;
+    --cirrus-focus-ring: #63BCFCFF;
+    --cirrus-drop-shadow: #0000007A;
+    --cirrus-text-primary: #F2F5FAFF;
+    --cirrus-text-secondary: #C9D3E0FF;
+    --cirrus-text-muted: #9BA8BCFF;
+    --cirrus-text-disabled: #687386FF;
+    --cirrus-text-on-accent: #FFFFFFFF;
+    --cirrus-text-on-dark: #F2F5FAFF;
+
+    /* Cost axes, rule strengths, advisories, edges, and diff */
+    --cirrus-cost-h: #F6BD4BFF;
+    --cirrus-cost-p: #5AD0F5FF;
+    --cirrus-cost-k: #FA9D52FF;
+    --cirrus-cost-s: #56DB8BFF;
+    --cirrus-cost-c: #CBA8FFFF;
+    --cirrus-rule-hard-ban: #FF858EFF;
+    --cirrus-rule-hard-pin: #63BCFCFF;
+    --cirrus-rule-soft-prefer: #56DB8BFF;
+    --cirrus-rule-soft-penalize: #F6BD4BFF;
+    --cirrus-advisory-discouraged: #F6BD4BFF;
+    --cirrus-advisory-last-resort: #FF858EFF;
+    --cirrus-edge-material: #AABBD0D9;
+    --cirrus-edge-catalyst: #F6D854E6;
+    --cirrus-edge-machine: #FA9D52D9;
+    --cirrus-edge-critical-path: #F6BD4BFF;
+    --cirrus-edge-upstream-trace: #63BCFCFF;
+    --cirrus-edge-downstream-trace: #FA9D52FF;
+    --cirrus-diff-added: #56DB8BFF;
+    --cirrus-diff-removed: #FF858EFF;
+
+    /* Plan step tints */
+    --cirrus-step-acquire-accent: #56DB8BFF;
+    --cirrus-step-acquire-bg: #56DB8B1F;
+    --cirrus-step-acquire-idle: #386B52FF;
+    --cirrus-step-acquire-selected: #7CEBA8FF;
+    --cirrus-step-craft-accent: #63BCFCFF;
+    --cirrus-step-craft-bg: #63BCFC1C;
+    --cirrus-step-craft-idle: #3A5D7AFF;
+    --cirrus-step-craft-selected: #94D4FFFF;
+    --cirrus-step-convert-accent: #5AD0F5FF;
+    --cirrus-step-convert-bg: #5AD0F51C;
+    --cirrus-step-convert-idle: #346475FF;
+    --cirrus-step-convert-selected: #8EE2FCFF;
+    --cirrus-step-cycle-loop-accent: #CBA8FFFF;
+    --cirrus-step-cycle-loop-bg: #CBA8FF22;
+    --cirrus-step-cycle-loop-idle: #5F4A87FF;
+    --cirrus-step-cycle-loop-selected: #DFC7FFFF;
+    --cirrus-step-provision-machine-accent: #FA9D52FF;
+    --cirrus-step-provision-machine-bg: #FA9D5220;
+    --cirrus-step-provision-machine-idle: #7A4F2EFF;
+    --cirrus-step-provision-machine-selected: #FFBE85FF;
+    --cirrus-step-setup-line-accent: #F6BD4BFF;
+    --cirrus-step-setup-line-bg: #F6BD4B20;
+    --cirrus-step-setup-line-idle: #735B2AFF;
+    --cirrus-step-setup-line-selected: #FFD57AFF;
+    --cirrus-step-line-pull-accent: #4BD6B4FF;
+    --cirrus-step-line-pull-bg: #4BD6B41E;
+    --cirrus-step-line-pull-idle: #30695DFF;
+    --cirrus-step-line-pull-selected: #7EEBD1FF;
+
+    /* Pure sharp 90-degree non-PNG dark surfaces (no light-stone PNG tinting) */
+    --cirrus-tex-dock: group(color(#292F3BF7), border-texture(#14171EFF, 1));
+    --cirrus-tex-card: group(color(#343B4AFF), border-texture(#14171EFF, 1));
+    --cirrus-tex-card-hover: group(color(#3F485AFF), border-texture(#14171EFF, 1));
+    --cirrus-tex-card-selected: group(color(#3B4659FF), border-texture(#63BCFCFF, 2));
+    --cirrus-tex-flat: group(color(#343B4AFF), border-texture(#434C5EFF, 1));
+    --cirrus-tex-inset: group(color(#232833FF), border-texture(#434C5EFF, 1));
+    --cirrus-tex-recessed: group(color(#222834FF), border-texture(#14171EFF, 1));
+    --cirrus-tex-slot: group(color(#242A36FF), border-texture(#3D4556FF, 1));
+    --cirrus-tex-slot-dark: group(color(#34242DFF), border-texture(#693B47FF, 1));
+    --cirrus-tex-btn-up: group(color(#434C5EFF), border-texture(#14171EFF, 1));
+    --cirrus-tex-btn-hover: group(color(#505B70FF), border-texture(#14171EFF, 1));
+    --cirrus-tex-btn-down: group(color(#2C3240FF), border-texture(#14171EFF, 1));
+    --cirrus-tex-cta-primary: group(color(#2F7D38FF), border-texture(#14171EFF, 1));
+    --cirrus-tex-cta-danger: group(color(#B8323CFF), border-texture(#14171EFF, 1));
+    --cirrus-tex-switch-on: group(color(#2F7D38FF), border-texture(#14171EFF, 1));
+    --cirrus-tex-switch-on-hover: group(color(#3B9645FF), border-texture(#14171EFF, 1));
+    --cirrus-tex-switch-off: group(color(#2A303DFF), border-texture(#14171EFF, 1));
+    --cirrus-tex-switch-off-hover: group(color(#333A4AFF), border-texture(#14171EFF, 1));
+    --cirrus-tex-scroll-track: group(color(#1F242EFF), border-texture(#434C5EFF, 1));
+    --cirrus-tex-scroll-thumb: group(color(#535F75FF), border-texture(#14171EFF, 1));
+    --cirrus-tex-scroll-thumb-h: group(color(#535F75FF), border-texture(#14171EFF, 1));
+    --cirrus-tex-scroll-track-fill: color(#1F242EFF);
+    --cirrus-tex-minimap-frame: group(color(#242A35E8), border-texture(#434C5EFF, 1));
+    --cirrus-tex-meter-track: group(color(#212631FF), border-texture(#465064FF, 1));
+    --cirrus-tex-triple-left-off: group(color(#2C3240FF), border-texture(#14171EFF, 1));
+    --cirrus-tex-triple-left-on: group(color(#3B4659FF), border-texture(#63BCFCFF, 1));
+    --cirrus-tex-triple-mid-left: group(color(#2C3240FF), border-texture(#14171EFF, 1));
+    --cirrus-tex-triple-mid: group(color(#343B4AFF), border-texture(#14171EFF, 1));
+    --cirrus-tex-triple-mid-right: group(color(#2C3240FF), border-texture(#14171EFF, 1));
+    --cirrus-tex-triple-right-on: group(color(#3B4659FF), border-texture(#63BCFCFF, 1));
+    --cirrus-tex-triple-right-off: group(color(#2C3240FF), border-texture(#14171EFF, 1));
+
+    /* CloudLib standard and meter bindings */
+    --accent: var(--cirrus-focus-ring);
+    --text: var(--cirrus-text-primary);
+    --text-dim: var(--cirrus-text-secondary);
+    --text-dim-strong: var(--cirrus-text-disabled);
+    --text-on-accent: var(--cirrus-text-on-accent);
+    --danger: var(--cirrus-rule-hard-ban);
+    --ok: var(--cirrus-cost-s);
+    --rule: color(var(--cirrus-hairline-border));
+    --bar-track: color(#212631FF);
+    --bar-frame: border-texture(#465064FF, 1);
+    --bar-fill: color(var(--cirrus-focus-ring));
+    --bar-mark: color(var(--cirrus-text-primary));
+    --bar-ok: color(var(--cirrus-cost-s));
+    --bar-warn: color(var(--cirrus-cost-h));
+    --bar-danger: color(var(--cirrus-rule-hard-ban));
+    --bar-info: color(var(--cirrus-focus-ring));
+    --ring-track: #E6EDF724;
+    --ring-fill: var(--cirrus-focus-ring);
+    --meter-p: var(--cirrus-cost-p);
+    --meter-k: var(--cirrus-cost-k);
+    --meter-c: var(--cirrus-cost-c);
+    --meter-ok: var(--cirrus-cost-s);
+    --meter-warn: var(--cirrus-cost-h);
+    --meter-danger: var(--cirrus-rule-hard-ban);
+    --meter-focus: var(--cirrus-focus-ring);
+}

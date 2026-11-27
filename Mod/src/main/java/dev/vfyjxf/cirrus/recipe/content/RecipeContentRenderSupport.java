@@ -6,9 +6,9 @@ import dev.vfyjxf.cirrus.api.content.value.ContentKind;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.recipe.content.BatchableRecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
-import dev.vfyjxf.cirrus.api.recipe.content.BatchableRecipeContentRenderer;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipContext;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipStack;
@@ -20,15 +20,14 @@ import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.impl.factory.Lists;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashSet;
 import java.util.Objects;
 
 final class RecipeContentRenderSupport {
 
-    private RecipeContentRenderSupport() {
-    }
+    private RecipeContentRenderSupport() {}
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     static void renderBaseStack(GuiGraphics graphics, ContentStack<?, ?> stack, int width, int height, float delta) {
@@ -36,7 +35,15 @@ final class RecipeContentRenderSupport {
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    static void renderBaseStackAt(GuiGraphics graphics, ContentStack<?, ?> stack, int x, int y, int width, int height, float delta) {
+    static void renderBaseStackAt(
+        GuiGraphics graphics,
+        ContentStack<?, ?> stack,
+        int x,
+        int y,
+        int width,
+        int height,
+        float delta
+    ) {
         ContentStack<?, ?> visual = visualStack(stack);
         if (visual.isEmpty()) {
             return;
@@ -45,7 +52,14 @@ final class RecipeContentRenderSupport {
         renderer.renderBaseAt(graphics, visual, x, y, width, height, delta);
     }
 
-    static void submitBaseStack(BatchableRecipeContentRenderer.Batch batch, ContentStack<?, ?> stack, int x, int y, int width, int height) {
+    static void submitBaseStack(
+        BatchableRecipeContentRenderer.Batch batch,
+        ContentStack<?, ?> stack,
+        int x,
+        int y,
+        int width,
+        int height
+    ) {
         ContentStack<?, ?> visual = visualStack(stack);
         if (visual.isEmpty()) {
             return;
@@ -54,7 +68,15 @@ final class RecipeContentRenderSupport {
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    static void renderStackAt(GuiGraphics graphics, ContentStack<?, ?> stack, int x, int y, int width, int height, float delta) {
+    static void renderStackAt(
+        GuiGraphics graphics,
+        ContentStack<?, ?> stack,
+        int x,
+        int y,
+        int width,
+        int height,
+        float delta
+    ) {
         ContentStack<?, ?> visual = visualStack(stack);
         if (visual.isEmpty()) {
             return;
@@ -63,7 +85,14 @@ final class RecipeContentRenderSupport {
         renderer.renderAt(graphics, visual, x, y, width, height, delta);
     }
 
-    static void submitStack(BatchableRecipeContentRenderer.Batch batch, ContentStack<?, ?> stack, int x, int y, int width, int height) {
+    static void submitStack(
+        BatchableRecipeContentRenderer.Batch batch,
+        ContentStack<?, ?> stack,
+        int x,
+        int y,
+        int width,
+        int height
+    ) {
         ContentStack<?, ?> visual = visualStack(stack);
         if (visual.isEmpty()) {
             return;
@@ -112,8 +141,7 @@ final class RecipeContentRenderSupport {
                         out.add(stack.normalize());
                     }
                 }
-                default -> {
-                }
+                default -> {}
             }
         }
         return out.toImmutable();
@@ -143,10 +171,10 @@ final class RecipeContentRenderSupport {
     }
 
     static ContentStack<?, ?> stackFromKind(ContentKind<?> kind) {
-        if (kind.type() == CirrusTypes.Contents.ITEM) {
+        if (kind.type() == CirrusTypes.Contents.item) {
             return ContentStack.fromContent(kind.<Item>cast().value());
         }
-        if (kind.type() == CirrusTypes.Contents.FLUID) {
+        if (kind.type() == CirrusTypes.Contents.fluidConst) {
             return ContentStack.fromContent(kind.<Fluid>cast().value());
         }
         return ContentStack.empty();
@@ -166,8 +194,7 @@ final class RecipeContentRenderSupport {
                     }
                 }
                 case ContentValue<?> value -> labels.add(describeValue(value));
-                default -> {
-                }
+                default -> {}
             }
         }
         return joinedLabels(labels);
@@ -249,7 +276,7 @@ final class RecipeContentRenderSupport {
     private static String describeKind(ContentKind<?> kind) {
         var location = kind.getLocation();
         return location == null
-            ? kind.type().typeId() + "=" + Objects.toString(kind.value(), "unknown")
-            : location.toString();
+                ? kind.type().typeId() + "=" + Objects.toString(kind.value(), "unknown")
+                : location.toString();
     }
 }

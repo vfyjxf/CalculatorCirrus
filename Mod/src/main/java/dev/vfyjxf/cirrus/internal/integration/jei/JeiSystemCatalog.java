@@ -4,8 +4,7 @@ import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.recipe.system.jei.JeiCategoryRecipeSystem;
 import mezz.jei.api.recipe.IRecipeManager;
 import mezz.jei.api.recipe.RecipeType;
-import mezz.jei.api.recipe.category.IRecipeCategory;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 
@@ -15,11 +14,10 @@ public final class JeiSystemCatalog {
 
     public synchronized void rebuild(IRecipeManager manager) {
         try {
-            systems = manager.createRecipeCategoryLookup()
-                             .get()
-                             .filter(category -> JeiRecipeCategoryFilter.include(category.getRecipeType()))
-                             .<RecipeSystem<?>>map(category -> JeiCategoryRecipeSystem.create(category.getRecipeType()))
-                             .toList();
+            systems = manager.createRecipeCategoryLookup().get()
+                    .filter(category -> JeiRecipeCategoryFilter.include(category.getRecipeType()))
+                    .<RecipeSystem<?>>map(category -> JeiCategoryRecipeSystem.create(category.getRecipeType()))
+                    .toList();
         } catch (RuntimeException | LinkageError ignored) {
             systems = List.of();
         }

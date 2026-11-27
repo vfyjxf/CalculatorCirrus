@@ -4,7 +4,10 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * One unified rule: a condition tree plus the actions to execute on match.
@@ -33,28 +36,30 @@ public record RuleSpec(
     boolean enabled,
     RuleStage stage,
     RuleCondition condition,
-    java.util.List<RuleAction> actions
+    List<RuleAction> actions
 ) {
 
-    public static final Codec<RuleSpec> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-        Namespace.codec.fieldOf("id").forGetter(RuleSpec::id),
-        Codec.STRING.optionalFieldOf("label", "").forGetter(RuleSpec::label),
-        Codec.BOOL.optionalFieldOf("enabled", true).forGetter(RuleSpec::enabled),
-        RuleStage.CODEC.fieldOf("stage").forGetter(RuleSpec::stage),
-        RuleCondition.CODEC.fieldOf("when").forGetter(RuleSpec::condition),
-        Codec.list(RuleAction.CODEC).fieldOf("then").forGetter(RuleSpec::actions)
-    ).apply(instance, RuleSpec::new));
+    public static final Codec<RuleSpec> codec = RecordCodecBuilder.create(
+        instance -> instance.group(
+            Namespace.codec.fieldOf("id").forGetter(RuleSpec::id),
+            Codec.STRING.optionalFieldOf("label", "").forGetter(RuleSpec::label),
+            Codec.BOOL.optionalFieldOf("enabled", true).forGetter(RuleSpec::enabled),
+            RuleStage.codec.fieldOf("stage").forGetter(RuleSpec::stage),
+            RuleCondition.codec.fieldOf("when").forGetter(RuleSpec::condition),
+            Codec.list(RuleAction.codec).fieldOf("then").forGetter(RuleSpec::actions)
+        ).apply(instance, RuleSpec::new)
+    );
 
     public RuleSpec {
         Checks.checkNotNull(id, "id");
         label = label == null ? "" : label;
         Checks.checkNotNull(stage, "stage");
         Checks.checkNotNull(condition, "condition");
-        actions = java.util.List.copyOf(actions == null ? java.util.List.of() : actions);
+        actions = List.copyOf(actions == null ? List.of() : actions);
     }
 
     /** Infers the stage from the actions when the caller has not decided yet. */
-    public static @Nullable RuleStage inferStage(java.util.List<RuleAction> actions) {
+    public static @Nullable RuleStage inferStage(List<RuleAction> actions) {
         boolean catalog = false;
         boolean candidate = false;
         for (RuleAction action : actions) {
@@ -71,8 +76,8 @@ public record RuleSpec(
     }
 
     /** Validation problems (empty list = valid); cross-rule checks live in {@link RuleEngine}. */
-    public java.util.List<String> validate() {
-        java.util.List<String> problems = new java.util.ArrayList<>();
+    public List<String> validate() {
+        List<String> problems = new ArrayList<>();
         problems.addAll(RuleCondition.validate(condition));
         if (actions.isEmpty()) {
             problems.add("rule has no actions");

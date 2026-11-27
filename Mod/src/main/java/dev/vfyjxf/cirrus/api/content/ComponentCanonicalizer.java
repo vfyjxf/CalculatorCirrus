@@ -3,7 +3,7 @@ package dev.vfyjxf.cirrus.api.content;
 import com.google.common.collect.MapMaker;
 import net.minecraft.core.component.DataComponentMap;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -37,17 +37,16 @@ import java.util.concurrent.ConcurrentMap;
 @ApiStatus.Internal
 public final class ComponentCanonicalizer {
 
-    private static final int POOL_SOFT_CAP = 1 << 16;
+    private static final int poolSoftCap = 1 << 16;
 
-    private static final ConcurrentMap<DataComponentMap, DataComponentMap> IDENTITY_CACHE =
-            new MapMaker().weakKeys().weakValues().concurrencyLevel(4).makeMap();
+    private static final ConcurrentMap<DataComponentMap, DataComponentMap> identityCache = new MapMaker().weakKeys()
+            .weakValues().concurrencyLevel(4).makeMap();
 
-    private static final ConcurrentHashMap<PoolKey, DataComponentMap> POOL = new ConcurrentHashMap<>(1024);
+    private static final ConcurrentHashMap<PoolKey, DataComponentMap> pool = new ConcurrentHashMap<>(1024);
 
     private static volatile long generation;
 
-    private ComponentCanonicalizer() {
-    }
+    private ComponentCanonicalizer() {}
 
     /**
      * @param map the components to canonicalize
@@ -56,12 +55,12 @@ public final class ComponentCanonicalizer {
      */
     public static @Nullable DataComponentMap canonical(@Nullable DataComponentMap map) {
         if (map == null) return null;
-        DataComponentMap cached = IDENTITY_CACHE.get(map);
+        DataComponentMap cached = identityCache.get(map);
         if (cached != null) return cached;
         PoolKey key = new PoolKey(map, map.hashCode());
-        DataComponentMap canonical = POOL.computeIfAbsent(key, poolKey -> poolKey.map);
-        IDENTITY_CACHE.put(map, canonical);
-        if (POOL.size() > POOL_SOFT_CAP) {
+        DataComponentMap canonical = pool.computeIfAbsent(key, poolKey -> poolKey.map);
+        identityCache.put(map, canonical);
+        if (pool.size() > poolSoftCap) {
             clear();
         }
         return canonical;
@@ -78,8 +77,8 @@ public final class ComponentCanonicalizer {
     }
 
     public static void clear() {
-        IDENTITY_CACHE.clear();
-        POOL.clear();
+        identityCache.clear();
+        pool.clear();
         generation++;
     }
 

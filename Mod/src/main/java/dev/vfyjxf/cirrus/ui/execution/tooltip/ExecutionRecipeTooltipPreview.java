@@ -1,32 +1,28 @@
 package dev.vfyjxf.cirrus.ui.execution.tooltip;
 
-import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
-import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
-import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
-import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayRecipePreview;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
 import dev.vfyjxf.cirrus.recipe.execution.driver.slot.CraftingTableExecutionDriver;
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayContentHelper;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode;
+import net.minecraft.world.inventory.tooltip.TooltipComponent;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
-import org.jetbrains.annotations.Nullable;
-
-import net.minecraft.world.inventory.tooltip.TooltipComponent;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 public final class ExecutionRecipeTooltipPreview {
-    private ExecutionRecipeTooltipPreview() {
-    }
+    private ExecutionRecipeTooltipPreview() {}
 
     public static @Nullable TooltipComponent create(@Nullable ExecutionOverlayRecipePreview preview) {
         return create(preview, false);
@@ -36,7 +32,10 @@ public final class ExecutionRecipeTooltipPreview {
         return create(preview, true);
     }
 
-    private static @Nullable TooltipComponent create(@Nullable ExecutionOverlayRecipePreview preview, boolean leftAligned) {
+    private static @Nullable TooltipComponent create(
+        @Nullable ExecutionOverlayRecipePreview preview,
+        boolean leftAligned
+    ) {
         if (preview == null) {
             return null;
         }
@@ -84,15 +83,9 @@ public final class ExecutionRecipeTooltipPreview {
             return null;
         }
         if (leftAligned) {
-            return ExecutionRecipeLayoutTooltipComponent.leftAligned(
-                new ArrayList<>(inputs),
-                List.copyOf(outputs)
-            );
+            return ExecutionRecipeLayoutTooltipComponent.leftAligned(new ArrayList<>(inputs), List.copyOf(outputs));
         }
-        return new ExecutionRecipeLayoutTooltipComponent(
-                new ArrayList<>(inputs),
-                List.copyOf(outputs)
-        );
+        return new ExecutionRecipeLayoutTooltipComponent(new ArrayList<>(inputs), List.copyOf(outputs));
     }
 
     public static List<ProcessNode.MaterialSlot> previewInputSlots(
@@ -108,8 +101,8 @@ public final class ExecutionRecipeTooltipPreview {
         for (InputContent input : inputs) {
             bindings.add(new InputBinding(input, Math.max(1L, input.amount())));
         }
-        ImmutableList<CraftingTableExecutionDriver.RecipePreviewSlot> previewSlots =
-            CraftingTableExecutionDriver.resolvePreviewSlots(recipe, Lists.immutable.ofAll(bindings));
+        ImmutableList<CraftingTableExecutionDriver.RecipePreviewSlot> previewSlots = CraftingTableExecutionDriver
+                .resolvePreviewSlots(recipe, Lists.immutable.ofAll(bindings));
         if (previewSlots.notEmpty()) {
             return mapPreviewSlots(previewSlots);
         }
@@ -142,8 +135,8 @@ public final class ExecutionRecipeTooltipPreview {
         if (inputs.isEmpty()) {
             return List.of();
         }
-        ImmutableList<CraftingTableExecutionDriver.RecipePreviewSlot> previewSlots =
-            CraftingTableExecutionDriver.resolvePreviewSlots(recipe, inputs);
+        ImmutableList<CraftingTableExecutionDriver.RecipePreviewSlot> previewSlots = CraftingTableExecutionDriver
+                .resolvePreviewSlots(recipe, inputs);
         if (previewSlots.notEmpty()) {
             return mapPreviewSlots(previewSlots);
         }
@@ -154,9 +147,7 @@ public final class ExecutionRecipeTooltipPreview {
         return out;
     }
 
-    public static List<ProcessNode.MaterialSlot> previewOutputSlots(
-        ImmutableList<OutputBinding> outputs
-    ) {
+    public static List<ProcessNode.MaterialSlot> previewOutputSlots(ImmutableList<OutputBinding> outputs) {
         if (outputs.isEmpty()) {
             return List.of();
         }
@@ -167,11 +158,12 @@ public final class ExecutionRecipeTooltipPreview {
         return out;
     }
 
-    private static List<InputContent> inputContents(@Nullable RecipeProjection projection, @Nullable ProjectedRecipe projected) {
+    private static List<InputContent> inputContents(
+        @Nullable RecipeProjection projection,
+        @Nullable ProjectedRecipe projected
+    ) {
         if (projected != null) {
-            return projected.inputs().stream()
-                .filter(input -> input != null && input.notEmpty())
-                .toList();
+            return projected.inputs().stream().filter(input -> input != null && input.notEmpty()).toList();
         }
         if (projection == null) {
             return List.of();
@@ -185,11 +177,12 @@ public final class ExecutionRecipeTooltipPreview {
         return List.copyOf(inputs);
     }
 
-    private static List<OutputContent> outputContents(@Nullable RecipeProjection projection, @Nullable ProjectedRecipe projected) {
+    private static List<OutputContent> outputContents(
+        @Nullable RecipeProjection projection,
+        @Nullable ProjectedRecipe projected
+    ) {
         if (projected != null) {
-            return projected.outputs().stream()
-                .filter(ExecutionRecipeTooltipPreview::isVisiblePreviewContent)
-                .toList();
+            return projected.outputs().stream().filter(ExecutionRecipeTooltipPreview::isVisiblePreviewContent).toList();
         }
         if (projection == null) {
             return List.of();
@@ -204,10 +197,7 @@ public final class ExecutionRecipeTooltipPreview {
     }
 
     private static boolean isVisiblePreviewContent(@Nullable RecipeContent content) {
-        if (content == null || content.isEmpty()) {
-            return false;
-        }
-        return !(content instanceof ValueContent<?> value && value.type() == CirrusTypes.Contents.ENERGY);
+        return content != null && content.notEmpty();
     }
 
     private static ArrayList<ProcessNode.MaterialSlot> mapPreviewSlots(
@@ -223,12 +213,15 @@ public final class ExecutionRecipeTooltipPreview {
         return out;
     }
 
-    private static ProcessNode.MaterialSlot toPreviewMaterialSlot(CraftingTableExecutionDriver.RecipePreviewSlot previewSlot) {
+    private static ProcessNode.MaterialSlot toPreviewMaterialSlot(
+        CraftingTableExecutionDriver.RecipePreviewSlot previewSlot
+    ) {
         InputContent input = previewSlot.input();
         if (input != null) {
             return ExecutionOverlayContentHelper.materialSlot(input.copyWithAmount(previewSlot.amount()));
         }
-        return ExecutionOverlayContentHelper.materialSlot(InputContent.fromItemStack(previewSlot.template(), previewSlot.amount()));
+        return ExecutionOverlayContentHelper
+                .materialSlot(InputContent.fromItemStack(previewSlot.template(), previewSlot.amount()));
     }
 
     public static RecipeContent firstPreviewContent(

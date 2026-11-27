@@ -18,7 +18,7 @@ import dev.vfyjxf.cirrus.planning.adapter.DropReason;
 import dev.vfyjxf.cirrus.planning.adapter.RawRecordMapper;
 import dev.vfyjxf.cirrus.planning.adapter.StackIdentity;
 import dev.vfyjxf.cirrus.planning.core.graph.DefaultSystemAdmissionPolicy;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
@@ -49,17 +49,17 @@ import java.util.zip.ZipFile;
 
 public final class ExportJsonCatalogLoader {
 
-    private static final String FLUID_TAG_TYPE_ID = "minecraft:tag/fluid";
-    private static final String ITEM_TAG_TYPE_ID = "minecraft:tag/item";
+    private static final String fluidTagTypeId = "minecraft:tag/fluid";
+    private static final String itemTagTypeId = "minecraft:tag/item";
 
-    public ExportJsonCatalogLoader() {
-    }
+    public ExportJsonCatalogLoader() {}
 
     public static void validatePackName(String packName) {
         if (packName == null || packName.isBlank()) {
             throw new IllegalArgumentException("packName must not be empty");
         }
-        if (".".equals(packName) || "..".equals(packName)
+        if (".".equals(packName)
+                || "..".equals(packName)
                 || packName.indexOf('/') >= 0
                 || packName.indexOf('\\') >= 0
                 || packName.indexOf('\0') >= 0
@@ -190,10 +190,10 @@ public final class ExportJsonCatalogLoader {
     }
 
     public LoadedCatalog loadStream(
-            InputStream in,
-            long catalogVersion,
-            RawRecordMapper.TagTypeRegistry tagRegistry,
-            boolean runClassifier
+        InputStream in,
+        long catalogVersion,
+        RawRecordMapper.TagTypeRegistry tagRegistry,
+        boolean runClassifier
     ) throws IOException {
         Objects.requireNonNull(in, "in");
         Objects.requireNonNull(tagRegistry, "tagRegistry");
@@ -208,7 +208,7 @@ public final class ExportJsonCatalogLoader {
         boolean foundAny = false;
         try (JsonReader reader = new JsonReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
             if (reader.peek() != JsonToken.BEGIN_OBJECT) {
-                return RawRecordMapper.TagTypeRegistry.ABSENT;
+                return RawRecordMapper.TagTypeRegistry.absent;
             }
             reader.beginObject();
             while (reader.hasNext()) {
@@ -228,10 +228,11 @@ public final class ExportJsonCatalogLoader {
         }
         return foundAny
                 ? new RawRecordMapper.TagTypeRegistry(fluidTags, itemTags, true)
-                : RawRecordMapper.TagTypeRegistry.ABSENT;
+                : RawRecordMapper.TagTypeRegistry.absent;
     }
 
-    private static void readTagTypeEntry(JsonReader reader, Set<String> fluidTags, Set<String> itemTags) throws IOException {
+    private static void readTagTypeEntry(JsonReader reader, Set<String> fluidTags, Set<String> itemTags)
+            throws IOException {
         if (reader.peek() != JsonToken.BEGIN_OBJECT) {
             reader.skipValue();
             return;
@@ -271,16 +272,16 @@ public final class ExportJsonCatalogLoader {
         if (tags == null || tags.isEmpty()) {
             return;
         }
-        if (FLUID_TAG_TYPE_ID.equals(id) || StackIdentity.FLUID_CONTENT_TYPE.equals(contentType)) {
+        if (fluidTagTypeId.equals(id) || StackIdentity.fluidContentType.equals(contentType)) {
             fluidTags.addAll(tags);
-        } else if (ITEM_TAG_TYPE_ID.equals(id) || StackIdentity.ITEM_CONTENT_TYPE.equals(contentType)) {
+        } else if (itemTagTypeId.equals(id) || StackIdentity.itemContentType.equals(contentType)) {
             itemTags.addAll(tags);
         }
     }
 
     private static RawRecordMapper.TagTypeRegistry readTagTypesFromPaths(List<Path> tagFiles) throws IOException {
         if (tagFiles.isEmpty()) {
-            return RawRecordMapper.TagTypeRegistry.ABSENT;
+            return RawRecordMapper.TagTypeRegistry.absent;
         }
         Set<String> fluidTags = new HashSet<>();
         Set<String> itemTags = new HashSet<>();
@@ -295,12 +296,15 @@ public final class ExportJsonCatalogLoader {
                 }
             }
         }
-        return present ? new RawRecordMapper.TagTypeRegistry(fluidTags, itemTags, true) : RawRecordMapper.TagTypeRegistry.ABSENT;
+        return present
+                ? new RawRecordMapper.TagTypeRegistry(fluidTags, itemTags, true)
+                : RawRecordMapper.TagTypeRegistry.absent;
     }
 
-    private static RawRecordMapper.TagTypeRegistry readTagTypesFromZip(ZipFile zip, List<ZipEntry> tagEntries) throws IOException {
+    private static RawRecordMapper.TagTypeRegistry readTagTypesFromZip(ZipFile zip, List<ZipEntry> tagEntries)
+            throws IOException {
         if (tagEntries.isEmpty()) {
-            return RawRecordMapper.TagTypeRegistry.ABSENT;
+            return RawRecordMapper.TagTypeRegistry.absent;
         }
         Set<String> fluidTags = new HashSet<>();
         Set<String> itemTags = new HashSet<>();
@@ -315,19 +319,17 @@ public final class ExportJsonCatalogLoader {
                 }
             }
         }
-        return present ? new RawRecordMapper.TagTypeRegistry(fluidTags, itemTags, true) : RawRecordMapper.TagTypeRegistry.ABSENT;
+        return present
+                ? new RawRecordMapper.TagTypeRegistry(fluidTags, itemTags, true)
+                : RawRecordMapper.TagTypeRegistry.absent;
     }
 
     private static List<Path> findMatchingFiles(Path dir, String prefix) throws IOException {
         try (Stream<Path> files = Files.list(dir)) {
-            return files
-                    .filter(Files::isRegularFile)
-                    .filter(p -> {
-                        String name = p.getFileName().toString();
-                        return name.startsWith(prefix) && name.endsWith(".json");
-                    })
-                    .sorted(Comparator.comparing(p -> p.getFileName().toString()))
-                    .toList();
+            return files.filter(Files::isRegularFile).filter(p -> {
+                String name = p.getFileName().toString();
+                return name.startsWith(prefix) && name.endsWith(".json");
+            }).sorted(Comparator.comparing(p -> p.getFileName().toString())).toList();
         }
     }
 
@@ -337,8 +339,10 @@ public final class ExportJsonCatalogLoader {
             normalized = normalized.substring(1);
         }
         String[] parts = normalized.split("/");
-        if (parts.length == 3 && "exports".equals(parts[0])
-                && parts[2].startsWith(filePrefix) && parts[2].endsWith(".json")) {
+        if (parts.length == 3
+                && "exports".equals(parts[0])
+                && parts[2].startsWith(filePrefix)
+                && parts[2].endsWith(".json")) {
             return parts[1];
         }
         if (parts.length == 2 && parts[1].startsWith(filePrefix) && parts[1].endsWith(".json")) {
@@ -359,6 +363,14 @@ public final class ExportJsonCatalogLoader {
         }
         reader.skipValue();
         return fallback;
+    }
+
+    private static @Nullable String readNullableString(JsonReader reader) throws IOException {
+        if (reader.peek() == JsonToken.STRING) {
+            return reader.nextString().trim();
+        }
+        reader.skipValue();
+        return null;
     }
 
     private static final class LoadAccumulator {
@@ -403,7 +415,7 @@ public final class ExportJsonCatalogLoader {
         private void readOneRecipe(JsonReader reader) throws IOException {
             if (reader.peek() != JsonToken.BEGIN_OBJECT) {
                 reader.skipValue();
-                drop(DropReason.UNKNOWN_KIND);
+                drop(DropReason.unknownKind);
                 return;
             }
             String systemId = "";
@@ -442,7 +454,7 @@ public final class ExportJsonCatalogLoader {
             reader.endObject();
 
             if (rawInputs == null || rawInputs.isEmpty() || rawOutputs == null || rawOutputs.isEmpty()) {
-                drop(DropReason.EMPTY_SLOT_LISTS);
+                drop(DropReason.emptySlotLists);
                 return;
             }
             if (parseError != null) {
@@ -461,17 +473,21 @@ public final class ExportJsonCatalogLoader {
             List<ClassifyContent> cOutputs = runClassifier ? new ArrayList<>(rawOutputs.size()) : null;
 
             for (ParsedSlot slot : rawInputs) {
-                if (!Double.isFinite(slot.chance) || slot.chance < 0.0 || slot.chance > 1.0
+                if (!Double.isFinite(slot.chance)
+                        || slot.chance < 0.0
+                        || slot.chance > 1.0
                         || (slot.chance > 0.0 && slot.chance < 1.0)) {
-                    drop(DropReason.PROBABILISTIC);
+                    drop(DropReason.probabilistic);
                     return;
                 }
                 boolean catalyst = slot.chance == 0.0;
                 switch (slot.kind) {
                     case "value" -> {
-                        if (slot.valueType == null || slot.valueType.isEmpty()
-                                || slot.numericValue == null || !Double.isFinite(slot.numericValue)) {
-                            drop(DropReason.INVALID_AMOUNT);
+                        if (slot.valueType == null
+                                || slot.valueType.isEmpty()
+                                || slot.numericValue == null
+                                || !Double.isFinite(slot.numericValue)) {
+                            drop(DropReason.invalidAmount);
                             return;
                         }
                         if (!catalyst) {
@@ -481,30 +497,38 @@ public final class ExportJsonCatalogLoader {
                             recipeValues.merge(slot.valueType, slot.numericValue, Math::max);
                         }
                         if (cInputs != null) {
-                            cInputs.add(new ClassifyContent(ClassifyContent.Kind.value, Set.of(), null, slot.numericValue, slot.chance));
+                            cInputs.add(
+                                new ClassifyContent(
+                                    ClassifyContent.Kind.value,
+                                    Set.of(),
+                                    null,
+                                    slot.numericValue,
+                                    slot.chance
+                                )
+                            );
                         }
                     }
                     case "complex" -> {
-                        drop(DropReason.COMPLEX_SLOT);
+                        drop(DropReason.complexSlot);
                         return;
                     }
                     case "stack" -> {
                         if (slot.exactAmount == null || slot.exactAmount <= 0L) {
-                            drop(DropReason.INVALID_AMOUNT);
+                            drop(DropReason.invalidAmount);
                             return;
                         }
                         Optional<StackIdentity.MatchFlags> flags = StackIdentity.MatchFlags.parse(slot.matchStrategy);
                         if (flags.isEmpty() || flags.get().toSlotMatchMode().isEmpty()) {
-                            drop(DropReason.UNSUPPORTED_MATCH_STRATEGY);
+                            drop(DropReason.unsupportedMatchStrategy);
                             return;
                         }
                         if (slot.stack == null) {
-                            drop(DropReason.INVALID_STACK);
+                            drop(DropReason.invalidStack);
                             return;
                         }
                         StackIdentity.MappedStack mapped = mapParsedStackInput(slot.stack, flags.get());
                         if (mapped.key().isEmpty()) {
-                            drop(DropReason.INVALID_STACK);
+                            drop(DropReason.invalidStack);
                             return;
                         }
                         ResourceKey key = mapped.key().get();
@@ -522,16 +546,21 @@ public final class ExportJsonCatalogLoader {
                     }
                     case "tag" -> {
                         if (slot.exactAmount == null || slot.exactAmount <= 0L) {
-                            drop(DropReason.INVALID_AMOUNT);
+                            drop(DropReason.invalidAmount);
                             return;
                         }
-                        if (slot.tagId == null || slot.tagId.isEmpty() || slot.tagValues == null || slot.tagValues.isEmpty()) {
-                            drop(DropReason.EMPTY_SLOT_CANDIDATES);
+                        if (slot.tagId == null
+                                || slot.tagId.isEmpty()
+                                || slot.tagValues == null
+                                || slot.tagValues.isEmpty()) {
+                            drop(DropReason.emptySlotCandidates);
                             return;
                         }
                         String contentTypeId = tagRegistry.resolveTagContentType(slot.tagId, slot.exactAmount);
                         LinkedHashSet<ResourceKey> unique = new LinkedHashSet<>(slot.tagValues.size());
-                        LinkedHashSet<String> idStrings = runClassifier ? new LinkedHashSet<>(slot.tagValues.size()) : null;
+                        LinkedHashSet<String> idStrings = runClassifier
+                                ? new LinkedHashSet<>(slot.tagValues.size())
+                                : null;
                         for (String rawId : slot.tagValues) {
                             if (!rawId.isEmpty()) {
                                 unique.add(pool.internBare(contentTypeId, rawId));
@@ -541,42 +570,70 @@ public final class ExportJsonCatalogLoader {
                             }
                         }
                         if (unique.isEmpty()) {
-                            drop(DropReason.EMPTY_SLOT_CANDIDATES);
+                            drop(DropReason.emptySlotCandidates);
                             return;
                         }
                         List<ResourceKey> candidates = pool.internList(new ArrayList<>(unique));
                         if (catalyst) {
                             if (candidates.size() == 1) {
-                                inputs.add(new RawIngredientSlot(Optional.empty(), candidates, slot.exactAmount, SlotMatchMode.IDENTITY));
+                                inputs.add(
+                                    new RawIngredientSlot(
+                                        Optional.empty(),
+                                        candidates,
+                                        slot.exactAmount,
+                                        SlotMatchMode.identity
+                                    )
+                                );
                                 if (catalystReturnOutputs == null) {
                                     catalystReturnOutputs = new ArrayList<>(2);
                                 }
                                 catalystReturnOutputs.add(new RawOutputSlot(candidates.get(0), slot.exactAmount));
                             } else {
-                                inputs.add(new RawIngredientSlot(Optional.of(slot.tagId), candidates, 0L, SlotMatchMode.IDENTITY, 0, 1));
+                                inputs.add(
+                                    new RawIngredientSlot(
+                                        Optional.of(slot.tagId),
+                                        candidates,
+                                        0L,
+                                        SlotMatchMode.identity,
+                                        0,
+                                        1
+                                    )
+                                );
                             }
                         } else {
-                            inputs.add(new RawIngredientSlot(Optional.of(slot.tagId), candidates, slot.exactAmount, SlotMatchMode.IDENTITY));
+                            inputs.add(
+                                new RawIngredientSlot(
+                                    Optional.of(slot.tagId),
+                                    candidates,
+                                    slot.exactAmount,
+                                    SlotMatchMode.identity
+                                )
+                            );
                         }
-                        if (cInputs != null) {
-                            cInputs.add(ClassifyContent.tag(slot.tagId, pool.internIdSet(idStrings), slot.exactAmount, slot.chance));
+                        if (cInputs != null && idStrings != null) {
+                            cInputs.add(
+                                ClassifyContent
+                                        .tag(slot.tagId, pool.internIdSet(idStrings), slot.exactAmount, slot.chance)
+                            );
                         }
                     }
                     case "any", "typedAny" -> {
                         if (slot.exactAmount == null || slot.exactAmount <= 0L) {
-                            drop(DropReason.INVALID_AMOUNT);
+                            drop(DropReason.invalidAmount);
                             return;
                         }
                         if (slot.stacks == null || slot.stacks.isEmpty()) {
-                            drop(DropReason.EMPTY_SLOT_CANDIDATES);
+                            drop(DropReason.emptySlotCandidates);
                             return;
                         }
                         LinkedHashSet<ResourceKey> unique = new LinkedHashSet<>(slot.stacks.size());
-                        LinkedHashSet<String> idStrings = runClassifier ? new LinkedHashSet<>(slot.stacks.size()) : null;
+                        LinkedHashSet<String> idStrings = runClassifier
+                                ? new LinkedHashSet<>(slot.stacks.size())
+                                : null;
                         for (ParsedStack ps : slot.stacks) {
                             Optional<ResourceKey> key = mapParsedStackConcrete(ps);
                             if (key.isEmpty()) {
-                                drop(DropReason.INVALID_STACK);
+                                drop(DropReason.invalidStack);
                                 return;
                             }
                             unique.add(key.get());
@@ -585,7 +642,7 @@ public final class ExportJsonCatalogLoader {
                             }
                         }
                         if (unique.isEmpty()) {
-                            drop(DropReason.EMPTY_SLOT_CANDIDATES);
+                            drop(DropReason.emptySlotCandidates);
                             return;
                         }
                         List<ResourceKey> candidates = pool.internList(new ArrayList<>(unique));
@@ -603,37 +660,49 @@ public final class ExportJsonCatalogLoader {
                         } else {
                             inputs.add(new RawIngredientSlot(Optional.empty(), candidates, slot.exactAmount, mode));
                         }
-                        if (cInputs != null) {
+                        if (cInputs != null && idStrings != null) {
                             ClassifyContent.Kind cKind = "typedAny".equals(slot.kind)
                                     ? ClassifyContent.Kind.typedAny
                                     : ClassifyContent.Kind.any;
-                            cInputs.add(new ClassifyContent(cKind, pool.internIdSet(idStrings), null, slot.exactAmount, slot.chance));
+                            cInputs.add(
+                                new ClassifyContent(
+                                    cKind,
+                                    pool.internIdSet(idStrings),
+                                    null,
+                                    slot.exactAmount,
+                                    slot.chance
+                                )
+                            );
                         }
                     }
                     default -> {
-                        drop(DropReason.UNKNOWN_KIND);
+                        drop(DropReason.unknownKind);
                         return;
                     }
                 }
             }
 
             if (inputs.isEmpty()) {
-                drop(DropReason.NO_INPUT_AFTER_VALUES);
+                drop(DropReason.noInputAfterValues);
                 return;
             }
 
             for (ParsedSlot slot : rawOutputs) {
-                if (!Double.isFinite(slot.chance) || slot.chance < 0.0 || slot.chance > 1.0
+                if (!Double.isFinite(slot.chance)
+                        || slot.chance < 0.0
+                        || slot.chance > 1.0
                         || (slot.chance > 0.0 && slot.chance < 1.0)) {
-                    drop(DropReason.PROBABILISTIC);
+                    drop(DropReason.probabilistic);
                     return;
                 }
                 boolean neverProduced = slot.chance == 0.0;
                 switch (slot.kind) {
                     case "value" -> {
-                        if (slot.valueType == null || slot.valueType.isEmpty()
-                                || slot.numericValue == null || !Double.isFinite(slot.numericValue)) {
-                            drop(DropReason.INVALID_AMOUNT);
+                        if (slot.valueType == null
+                                || slot.valueType.isEmpty()
+                                || slot.numericValue == null
+                                || !Double.isFinite(slot.numericValue)) {
+                            drop(DropReason.invalidAmount);
                             return;
                         }
                         if (!neverProduced) {
@@ -643,41 +712,54 @@ public final class ExportJsonCatalogLoader {
                             recipeValues.merge(slot.valueType, slot.numericValue, Math::max);
                         }
                         if (cOutputs != null) {
-                            cOutputs.add(new ClassifyContent(ClassifyContent.Kind.value, Set.of(), null, slot.numericValue, slot.chance));
+                            cOutputs.add(
+                                new ClassifyContent(
+                                    ClassifyContent.Kind.value,
+                                    Set.of(),
+                                    null,
+                                    slot.numericValue,
+                                    slot.chance
+                                )
+                            );
                         }
                     }
                     case "complex" -> {
-                        drop(DropReason.COMPLEX_SLOT);
+                        drop(DropReason.complexSlot);
                         return;
                     }
                     case "stack" -> {
                         if (slot.exactAmount == null || slot.exactAmount <= 0L) {
-                            drop(DropReason.INVALID_AMOUNT);
+                            drop(DropReason.invalidAmount);
                             return;
                         }
                         if (slot.stack == null) {
-                            drop(DropReason.INVALID_STACK);
+                            drop(DropReason.invalidStack);
                             return;
                         }
                         Optional<ResourceKey> key = mapParsedStackConcrete(slot.stack);
                         if (key.isEmpty()) {
-                            drop(DropReason.INVALID_STACK);
+                            drop(DropReason.invalidStack);
                             return;
                         }
                         if (!neverProduced) {
                             outputs.add(new RawOutputSlot(key.get(), slot.exactAmount));
                             if (cOutputs != null) {
-                                cOutputs.add(ClassifyContent.stack(key.get().resourceId(), slot.exactAmount, slot.chance));
+                                cOutputs.add(
+                                    ClassifyContent.stack(key.get().resourceId(), slot.exactAmount, slot.chance)
+                                );
                             }
                         }
                     }
                     case "tag" -> {
                         if (slot.exactAmount == null || slot.exactAmount <= 0L) {
-                            drop(DropReason.INVALID_AMOUNT);
+                            drop(DropReason.invalidAmount);
                             return;
                         }
-                        if (slot.tagId == null || slot.tagId.isEmpty() || slot.tagValues == null || slot.tagValues.isEmpty()) {
-                            drop(DropReason.EMPTY_SLOT_CANDIDATES);
+                        if (slot.tagId == null
+                                || slot.tagId.isEmpty()
+                                || slot.tagValues == null
+                                || slot.tagValues.isEmpty()) {
+                            drop(DropReason.emptySlotCandidates);
                             return;
                         }
                         String contentTypeId = tagRegistry.resolveTagContentType(slot.tagId, slot.exactAmount);
@@ -688,11 +770,11 @@ public final class ExportJsonCatalogLoader {
                             }
                         }
                         if (unique.isEmpty()) {
-                            drop(DropReason.EMPTY_SLOT_CANDIDATES);
+                            drop(DropReason.emptySlotCandidates);
                             return;
                         }
                         if (unique.size() > 1) {
-                            drop(DropReason.TAG_OUTPUT_MULTI);
+                            drop(DropReason.tagOutputMulti);
                             return;
                         }
                         ResourceKey only = unique.iterator().next();
@@ -705,28 +787,28 @@ public final class ExportJsonCatalogLoader {
                     }
                     case "any", "typedAny" -> {
                         if (slot.exactAmount == null || slot.exactAmount <= 0L) {
-                            drop(DropReason.INVALID_AMOUNT);
+                            drop(DropReason.invalidAmount);
                             return;
                         }
                         if (slot.stacks == null || slot.stacks.isEmpty()) {
-                            drop(DropReason.EMPTY_SLOT_CANDIDATES);
+                            drop(DropReason.emptySlotCandidates);
                             return;
                         }
                         LinkedHashSet<ResourceKey> unique = new LinkedHashSet<>(slot.stacks.size());
                         for (ParsedStack ps : slot.stacks) {
                             Optional<ResourceKey> key = mapParsedStackConcrete(ps);
                             if (key.isEmpty()) {
-                                drop(DropReason.INVALID_STACK);
+                                drop(DropReason.invalidStack);
                                 return;
                             }
                             unique.add(key.get());
                         }
                         if (unique.isEmpty()) {
-                            drop(DropReason.EMPTY_SLOT_CANDIDATES);
+                            drop(DropReason.emptySlotCandidates);
                             return;
                         }
                         if (unique.size() > 1) {
-                            drop(DropReason.MULTI_STACK_OUTPUT);
+                            drop(DropReason.multiStackOutput);
                             return;
                         }
                         ResourceKey only = unique.iterator().next();
@@ -738,14 +820,14 @@ public final class ExportJsonCatalogLoader {
                         }
                     }
                     default -> {
-                        drop(DropReason.UNKNOWN_KIND);
+                        drop(DropReason.unknownKind);
                         return;
                     }
                 }
             }
 
             if (outputs.isEmpty()) {
-                drop(DropReason.NO_OUTPUT_AFTER_VALUES);
+                drop(DropReason.noOutputAfterValues);
                 return;
             }
             if (catalystReturnOutputs != null) {
@@ -754,26 +836,28 @@ public final class ExportJsonCatalogLoader {
 
             long sourceRef = nextSourceRef++;
             RawRecipeRecord record = new RawRecipeRecord(
-                    systemId,
-                    sourceKind,
-                    explicitId.isEmpty() ? Optional.empty() : Optional.of(explicitId),
-                    machines,
-                    inputs,
-                    outputs,
-                    recipeValues == null ? Map.of() : recipeValues,
-                    sourceRef
+                systemId,
+                sourceKind,
+                explicitId.isEmpty() ? Optional.empty() : Optional.of(explicitId),
+                machines,
+                inputs,
+                outputs,
+                recipeValues == null ? Map.of() : recipeValues,
+                sourceRef
             );
             keptRecords.add(record);
             if (runClassifier) {
                 int viewIndex = classifyViews.size();
-                classifyViews.add(new RecipeClassifyView(
+                classifyViews.add(
+                    new RecipeClassifyView(
                         viewIndex,
                         systemId,
                         explicitId,
                         machines,
-                        cInputs,
-                        cOutputs
-                ));
+                        Objects.requireNonNull(cInputs),
+                        Objects.requireNonNull(cOutputs)
+                    )
+                );
             }
         }
 
@@ -784,9 +868,10 @@ public final class ExportJsonCatalogLoader {
                 return new StackIdentity.MappedStack(Optional.empty(), flags.toSlotMatchMode());
             }
             Optional<SlotMatchMode> mode = flags.toSlotMatchMode();
-            if (ps.components == null || ps.components.isJsonNull()
+            if (ps.components == null
+                    || ps.components.isJsonNull()
                     || (ps.components.isJsonObject() && ps.components.getAsJsonObject().isEmpty())
-                    || mode.orElse(SlotMatchMode.IDENTITY) == SlotMatchMode.IDENTITY) {
+                    || mode.orElse(SlotMatchMode.identity) == SlotMatchMode.identity) {
                 return new StackIdentity.MappedStack(Optional.of(pool.internBare(contentTypeId, resId)), mode);
             }
             return StackIdentity.mapInput(new StackIdentity.StackSpec(contentTypeId, resId, ps.components, flags));
@@ -798,7 +883,8 @@ public final class ExportJsonCatalogLoader {
             if (contentTypeId.isEmpty() || resId.isEmpty()) {
                 return Optional.empty();
             }
-            if (ps.components == null || ps.components.isJsonNull()
+            if (ps.components == null
+                    || ps.components.isJsonNull()
                     || (ps.components.isJsonObject() && ps.components.getAsJsonObject().isEmpty())) {
                 return Optional.of(pool.internBare(contentTypeId, resId));
             }
@@ -806,10 +892,10 @@ public final class ExportJsonCatalogLoader {
         }
 
         private static String extractParsedStackResourceId(ParsedStack ps, String contentTypeId) {
-            if (StackIdentity.ITEM_CONTENT_TYPE.equals(contentTypeId)) {
+            if (StackIdentity.itemContentType.equals(contentTypeId)) {
                 return ps.id;
             }
-            if (StackIdentity.FLUID_CONTENT_TYPE.equals(contentTypeId)) {
+            if (StackIdentity.fluidContentType.equals(contentTypeId)) {
                 return !ps.fluid.isEmpty() ? ps.fluid : ps.id;
             }
             if (!ps.id.isEmpty()) {
@@ -846,7 +932,7 @@ public final class ExportJsonCatalogLoader {
                 if (reader.peek() != JsonToken.BEGIN_OBJECT) {
                     reader.skipValue();
                     if (firstErr == null) {
-                        firstErr = DropReason.UNKNOWN_KIND;
+                        firstErr = DropReason.unknownKind;
                     }
                     continue;
                 }
@@ -866,7 +952,7 @@ public final class ExportJsonCatalogLoader {
                     case "kind" -> slot.kind = readStringOrNull(reader, "");
                     case "amount" -> slot.exactAmount = readExactPositiveLong(reader);
                     case "chance" -> slot.chance = readChance(reader);
-                    case "matchStrategy" -> slot.matchStrategy = readStringOrNull(reader, null);
+                    case "matchStrategy" -> slot.matchStrategy = readNullableString(reader);
                     case "tag" -> slot.tagId = readStringOrNull(reader, "");
                     case "values" -> slot.tagValues = readStringList(reader);
                     case "stack" -> slot.stack = readStackObject(reader);
@@ -1022,30 +1108,34 @@ public final class ExportJsonCatalogLoader {
                 for (int i = 0; i < keptRecords.size(); i++) {
                     sourceRefs[i] = keptRecords.get(i).sourceRef();
                 }
-                policy = ClassifierVerdictBridge.classifyToPolicy(
-                        DefaultSystemAdmissionPolicy.defaults(),
-                        classifyViews,
-                        sourceRefs
-                );
+                policy = ClassifierVerdictBridge
+                        .classifyToPolicy(DefaultSystemAdmissionPolicy.defaults(), classifyViews, sourceRefs);
             }
             return new LoadedCatalog(snapshot, policy, stats);
         }
     }
 
-    private record SlotArrayResult(List<ParsedSlot> slots, @Nullable DropReason error) {
-    }
+    private record SlotArrayResult(List<ParsedSlot> slots, @Nullable DropReason error) {}
 
     private static final class ParsedSlot {
         String kind = "";
-        @Nullable Long exactAmount;
+        @Nullable
+        Long exactAmount;
         double chance = 1.0;
-        @Nullable String matchStrategy;
-        @Nullable String tagId;
-        @Nullable List<String> tagValues;
-        @Nullable ParsedStack stack;
-        @Nullable List<ParsedStack> stacks;
-        @Nullable String valueType;
-        @Nullable Double numericValue;
+        @Nullable
+        String matchStrategy;
+        @Nullable
+        String tagId;
+        @Nullable
+        List<String> tagValues;
+        @Nullable
+        ParsedStack stack;
+        @Nullable
+        List<ParsedStack> stacks;
+        @Nullable
+        String valueType;
+        @Nullable
+        Double numericValue;
     }
 
     private static final class ParsedStack {
@@ -1053,6 +1143,7 @@ public final class ExportJsonCatalogLoader {
         String id = "";
         String fluid = "";
         String value = "";
-        @Nullable JsonElement components;
+        @Nullable
+        JsonElement components;
     }
 }

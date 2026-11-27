@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.rule;
 
 import com.mojang.serialization.Codec;
+import dev.vfyjxf.cloudlib.api.util.Codecs;
 
 /**
  * String-matching semantics for id-style condition leaves
@@ -27,12 +28,7 @@ import com.mojang.serialization.Codec;
  * </ul>
  */
 public enum TextMatchOp {
-    in,
-    prefix,
-    suffix,
-    contains,
-    glob,
-    regex;
+    in, prefix, suffix, contains, glob, regex;
 
-    public static final Codec<TextMatchOp> CODEC = dev.vfyjxf.cloudlib.api.util.Codecs.lowerCaseEnum(TextMatchOp.class);
+    public static final Codec<TextMatchOp> codec = Codecs.lowerCaseEnum(TextMatchOp.class);
 }

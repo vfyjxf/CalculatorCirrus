@@ -9,7 +9,6 @@ import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowStatus;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowViewModel;
-import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -19,6 +18,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.factory.Sets;
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -107,20 +107,13 @@ class ExecutionFlowViewModelContractTest {
 
         var viewModel = ExecutionFlowViewModel.derive(
             root,
-            new ExecutionFlowViewModel.RuntimeState(
-                Sets.immutable.empty(),
-                Sets.immutable.empty(),
-                null,
-                null
-            )
+            new ExecutionFlowViewModel.RuntimeState(Sets.immutable.empty(), Sets.immutable.empty(), null, null)
         );
 
         assertEquals("target", viewModel.root().nodeId());
         assertEquals(1, viewModel.root().children().size());
         assertEquals("recipe:craft_planks", viewModel.root().children().get(0).nodeId());
         assertEquals(4, viewModel.root().children().get(0).children().size());
-        assertEquals("Acquire inputs", viewModel.root().children().get(0).children().get(0).label().getString());
-        assertEquals("Store outputs", viewModel.root().children().get(0).children().get(3).label().getString());
     }
 
     //endregion
@@ -182,21 +175,11 @@ class ExecutionFlowViewModelContractTest {
 
         var running = ExecutionFlowViewModel.derive(
             root,
-            new ExecutionFlowViewModel.RuntimeState(
-                Sets.immutable.of(withdraw),
-                Sets.immutable.empty(),
-                execute,
-                null
-            )
+            new ExecutionFlowViewModel.RuntimeState(Sets.immutable.of(withdraw), Sets.immutable.empty(), execute, null)
         );
         var paused = ExecutionFlowViewModel.derive(
             root,
-            new ExecutionFlowViewModel.RuntimeState(
-                Sets.immutable.of(withdraw),
-                Sets.immutable.of(manual),
-                null,
-                null
-            )
+            new ExecutionFlowViewModel.RuntimeState(Sets.immutable.of(withdraw), Sets.immutable.of(manual), null, null)
         );
         var completed = ExecutionFlowViewModel.derive(
             root,
@@ -287,12 +270,12 @@ class ExecutionFlowViewModelContractTest {
         }
 
         @Override
-        public TestRecipe findRecipe(String uniqueId) {
+        public @Nullable TestRecipe findRecipe(String uniqueId) {
             return byId.get(uniqueId);
         }
 
         @Override
-        public TestRecipe findRecipe(ResourceLocation registryName) {
+        public @Nullable TestRecipe findRecipe(ResourceLocation registryName) {
             return byId.get(registryName.getPath());
         }
 

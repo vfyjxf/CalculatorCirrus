@@ -1,15 +1,17 @@
 package dev.vfyjxf.cirrus.api.recipe.projection.effect;
 
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public sealed interface OutputEffect extends ProjectionEffect permits OutputInjected, OutputRejected, OutputReplaced {
 
     int index();
 
-    @Nullable OutputContent before();
+    @Nullable
+    OutputContent before();
 
-    @Nullable OutputContent after();
+    @Nullable
+    OutputContent after();
 
     default long beforeAmount() {
         OutputContent before = before();

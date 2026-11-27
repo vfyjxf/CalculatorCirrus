@@ -50,14 +50,9 @@ public final class CirrusServer extends Cirrus {
     }
 
     private void registerLifecycleDriver() {
-        LifecycleDriver.builder("Calculator Cirrus Server")
-                .logger(logger)
-                .require(CirrusLifecycleStates.serverStarted)
-                .require(CirrusLifecycleStates.serverDataReady)
-                .source(CirrusLifecycleSources.server())
-                .onLoad(this::load)
-                .onUnload(this::unload)
-                .build();
+        LifecycleDriver.builder("Calculator Cirrus Server").logger(logger).require(CirrusLifecycleStates.serverStarted)
+                .require(CirrusLifecycleStates.serverDataReady).source(CirrusLifecycleSources.server())
+                .onLoad(this::load).onUnload(this::unload).build();
     }
 
 }

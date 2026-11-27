@@ -8,11 +8,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 public record InputSlot(
-        int slotIndex,
-        long amountPerBatch,
-        Optional<String> tagId,
-        List<ResourceKey> candidates,
-        SlotMatchMode matchMode
+    int slotIndex,
+    long amountPerBatch,
+    Optional<String> tagId,
+    List<ResourceKey> candidates,
+    SlotMatchMode matchMode
 ) {
 
     public InputSlot {

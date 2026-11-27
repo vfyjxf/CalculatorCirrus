@@ -27,7 +27,7 @@ public class BenchmarkContentVariant {
     public HashMap<ItemStub, Object> hashMap;
     public Object2ObjectOpenHashMap<ItemStub, Object> openHashMap;
     public Object2ObjectArrayMap<ItemStub, Object> arrayMap;
-    public UnifiedMap<ItemStub,Object> unifiedMap;
+    public UnifiedMap<ItemStub, Object> unifiedMap;
 
     public Object dummyValue = new Object();
 
@@ -88,8 +88,8 @@ public class BenchmarkContentVariant {
     static class ItemStub {
         private final int id;
 
-        public ItemStub(int id) {this.id = id;}
+        public ItemStub(int id) {
+            this.id = id;
+        }
     }
 }
-
-

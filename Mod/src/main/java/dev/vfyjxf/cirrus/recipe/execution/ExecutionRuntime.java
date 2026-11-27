@@ -16,7 +16,7 @@ import dev.vfyjxf.cirrus.api.recipe.storage.StorageTransferResult;
 import org.eclipse.collections.api.set.ImmutableSet;
 import org.eclipse.collections.impl.factory.Lists;
 import org.eclipse.collections.impl.factory.Sets;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Minimal runtime loop for stepwise execution, pause/resume, and retranslation triggers.
@@ -45,7 +45,8 @@ public final class ExecutionRuntime {
 
         return switch (step) {
             case InteractionStep.EnsureAccessibleStep ensureAccessibleStep -> complete(session, step);
-            case InteractionStep.WithdrawResourceStep withdrawResourceStep -> handleWithdraw(session, withdrawResourceStep);
+            case InteractionStep.WithdrawResourceStep withdrawResourceStep ->
+                handleWithdraw(session, withdrawResourceStep);
             case InteractionStep.ReserveCatalystStep reserveCatalystStep -> complete(session, step);
             case InteractionStep.EnsureCapacityStep ensureCapacityStep -> handleCapacity(session, ensureCapacityStep);
             case InteractionStep.OpenInteractionStep openInteractionStep -> complete(session, step);
@@ -53,7 +54,11 @@ public final class ExecutionRuntime {
             case InteractionStep.ExecuteRecipeStep executeRecipeStep -> handleExecute(session, executeRecipeStep);
             case InteractionStep.CollectOutputsStep collectOutputsStep -> complete(session, step);
             case InteractionStep.StoreOutputsStep storeOutputsStep -> handleStore(session, storeOutputsStep);
-            case InteractionStep.ManualCheckpointStep manualCheckpointStep -> pause(session, step, new PauseReason(PauseReasons.awaitingPlayerAction, manualCheckpointStep.guidance()));
+            case InteractionStep.ManualCheckpointStep manualCheckpointStep -> pause(
+                session,
+                step,
+                new PauseReason(PauseReasons.awaitingPlayerAction, manualCheckpointStep.guidance())
+            );
         };
     }
 
@@ -101,7 +106,8 @@ public final class ExecutionRuntime {
     }
 
     private ExecutionSession handleCapacity(ExecutionSession session, InteractionStep.EnsureCapacityStep step) {
-        var result = storageApi.simulateInsertFirstAvailable(StorageTransferRequest.forResource(step.resource(), step.amount()));
+        var result = storageApi
+                .simulateInsertFirstAvailable(StorageTransferRequest.forResource(step.resource(), step.amount()));
         if (result.completed()) {
             return complete(session, step);
         }
@@ -109,7 +115,8 @@ public final class ExecutionRuntime {
     }
 
     private ExecutionSession handleExecute(ExecutionSession session, InteractionStep.ExecuteRecipeStep step) {
-        var result = interactionApi.perform(new InteractionContext(step.recipe(), step.times(), step.inputs(), step.expectedOutputs()));
+        var result = interactionApi
+                .perform(new InteractionContext(step.recipe(), step.times(), step.inputs(), step.expectedOutputs()));
         return switch (result) {
             case InteractionPerformResult.Performed performed -> complete(session, step);
             case InteractionPerformResult.ReTranslationRequired reTranslationRequired ->
@@ -122,7 +129,8 @@ public final class ExecutionRuntime {
     }
 
     private ExecutionSession handleStore(ExecutionSession session, InteractionStep.StoreOutputsStep step) {
-        var result = storageApi.insertFirstAvailable(StorageTransferRequest.forResource(step.resource(), step.amount()));
+        var result = storageApi
+                .insertFirstAvailable(StorageTransferRequest.forResource(step.resource(), step.amount()));
         if (result.completed()) {
             return complete(session, step);
         }
@@ -136,8 +144,10 @@ public final class ExecutionRuntime {
      */
     private StorageTransferRequest withdrawRequest(InteractionStep.WithdrawResourceStep step) {
         return switch (step.target()) {
-            case InteractionStep.WithdrawTarget.Resource resource -> StorageTransferRequest.forResource(resource.resource(), step.requestedAmount());
-            case InteractionStep.WithdrawTarget.Input input -> StorageTransferRequest.forInput(input.input(), step.requestedAmount());
+            case InteractionStep.WithdrawTarget.Resource resource ->
+                StorageTransferRequest.forResource(resource.resource(), step.requestedAmount());
+            case InteractionStep.WithdrawTarget.Input input ->
+                StorageTransferRequest.forInput(input.input(), step.requestedAmount());
         };
     }
 
@@ -222,4 +232,3 @@ public final class ExecutionRuntime {
 
     //endregion
 }
-

@@ -1,4 +1,4 @@
-@NotNullByDefault
+@NullMarked
 package dev.vfyjxf.cirrus.ui.execution.widget;
 
-import dev.vfyjxf.cloudlib.api.annotation.NotNullByDefault;
+import org.jspecify.annotations.NullMarked;

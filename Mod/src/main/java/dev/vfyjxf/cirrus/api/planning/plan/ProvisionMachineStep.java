@@ -8,13 +8,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 public record ProvisionMachineStep(
-        String stepId,
-        List<String> dependsOnStepIds,
-        String machineId,
-        Optional<MachineCapabilityId> satisfiedCapability,
-        int countToBuild,
-        boolean craftedByPredecessorSteps,
-        CostVector stepCost
+    String stepId,
+    List<String> dependsOnStepIds,
+    String machineId,
+    Optional<MachineCapabilityId> satisfiedCapability,
+    int countToBuild,
+    boolean craftedByPredecessorSteps,
+    CostVector stepCost
 ) implements PlanStep {
 
     public ProvisionMachineStep {

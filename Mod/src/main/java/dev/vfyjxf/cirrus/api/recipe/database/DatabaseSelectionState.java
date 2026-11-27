@@ -7,8 +7,8 @@ import java.util.List;
 import java.util.Objects;
 
 public final class DatabaseSelectionState {
-    public static final Codec<DatabaseSelectionState> CODEC = DatabaseDefinition.CODEC.listOf()
-        .xmap(DatabaseSelectionState::new, DatabaseSelectionState::ordered);
+    public static final Codec<DatabaseSelectionState> codec = DatabaseDefinition.codec.listOf()
+            .xmap(DatabaseSelectionState::new, DatabaseSelectionState::ordered);
 
     private final List<DatabaseDefinition> databases = new ArrayList<>();
 
@@ -24,9 +24,7 @@ public final class DatabaseSelectionState {
     }
 
     public List<DatabaseDefinition> enabledOrdered() {
-        return databases.stream()
-            .filter(DatabaseDefinition::enabled)
-            .toList();
+        return databases.stream().filter(DatabaseDefinition::enabled).toList();
     }
 
     public void toggleEnabled(String id) {

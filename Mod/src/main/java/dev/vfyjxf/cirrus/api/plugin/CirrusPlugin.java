@@ -34,7 +34,6 @@ public interface CirrusPlugin extends ModPlugin {
 
     PluginDependency afterBuiltin = new PluginDependency(builtin, Order.after, Constraint.required);
 
-
     //region content registryKey
 
     default void registerContentType(ContentTypeRegister register) {}
@@ -92,6 +91,12 @@ public interface CirrusPlugin extends ModPlugin {
     //region execution driver
 
     default void registerExecutionDriver(ExecutionDriverRegister register) {}
+
+    //endregion
+
+    //region planning extensions
+
+    default void registerPlanningExtension(PlanningExtensionRegister register) {}
 
     //endregion
 }

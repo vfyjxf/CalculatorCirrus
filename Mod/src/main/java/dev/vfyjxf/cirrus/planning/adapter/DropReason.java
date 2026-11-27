@@ -1,16 +1,5 @@
 package dev.vfyjxf.cirrus.planning.adapter;
 
 public enum DropReason {
-    EMPTY_SLOT_LISTS,
-    INVALID_AMOUNT,
-    PROBABILISTIC,
-    INVALID_STACK,
-    COMPLEX_SLOT,
-    UNKNOWN_KIND,
-    EMPTY_SLOT_CANDIDATES,
-    MULTI_STACK_OUTPUT,
-    TAG_OUTPUT_MULTI,
-    NO_OUTPUT_AFTER_VALUES,
-    NO_INPUT_AFTER_VALUES,
-    UNSUPPORTED_MATCH_STRATEGY
+    emptySlotLists, invalidAmount, probabilistic, invalidStack, complexSlot, unknownKind, emptySlotCandidates, multiStackOutput, tagOutputMulti, noOutputAfterValues, noInputAfterValues, unsupportedMatchStrategy
 }

@@ -112,9 +112,7 @@ public final class TagStackContent<T> implements InputContent {
 
     @Override
     public boolean mergeable(RecipeContent other) {
-        return other instanceof TagStackContent<?> o &&
-               type == o.type &&
-               tagKey == o.tagKey;
+        return other instanceof TagStackContent<?> o && type == o.type && tagKey == o.tagKey;
     }
 
     @SuppressWarnings("unchecked")
@@ -135,13 +133,10 @@ public final class TagStackContent<T> implements InputContent {
 
     @Override
     public String toString() {
-        return "TagStackContent{" +
-               "type=" + type +
-               ", tagKey=" + tagKey +
-               ", amount=" + amount +
-               ", chance=" + chance +
-               '}';
+        return "TagStackContent{" + "type=" + type + ", tagKey=" + tagKey + ", amount=" + amount + ", chance=" + chance
+                + '}';
     }
+
     @Override
     public RecipeContentType<? extends RecipeContent> recipeType() {
         return RecipeContentType.TAG_STACK;

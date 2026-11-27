@@ -1,9 +1,7 @@
 package dev.vfyjxf.cirrus.api.planning.graph;
 
 public enum RecipeAdvisory {
-    NONE(0),
-    DISCOURAGED(1),
-    LAST_RESORT(10);
+    none(0), discouraged(1), lastResort(10);
 
     private final int weight;
 

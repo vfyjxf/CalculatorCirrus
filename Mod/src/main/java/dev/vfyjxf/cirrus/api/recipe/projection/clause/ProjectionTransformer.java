@@ -8,7 +8,11 @@ import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer.Increme
 
 public interface ProjectionTransformer<F extends RecipeClause> {
 
-    static <F extends RecipeClause> ProjectionTransformer<F> of(ProjectionPlugin plugin, SelectionFunction selector, TransformFunction<F> transformation) {
+    static <F extends RecipeClause> ProjectionTransformer<F> of(
+        ProjectionPlugin plugin,
+        SelectionFunction selector,
+        TransformFunction<F> transformation
+    ) {
         return new ProjectionTransformer<>() {
             @Override
             public ProjectionPlugin plugin() {
@@ -21,7 +25,13 @@ public interface ProjectionTransformer<F extends RecipeClause> {
             }
 
             @Override
-            public void project(ExecutionContext context, RecipeProjection projection, F clause, IncrementOps increment, DecrementOps decrement) {
+            public void project(
+                ExecutionContext context,
+                RecipeProjection projection,
+                F clause,
+                IncrementOps increment,
+                DecrementOps decrement
+            ) {
                 transformation.transform(context, projection, clause, increment, decrement);
             }
         };
@@ -31,16 +41,26 @@ public interface ProjectionTransformer<F extends RecipeClause> {
 
     boolean selectProjection(ExecutionContext context, RecipeProjection projection);
 
-    void project(ExecutionContext context, RecipeProjection projection, F clause, IncrementOps increment, DecrementOps decrement);
+    void project(
+        ExecutionContext context,
+        RecipeProjection projection,
+        F clause,
+        IncrementOps increment,
+        DecrementOps decrement
+    );
 
     interface SelectionFunction {
         boolean select(ExecutionContext context, RecipeProjection projection);
     }
 
     interface TransformFunction<F extends RecipeClause> {
-        void transform(ExecutionContext context, RecipeProjection projection, F clause, IncrementOps increment, DecrementOps decrement);
+        void transform(
+            ExecutionContext context,
+            RecipeProjection projection,
+            F clause,
+            IncrementOps increment,
+            DecrementOps decrement
+        );
     }
 
 }
-
-

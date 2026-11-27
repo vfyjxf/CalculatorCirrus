@@ -4,14 +4,14 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RecipeSearchHighlighterTest {
 
     @Test
     void highlightsJeiPrefixesFieldsOperatorsAndSyntax() {
-        List<SearchHighlightSegment> segments = RecipeSearchHighlighter.highlight("@minecraft in:oak time>=10s | -#burn");
+        List<SearchHighlightSegment> segments = RecipeSearchHighlighter
+                .highlight("@minecraft in:oak time>=10s | -#burn");
 
         assertKind(segments, "@", SearchHighlightKind.prefix);
         assertKind(segments, "in", SearchHighlightKind.field);
@@ -32,7 +32,8 @@ class RecipeSearchHighlighterTest {
 
     @Test
     void highlightsRangeAndWildcardOperatorsInsideValues() {
-        List<SearchHighlightSegment> segments = RecipeSearchHighlighter.highlight("out:smoker * 1..64 has:smok* cat:bucket");
+        List<SearchHighlightSegment> segments = RecipeSearchHighlighter
+                .highlight("out:smoker * 1..64 has:smok* cat:bucket");
 
         assertKind(segments, "out", SearchHighlightKind.field);
         assertKind(segments, "*", SearchHighlightKind.operator);

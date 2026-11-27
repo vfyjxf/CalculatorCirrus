@@ -4,6 +4,22 @@ import java.time.Duration;
 import java.util.Objects;
 
 public record PlanningBudget(
+    Duration softTimeLimit,
+    Duration hardTimeLimit,
+    int maxSubgraphNodes,
+    int maxSubgraphRecipes,
+    int maxReturnedPlans,
+    int maxDecisionPrompts,
+    boolean enableMachineSetCoverRefinement,
+    boolean enableBatchCouplingRefinement,
+    int maxProducersPerResource,
+    long searchWorkBudget
+) {
+
+    public static final int defaultMaxProducersPerResource = 16;
+    public static final long defaultSearchWorkBudget = 1200L;
+
+    public PlanningBudget(
         Duration softTimeLimit,
         Duration hardTimeLimit,
         int maxSubgraphNodes,
@@ -11,27 +27,20 @@ public record PlanningBudget(
         int maxReturnedPlans,
         int maxDecisionPrompts,
         boolean enableMachineSetCoverRefinement,
-        boolean enableBatchCouplingRefinement,
-        int maxProducersPerResource,
-        long searchWorkBudget
-) {
-
-    public static final int DEFAULT_MAX_PRODUCERS_PER_RESOURCE = 16;
-    public static final long DEFAULT_SEARCH_WORK_BUDGET = 1200L;
-
-    public PlanningBudget(
-            Duration softTimeLimit,
-            Duration hardTimeLimit,
-            int maxSubgraphNodes,
-            int maxSubgraphRecipes,
-            int maxReturnedPlans,
-            int maxDecisionPrompts,
-            boolean enableMachineSetCoverRefinement,
-            boolean enableBatchCouplingRefinement
+        boolean enableBatchCouplingRefinement
     ) {
-        this(softTimeLimit, hardTimeLimit, maxSubgraphNodes, maxSubgraphRecipes,
-                maxReturnedPlans, maxDecisionPrompts, enableMachineSetCoverRefinement,
-                enableBatchCouplingRefinement, DEFAULT_MAX_PRODUCERS_PER_RESOURCE, DEFAULT_SEARCH_WORK_BUDGET);
+        this(
+            softTimeLimit,
+            hardTimeLimit,
+            maxSubgraphNodes,
+            maxSubgraphRecipes,
+            maxReturnedPlans,
+            maxDecisionPrompts,
+            enableMachineSetCoverRefinement,
+            enableBatchCouplingRefinement,
+            defaultMaxProducersPerResource,
+            defaultSearchWorkBudget
+        );
     }
 
     public PlanningBudget {
@@ -68,9 +77,16 @@ public record PlanningBudget(
 
     public static PlanningBudget defaultInteractive() {
         return new PlanningBudget(
-                Duration.ofMillis(80), Duration.ofMillis(250),
-                2500, 6000, 3, 3, true, true,
-                DEFAULT_MAX_PRODUCERS_PER_RESOURCE, DEFAULT_SEARCH_WORK_BUDGET
+            Duration.ofMillis(80),
+            Duration.ofMillis(250),
+            2500,
+            6000,
+            3,
+            3,
+            true,
+            true,
+            defaultMaxProducersPerResource,
+            defaultSearchWorkBudget
         );
     }
 }

@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.recipe.lookup;
 import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeLookup;
+import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 
@@ -12,16 +13,20 @@ import java.util.function.Predicate;
 public class EmptyRecipeLookup<T> implements RecipeLookup<T> {
 
     @SuppressWarnings("rawtypes")
-    private static final RichIterable EMPTY = Lists.immutable.empty();
+    private static final RichIterable empty = Lists.immutable.empty();
 
     @SuppressWarnings("rawtypes")
     public static final RecipeLookup instance = new EmptyRecipeLookup<>();
 
-    private EmptyRecipeLookup() {
+    private EmptyRecipeLookup() {}
+
+    @Override
+    public RecipeLookup<T> filter(Predicate<? super T> predicate) {
+        return this;
     }
 
     @Override
-    public RecipeLookup<T> filter(Predicate<T> predicate) {
+    public RecipeLookup<T> withId(ResourceLocation id) {
         return this;
     }
 
@@ -48,6 +53,6 @@ public class EmptyRecipeLookup<T> implements RecipeLookup<T> {
     @Override
     @SuppressWarnings("unchecked")
     public RichIterable<T> get() {
-        return EMPTY;
+        return empty;
     }
 }

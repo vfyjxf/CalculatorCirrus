@@ -3,7 +3,7 @@ package dev.vfyjxf.cirrus.api.recipe.projection.effect;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public record ProjectionEffectSource(
     ProjectionPlugin plugin,
@@ -19,7 +19,11 @@ public record ProjectionEffectSource(
         Checks.checkNotNull(phase, "phase");
     }
 
-    public static ProjectionEffectSource clause(ProjectionPlugin plugin, Namespace clauseId, ProjectionEffectPhase phase) {
+    public static ProjectionEffectSource clause(
+        ProjectionPlugin plugin,
+        Namespace clauseId,
+        ProjectionEffectPhase phase
+    ) {
         if (phase == ProjectionEffectPhase.resolveEffect) {
             throw new IllegalArgumentException("Use resolveEffect(...) for resolve effects");
         }

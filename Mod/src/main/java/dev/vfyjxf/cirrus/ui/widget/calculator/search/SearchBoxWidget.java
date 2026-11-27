@@ -1,6 +1,12 @@
 package dev.vfyjxf.cirrus.ui.widget.calculator.search;
 
+import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
+import dev.vfyjxf.cirrus.ui.CirrusThemeIcons;
+import dev.vfyjxf.cirrus.ui.CirrusThemeTextures;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
+import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
+import dev.vfyjxf.cirrus.util.NumberUtils;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.math.Rect;
 import dev.vfyjxf.cloudlib.api.ui.InputContext;
@@ -10,24 +16,25 @@ import dev.vfyjxf.cloudlib.api.ui.base.SceneLayer;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
+import dev.vfyjxf.cloudlib.api.ui.style.UIStyle;
+import dev.vfyjxf.cloudlib.api.ui.style.UIStyles;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.textMuted;
-import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.textPrimary;
-import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.textSecondary;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.background;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.boxSizingBorderBox;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.displayDefault;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.displayNone;
@@ -37,7 +44,6 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minWidth;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.padding;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.positionAbsolute;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeOf;
-import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.zIndexOf;
 
 public class SearchBoxWidget extends Widget {
     private static final int paddingLeft = 15;
@@ -65,18 +71,34 @@ public class SearchBoxWidget extends Widget {
     private SearchSuggestionSource suggestionSource = SearchSuggestionSource.syntaxOnly();
     private @Nullable Consumer<String> onQueryChanged;
     private @Nullable Consumer<String> onEnterPressed;
-    private @Nullable Supplier<dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip> tooltipSupplier;
+    private @Nullable Supplier<Tooltip> tooltipSupplier;
     private @Nullable Supplier<Rect> suggestionViewportSupplier;
     private @Nullable SuggestionPopup suggestionPopup;
     private boolean closeSuggestionPopupScheduled;
+    private @Nullable WorkbenchThemeMode appliedTheme;
 
     public SearchBoxWidget() {
         setFocusable(true);
         setClickGroup(this);
         setTickable(true);
+        addStyleClass("cirrus-input");
         useStyle(heightOf(18), minWidth(0));
+        syncDefaultBackground(true);
+        onMount(
+            (scene, context, handle) -> CirrusUiTheme
+                    .bindThemeListener(this, handle, () -> syncDefaultBackground(false))
+        );
         refreshDerivedState();
         setupEvents();
+    }
+
+    private void syncDefaultBackground(boolean force) {
+        WorkbenchThemeMode mode = CirrusUiTheme.mode(this);
+        if (!force && mode == appliedTheme) {
+            return;
+        }
+        appliedTheme = mode;
+        defaultStyle(UIStyle.of(background(CirrusUiTheme.textures(this).recessed())));
     }
 
     private void setupEvents() {
@@ -151,7 +173,7 @@ public class SearchBoxWidget extends Widget {
         return this;
     }
 
-    public SearchBoxWidget tooltip(@Nullable Supplier<dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip> tooltipSupplier) {
+    public SearchBoxWidget tooltip(@Nullable Supplier<Tooltip> tooltipSupplier) {
         this.tooltipSupplier = tooltipSupplier;
         return this;
     }
@@ -199,7 +221,8 @@ public class SearchBoxWidget extends Widget {
     }
 
     public static int suggestionPopupHeightForCount(int count) {
-        return Math.max(suggestionRowHeight, visibleSuggestionRows(count) * suggestionRowHeight) + suggestionPopupPadding * 2;
+        return Math.max(suggestionRowHeight, visibleSuggestionRows(count) * suggestionRowHeight)
+                + suggestionPopupPadding * 2;
     }
 
     public static int suggestionPopupHeightForRows(int rows) {
@@ -282,7 +305,10 @@ public class SearchBoxWidget extends Widget {
                 if (hasSelection()) {
                     deleteSelection();
                 } else if (cursorPosition > 0) {
-                    replaceText(text.substring(0, cursorPosition - 1) + text.substring(cursorPosition), cursorPosition - 1);
+                    replaceText(
+                        text.substring(0, cursorPosition - 1) + text.substring(cursorPosition),
+                        cursorPosition - 1
+                    );
                 }
                 return EventDispatch.consumed;
             }
@@ -467,7 +493,8 @@ public class SearchBoxWidget extends Widget {
         suggestionTypedPrefix = typedCompletionPrefix();
         List<SearchHighlightSegment> nextHighlights = highlighter.apply(text);
         highlightedSegments = nextHighlights == null ? List.of() : nextHighlights;
-        List<SearchSuggestion> nextSuggestions = suggestionSource.suggest(text, cursorPosition, maxSuggestionCandidates);
+        List<SearchSuggestion> nextSuggestions = suggestionSource
+                .suggest(text, cursorPosition, maxSuggestionCandidates);
         if (!nextSuggestions.equals(suggestions)) {
             suggestions = nextSuggestions;
             suggestionVersion++;
@@ -551,11 +578,11 @@ public class SearchBoxWidget extends Widget {
 
     private static boolean anchorVisibleInViewport(Rect anchor, Rect viewport) {
         return anchor.width() > 0
-            && anchor.height() > 0
-            && anchor.y() >= viewport.y()
-            && anchor.bottom() <= viewport.bottom()
-            && anchor.right() > viewport.x()
-            && anchor.x() < viewport.right();
+                && anchor.height() > 0
+                && anchor.y() >= viewport.y()
+                && anchor.bottom() <= viewport.bottom()
+                && anchor.right() > viewport.x()
+                && anchor.x() < viewport.right();
     }
 
     private static int availableBelow(Rect anchor, Rect viewport) {
@@ -589,26 +616,42 @@ public class SearchBoxWidget extends Widget {
         return Math.max(0, Math.min(best, text.length()));
     }
 
+    public Rect localTextClipRect() {
+        int visibleWidth = Math.max(0, width() - paddingLeft - paddingRight);
+        return new Rect(paddingLeft, 0, visibleWidth, height());
+    }
+
     @Override
     protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
-        canvas.texture(CirrusTextures.Background.Outlined.inset, 0, 0, width(), height());
+        CirrusPalette palette = CirrusUiTheme.palette(this);
+        boolean dark = CirrusUiTheme.isDark(this);
+        canvas.texture(CirrusUiTheme.textures(this).recessed(), 0, 0, width(), height());
+        if (focused()) {
+            canvas.strokeRect(0, 0, width(), height(), palette.focusRing(), 1);
+        }
         int iconY = Math.max(0, (height() - 10) / 2);
-        canvas.texture(CirrusTextures.Icon.search, 3, iconY, 10, 10);
+        var searchIcon = CirrusThemeIcons.resolve(CirrusTextures.Icon.search, this);
+        canvas.texture(searchIcon, 3, iconY, 10, 10);
 
         Font font = context().font();
         int textY = (height() - font.lineHeight) / 2 + 1;
-        int visibleWidth = Math.max(0, width() - paddingLeft - paddingRight);
+        Rect clip = localTextClipRect();
+        int visibleWidth = clip.width();
         syncScroll(font, visibleWidth);
 
-        int absX = absolutePos().x();
-        int absY = absolutePos().y();
-        canvas.pushClip(absX + paddingLeft, absY, visibleWidth, height());
+        canvas.pushClip(clip.x(), clip.y(), clip.width(), clip.height());
         if (text.isEmpty() && !placeholder.isEmpty() && !focused()) {
-            canvas.text(Component.literal(fit(font, placeholder, visibleWidth)), paddingLeft, textY, textMuted, false);
+            canvas.text(
+                Component.literal(fit(font, placeholder, visibleWidth)),
+                paddingLeft,
+                textY,
+                palette.textMuted(),
+                false
+            );
         } else {
-            renderSelection(canvas, font, textY);
-            renderHighlightedText(canvas, font, textY);
-            renderCursor(canvas, font, textY);
+            renderSelection(canvas, font, textY, palette);
+            renderHighlightedText(canvas, font, textY, palette, dark);
+            renderCursor(canvas, font, textY, palette);
         }
         canvas.popClip();
     }
@@ -632,7 +675,7 @@ public class SearchBoxWidget extends Widget {
     /** Accent color of the word at the cursor — the same color emphasizes the typed prefix in suggestion rows. */
     private static final int activeTokenColor = 0xFF2E86C1;
 
-    private void renderHighlightedText(SceneCanvas canvas, Font font, int textY) {
+    private void renderHighlightedText(SceneCanvas canvas, Font font, int textY, CirrusPalette palette, boolean dark) {
         int activeStart = -1;
         int activeEnd = -1;
         if (focused()) {
@@ -649,27 +692,29 @@ public class SearchBoxWidget extends Widget {
                 activeStart = -1;
             }
         }
-        // segments must cover the current text exactly; a programmatic text
-        // change without refresh would misalign offsets, so fall back to plain
         boolean segmentsCurrent = !highlightedSegments.isEmpty()
-            && highlightedSegments.getFirst().start() == 0
-            && highlightedSegments.getLast().end() == text.length();
+                && highlightedSegments.getFirst().start() == 0
+                && highlightedSegments.getLast().end() == text.length();
         if (!segmentsCurrent) {
-            canvas.text(text, paddingLeft - scrollOffset, textY, textPrimary, false);
+            canvas.text(text, paddingLeft - scrollOffset, textY, palette.textPrimary(), false);
             return;
         }
+        int wordColor = dark ? palette.costP() : searchWordColor;
+        int activeColor = dark ? palette.focusRing() : activeTokenColor;
         int x = paddingLeft - scrollOffset;
         for (SearchHighlightSegment segment : highlightedSegments) {
             int from = segment.start();
             int to = segment.end();
             while (from < to) {
-                int color = segment.kind() == SearchHighlightKind.text ? searchWordColor : highlightColorFor(segment.kind());
+                int color = segment.kind() == SearchHighlightKind.text
+                        ? wordColor
+                        : highlightColorFor(segment.kind(), palette, dark);
                 int end = to;
                 if (activeStart >= 0) {
                     if (from < activeStart) {
                         end = Math.min(to, activeStart);
                     } else if (from < activeEnd) {
-                        color = activeTokenColor;
+                        color = activeColor;
                         end = Math.min(to, activeEnd);
                     }
                 }
@@ -680,24 +725,28 @@ public class SearchBoxWidget extends Widget {
             }
         }
         if (activeStart >= 0) {
-            // underline the word being typed: brightest blue plus a bar, so it
-            // reads as "active" against the committed search words
             int activeX = paddingLeft - scrollOffset + font.width(text.substring(0, activeStart));
             int activeW = font.width(text.substring(activeStart, activeEnd));
-            canvas.fill(activeX, textY + font.lineHeight - 1, activeW, 1, activeTokenColor);
+            canvas.fill(activeX, textY + font.lineHeight - 1, activeW, 1, activeColor);
         }
     }
 
-    private void renderSelection(SceneCanvas canvas, Font font, int textY) {
+    private void renderSelection(SceneCanvas canvas, Font font, int textY, CirrusPalette palette) {
         if (!focused() || !hasSelection()) {
             return;
         }
         int x1 = paddingLeft + font.width(text.substring(0, selectionStart())) - scrollOffset;
         int x2 = paddingLeft + font.width(text.substring(0, selectionEnd())) - scrollOffset;
-        canvas.fill(x1, textY - 1, Math.max(1, x2 - x1), font.lineHeight + 2, 0x663C78D8);
+        canvas.fill(
+            x1,
+            textY - 1,
+            Math.max(1, x2 - x1),
+            font.lineHeight + 2,
+            (palette.focusRing() & 0x00FFFFFF) | 0x55000000
+        );
     }
 
-    private void renderCursor(SceneCanvas canvas, Font font, int textY) {
+    private void renderCursor(SceneCanvas canvas, Font font, int textY, CirrusPalette palette) {
         if (!focused()) {
             return;
         }
@@ -705,7 +754,7 @@ public class SearchBoxWidget extends Widget {
             return;
         }
         int cursorX = paddingLeft + font.width(text.substring(0, cursorPosition)) - scrollOffset;
-        canvas.fill(cursorX, textY - 1, 1, font.lineHeight + 2, 0xFFFFFFFF);
+        canvas.fill(cursorX, textY - 1, 1, font.lineHeight + 2, palette.focusRing());
     }
 
     private static String fit(Font font, String text, int maxWidth) {
@@ -719,6 +768,22 @@ public class SearchBoxWidget extends Widget {
     }
 
     public static int highlightColorFor(SearchHighlightKind kind) {
+        return highlightColorFor(kind, CirrusUiTheme.palette(null), false);
+    }
+
+    static int highlightColorFor(SearchHighlightKind kind, CirrusPalette palette, boolean dark) {
+        if (dark) {
+            return switch (kind) {
+                case field -> palette.focusRing();
+                case prefix -> palette.costS();
+                case operator -> palette.costH();
+                case keyword -> palette.costC();
+                case negation -> palette.ruleHardBan();
+                case quote -> palette.textSecondary();
+                case error -> palette.advisoryLastResort();
+                case text -> palette.textPrimary();
+            };
+        }
         return switch (kind) {
             case field -> 0xFF0B5CAD;
             case prefix -> 0xFF00796B;
@@ -727,12 +792,16 @@ public class SearchBoxWidget extends Widget {
             case negation -> 0xFFB3261E;
             case quote -> 0xFF5C6470;
             case error -> 0xFFD11F2A;
-            case text -> textPrimary;
+            case text -> palette.textPrimary();
         };
     }
 
     private void syncSuggestionPopup() {
-        if (!focused() || suggestions.isEmpty() || width() <= 0 || !lifecycle().mounted() || visibleSuggestionRowsForPopup() <= 0) {
+        if (!focused()
+                || suggestions.isEmpty()
+                || width() <= 0
+                || !lifecycle().mounted()
+                || visibleSuggestionRowsForPopup() <= 0) {
             scheduleCloseSuggestionPopup();
             return;
         }
@@ -809,8 +878,7 @@ public class SearchBoxWidget extends Widget {
         return Math.max(min, Math.min(value, max));
     }
 
-    private record PopupLayout(int x, int y, int width, int height) {
-    }
+    private record PopupLayout(int x, int y, int width, int height) {}
 
     private final class SuggestionPopup extends CompositeWidget<Widget> {
         private final ArrayList<SuggestionRow> rows = new ArrayList<>();
@@ -825,7 +893,14 @@ public class SearchBoxWidget extends Widget {
         private SuggestionPopup() {
             setCoordinateSpace(CoordinateSpace.scene);
             setSceneLayer(SceneLayer.floating);
-            useStyle(positionAbsolute(), flexColumn(), minWidth(0), padding(suggestionPopupPadding), boxSizingBorderBox(), zIndexOf(suggestionPopupZIndex));
+            useStyle(
+                positionAbsolute(),
+                flexColumn(),
+                minWidth(0),
+                padding(suggestionPopupPadding),
+                boxSizingBorderBox(),
+                UIStyles.zIndex(suggestionPopupZIndex)
+            );
             onLayout((widget, scope) -> {
                 PopupLayout layout = popupLayout();
                 scope.setBounds(layout.x(), layout.y(), layout.width(), layout.height());
@@ -852,12 +927,12 @@ public class SearchBoxWidget extends Widget {
             PopupLayout nextLayout = popupLayout(nextRowCount);
             int nextScrollIndex = clampSuggestionScroll(suggestionScrollIndex);
             if (nextLayout.width() == popupWidth
-                && nextLayout.height() == popupHeight
-                && nextLayout.x() == popupX
-                && nextLayout.y() == popupY
-                && nextRowCount == rowCount
-                && nextScrollIndex == renderedScrollIndex
-                && suggestionVersion == renderedSuggestionVersion) {
+                    && nextLayout.height() == popupHeight
+                    && nextLayout.x() == popupX
+                    && nextLayout.y() == popupY
+                    && nextRowCount == rowCount
+                    && nextScrollIndex == renderedScrollIndex
+                    && suggestionVersion == renderedSuggestionVersion) {
                 return;
             }
             refresh(nextRowCount, nextLayout);
@@ -879,7 +954,14 @@ public class SearchBoxWidget extends Widget {
             renderedSuggestionVersion = suggestionVersion;
             setPos(popupX, popupY);
             setSize(popupWidth, popupHeight);
-            useStyle(positionAbsolute(), sizeOf(popupWidth, popupHeight), flexColumn(), padding(suggestionPopupPadding), boxSizingBorderBox(), zIndexOf(suggestionPopupZIndex));
+            useStyle(
+                positionAbsolute(),
+                sizeOf(popupWidth, popupHeight),
+                flexColumn(),
+                padding(suggestionPopupPadding),
+                boxSizingBorderBox(),
+                UIStyles.zIndex(suggestionPopupZIndex)
+            );
             int rowWidth = Math.max(0, popupWidth - suggestionPopupPadding * 2);
             for (int i = 0; i < rows.size(); i++) {
                 int suggestionIndex = renderedScrollIndex + i;
@@ -889,7 +971,7 @@ public class SearchBoxWidget extends Widget {
 
         @Override
         protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
-            canvas.texture(CirrusTextures.Background.Outlined.flat, 0, 0, width(), height());
+            canvas.texture(CirrusUiTheme.textures(SearchBoxWidget.this).cardSurface(), 0, 0, width(), height());
         }
     }
 
@@ -920,10 +1002,13 @@ public class SearchBoxWidget extends Widget {
             if (index < 0 || index >= suggestions.size()) {
                 return;
             }
+            CirrusPalette palette = CirrusUiTheme.palette(SearchBoxWidget.this);
+            CirrusThemeTextures textures = CirrusUiTheme.textures(SearchBoxWidget.this);
+            boolean dark = CirrusUiTheme.isDark(SearchBoxWidget.this);
             boolean selected = index == selectedSuggestion;
             if (selected || hovered()) {
                 canvas.texture(
-                    selected ? CirrusTextures.Background.Border.light : CirrusTextures.Toggle.Button.hover,
+                    selected ? textures.cardSelected() : textures.cardHover(),
                     1,
                     0,
                     Math.max(0, width() - 2),
@@ -932,20 +1017,20 @@ public class SearchBoxWidget extends Widget {
             }
             Font font = context().font();
             SearchSuggestion suggestion = suggestions.get(index);
-            String countLabel = suggestion.count() > 0 ? dev.vfyjxf.cirrus.util.NumberUtils.toSuffix(suggestion.count()) : null;
+            String countLabel = suggestion.count() > 0 ? NumberUtils.toSuffix(suggestion.count()) : null;
             int tokenBudget = Math.max(0, width() - 12 - (countLabel == null ? 0 : font.width(countLabel) + 6));
             String token = fit(font, suggestion.token(), tokenBudget);
-            // syntax-colored segments (field/prefix/colon/keyword/...) matching
-            // the query box, with the already-typed prefix drawn in accent
             boolean emphasized = selected || hovered();
-            int baseColor = emphasized ? textPrimary : textSecondary;
-            int accent = 0xFF2E86C1;
-            String typedPrefix = suggestionTypedPrefix.toLowerCase(java.util.Locale.ROOT);
-            int prefixStart = typedPrefix.isEmpty() ? -1 : token.toLowerCase(java.util.Locale.ROOT).indexOf(typedPrefix);
+            int baseColor = emphasized ? palette.textPrimary() : palette.textSecondary();
+            int accent = dark ? palette.focusRing() : activeTokenColor;
+            String typedPrefix = suggestionTypedPrefix.toLowerCase(Locale.ROOT);
+            int prefixStart = typedPrefix.isEmpty() ? -1 : token.toLowerCase(Locale.ROOT).indexOf(typedPrefix);
             int prefixEnd = prefixStart < 0 ? -1 : prefixStart + typedPrefix.length();
             int x = 6;
             for (SearchHighlightSegment segment : RecipeSearchHighlighter.highlight(token)) {
-                int segmentColor = segment.kind() == SearchHighlightKind.text ? baseColor : highlightColorFor(segment.kind());
+                int segmentColor = segment.kind() == SearchHighlightKind.text
+                        ? baseColor
+                        : highlightColorFor(segment.kind(), palette, dark);
                 int from = segment.start();
                 int to = segment.end();
                 while (from < to) {
@@ -966,7 +1051,13 @@ public class SearchBoxWidget extends Widget {
                 }
             }
             if (countLabel != null) {
-                canvas.text(countLabel, Math.max(8, width() - 4 - font.width(countLabel)), 3, textMuted, false);
+                canvas.text(
+                    countLabel,
+                    Math.max(8, width() - 4 - font.width(countLabel)),
+                    3,
+                    palette.textMuted(),
+                    false
+                );
             }
         }
 

@@ -1,8 +1,8 @@
 package dev.vfyjxf.cirrus.api.content;
 
 import dev.vfyjxf.cirrus.api.CirrusTypes;
-import dev.vfyjxf.cirrus.api.content.type.TagType;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
+import dev.vfyjxf.cirrus.api.content.type.TagType;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.helper.TagHelper;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
@@ -21,9 +21,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Collection;
-
+import java.util.List;
+import java.util.Objects;
 
 @ExtendWith(EphemeralTestServerProvider.class)
 class ContentApiTest {
@@ -34,16 +34,16 @@ class ContentApiTest {
         var itemId = Namespace.ofMc("item_stack");
         StackType<Item, ItemStack> stackType = instance.getStackType(itemId);
         Assertions.assertNotNull(stackType);
-//        Assertions.assertEquals(Item.class, stackType.contentType().valueType());
+        //        Assertions.assertEquals(Item.class, stackType.contentType().valueType());
         var fluidId = Namespace.ofMc("fluid_stack");
         StackType<Fluid, FluidStack> fluidType = instance.getStackType(fluidId);
         Assertions.assertNotNull(fluidType);
-//        Assertions.assertEquals(Fluid.class, fluidType.contentType().valueType());
+        //        Assertions.assertEquals(Fluid.class, fluidType.contentType().valueType());
     }
 
     @Test
     void testContentMatches(MinecraftServer server) {
-        var itemType = CirrusTypes.Contents.ITEM_STACK;
+        var itemType = CirrusTypes.Contents.itemStack;
         var a = new ItemStack(Items.CANDLE);
         var b = new ItemStack(Items.CANDLE, 2);
         var c = new ItemStack(Items.WHEAT, 30);
@@ -65,7 +65,6 @@ class ContentApiTest {
         Assertions.assertFalse(itemType.matches(e, f));
     }
 
-
     @Test
     void testContentEmpty(MinecraftServer server) {
         var is = ContentStack.fromStack(ItemStack.EMPTY);
@@ -76,10 +75,9 @@ class ContentApiTest {
         Assertions.assertTrue(empty.isEmpty());
     }
 
-
     @Test
     void testTagType(MinecraftServer server) {
-        TagType<Item> tagType = CirrusTypes.Contents.ITEM.tagType();
+        TagType<Item> tagType = Objects.requireNonNull(CirrusTypes.Contents.item.tagType(), "item tagType");
         var first = tagType.allTags();
         var second = tagType.allTags();
         Assertions.assertSame(first, second);
@@ -90,7 +88,7 @@ class ContentApiTest {
 
     @Test
     void testTagHelperMatchStaysStable(MinecraftServer server) {
-        TagType<Item> tagType = CirrusTypes.Contents.ITEM.tagType();
+        TagType<Item> tagType = Objects.requireNonNull(CirrusTypes.Contents.item.tagType(), "item tagType");
         TagKey<Item> tag = null;
         Collection<? extends ContentStack<Item, ?>> stacks = null;
         for (TagKey<Item> candidate : tagType.allTags()) {
@@ -114,7 +112,7 @@ class ContentApiTest {
 
     @Test
     void testTagHelperMatchesDuplicateStackInputs(MinecraftServer server) {
-        TagType<Item> tagType = CirrusTypes.Contents.ITEM.tagType();
+        TagType<Item> tagType = Objects.requireNonNull(CirrusTypes.Contents.item.tagType(), "item tagType");
         TagKey<Item> tag = null;
         Collection<? extends ContentStack<Item, ?>> duplicated = null;
         for (TagKey<Item> candidate : tagType.allTags()) {
@@ -128,9 +126,11 @@ class ContentApiTest {
             break;
         }
         Assertions.assertNotNull(tag, "no single-member item tag found in the ephemeral registry");
-        Assertions.assertEquals(tag, TagHelper.findTagMatchStacks(tagType, duplicated),
-            "duplicate-stack inputs must still resolve through the member index");
+        Assertions.assertEquals(
+            tag,
+            TagHelper.findTagMatchStacks(tagType, Objects.requireNonNull(duplicated, "duplicated")),
+            "duplicate-stack inputs must still resolve through the member index"
+        );
     }
-
 
 }

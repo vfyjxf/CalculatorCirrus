@@ -1,7 +1,5 @@
 package dev.vfyjxf.cirrus.ui.execution.support;
 
-import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
-import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.content.render.StackRenderer;
 import dev.vfyjxf.cirrus.api.content.value.ContentKind;
@@ -14,9 +12,12 @@ import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
 import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
 import dev.vfyjxf.cirrus.ui.process.MaterialCategory;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode;
+import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipContext;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipStack;
@@ -27,14 +28,15 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 
 public final class ExecutionOverlayContentHelper {
 
-    private ExecutionOverlayContentHelper() {
-    }
+    private ExecutionOverlayContentHelper() {}
 
     public static boolean hasRenderableVisual(@Nullable RecipeContent content) {
         return content != null && content.notEmpty() && renderer(content).visualCount(content) > 0;
@@ -49,7 +51,7 @@ public final class ExecutionOverlayContentHelper {
     }
 
     public static int currentVisualIndex(@Nullable RecipeContent content) {
-        if (!hasRenderableVisual(content)) {
+        if (content == null || !hasRenderableVisual(content)) {
             return 0;
         }
         int visualCount = renderer(content).visualCount(content);
@@ -57,7 +59,7 @@ public final class ExecutionOverlayContentHelper {
     }
 
     public static void renderRecipeContent(
-        dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas canvas,
+        SceneCanvas canvas,
         @Nullable RecipeContent content,
         int x,
         int y,
@@ -65,7 +67,7 @@ public final class ExecutionOverlayContentHelper {
         int height,
         float partialTicks
     ) {
-        if (!hasRenderableVisual(content)) {
+        if (content == null || !hasRenderableVisual(content)) {
             return;
         }
         int visualIndex = currentVisualIndex(content);
@@ -138,6 +140,36 @@ public final class ExecutionOverlayContentHelper {
             return contentKey(stackContent.content()).toLowerCase(Locale.ROOT);
         }
         return label.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Merges duplicate recipe contents with identical canonical key and chance by summing their amounts while preserving encounter order.
+     */
+    public static List<RecipeContent> mergeStackedContents(@Nullable List<? extends RecipeContent> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashMap<String, RecipeContent> merged = new LinkedHashMap<>();
+        int uniqueIndex = 0;
+        for (RecipeContent content : raw) {
+            if (content == null || content.isEmpty()) {
+                continue;
+            }
+            String key = recipeContentKey(content);
+            if (key == null || key.isEmpty() || "-".equals(key)) {
+                merged.put("__u" + (uniqueIndex++), content);
+                continue;
+            }
+            String bucket = content.getClass().getName() + "|" + key + "|" + Math.round(content.chance() * 1000f);
+            RecipeContent existing = merged.get(bucket);
+            if (existing == null) {
+                merged.put(bucket, content);
+            } else {
+                long total = Math.max(1L, existing.amount()) + Math.max(1L, content.amount());
+                merged.put(bucket, existing.copyWithAmount(total));
+            }
+        }
+        return List.copyOf(merged.values());
     }
 
     public static ItemStack stackFromInputContent(InputContent input) {
@@ -213,7 +245,8 @@ public final class ExecutionOverlayContentHelper {
         }
         if (stack.isFluid()) {
             FluidStack fluidStack = stack.<Fluid, FluidStack>cast().value();
-            return "fluid:" + fluidStack.getFluidHolder().getRegisteredName().toLowerCase(Locale.ROOT) + ":" + stack.componentsPatch();
+            return "fluid:" + fluidStack.getFluidHolder().getRegisteredName().toLowerCase(Locale.ROOT) + ":"
+                    + stack.componentsPatch();
         }
         var location = stack.kind().getLocation();
         return location == null ? stack.toString() : location.toString();
@@ -232,7 +265,7 @@ public final class ExecutionOverlayContentHelper {
         return new ProcessNode.MaterialSlot(
             label(content),
             amount,
-            catalyst ? MaterialCategories.CATALYST : materialCategory(content),
+            catalyst ? MaterialCategories.catalyst : materialCategory(content),
             1.0,
             catalyst,
             content,
@@ -263,16 +296,16 @@ public final class ExecutionOverlayContentHelper {
 
     private static MaterialCategory materialCategory(@Nullable RecipeContent content) {
         if (content == null || content.isEmpty()) {
-            return MaterialCategories.UNKNOWN;
+            return MaterialCategories.unknown;
         }
         if (content instanceof StackContent<?, ?> stackContent) {
             ContentStack<?, ?> stack = stackContent.content();
             if (stack.notEmpty() && stack.isFluid()) {
-                return MaterialCategories.FLUID;
+                return MaterialCategories.fluid;
             }
-            return MaterialCategories.ITEM;
+            return MaterialCategories.item;
         }
-        return MaterialCategories.VALUE;
+        return MaterialCategories.value;
     }
 
     public static boolean supportsItemMatching(@Nullable RecipeContent content) {
@@ -291,11 +324,10 @@ public final class ExecutionOverlayContentHelper {
                 case ContentStack<?, ?> stack when stack.isItem() -> {
                     return true;
                 }
-                case ContentKind<?> kind when kind.type() == CirrusTypes.Contents.ITEM -> {
+                case ContentKind<?> kind when kind.type() == CirrusTypes.Contents.item -> {
                     return true;
                 }
-                default -> {
-                }
+                default -> {}
             }
         }
         return false;

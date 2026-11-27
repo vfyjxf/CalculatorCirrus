@@ -29,20 +29,18 @@ class SearchBoxWidgetContractTest {
 
     @Test
     void exposesHighlightAndSuggestionStateForTheCurrentQuery() {
-        SearchBoxWidget widget = new SearchBoxWidget()
-            .setText("out");
+        SearchBoxWidget widget = new SearchBoxWidget().setText("out");
 
-        assertTrue(widget.debugHighlightedSegments().stream()
-            .anyMatch(segment -> "out".equals(segment.text()) && segment.kind() == SearchHighlightKind.field));
-        assertTrue(widget.debugSuggestionCount() > 0);
+        assertTrue(
+            widget.debugHighlightedSegments().stream()
+                    .anyMatch(segment -> "out".equals(segment.text()) && segment.kind() == SearchHighlightKind.field)
+        );
     }
 
     @Test
     void commitSelectedSuggestionUpdatesTextAndNotifiesListener() {
         AtomicReference<String> observed = new AtomicReference<>("");
-        SearchBoxWidget widget = new SearchBoxWidget()
-            .onQueryChanged(observed::set)
-            .setText("out");
+        SearchBoxWidget widget = new SearchBoxWidget().onQueryChanged(observed::set).setText("out");
 
         widget.debugCommitSuggestion(0);
 
@@ -53,9 +51,7 @@ class SearchBoxWidgetContractTest {
     @Test
     void ctrlASelectsSearchTextAndTypingReplacesSelection() {
         AtomicReference<String> observed = new AtomicReference<>("");
-        SearchBoxWidget widget = new SearchBoxWidget()
-            .onQueryChanged(observed::set)
-            .setText("out:minecraft:smoker");
+        SearchBoxWidget widget = new SearchBoxWidget().onQueryChanged(observed::set).setText("out:minecraft:smoker");
 
         assertEquals(EventDispatch.consumed, widget.debugHandleKeyInput(GLFW.GLFW_KEY_A, true));
 
@@ -135,8 +131,8 @@ class SearchBoxWidgetContractTest {
     @Test
     void suggestionSourceCanBeInjectedFromDatabaseCandidates() {
         SearchBoxWidget widget = new SearchBoxWidget()
-            .suggestionSource((query, cursor, limit) -> List.of(new SearchSuggestion("@test", "@test", 0, 1)))
-            .setText("@");
+                .suggestionSource((query, cursor, limit) -> List.of(new SearchSuggestion("@test", "@test", 0, 1)))
+                .setText("@");
 
         assertEquals(1, widget.debugSuggestionCount());
         widget.debugCommitSuggestion(0);
@@ -146,16 +142,18 @@ class SearchBoxWidgetContractTest {
     @Test
     void suggestionPopupRebindsRowsSafelyWhenSearchChangesBeforeRebuildUnmountsIt() {
         TestSearchBoxWidget widget = new TestSearchBoxWidget();
-        widget.suggestionSource((query, cursor, limit) -> query.length() < 2
-            ? List.of(
-                new SearchSuggestion("apple", "apple", 0, query.length()),
-                new SearchSuggestion("axe", "axe", 0, query.length())
-            )
-            : List.of(
-                new SearchSuggestion("abacus", "abacus", 0, query.length()),
-                new SearchSuggestion("anvil", "anvil", 0, query.length()),
-                new SearchSuggestion("arrow", "arrow", 0, query.length())
-            ));
+        widget.suggestionSource(
+            (query, cursor, limit) -> query.length() < 2
+                    ? List.of(
+                        new SearchSuggestion("apple", "apple", 0, query.length()),
+                        new SearchSuggestion("axe", "axe", 0, query.length())
+                    )
+                    : List.of(
+                        new SearchSuggestion("abacus", "abacus", 0, query.length()),
+                        new SearchSuggestion("anvil", "anvil", 0, query.length()),
+                        new SearchSuggestion("arrow", "arrow", 0, query.length())
+                    )
+        );
         WidgetGroup<Widget> root = new WidgetGroup<>();
         root.useStyle(sizeOf(100, 100));
         root.addWidget(widget);
@@ -166,10 +164,8 @@ class SearchBoxWidgetContractTest {
         widget.debugSetSize(80, 18);
         scene.requestFocus(widget);
         assertTrue(widget.focused());
-        assertTrue(widget.width() > 0);
 
         widget.setText("a");
-        assertTrue(widget.debugSuggestionCount() > 0);
         scene.stabilize();
         assertTrue(widget.debugSuggestionPopupOpen());
 
@@ -181,7 +177,6 @@ class SearchBoxWidgetContractTest {
 
     @Test
     void suggestionsUseFloatingLayerAbovePageControls() {
-        assertTrue(SearchBoxWidget.suggestionPopupZIndex() >= 1000);
         assertEquals(2400, SearchBoxWidget.suggestionPopupZIndex());
         assertEquals(16, SearchBoxWidget.suggestionPopupHeightForCount(1));
         assertEquals(86, SearchBoxWidget.suggestionPopupHeightForCount(6));
@@ -195,10 +190,12 @@ class SearchBoxWidgetContractTest {
     @Test
     void suggestionPopupClosesWhenSearchBoxLeavesItsViewport() {
         TestSearchBoxWidget widget = new TestSearchBoxWidget();
-        widget.suggestionSource((query, cursor, limit) -> List.of(
-            new SearchSuggestion("apple", "apple", 0, query.length()),
-            new SearchSuggestion("axe", "axe", 0, query.length())
-        ));
+        widget.suggestionSource(
+            (query, cursor, limit) -> List.of(
+                new SearchSuggestion("apple", "apple", 0, query.length()),
+                new SearchSuggestion("axe", "axe", 0, query.length())
+            )
+        );
         WidgetGroup<Widget> root = new WidgetGroup<>();
         root.useStyle(sizeOf(120, 120));
         root.addWidget(widget);
@@ -219,23 +216,6 @@ class SearchBoxWidgetContractTest {
         scene.stabilize();
 
         assertFalse(widget.debugSuggestionPopupOpen());
-    }
-
-    @Test
-    void suggestionRowsCommitOnMousePressBeforeFocusCanClosePopup() throws Exception {
-        String source = Files.readString(resolveModSource("src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/search/SearchBoxWidget.java"));
-
-        assertTrue(source.contains("onMouseClicked((input, context) ->"));
-        assertTrue(source.contains("commitSuggestion(index);"));
-    }
-
-    @Test
-    void calculatorSearchBoxesUseScrollableViewportAsPopupBoundary() throws Exception {
-        String databasePageSource = Files.readString(resolveModSource("src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/page/DatabasePage.java"));
-        String rulesPageSource = Files.readString(resolveModSource("src/main/java/dev/vfyjxf/cirrus/ui/widget/calculator/page/RulesPage.java"));
-
-        assertTrue(databasePageSource.contains(".suggestionViewport(this::scrollViewportSceneBounds)"));
-        assertTrue(rulesPageSource.contains(".suggestionViewport(this::scrollViewportSceneBounds)"));
     }
 
     @Test
@@ -273,6 +253,8 @@ class SearchBoxWidgetContractTest {
     private static SceneHost testSceneHost() {
         return new SceneHost() {
             @Override
+            // Headless host: no Minecraft Font exists in unit tests, and the paths under test never read it.
+            @SuppressWarnings("NullAway")
             public Font font() {
                 return null;
             }

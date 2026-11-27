@@ -3,16 +3,29 @@ package dev.vfyjxf.cirrus.internal.performance;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
+import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
+import dev.vfyjxf.cirrus.api.planning.graph.RawIngredientSlot;
+import dev.vfyjxf.cirrus.api.planning.graph.RawOutputSlot;
+import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeCatalogSnapshot;
+import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeRecord;
+import dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory;
+import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
+import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.screening.RecipeScreeningHints;
+import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.system.RoutingRecipeView;
+import dev.vfyjxf.cirrus.planning.core.graph.DefaultRecipeGraphCompiler;
+import dev.vfyjxf.cirrus.planning.core.graph.DefaultSystemAdmissionPolicy;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.RecipeApiRegistryBuilder;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
@@ -21,19 +34,22 @@ import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.SplittableRandom;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class CalculatorSyntheticScenario {
-    private CalculatorSyntheticScenario() {
-    }
+    private static final String benchNamespace = "bench";
+
+    private CalculatorSyntheticScenario() {}
 
     public static Scenario create(int competingGearRecipes) {
         MaterialSet materials = MaterialSet.create(Math.max(0, competingGearRecipes));
@@ -41,10 +57,22 @@ public final class CalculatorSyntheticScenario {
         recipes.add("ore_to_crushed", List.of(input(materials.ore, 1)), List.of(output(materials.crushedOre, 2)));
         recipes.add("crushed_to_ingot", List.of(input(materials.crushedOre, 1)), List.of(output(materials.ingot, 1)));
         recipes.add("ingot_to_plate", List.of(input(materials.ingot, 2)), List.of(output(materials.plate, 1)));
-        recipes.add("make_circuit", List.of(input(materials.plate, 2), input(materials.crystal, 1)), List.of(output(materials.circuit, 1)));
+        recipes.add(
+            "make_circuit",
+            List.of(input(materials.plate, 2), input(materials.crystal, 1)),
+            List.of(output(materials.circuit, 1))
+        );
         recipes.add("make_gear", List.of(input(materials.plate, 4)), List.of(output(materials.gear, 1)));
-        recipes.add("make_machine", List.of(input(materials.gear, 2), input(materials.circuit, 1), input(materials.casing, 1)), List.of(output(materials.machine, 1)));
-        recipes.add("make_target", List.of(input(materials.machine, 1), input(materials.fuel, 4)), List.of(output(materials.target, 1)));
+        recipes.add(
+            "make_machine",
+            List.of(input(materials.gear, 2), input(materials.circuit, 1), input(materials.casing, 1)),
+            List.of(output(materials.machine, 1))
+        );
+        recipes.add(
+            "make_target",
+            List.of(input(materials.machine, 1), input(materials.fuel, 4)),
+            List.of(output(materials.target, 1))
+        );
         for (int i = 0; i < competingGearRecipes; i++) {
             recipes.add(
                 "zz_alt_gear_" + i,
@@ -55,7 +83,13 @@ public final class CalculatorSyntheticScenario {
         SyntheticRecipeSystem system = new SyntheticRecipeSystem(recipes.toImmutable());
         ImmutableList<RecipeEntry<?>> entries = recipes.entries(system);
         RecipeEntry<SyntheticRecipe> target = RecipeEntry.of(system, recipes.require("make_target"));
-        return new Scenario("wide:" + competingGearRecipes, system, entries, target, outputResource(materials.target, 1));
+        return new Scenario(
+            "wide:" + competingGearRecipes,
+            system,
+            entries,
+            target,
+            outputResource(materials.target, 1)
+        );
     }
 
     public static Scenario createDeepChain(int depth, int competingRecipesPerStep) {
@@ -147,13 +181,7 @@ public final class CalculatorSyntheticScenario {
         SyntheticRecipeSystem system = new SyntheticRecipeSystem(recipes.toImmutable());
         ImmutableList<RecipeEntry<?>> entries = recipes.entries(system);
         RecipeEntry<SyntheticRecipe> target = RecipeEntry.of(system, recipes.require("workbench_make_station"));
-        return new Scenario(
-            "workbench:" + safeCompeting,
-            system,
-            entries,
-            target,
-            outputResource(station, 1)
-        );
+        return new Scenario("workbench:" + safeCompeting, system, entries, target, outputResource(station, 1));
     }
 
     public static Scenario createMachineLineLike(int componentFamilies, int competingAlternatives) {
@@ -180,10 +208,18 @@ public final class CalculatorSyntheticScenario {
         recipes.add("machine_ingot_to_wire", List.of(input(ingot, 1)), List.of(output(wire, 2)));
         recipes.add("machine_ingot_to_rod", List.of(input(ingot, 1)), List.of(output(rod, 2)));
         recipes.add("machine_make_gear", List.of(input(plate, 4)), List.of(output(gear, 1)));
-        recipes.add("machine_make_motor", List.of(input(plate, 2), input(wire, 4), input(rod, 2)), List.of(output(motor, 1)));
+        recipes.add(
+            "machine_make_motor",
+            List.of(input(plate, 2), input(wire, 4), input(rod, 2)),
+            List.of(output(motor, 1))
+        );
         recipes.add("machine_make_circuit", List.of(input(plate, 1), input(wire, 6)), List.of(output(circuit, 1)));
         recipes.add("machine_make_casing", List.of(input(plate, 8)), List.of(output(casing, 1)));
-        recipes.add("machine_make_pump", List.of(input(motor, 1), input(plate, 2), input(wire, 2)), List.of(output(pump, 1)));
+        recipes.add(
+            "machine_make_pump",
+            List.of(input(motor, 1), input(plate, 2), input(wire, 2)),
+            List.of(output(pump, 1))
+        );
         recipes.add(
             "machine_make_assembler",
             List.of(input(casing, 1), input(circuit, 2), input(gear, 2), input(motor, 1)),
@@ -199,7 +235,8 @@ public final class CalculatorSyntheticScenario {
             switch (i % 4) {
                 case 0 -> recipes.add("machine_alt_gear_" + i, List.of(input(noise, 1)), List.of(output(gear, 1)));
                 case 1 -> recipes.add("machine_alt_motor_" + i, List.of(input(noise, 1)), List.of(output(motor, 1)));
-                case 2 -> recipes.add("machine_alt_circuit_" + i, List.of(input(noise, 1)), List.of(output(circuit, 1)));
+                case 2 ->
+                    recipes.add("machine_alt_circuit_" + i, List.of(input(noise, 1)), List.of(output(circuit, 1)));
                 default -> recipes.add("machine_alt_plate_" + i, List.of(input(noise, 1)), List.of(output(plate, 1)));
             }
         }
@@ -242,7 +279,11 @@ public final class CalculatorSyntheticScenario {
             inputs.add(input(pathStages.get(step - 1), 1 + random.nextInt(3)));
             for (int inputIndex = 1; inputIndex < inputCount; inputIndex++) {
                 SyntheticMaterialType leaf = material(prefix + "path_leaf_" + step + "_" + inputIndex);
-                recipes.add(prefix + "path_leaf_recipe_" + step + "_" + inputIndex, List.of(), List.of(output(leaf, 1 + random.nextInt(4))));
+                recipes.add(
+                    prefix + "path_leaf_recipe_" + step + "_" + inputIndex,
+                    List.of(),
+                    List.of(output(leaf, 1 + random.nextInt(4)))
+                );
                 inputs.add(input(leaf, 1 + random.nextInt(2)));
             }
             recipes.add(prefix + "path_step_" + step, inputs, List.of(output(pathStages.get(step), 1)));
@@ -334,15 +375,77 @@ public final class CalculatorSyntheticScenario {
         RecipeEntry<SyntheticRecipe> target,
         ContentResource targetOutput
     ) {
-        // TODO(planning-bridge): 恢复场景图/规划基准入口（旧路由已删除，待 bridge 接线）
+        public ResourceKey targetResourceKey() {
+            if (targetOutput instanceof ContentValue<?> value) {
+                return new ResourceKey("custom:synthetic", value.type().typeId().toString(), Optional.empty());
+            }
+            return new ResourceKey("custom:synthetic", "bench:" + target.recipe().id(), Optional.empty());
+        }
+
+        public CompiledRecipeGraph compileGraph() {
+            String sysId = system.systemId().toString();
+            List<RawRecipeRecord> records = new ArrayList<>();
+            Map<Long, SystemAdmission> admissions = new HashMap<>();
+            Map<Long, RecipeAdvisory> advisories = new HashMap<>();
+            long ref = 1L;
+            for (SyntheticRecipe recipe : system.allRecipes()) {
+                List<RawIngredientSlot> ins = new ArrayList<>(recipe.inputs().size());
+                for (InputContent in : recipe.inputs()) {
+                    if (in instanceof ValueContent<?> vc && vc.amount() > 0L) {
+                        ResourceKey key = new ResourceKey(
+                            "custom:synthetic",
+                            vc.type().typeId().toString(),
+                            Optional.empty()
+                        );
+                        ins.add(
+                            new RawIngredientSlot(Optional.empty(), List.of(key), vc.amount(), SlotMatchMode.identity)
+                        );
+                    }
+                }
+                List<RawOutputSlot> outs = new ArrayList<>(recipe.outputs().size());
+                for (OutputContent out : recipe.outputs()) {
+                    if (out instanceof ValueContent<?> vc && vc.amount() > 0L) {
+                        ResourceKey key = new ResourceKey(
+                            "custom:synthetic",
+                            vc.type().typeId().toString(),
+                            Optional.empty()
+                        );
+                        outs.add(new RawOutputSlot(key, vc.amount()));
+                    }
+                }
+                if (ins.isEmpty() || outs.isEmpty()) {
+                    continue;
+                }
+                ResourceLocation id = system.getId(recipe);
+                records.add(
+                    new RawRecipeRecord(
+                        sysId,
+                        "custom",
+                        Optional.ofNullable(id).map(ResourceLocation::toString),
+                        List.of(),
+                        ins,
+                        outs,
+                        Map.of(),
+                        ref
+                    )
+                );
+                RecipeUsePolicy hintPolicy = system.routingHints(recipe).usePolicy();
+                if (hintPolicy == RecipeUsePolicy.disabledByDefault) {
+                    admissions.put(ref, SystemAdmission.excludedDisplay);
+                } else if (hintPolicy == RecipeUsePolicy.lastResort) {
+                    advisories.put(ref, RecipeAdvisory.lastResort);
+                } else if (hintPolicy == RecipeUsePolicy.discouraged || hintPolicy == RecipeUsePolicy.targetOnly) {
+                    advisories.put(ref, RecipeAdvisory.discouraged);
+                }
+                ref++;
+            }
+            DefaultSystemAdmissionPolicy policy = DefaultSystemAdmissionPolicy.defaults()
+                    .withExternalVerdicts(admissions, advisories);
+            return new DefaultRecipeGraphCompiler().compile(new RawRecipeCatalogSnapshot(1L, records), policy);
+        }
     }
 
-    public record SyntheticRecipe(
-        String id,
-        Collection<InputContent> inputs,
-        Collection<OutputContent> outputs
-    ) {
-    }
+    public record SyntheticRecipe(String id, Collection<InputContent> inputs, Collection<OutputContent> outputs) {}
 
     public static final class SyntheticRecipeSystem implements RecipeSystem<SyntheticRecipe> {
         private final RichIterable<SyntheticRecipe> recipes;
@@ -355,7 +458,7 @@ public final class CalculatorSyntheticScenario {
 
         @Override
         public Namespace systemId() {
-            return Namespace.of("bench", "calculator");
+            return Namespace.of(benchNamespace, "calculator");
         }
 
         @Override
@@ -365,7 +468,7 @@ public final class CalculatorSyntheticScenario {
 
         @Override
         public @Nullable ResourceLocation getId(SyntheticRecipe recipe) {
-            return ResourceLocation.fromNamespaceAndPath("bench", recipe.id());
+            return ResourceLocation.fromNamespaceAndPath(benchNamespace, recipe.id());
         }
 
         @Override
@@ -390,7 +493,8 @@ public final class CalculatorSyntheticScenario {
 
         @Override
         public ResolveResult resolveFallback(ResolveContext context, SyntheticRecipe recipe) {
-            return ResolveResult.resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
+            return ResolveResult
+                    .resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
         }
 
         @Override
@@ -401,18 +505,12 @@ public final class CalculatorSyntheticScenario {
         @Override
         public RecipeScreeningHints routingHints(SyntheticRecipe recipe) {
             if (recipe.id().startsWith("deep_step_") && recipe.id().contains("_alt_")) {
-                return RecipeScreeningHints.builder()
-                    .lastResort()
-                    .penalty(100_000)
-                    .reasonKey("synthetic_noise")
-                    .build();
+                return RecipeScreeningHints.builder().lastResort().penalty(100_000).reasonKey("synthetic_noise")
+                        .build();
             }
             if (recipe.id().contains("_noise_recipe_")) {
-                return RecipeScreeningHints.builder()
-                    .lastResort()
-                    .penalty(100_000)
-                    .reasonKey("synthetic_noise")
-                    .build();
+                return RecipeScreeningHints.builder().lastResort().penalty(100_000).reasonKey("synthetic_noise")
+                        .build();
             }
             return RecipeScreeningHints.empty();
         }
@@ -428,7 +526,7 @@ public final class CalculatorSyntheticScenario {
         private final String displayName;
 
         private SyntheticMaterialType(String name) {
-            this.id = Namespace.of("bench", "material/" + name);
+            this.id = Namespace.of(benchNamespace, "material/" + name);
             this.displayName = name;
         }
 

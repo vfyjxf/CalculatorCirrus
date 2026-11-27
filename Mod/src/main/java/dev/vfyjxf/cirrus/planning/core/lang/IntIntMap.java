@@ -4,7 +4,7 @@ import java.util.Arrays;
 
 public final class IntIntMap {
 
-    private static final int EMPTY = Integer.MIN_VALUE;
+    private static final int empty = Integer.MIN_VALUE;
 
     private int[] keys;
     private int[] values;
@@ -23,7 +23,7 @@ public final class IntIntMap {
         }
         this.keys = new int[cap];
         this.values = new int[cap];
-        Arrays.fill(this.keys, EMPTY);
+        Arrays.fill(this.keys, empty);
         this.mask = cap - 1;
         this.threshold = (int) (cap * 0.65);
     }
@@ -32,7 +32,7 @@ public final class IntIntMap {
         int idx = mix(key) & mask;
         while (true) {
             int k = keys[idx];
-            if (k == EMPTY) {
+            if (k == empty) {
                 return defaultValue;
             }
             if (k == key) {
@@ -43,7 +43,7 @@ public final class IntIntMap {
     }
 
     public int put(int key, int value) {
-        if (key == EMPTY) {
+        if (key == empty) {
             throw new IllegalArgumentException("reserved sentinel key");
         }
         if (size >= threshold) {
@@ -52,7 +52,7 @@ public final class IntIntMap {
         int idx = mix(key) & mask;
         while (true) {
             int k = keys[idx];
-            if (k == EMPTY) {
+            if (k == empty) {
                 keys[idx] = key;
                 values[idx] = value;
                 size++;
@@ -72,7 +72,7 @@ public final class IntIntMap {
     }
 
     public void clear() {
-        Arrays.fill(keys, EMPTY);
+        Arrays.fill(keys, empty);
         size = 0;
     }
 
@@ -82,14 +82,14 @@ public final class IntIntMap {
         int newCap = oldK.length << 1;
         keys = new int[newCap];
         values = new int[newCap];
-        Arrays.fill(keys, EMPTY);
+        Arrays.fill(keys, empty);
         mask = newCap - 1;
         threshold = (int) (newCap * 0.65);
         for (int i = 0; i < oldK.length; i++) {
             int k = oldK[i];
-            if (k != EMPTY) {
+            if (k != empty) {
                 int idx = mix(k) & mask;
-                while (keys[idx] != EMPTY) {
+                while (keys[idx] != empty) {
                     idx = (idx + 1) & mask;
                 }
                 keys[idx] = k;

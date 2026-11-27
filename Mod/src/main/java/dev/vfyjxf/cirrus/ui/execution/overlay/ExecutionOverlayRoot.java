@@ -1,24 +1,29 @@
 package dev.vfyjxf.cirrus.ui.execution.overlay;
 
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.ExecutionDriverHandle;
-import dev.vfyjxf.cirrus.api.recipe.execution.driver.slot.SlotLayout;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayTraceSnapshot;
+import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.execution.MainPanel;
+import dev.vfyjxf.cirrus.ui.execution.cockpit.ExecutionCockpitTheme;
+import dev.vfyjxf.cirrus.ui.execution.layout.ExecutionOverlayLayout;
+import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiMotion;
+import dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltip;
+import dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltipRenderer;
+import dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiTooltipProvider;
+import dev.vfyjxf.cloudlib.api.math.FloatPos;
 import dev.vfyjxf.cloudlib.api.ui.base.CompositeWidget;
 import dev.vfyjxf.cloudlib.api.ui.base.CoordinateSpace;
+import dev.vfyjxf.cloudlib.api.ui.base.Scene;
 import dev.vfyjxf.cloudlib.api.ui.base.SceneLayer;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.api.ui.style.UIStyle;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.renderer.Rect2i;
-import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemStack;
-import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.List;
 
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.flexColumn;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.inset;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.insetLeft;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.insetTop;
@@ -26,264 +31,284 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.positionAbsolute;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeOf;
 
 public class ExecutionOverlayRoot extends CompositeWidget<Widget> {
-	//region geometry
+    //region geometry
 
-	private static final int slotFrameInset = 1;
-	private static final int slotFrameSize = 18;
-	private static final int moveLineThickness = 1;
-	private static final int moveAnchorInset = 9;
-	private static final int traceInventoryFillAlpha = 0x18;
-	private static final int traceInputFillAlpha = 0x12;
-	private static final int traceOutputFillAlpha = 0x20;
-	//endregion
+    private static final long openAnimDurationMs = 190L;
+    //endregion
 
-	//region state
+    //region state
 
-	private final TraceLayerWidget traceLayer;
-	private final MainPanel panel;
-	private final Runnable openStateListener = this::applyOpenState;
-	private Rect2i panelBounds;
-	//endregion
+    private final TraceLayerWidget traceLayer;
+    private final CockpitTooltipLayer tooltipLayer;
+    private final MainPanel panel;
+    private final Runnable openStateListener = this::applyOpenState;
+    private Rect2i panelBounds;
+    private boolean targetOpen;
+    private float animFrom;
+    private float animProgress;
+    private long animStartMs;
+    private boolean animating;
+    //endregion
 
-	//region setup
+    //region setup
 
-	public ExecutionOverlayRoot(ExecutionDriverHandle driverHandle, Rect2i panelBounds, int sceneWidth, int sceneHeight) {
-		this.panelBounds = panelBounds;
-		applyRootBounds();
+    public ExecutionOverlayRoot(
+        ExecutionDriverHandle driverHandle,
+        Rect2i panelBounds,
+        int sceneWidth,
+        int sceneHeight
+    ) {
+        this.panelBounds = panelBounds;
+        this.targetOpen = ExecutionOverlayOpenState.open();
+        this.animProgress = targetOpen ? 1f : 0f;
+        this.animFrom = animProgress;
+        this.animating = false;
+        setTickable(true);
+        applyRootBounds();
 
-		traceLayer = addWidget(new TraceLayerWidget());
-		traceLayer.setSceneLayer(SceneLayer.overlay);
-		traceLayer.setCoordinateSpace(CoordinateSpace.scene);
-		traceLayer.useStyle(UIStyle.of(positionAbsolute(), inset(0), sizeOf(Math.max(0, sceneWidth), Math.max(0, sceneHeight))));
-		traceLayer.setInteractive(false);
-		traceLayer.setActive(false);
+        traceLayer = addWidget(new TraceLayerWidget());
+        traceLayer.setSceneLayer(SceneLayer.overlay);
+        traceLayer.setCoordinateSpace(CoordinateSpace.scene);
+        traceLayer.useStyle(
+            UIStyle.of(positionAbsolute(), inset(0), sizeOf(Math.max(0, sceneWidth), Math.max(0, sceneHeight)))
+        );
+        traceLayer.setInteractive(false);
+        traceLayer.setActive(false);
 
-		panel = addWidget(new MainPanel(driverHandle));
-		panel.useStyle(UIStyle.of(positionAbsolute(), inset(0), sizeOf(-1, -1)));
+        panel = addWidget(new MainPanel(driverHandle));
 
-		ExecutionOverlayOpenState.addListener(openStateListener);
-		onUnmount(() -> ExecutionOverlayOpenState.removeListener(openStateListener));
-		applyOpenState();
-	}
-	//endregion
+        tooltipLayer = addWidget(new CockpitTooltipLayer());
+        tooltipLayer.setSceneLayer(SceneLayer.overlay);
+        tooltipLayer.setCoordinateSpace(CoordinateSpace.scene);
+        tooltipLayer.useStyle(
+            UIStyle.of(positionAbsolute(), inset(0), sizeOf(Math.max(0, sceneWidth), Math.max(0, sceneHeight)))
+        );
+        tooltipLayer.setInteractive(false);
+        tooltipLayer.setActive(false);
 
-	//region access
+        ExecutionOverlayOpenState.addListener(openStateListener);
+        onUnmount(() -> {
+            panel.autoSaveCheckpointOnClose();
+            ExecutionOverlayOpenState.removeListener(openStateListener);
+        });
+        applyOpenStateImmediate();
+    }
+    //endregion
 
-	public MainPanel panel() {
-		return panel;
-	}
+    //region access
 
-	public Rect2i panelBounds() {
-		return panelBounds;
-	}
+    public MainPanel panel() {
+        return panel;
+    }
 
-	public Rect2i currentBounds() {
-		if (!ExecutionOverlayOpenState.open()) {
-			return new Rect2i(panelBounds.getX(), panelBounds.getY(), 0, 0);
-		}
-		return panelBounds;
-	}
+    public Rect2i panelBounds() {
+        return panelBounds;
+    }
 
-	public List<Rect2i> exclusionBounds() {
-		return ExecutionOverlayOpenState.open() ? List.of(panelBounds) : List.of();
-	}
-	//endregion
+    public float openAnimationProgress() {
+        stepOpenAnimation();
+        return animProgress;
+    }
 
-	//region layout
+    public Rect2i currentBounds() {
+        if (!targetOpen && !animating && animProgress <= 0.001f) {
+            return new Rect2i(panelBounds.getX(), panelBounds.getY(), 0, 0);
+        }
+        int closedX = -panelBounds.getWidth() - 8;
+        int animatedX = Math.round(OreUiMotion.lerp(closedX, panelBounds.getX(), animProgress));
+        return new Rect2i(animatedX, panelBounds.getY(), panelBounds.getWidth(), panelBounds.getHeight());
+    }
 
-	private void applyRootBounds() {
-		Rect2i bounds = currentBounds();
-		useStyle(UIStyle.of(
-				positionAbsolute(),
-				insetLeft(bounds.getX()),
-				insetTop(bounds.getY()),
-				sizeOf(bounds.getWidth(), bounds.getHeight())
-		));
-	}
+    public List<Rect2i> exclusionBounds() {
+        if (!ExecutionOverlayOpenState.open() || panelBounds.getWidth() <= 0 || panelBounds.getHeight() <= 0) {
+            return List.of();
+        }
+        var screen = lifecycle().mounted() ? context().currentScreen() : null;
+        return List.of(ExecutionOverlayLayout.jeiExclusionBounds(screen, panelBounds));
+    }
+    //endregion
 
-	private void applyOpenState() {
-		boolean open = ExecutionOverlayOpenState.open();
-		applyRootBounds();
-		panel.setVisible(open);
-		panel.setActive(open);
-		panel.setTickable(open);
-		traceLayer.setVisible(open);
-		traceLayer.setActive(false);
-	}
-	//endregion
+    //region layout
 
-	//region lifecycle
+    private void applyRootBounds() {
+        Rect2i bounds = currentBounds();
+        useStyle(
+            UIStyle.of(
+                positionAbsolute(),
+                flexColumn(),
+                insetLeft(bounds.getX()),
+                insetTop(bounds.getY()),
+                sizeOf(bounds.getWidth(), bounds.getHeight())
+            )
+        );
+    }
 
-	@Override
-	public void tick() {
-		if (!ExecutionOverlayOpenState.open()) {
-			return;
-		}
-		super.tick();
-	}
-	//endregion
+    private void syncContainerBounds() {
+        if (!lifecycle().mounted()) {
+            return;
+        }
+        var screen = context().currentScreen();
+        if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) {
+            return;
+        }
+        int screenW = containerScreen.width;
+        int screenH = containerScreen.height;
+        if (screenW <= 0 || screenH <= 0) {
+            return;
+        }
+        Rect2i next = ExecutionOverlayLayout.panelBounds(containerScreen, screenW, screenH);
+        if (next.getX() != panelBounds.getX()
+                || next.getY() != panelBounds.getY()
+                || next.getWidth() != panelBounds.getWidth()
+                || next.getHeight() != panelBounds.getHeight()) {
+            panelBounds = next;
+            applyRootBounds();
+            traceLayer.useStyle(UIStyle.of(positionAbsolute(), inset(0), sizeOf(screenW, screenH)));
+            tooltipLayer.useStyle(UIStyle.of(positionAbsolute(), inset(0), sizeOf(screenW, screenH)));
+        }
+    }
 
-	//region trace layer
+    private void applyOpenStateImmediate() {
+        boolean open = ExecutionOverlayOpenState.open();
+        targetOpen = open;
+        animProgress = open ? 1f : 0f;
+        animFrom = animProgress;
+        animating = false;
+        setInteractive(open);
+        applyRootBounds();
+        panel.setVisible(open);
+        panel.setActive(open);
+        panel.setTickable(open);
+        traceLayer.setVisible(open);
+        traceLayer.setActive(false);
+        tooltipLayer.setVisible(open);
+        tooltipLayer.setActive(false);
+    }
 
-	private final class TraceLayerWidget extends Widget {
+    private void applyOpenState() {
+        boolean nextOpen = ExecutionOverlayOpenState.open();
+        if (nextOpen != targetOpen) {
+            if (!nextOpen) {
+                panel.archiveAndClearOnClose();
+            }
+            stepOpenAnimation();
+            animFrom = animProgress;
+            targetOpen = nextOpen;
+            animStartMs = OreUiMotion.nowMs();
+            if (OreUiMotion.reducedMotion()) {
+                animProgress = targetOpen ? 1f : 0f;
+                animating = false;
+            } else {
+                animating = true;
+            }
+        }
+        boolean showPanel = targetOpen || animating;
+        setInteractive(targetOpen);
+        applyRootBounds();
+        panel.setVisible(showPanel);
+        panel.setActive(targetOpen);
+        panel.setTickable(targetOpen);
+        traceLayer.setVisible(targetOpen);
+        traceLayer.setActive(false);
+        tooltipLayer.setVisible(targetOpen);
+        tooltipLayer.setActive(false);
+    }
 
-		@Override
-		protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
-			super.renderInternal(canvas, mouseX, mouseY, partialTicks);
-			if (!ExecutionOverlayOpenState.open() || !panel.traceEnabled()) {
-				return;
-			}
-			ExecutionOverlayTraceSnapshot trace = panel.trace();
-			if (trace == null || !trace.available()) {
-				return;
-			}
-			var screen = context().currentScreen();
-			if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) {
-				return;
-			}
-			List<SlotRect> slotRects = resolveSlotRects(containerScreen, trace);
-			if (slotRects.isEmpty()) {
-				return;
-			}
+    private void stepOpenAnimation() {
+        if (!animating) {
+            return;
+        }
+        long elapsed = Math.max(0L, OreUiMotion.nowMs() - animStartMs);
+        float t = OreUiMotion.cubicOut(elapsed, openAnimDurationMs, OreUiMotion.reducedMotion());
+        animProgress = OreUiMotion.lerp(animFrom, targetOpen ? 1f : 0f, t);
+        if (t >= 1f) {
+            animProgress = targetOpen ? 1f : 0f;
+            animating = false;
+            if (!targetOpen) {
+                panel.setVisible(false);
+            }
+        }
+        applyRootBounds();
+    }
+    //endregion
 
-			for (ExecutionOverlayTraceSnapshot.SlotMove move : trace.moves()) {
-				Rect2i from = findSlotRect(slotRects, move.from());
-				Rect2i to = findSlotRect(slotRects, move.to());
-				if (from == null || to == null) {
-					continue;
-				}
-				int fromX = from.getX() + moveAnchorInset;
-				int fromY = from.getY() + moveAnchorInset;
-				int toX = to.getX() + moveAnchorInset;
-				int toY = to.getY() + moveAnchorInset;
-				canvas.line(fromX, fromY, toX, toY, moveLineThickness, move.color());
-			}
+    //region lifecycle
 
-			for (SlotRect slotRect : slotRects) {
-				drawSlotRect(canvas, slotRect);
-			}
-		}
+    @Override
+    protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
+        stepOpenAnimation();
+        super.renderInternal(canvas, mouseX, mouseY, partialTicks);
+    }
 
-		private void drawSlotRect(SceneCanvas canvas, SlotRect slotRect) {
-			Rect2i rect = slotRect.rect();
-			canvas.fill(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), slotRect.fillColor());
-			if (slotRect.role().equals("input-preview")) {
-				canvas.strokeRect(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), withAlpha(slotRect.color(), 0x72), 1);
-				if (slotRect.currentStack().isEmpty()) {
-					ItemStack ghost = slotRect.stack();
-					if (!ghost.isEmpty()) {
-						canvas.color(0x72FFFFFF);
-						canvas.renderItem(ghost, rect.getX() + 1, rect.getY() + 1);
-						canvas.resetColor();
-					}
-				}
-				return;
-			}
-			if (slotRect.role().equals("input-executing")) {
-				canvas.strokeRect(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), withAlpha(slotRect.color(), 0x88), 1);
-				canvas.fill(rect.getX() + 2, rect.getY() + 2, rect.getWidth() - 4, rect.getHeight() - 4, withAlpha(slotRect.color(), 0x10));
-				return;
-			}
-			if (slotRect.role().equals("output")) {
-				canvas.strokeRect(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), withAlpha(slotRect.color(), 0x88), 1);
-				canvas.fill(rect.getX() + 2, rect.getY() + 2, rect.getWidth() - 4, rect.getHeight() - 4, withAlpha(slotRect.color(), 0x16));
-				if (slotRect.currentStack().isEmpty()) {
-					ItemStack ghost = slotRect.stack();
-					if (!ghost.isEmpty()) {
-						canvas.color(0x7AFFFFFF);
-						canvas.renderItem(ghost, rect.getX() + 1, rect.getY() + 1);
-						canvas.resetColor();
-					}
-				}
-				return;
-			}
-			canvas.strokeRect(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), withAlpha(slotRect.color(), 0x88), 1);
-			if (slotRect.role().equals("inventory") && slotRect.currentStack().isEmpty()) {
-				ItemStack icon = slotRect.stack();
-				if (!icon.isEmpty()) {
-					canvas.color(0x70FFFFFF);
-					canvas.renderItem(icon, rect.getX() + 1, rect.getY() + 1);
-					canvas.resetColor();
-				}
-			}
-		}
+    @Override
+    public void tick() {
+        stepOpenAnimation();
+        if (!ExecutionOverlayOpenState.open()) {
+            return;
+        }
+        syncContainerBounds();
+        super.tick();
+    }
+    //endregion
 
-		private List<SlotRect> resolveSlotRects(AbstractContainerScreen<?> screen, ExecutionOverlayTraceSnapshot trace) {
-			ArrayList<SlotRect> out = new ArrayList<>();
-			int left = screen.getGuiLeft();
-			int top = screen.getGuiTop();
-			for (ExecutionOverlayTraceSnapshot.SlotHighlight highlight : trace.highlights()) {
-				Integer slotIndex = slotIndex(highlight.slot());
-				if (slotIndex == null || slotIndex < 0 || slotIndex >= screen.getMenu().slots.size()) {
-					continue;
-				}
-				Slot slot = screen.getMenu().slots.get(slotIndex);
-				Rect2i rect = new Rect2i(left + slot.x - slotFrameInset, top + slot.y - slotFrameInset, slotFrameSize, slotFrameSize);
-				out.add(new SlotRect(
-						highlight.slot(),
-						highlight.role(),
-						rect,
-						highlight.color(),
-						roleFillColor(highlight.role(), highlight.color()),
-						normalizedStack(highlight.stack()),
-						normalizedStack(slot.getItem())
-				));
-			}
-			return out;
-		}
+    //region trace layer
 
-		private int roleFillColor(String role, int color) {
-			return switch (role) {
-				case "input-preview" -> withAlpha(color, 0x08);
-				case "input-executing" -> withAlpha(color, traceInputFillAlpha);
-				case "output" -> withAlpha(color, traceOutputFillAlpha);
-				case "inventory" -> withAlpha(color, traceInventoryFillAlpha);
-				default -> withAlpha(color, 0x18);
-			};
-		}
+    private final class TraceLayerWidget extends Widget {
 
-		private @Nullable Rect2i findSlotRect(List<SlotRect> slots, SlotLayout.Reference reference) {
-			for (SlotRect slot : slots) {
-				if (slot.reference().equals(reference)) {
-					return slot.rect();
-				}
-			}
-			return null;
-		}
+        private final SlotFlowTraceRenderer flowTraceRenderer = new SlotFlowTraceRenderer();
 
-		private @Nullable Integer slotIndex(SlotLayout.Reference reference) {
-			if (reference instanceof SlotLayout.Reference.Index index) {
-				return index.index();
-			}
-			if (reference instanceof SlotLayout.Reference.Key) {
-				return null;
-			}
-			return null;
-		}
+        @Override
+        protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
+            super.renderInternal(canvas, mouseX, mouseY, partialTicks);
+            if (!ExecutionOverlayOpenState.open() || !panel.traceEnabled()) {
+                return;
+            }
+            ExecutionOverlayTraceSnapshot trace = panel.trace();
+            if (trace == null || !trace.available()) {
+                return;
+            }
+            var screen = context().currentScreen();
+            if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) {
+                return;
+            }
+            flowTraceRenderer.render(canvas, containerScreen, panel, trace, ExecutionCockpitTheme.palette(panel));
+        }
+    }
+    //endregion
 
-		private int withAlpha(int color, int alpha) {
-			return (alpha << 24) | (color & 0x00FFFFFF);
-		}
+    private final class CockpitTooltipLayer extends Widget {
 
-		private ItemStack normalizedStack(ItemStack stack) {
-			if (stack.isEmpty()) {
-				return ItemStack.EMPTY;
-			}
-			ItemStack copy = stack.copy();
-			copy.setCount(1);
-			return copy;
-		}
-	}
-	//endregion
-
-	private record SlotRect(
-			SlotLayout.Reference reference,
-			String role,
-			Rect2i rect,
-			int color,
-			int fillColor,
-			ItemStack stack,
-			ItemStack currentStack
-	) {
-	}
+        @Override
+        protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
+            if (!ExecutionOverlayOpenState.open() || !lifecycle().mounted()) {
+                return;
+            }
+            int viewW = width();
+            int viewH = height();
+            if (viewW <= 0 || viewH <= 0) {
+                return;
+            }
+            Scene currentScene = scene();
+            Widget hit = currentScene.hitTest(mouseX, mouseY);
+            OreUiRichTooltip tooltip = null;
+            for (Widget cursor = hit; cursor != null; cursor = cursor.parent()) {
+                if (cursor == this) {
+                    continue;
+                }
+                if (cursor instanceof OreUiTooltipProvider provider) {
+                    FloatPos local = cursor.sceneToLocal(mouseX, mouseY);
+                    OreUiRichTooltip resolved = provider.richTooltipAt(local.x, local.y);
+                    if (resolved != null && !resolved.isEmpty()) {
+                        tooltip = resolved;
+                        break;
+                    }
+                }
+            }
+            if (tooltip == null) {
+                return;
+            }
+            CirrusPalette palette = ExecutionCockpitTheme.palette(panel);
+            OreUiRichTooltipRenderer.render(canvas, tooltip, mouseX, mouseY, viewW, viewH, palette);
+        }
+    }
 }

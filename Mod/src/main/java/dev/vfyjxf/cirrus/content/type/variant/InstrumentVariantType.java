@@ -14,7 +14,7 @@ public class InstrumentVariantType extends BasicVariantType<Item, ItemStack> {
     public static final InstrumentVariantType instance = new InstrumentVariantType();
 
     private InstrumentVariantType() {
-        super(Namespace.ofMc("instrument"), CirrusTypes.Contents.ITEM_STACK);
+        super(Namespace.ofMc("instrument"), CirrusTypes.Contents.itemStack);
     }
 
     @Override

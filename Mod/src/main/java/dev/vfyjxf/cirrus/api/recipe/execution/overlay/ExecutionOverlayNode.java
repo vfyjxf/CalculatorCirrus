@@ -5,7 +5,7 @@ import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowStatus;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.network.chat.Component;
 import org.eclipse.collections.api.list.ImmutableList;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Flattened tree row projected for the execution overlay body.

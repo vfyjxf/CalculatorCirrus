@@ -1,52 +1,53 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.driver.slot;
 
-import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
-import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionCapability;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSideRequirement;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionExecutionPlan;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.PauseReason;
 import dev.vfyjxf.cirrus.api.recipe.execution.core.PauseReasons;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.ExecutionDriverSnapshot;
+import dev.vfyjxf.cirrus.api.recipe.execution.interaction.ExecutionPlanningSnapshot;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionApi;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionContext;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionGuideResult;
-import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionProbeResult;
-import dev.vfyjxf.cirrus.api.recipe.execution.interaction.ExecutionPlanningSnapshot;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionPerformResult;
+import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionProbeResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayTraceSnapshot;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
-import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.recipe.execution.driver.slot.SlotExecutionDriver;
 import dev.vfyjxf.cirrus.recipe.execution.driver.slot.SlotFlow;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.neoforged.testframework.junit.EphemeralTestServerProvider;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -67,7 +68,9 @@ class SlotExecutionDriverTest {
         var step = openInteractionStep();
         var access = new FakeAccess(false);
         var flow = new FakeFlow(access);
-        var driver = SlotExecutionDriver.standard(new SlotExecutionDriver.Profile(testInteractionId, new FakeLayout(), access, null, null, flow));
+        var driver = SlotExecutionDriver.standard(
+            new SlotExecutionDriver.Profile(testInteractionId, new FakeLayout(), access, null, null, flow)
+        );
         driver.initialize(startSession(step));
 
         driver.advanceSteps(1);
@@ -82,7 +85,16 @@ class SlotExecutionDriverTest {
     @Test
     void snapshotAlwaysProvidesTelemetryEvenWithoutSession() {
         var access = new FakeAccess(true);
-        var driver = SlotExecutionDriver.standard(new SlotExecutionDriver.Profile(testInteractionId, new FakeLayout(), access, null, null, new FakeFlow(access)));
+        var driver = SlotExecutionDriver.standard(
+            new SlotExecutionDriver.Profile(
+                testInteractionId,
+                new FakeLayout(),
+                access,
+                null,
+                null,
+                new FakeFlow(access)
+            )
+        );
 
         ExecutionDriverSnapshot snapshot = driver.snapshot();
 
@@ -95,8 +107,12 @@ class SlotExecutionDriverTest {
     void slotHandlerHandlesCoreStepTypes() {
         var access = new FakeAccess(true);
         var flow = new FakeFlow(access);
-        var driver = SlotExecutionDriver.standard(new SlotExecutionDriver.Profile(testInteractionId, new FakeLayout(), access, null, null, flow));
-        driver.initialize(startSession(openInteractionStep(), prepareInputsStep(), executeRecipeStep(), collectOutputsStep()));
+        var driver = SlotExecutionDriver.standard(
+            new SlotExecutionDriver.Profile(testInteractionId, new FakeLayout(), access, null, null, flow)
+        );
+        driver.initialize(
+            startSession(openInteractionStep(), prepareInputsStep(), executeRecipeStep(), collectOutputsStep())
+        );
 
         driver.advanceSteps(4);
 
@@ -143,7 +159,8 @@ class SlotExecutionDriverTest {
     @Test
     void standardDriverFallsBackToDefaultFlowWhenFlowIsNull() {
         var access = new FakeAccess(false);
-        var driver = SlotExecutionDriver.standard(SlotExecutionDriver.profile(testInteractionId, new FakeLayout(), access));
+        var driver = SlotExecutionDriver
+                .standard(SlotExecutionDriver.profile(testInteractionId, new FakeLayout(), access));
         driver.initialize(startSession(openInteractionStep()));
 
         driver.advanceSteps(1);
@@ -154,27 +171,27 @@ class SlotExecutionDriverTest {
     @Test
     void interactionPlanningSnapshotAggregatesInventoryInputAndOutputRoles(MinecraftServer server) {
         SlotLayout layout = SlotLayout.builder()
-            .add(
-                SlotLayout.Role.input,
-                new SlotLayout.Key(Namespace.of("test", "input"), 0),
-                new SlotLayout.Reference.Index(0)
-            )
-            .add(
-                SlotLayout.Role.inventory,
-                new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
-                new SlotLayout.Reference.Index(1)
-            )
-            .add(
-                SlotLayout.Role.output,
-                new SlotLayout.Key(Namespace.of("test", "output"), 0),
-                new SlotLayout.Reference.Index(2)
-            )
-            .build();
+                .add(
+                    SlotLayout.Role.input,
+                    new SlotLayout.Key(Namespace.of("test", "input"), 0),
+                    new SlotLayout.Reference.Index(0)
+                )
+                .add(
+                    SlotLayout.Role.inventory,
+                    new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
+                    new SlotLayout.Reference.Index(1)
+                )
+                .add(
+                    SlotLayout.Role.output,
+                    new SlotLayout.Key(Namespace.of("test", "output"), 0),
+                    new SlotLayout.Reference.Index(2)
+                ).build();
         TestInteractionAccess access = new TestInteractionAccess(true);
         access.put(new SlotLayout.Reference.Index(0), stack(Items.OAK_LOG, 2));
         access.put(new SlotLayout.Reference.Index(1), stack(Items.COBBLESTONE, 5));
         access.put(new SlotLayout.Reference.Index(2), stack(Items.STICK, 3));
-        SlotExecutionDriver driver = SlotExecutionDriver.standard(new SlotExecutionDriver.Profile(testInteractionId, layout, access, access, null, null));
+        SlotExecutionDriver driver = SlotExecutionDriver
+                .standard(new SlotExecutionDriver.Profile(testInteractionId, layout, access, access, null, null));
 
         ExecutionPlanningSnapshot snapshot = driver.interaction().planningSnapshot();
 
@@ -211,12 +228,9 @@ class SlotExecutionDriverTest {
         };
         SlotExecutionDriver driver = new SlotExecutionDriver(testInteractionId, interactionApi, null, null, null);
 
-        int maxBatch = driver.interaction().interactionApi().maxExecuteBatchSize(new InteractionContext(
-            recipeEntry("craft"),
-            9,
-            Lists.immutable.empty(),
-            Lists.immutable.empty()
-        ));
+        int maxBatch = driver.interaction().interactionApi().maxExecuteBatchSize(
+            new InteractionContext(recipeEntry("craft"), 9, Lists.immutable.empty(), Lists.immutable.empty())
+        );
 
         assertEquals(7, maxBatch);
         assertEquals(9, observedTimes.get());
@@ -225,17 +239,16 @@ class SlotExecutionDriverTest {
     @Test
     void standardDriverUsesManualFlowWhenNoInteractionProvided() {
         SlotLayout layout = SlotLayout.builder()
-            .add(
-                SlotLayout.Role.input,
-                new SlotLayout.Key(Namespace.of("test", "input"), 0),
-                new SlotLayout.Reference.Index(0)
-            )
-            .add(
-                SlotLayout.Role.output,
-                new SlotLayout.Key(Namespace.of("test", "output"), 0),
-                new SlotLayout.Reference.Index(1)
-            )
-            .build();
+                .add(
+                    SlotLayout.Role.input,
+                    new SlotLayout.Key(Namespace.of("test", "input"), 0),
+                    new SlotLayout.Reference.Index(0)
+                )
+                .add(
+                    SlotLayout.Role.output,
+                    new SlotLayout.Key(Namespace.of("test", "output"), 0),
+                    new SlotLayout.Reference.Index(1)
+                ).build();
         SlotAccess access = new SlotAccess() {
             @Override
             public State state() {
@@ -247,7 +260,14 @@ class SlotExecutionDriverTest {
                 return ItemStack.EMPTY;
             }
         };
-        SlotExecutionDriver.Profile profile = new SlotExecutionDriver.Profile(testInteractionId, layout, access, null, null, null);
+        SlotExecutionDriver.Profile profile = new SlotExecutionDriver.Profile(
+            testInteractionId,
+            layout,
+            access,
+            null,
+            null,
+            null
+        );
         SlotExecutionDriver driver = SlotExecutionDriver.standard(profile);
         driver.initialize(startSession(prepareInputsStep()));
 
@@ -291,8 +311,7 @@ class SlotExecutionDriverTest {
             }
 
             @Override
-            public void close() {
-            }
+            public void close() {}
 
             @Override
             public ItemStack carried() {
@@ -300,7 +319,14 @@ class SlotExecutionDriverTest {
             }
         };
         SlotFlow.PlacementResolver resolver = (context, recipe, inputs) -> Lists.immutable.empty();
-        SlotExecutionDriver.Profile profile = new SlotExecutionDriver.Profile(testInteractionId, layoutForInputOutput(), access, interaction, resolver, null);
+        SlotExecutionDriver.Profile profile = new SlotExecutionDriver.Profile(
+            testInteractionId,
+            layoutForInputOutput(),
+            access,
+            interaction,
+            resolver,
+            null
+        );
         SlotExecutionDriver driver = SlotExecutionDriver.standard(profile);
         driver.initialize(startSession(openInteractionStep()));
 
@@ -332,12 +358,10 @@ class SlotExecutionDriverTest {
             }
 
             @Override
-            public void open() {
-            }
+            public void open() {}
 
             @Override
-            public void close() {
-            }
+            public void close() {}
 
             @Override
             public ItemStack carried() {
@@ -345,7 +369,14 @@ class SlotExecutionDriverTest {
             }
         };
         SlotFlow.PlacementResolver resolver = (context, recipe, inputs) -> Lists.immutable.empty();
-        SlotExecutionDriver.Profile profile = new SlotExecutionDriver.Profile(testInteractionId, layoutForInputOutput(), access, interaction, resolver, null);
+        SlotExecutionDriver.Profile profile = new SlotExecutionDriver.Profile(
+            testInteractionId,
+            layoutForInputOutput(),
+            access,
+            interaction,
+            resolver,
+            null
+        );
         SlotExecutionDriver driver = SlotExecutionDriver.standard(profile);
         driver.initialize(startSession(prepareInputsStep()));
 
@@ -374,8 +405,12 @@ class SlotExecutionDriverTest {
     void autoAdvanceRateStopsAtVisibleTraceSteps() {
         var access = new FakeAccess(true);
         var flow = new TraceTrackingFlow(access);
-        var driver = SlotExecutionDriver.standard(new SlotExecutionDriver.Profile(testInteractionId, new FakeLayout(), access, null, null, flow));
-        driver.initialize(startSession(openInteractionStep(), prepareInputsStep(), executeRecipeStep(), collectOutputsStep()));
+        var driver = SlotExecutionDriver.standard(
+            new SlotExecutionDriver.Profile(testInteractionId, new FakeLayout(), access, null, null, flow)
+        );
+        driver.initialize(
+            startSession(openInteractionStep(), prepareInputsStep(), executeRecipeStep(), collectOutputsStep())
+        );
         driver.toggleAutoAdvance();
         driver.setRatePerSecond(1.0d);
 
@@ -385,7 +420,7 @@ class SlotExecutionDriverTest {
 
         assertFalse(driver.snapshot().telemetry().completed());
         assertEquals(1, driver.session().nextStepIndex());
-        assertEquals("prepare", driver.snapshot().trace().recipeLabel());
+        assertEquals("prepare", Objects.requireNonNull(driver.snapshot().trace(), "trace").recipeLabel());
 
         for (int tick = 0; tick < 40; tick++) {
             driver.tick();
@@ -406,7 +441,16 @@ class SlotExecutionDriverTest {
     @Test
     void autoAdvanceStopsWhenExecutionCompletes() {
         var access = new FakeAccess(true);
-        var driver = SlotExecutionDriver.standard(new SlotExecutionDriver.Profile(testInteractionId, new FakeLayout(), access, null, null, new FakeFlow(access)));
+        var driver = SlotExecutionDriver.standard(
+            new SlotExecutionDriver.Profile(
+                testInteractionId,
+                new FakeLayout(),
+                access,
+                null,
+                null,
+                new FakeFlow(access)
+            )
+        );
         driver.initialize(startSession(executeRecipeStep()));
         driver.toggleAutoAdvance();
 
@@ -419,14 +463,25 @@ class SlotExecutionDriverTest {
     @Test
     void autoAdvanceSkipsNonTraceStepsWithoutHoldingStaleTrace() {
         var access = new FakeAccess(true);
-        var driver = SlotExecutionDriver.standard(new SlotExecutionDriver.Profile(testInteractionId, new FakeLayout(), access, null, null, new TraceTrackingFlow(access)));
-        driver.initialize(startSession(
-            openInteractionStep(),
-            prepareInputsStep(),
-            executeRecipeStep(),
-            collectOutputsStep(),
-            prepareInputsStep()
-        ));
+        var driver = SlotExecutionDriver.standard(
+            new SlotExecutionDriver.Profile(
+                testInteractionId,
+                new FakeLayout(),
+                access,
+                null,
+                null,
+                new TraceTrackingFlow(access)
+            )
+        );
+        driver.initialize(
+            startSession(
+                openInteractionStep(),
+                prepareInputsStep(),
+                executeRecipeStep(),
+                collectOutputsStep(),
+                prepareInputsStep()
+            )
+        );
         driver.toggleAutoAdvance();
         driver.setRatePerSecond(1.0d);
 
@@ -435,29 +490,29 @@ class SlotExecutionDriverTest {
         }
 
         assertEquals(4, driver.session().nextStepIndex());
-        assertEquals("prepare", driver.snapshot().trace().recipeLabel());
-        assertTrue(driver.snapshot().trace().available());
+        var trace = Objects.requireNonNull(driver.snapshot().trace(), "trace");
+        assertEquals("prepare", trace.recipeLabel());
+        assertTrue(trace.available());
     }
 
     @Test
     void autoFlowExecuteAcceptsInputsAlreadyPresentInGrid(MinecraftServer server) {
         SlotLayout layout = SlotLayout.builder()
-            .add(
-                SlotLayout.Role.input,
-                new SlotLayout.Key(Namespace.of("test", "input"), 0),
-                new SlotLayout.Reference.Index(0)
-            )
-            .add(
-                SlotLayout.Role.output,
-                new SlotLayout.Key(Namespace.of("test", "output"), 0),
-                new SlotLayout.Reference.Index(1)
-            )
-            .add(
-                SlotLayout.Role.inventory,
-                new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
-                new SlotLayout.Reference.Index(2)
-            )
-            .build();
+                .add(
+                    SlotLayout.Role.input,
+                    new SlotLayout.Key(Namespace.of("test", "input"), 0),
+                    new SlotLayout.Reference.Index(0)
+                )
+                .add(
+                    SlotLayout.Role.output,
+                    new SlotLayout.Key(Namespace.of("test", "output"), 0),
+                    new SlotLayout.Reference.Index(1)
+                )
+                .add(
+                    SlotLayout.Role.inventory,
+                    new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
+                    new SlotLayout.Reference.Index(2)
+                ).build();
         SlotLayout.Reference inputSlot = new SlotLayout.Reference.Index(0);
         SlotLayout.Reference outputSlot = new SlotLayout.Reference.Index(1);
         SlotLayout.Reference inventorySlot = new SlotLayout.Reference.Index(2);
@@ -465,10 +520,16 @@ class SlotExecutionDriverTest {
         access.put(inputSlot, stack(Items.OAK_LOG, 1));
         access.put(outputSlot, stack(Items.OAK_PLANKS, 4));
 
-        SlotFlow.PlacementResolver resolver = (context, recipe, inputs) -> Lists.immutable.of(
-            new SlotFlow.Placement(inputSlot, stack(Items.OAK_LOG, 1), 1)
+        SlotFlow.PlacementResolver resolver = (context, recipe, inputs) -> Lists.immutable
+                .of(new SlotFlow.Placement(inputSlot, stack(Items.OAK_LOG, 1), 1));
+        SlotExecutionDriver.Profile profile = new SlotExecutionDriver.Profile(
+            testInteractionId,
+            layout,
+            access,
+            access,
+            resolver,
+            null
         );
-        SlotExecutionDriver.Profile profile = new SlotExecutionDriver.Profile(testInteractionId, layout, access, access, resolver, null);
         SlotExecutionDriver driver = SlotExecutionDriver.standard(profile);
         driver.initialize(startSession(executeRecipeStepWithSingleInputAndOutput()));
 
@@ -484,22 +545,21 @@ class SlotExecutionDriverTest {
     @Test
     void autoFlowExecuteQuickMovesOutputOnceForPreparedMultiCraft() {
         SlotLayout layout = SlotLayout.builder()
-            .add(
-                SlotLayout.Role.input,
-                new SlotLayout.Key(Namespace.of("test", "input"), 0),
-                new SlotLayout.Reference.Index(0)
-            )
-            .add(
-                SlotLayout.Role.output,
-                new SlotLayout.Key(Namespace.of("test", "output"), 0),
-                new SlotLayout.Reference.Index(1)
-            )
-            .add(
-                SlotLayout.Role.inventory,
-                new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
-                new SlotLayout.Reference.Index(2)
-            )
-            .build();
+                .add(
+                    SlotLayout.Role.input,
+                    new SlotLayout.Key(Namespace.of("test", "input"), 0),
+                    new SlotLayout.Reference.Index(0)
+                )
+                .add(
+                    SlotLayout.Role.output,
+                    new SlotLayout.Key(Namespace.of("test", "output"), 0),
+                    new SlotLayout.Reference.Index(1)
+                )
+                .add(
+                    SlotLayout.Role.inventory,
+                    new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
+                    new SlotLayout.Reference.Index(2)
+                ).build();
         SlotLayout.Reference inputSlot = new SlotLayout.Reference.Index(0);
         SlotLayout.Reference outputSlot = new SlotLayout.Reference.Index(1);
         SlotLayout.Reference inventorySlot = new SlotLayout.Reference.Index(2);
@@ -507,19 +567,29 @@ class SlotExecutionDriverTest {
         access.put(inputSlot, stack(Items.OAK_LOG, 16));
         access.put(outputSlot, stack(Items.OAK_PLANKS, 4));
 
-        SlotFlow.PlacementResolver resolver = (context, recipe, inputs) -> Lists.immutable.of(
-            new SlotFlow.Placement(inputSlot, stack(Items.OAK_LOG, 1), 16)
+        SlotFlow.PlacementResolver resolver = (context, recipe, inputs) -> Lists.immutable
+                .of(new SlotFlow.Placement(inputSlot, stack(Items.OAK_LOG, 1), 16));
+        SlotExecutionDriver.Profile profile = new SlotExecutionDriver.Profile(
+            testInteractionId,
+            layout,
+            access,
+            access,
+            resolver,
+            null
         );
-        SlotExecutionDriver.Profile profile = new SlotExecutionDriver.Profile(testInteractionId, layout, access, access, resolver, null);
         SlotExecutionDriver driver = SlotExecutionDriver.standard(profile);
-        driver.initialize(startSession(new InteractionStep.ExecuteRecipeStep(
-            ExecutionSideRequirement.environmentAgnostic,
-            ExecutionCapability.interactionPerform,
-            recipeEntry("craft"),
-            16,
-            Lists.immutable.empty(),
-            Lists.immutable.empty()
-        )));
+        driver.initialize(
+            startSession(
+                new InteractionStep.ExecuteRecipeStep(
+                    ExecutionSideRequirement.environmentAgnostic,
+                    ExecutionCapability.interactionPerform,
+                    recipeEntry("craft"),
+                    16,
+                    Lists.immutable.empty(),
+                    Lists.immutable.empty()
+                )
+            )
+        );
 
         driver.advanceSteps(1);
 
@@ -534,30 +604,29 @@ class SlotExecutionDriverTest {
     @Test
     void autoFlowRetriesPausedStepWhenInventoryStateChanges() {
         SlotLayout layout = SlotLayout.builder()
-            .add(
-                SlotLayout.Role.input,
-                new SlotLayout.Key(Namespace.of("test", "input"), 0),
-                new SlotLayout.Reference.Index(0)
-            )
-            .add(
-                SlotLayout.Role.output,
-                new SlotLayout.Key(Namespace.of("test", "output"), 0),
-                new SlotLayout.Reference.Index(1)
-            )
-            .add(
-                SlotLayout.Role.inventory,
-                new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
-                new SlotLayout.Reference.Index(2)
-            )
-            .build();
+                .add(
+                    SlotLayout.Role.input,
+                    new SlotLayout.Key(Namespace.of("test", "input"), 0),
+                    new SlotLayout.Reference.Index(0)
+                )
+                .add(
+                    SlotLayout.Role.output,
+                    new SlotLayout.Key(Namespace.of("test", "output"), 0),
+                    new SlotLayout.Reference.Index(1)
+                )
+                .add(
+                    SlotLayout.Role.inventory,
+                    new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
+                    new SlotLayout.Reference.Index(2)
+                ).build();
         SlotLayout.Reference inputSlot = new SlotLayout.Reference.Index(0);
         SlotLayout.Reference inventorySlot = new SlotLayout.Reference.Index(2);
         AtomicInteger available = new AtomicInteger(0);
         RetryInteractionAccess access = new RetryInteractionAccess(true, available, inputSlot, inventorySlot);
-        SlotFlow.PlacementResolver resolver = (context, recipe, inputs) -> Lists.immutable.of(
-            new SlotFlow.Placement(inputSlot, stack(Items.OAK_LOG, 1), 1)
-        );
-        SlotExecutionDriver driver = SlotExecutionDriver.standard(new SlotExecutionDriver.Profile(testInteractionId, layout, access, access, resolver, null));
+        SlotFlow.PlacementResolver resolver = (context, recipe, inputs) -> Lists.immutable
+                .of(new SlotFlow.Placement(inputSlot, stack(Items.OAK_LOG, 1), 1));
+        SlotExecutionDriver driver = SlotExecutionDriver
+                .standard(new SlotExecutionDriver.Profile(testInteractionId, layout, access, access, resolver, null));
         driver.initialize(startSession(prepareInputsStep()));
         driver.toggleAutoAdvance();
         driver.setRatePerSecond(1.0d);
@@ -580,22 +649,21 @@ class SlotExecutionDriverTest {
     @Test
     void autoFlowPrepareKeepsExistingTagVariantInGrid(MinecraftServer server) {
         SlotLayout layout = SlotLayout.builder()
-            .add(
-                SlotLayout.Role.input,
-                new SlotLayout.Key(Namespace.of("test", "input"), 0),
-                new SlotLayout.Reference.Index(0)
-            )
-            .add(
-                SlotLayout.Role.output,
-                new SlotLayout.Key(Namespace.of("test", "output"), 0),
-                new SlotLayout.Reference.Index(1)
-            )
-            .add(
-                SlotLayout.Role.inventory,
-                new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
-                new SlotLayout.Reference.Index(2)
-            )
-            .build();
+                .add(
+                    SlotLayout.Role.input,
+                    new SlotLayout.Key(Namespace.of("test", "input"), 0),
+                    new SlotLayout.Reference.Index(0)
+                )
+                .add(
+                    SlotLayout.Role.output,
+                    new SlotLayout.Key(Namespace.of("test", "output"), 0),
+                    new SlotLayout.Reference.Index(1)
+                )
+                .add(
+                    SlotLayout.Role.inventory,
+                    new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
+                    new SlotLayout.Reference.Index(2)
+                ).build();
         SlotLayout.Reference inputSlot = new SlotLayout.Reference.Index(0);
         SlotLayout.Reference inventorySlot = new SlotLayout.Reference.Index(2);
         TagAwareInteractionAccess access = new TagAwareInteractionAccess(true, inputSlot, inventorySlot);
@@ -610,7 +678,8 @@ class SlotExecutionDriverTest {
                 InputContent.fromItemTag(ItemTags.PLANKS, 1)
             )
         );
-        SlotExecutionDriver driver = SlotExecutionDriver.standard(new SlotExecutionDriver.Profile(testInteractionId, layout, access, access, resolver, null));
+        SlotExecutionDriver driver = SlotExecutionDriver
+                .standard(new SlotExecutionDriver.Profile(testInteractionId, layout, access, access, resolver, null));
         driver.initialize(startSession(prepareInputsStep()));
 
         driver.advanceSteps(1);
@@ -625,22 +694,21 @@ class SlotExecutionDriverTest {
     @Test
     void autoFlowExecuteDoesNotRequestReTranslationWhenBatchOutputIsCollectedIncrementally(MinecraftServer server) {
         SlotLayout layout = SlotLayout.builder()
-            .add(
-                SlotLayout.Role.input,
-                new SlotLayout.Key(Namespace.of("test", "input"), 0),
-                new SlotLayout.Reference.Index(0)
-            )
-            .add(
-                SlotLayout.Role.output,
-                new SlotLayout.Key(Namespace.of("test", "output"), 0),
-                new SlotLayout.Reference.Index(1)
-            )
-            .add(
-                SlotLayout.Role.inventory,
-                new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
-                new SlotLayout.Reference.Index(2)
-            )
-            .build();
+                .add(
+                    SlotLayout.Role.input,
+                    new SlotLayout.Key(Namespace.of("test", "input"), 0),
+                    new SlotLayout.Reference.Index(0)
+                )
+                .add(
+                    SlotLayout.Role.output,
+                    new SlotLayout.Key(Namespace.of("test", "output"), 0),
+                    new SlotLayout.Reference.Index(1)
+                )
+                .add(
+                    SlotLayout.Role.inventory,
+                    new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
+                    new SlotLayout.Reference.Index(2)
+                ).build();
         SlotLayout.Reference inputSlot = new SlotLayout.Reference.Index(0);
         SlotLayout.Reference outputSlot = new SlotLayout.Reference.Index(1);
         SlotLayout.Reference inventorySlot = new SlotLayout.Reference.Index(2);
@@ -648,24 +716,22 @@ class SlotExecutionDriverTest {
         access.put(inputSlot, stack(Items.OAK_LOG, 8));
         access.put(outputSlot, stack(Items.OAK_PLANKS, 8));
 
-        SlotFlow.PlacementResolver resolver = (context, recipe, inputs) -> Lists.immutable.of(
-            new SlotFlow.Placement(inputSlot, stack(Items.OAK_LOG, 1), 8)
+        SlotFlow.PlacementResolver resolver = (context, recipe, inputs) -> Lists.immutable
+                .of(new SlotFlow.Placement(inputSlot, stack(Items.OAK_LOG, 1), 8));
+        SlotExecutionDriver driver = SlotExecutionDriver
+                .standard(new SlotExecutionDriver.Profile(testInteractionId, layout, access, access, resolver, null));
+        driver.initialize(
+            startSession(
+                new InteractionStep.ExecuteRecipeStep(
+                    ExecutionSideRequirement.environmentAgnostic,
+                    ExecutionCapability.interactionPerform,
+                    recipeEntry("craft"),
+                    8,
+                    Lists.immutable.of(new InputBinding(InputContent.fromItemStack(stack(Items.OAK_LOG, 1), 8), 8)),
+                    Lists.immutable.of(new OutputBinding(ContentStack.fromStack(stack(Items.OAK_PLANKS, 1)), 8))
+                )
+            )
         );
-        SlotExecutionDriver driver = SlotExecutionDriver.standard(new SlotExecutionDriver.Profile(testInteractionId, layout, access, access, resolver, null));
-        driver.initialize(startSession(new InteractionStep.ExecuteRecipeStep(
-            ExecutionSideRequirement.environmentAgnostic,
-            ExecutionCapability.interactionPerform,
-            recipeEntry("craft"),
-            8,
-            Lists.immutable.of(new InputBinding(
-                InputContent.fromItemStack(stack(Items.OAK_LOG, 1), 8),
-                8
-            )),
-            Lists.immutable.of(new OutputBinding(
-                ContentStack.fromStack(stack(Items.OAK_PLANKS, 1)),
-                8
-            ))
-        )));
 
         driver.advanceSteps(1);
 
@@ -682,22 +748,21 @@ class SlotExecutionDriverTest {
     @Test
     void tickDoesNotRequestReTranslationForSlotManagedExecuteInventoryDrift() {
         SlotLayout layout = SlotLayout.builder()
-            .add(
-                SlotLayout.Role.input,
-                new SlotLayout.Key(Namespace.of("test", "input"), 0),
-                new SlotLayout.Reference.Index(0)
-            )
-            .add(
-                SlotLayout.Role.output,
-                new SlotLayout.Key(Namespace.of("test", "output"), 0),
-                new SlotLayout.Reference.Index(1)
-            )
-            .add(
-                SlotLayout.Role.inventory,
-                new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
-                new SlotLayout.Reference.Index(2)
-            )
-            .build();
+                .add(
+                    SlotLayout.Role.input,
+                    new SlotLayout.Key(Namespace.of("test", "input"), 0),
+                    new SlotLayout.Reference.Index(0)
+                )
+                .add(
+                    SlotLayout.Role.output,
+                    new SlotLayout.Key(Namespace.of("test", "output"), 0),
+                    new SlotLayout.Reference.Index(1)
+                )
+                .add(
+                    SlotLayout.Role.inventory,
+                    new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
+                    new SlotLayout.Reference.Index(2)
+                ).build();
         SlotLayout.Reference inputSlot = new SlotLayout.Reference.Index(0);
         SlotLayout.Reference outputSlot = new SlotLayout.Reference.Index(1);
         SlotLayout.Reference inventorySlot = new SlotLayout.Reference.Index(2);
@@ -705,24 +770,22 @@ class SlotExecutionDriverTest {
         access.put(inputSlot, stack(Items.OAK_LOG, 8));
         access.put(outputSlot, stack(Items.OAK_PLANKS, 8));
 
-        SlotFlow.PlacementResolver resolver = (context, recipe, inputs) -> Lists.immutable.of(
-            new SlotFlow.Placement(inputSlot, stack(Items.OAK_LOG, 1), 8)
+        SlotFlow.PlacementResolver resolver = (context, recipe, inputs) -> Lists.immutable
+                .of(new SlotFlow.Placement(inputSlot, stack(Items.OAK_LOG, 1), 8));
+        SlotExecutionDriver driver = SlotExecutionDriver
+                .standard(new SlotExecutionDriver.Profile(testInteractionId, layout, access, access, resolver, null));
+        driver.initialize(
+            startSession(
+                new InteractionStep.ExecuteRecipeStep(
+                    ExecutionSideRequirement.environmentAgnostic,
+                    ExecutionCapability.interactionPerform,
+                    recipeEntry("craft"),
+                    8,
+                    Lists.immutable.of(new InputBinding(InputContent.fromItemStack(stack(Items.OAK_LOG, 1), 8), 8)),
+                    Lists.immutable.of(new OutputBinding(ContentStack.fromStack(stack(Items.OAK_PLANKS, 1)), 8))
+                )
+            )
         );
-        SlotExecutionDriver driver = SlotExecutionDriver.standard(new SlotExecutionDriver.Profile(testInteractionId, layout, access, access, resolver, null));
-        driver.initialize(startSession(new InteractionStep.ExecuteRecipeStep(
-            ExecutionSideRequirement.environmentAgnostic,
-            ExecutionCapability.interactionPerform,
-            recipeEntry("craft"),
-            8,
-            Lists.immutable.of(new InputBinding(
-                InputContent.fromItemStack(stack(Items.OAK_LOG, 1), 8),
-                8
-            )),
-            Lists.immutable.of(new OutputBinding(
-                ContentStack.fromStack(stack(Items.OAK_PLANKS, 1)),
-                8
-            ))
-        )));
         driver.toggleAutoAdvance();
         driver.setRatePerSecond(40.0d);
 
@@ -736,37 +799,46 @@ class SlotExecutionDriverTest {
     @Test
     void autoFlowCollectKeepsQuickMovingUntilOutputSlotIsEmpty() {
         SlotLayout layout = SlotLayout.builder()
-            .add(
-                SlotLayout.Role.input,
-                new SlotLayout.Key(Namespace.of("test", "input"), 0),
-                new SlotLayout.Reference.Index(0)
-            )
-            .add(
-                SlotLayout.Role.output,
-                new SlotLayout.Key(Namespace.of("test", "output"), 0),
-                new SlotLayout.Reference.Index(1)
-            )
-            .add(
-                SlotLayout.Role.inventory,
-                new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
-                new SlotLayout.Reference.Index(2)
-            )
-            .build();
+                .add(
+                    SlotLayout.Role.input,
+                    new SlotLayout.Key(Namespace.of("test", "input"), 0),
+                    new SlotLayout.Reference.Index(0)
+                )
+                .add(
+                    SlotLayout.Role.output,
+                    new SlotLayout.Key(Namespace.of("test", "output"), 0),
+                    new SlotLayout.Reference.Index(1)
+                )
+                .add(
+                    SlotLayout.Role.inventory,
+                    new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
+                    new SlotLayout.Reference.Index(2)
+                ).build();
         SlotLayout.Reference outputSlot = new SlotLayout.Reference.Index(1);
         SlotLayout.Reference inventorySlot = new SlotLayout.Reference.Index(2);
         PartialOutputInteractionAccess access = new PartialOutputInteractionAccess(true, outputSlot, inventorySlot, 1);
         access.put(outputSlot, stack(Items.OAK_PLANKS, 8));
 
-        SlotExecutionDriver driver = SlotExecutionDriver.standard(new SlotExecutionDriver.Profile(testInteractionId, layout, access, access, (context, recipe, inputs) -> Lists.immutable.empty(), null));
-        driver.initialize(startSession(new InteractionStep.CollectOutputsStep(
-            ExecutionSideRequirement.environmentAgnostic,
-            ExecutionCapability.outputStorage,
-            recipeEntry("craft"),
-            Lists.immutable.of(new OutputBinding(
-                ContentStack.fromStack(stack(Items.OAK_PLANKS, 1)),
-                8
-            ))
-        )));
+        SlotExecutionDriver driver = SlotExecutionDriver.standard(
+            new SlotExecutionDriver.Profile(
+                testInteractionId,
+                layout,
+                access,
+                access,
+                (context, recipe, inputs) -> Lists.immutable.empty(),
+                null
+            )
+        );
+        driver.initialize(
+            startSession(
+                new InteractionStep.CollectOutputsStep(
+                    ExecutionSideRequirement.environmentAgnostic,
+                    ExecutionCapability.outputStorage,
+                    recipeEntry("craft"),
+                    Lists.immutable.of(new OutputBinding(ContentStack.fromStack(stack(Items.OAK_PLANKS, 1)), 8))
+                )
+            )
+        );
 
         driver.advanceSteps(1);
 
@@ -780,22 +852,26 @@ class SlotExecutionDriverTest {
     @Test
     void tickRequestsReTranslationWhenPlanningInventoryChangesBeforeNonSlotStepCompletes() {
         SlotLayout layout = SlotLayout.builder()
-            .add(
-                SlotLayout.Role.inventory,
-                new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
-                new SlotLayout.Reference.Index(0)
-            )
-            .build();
+                .add(
+                    SlotLayout.Role.inventory,
+                    new SlotLayout.Key(Namespace.of("test", "inventory"), 0),
+                    new SlotLayout.Reference.Index(0)
+                ).build();
         TestInteractionAccess access = new TestInteractionAccess(true);
         SlotLayout.Reference inventorySlot = new SlotLayout.Reference.Index(0);
         access.put(inventorySlot, stack(Items.OAK_LOG, 1));
-        SlotExecutionDriver driver = SlotExecutionDriver.standard(new SlotExecutionDriver.Profile(testInteractionId, layout, access, null, null, null));
-        driver.initialize(startSession(new InteractionStep.WithdrawResourceStep(
-            ExecutionSideRequirement.environmentAgnostic,
-            ExecutionCapability.inventoryTransfer,
-            new InteractionStep.WithdrawTarget.Input(InputContent.fromItemStack(stack(Items.OAK_LOG, 1), 1)),
-            1
-        )));
+        SlotExecutionDriver driver = SlotExecutionDriver
+                .standard(new SlotExecutionDriver.Profile(testInteractionId, layout, access, null, null, null));
+        driver.initialize(
+            startSession(
+                new InteractionStep.WithdrawResourceStep(
+                    ExecutionSideRequirement.environmentAgnostic,
+                    ExecutionCapability.inventoryTransfer,
+                    new InteractionStep.WithdrawTarget.Input(InputContent.fromItemStack(stack(Items.OAK_LOG, 1), 1)),
+                    1
+                )
+            )
+        );
 
         access.put(inventorySlot, stack(Items.OAK_LOG, 2));
         driver.tick();
@@ -807,7 +883,11 @@ class SlotExecutionDriverTest {
 
     private static ExecutionSession startSession(InteractionStep... steps) {
         var plan = new InteractionExecutionPlan(recipeEntry("craft"), 1, Lists.immutable.of(steps));
-        return ExecutionSession.start(plan, ExecutionFlowNode.pending("root", Component.literal("root"), Lists.immutable.empty(), null, Lists.immutable.empty()));
+        return ExecutionSession.start(
+            plan,
+            ExecutionFlowNode
+                    .pending("root", Component.literal("root"), Lists.immutable.empty(), null, Lists.immutable.empty())
+        );
     }
 
     private static InteractionStep.OpenInteractionStep openInteractionStep() {
@@ -846,14 +926,8 @@ class SlotExecutionDriverTest {
             ExecutionCapability.interactionPerform,
             recipeEntry("craft"),
             1,
-            Lists.immutable.of(new InputBinding(
-                InputContent.fromItemStack(stack(Items.OAK_LOG, 1), 1),
-                1
-            )),
-            Lists.immutable.of(new OutputBinding(
-                ContentStack.fromStack(stack(Items.OAK_PLANKS, 1)),
-                4
-            ))
+            Lists.immutable.of(new InputBinding(InputContent.fromItemStack(stack(Items.OAK_LOG, 1), 1), 1)),
+            Lists.immutable.of(new OutputBinding(ContentStack.fromStack(stack(Items.OAK_PLANKS, 1)), 4))
         );
     }
 
@@ -867,31 +941,29 @@ class SlotExecutionDriverTest {
     }
 
     private static RecipeEntry<TestRecipe> recipeEntry(String id) {
-        return RecipeEntry.of(TEST_RECIPE_SYSTEM, new TestRecipe(id));
+        return RecipeEntry.of(testRecipeSystem, new TestRecipe(id));
     }
 
-    private record TestRecipe(String id) {
-    }
+    private record TestRecipe(String id) {}
 
     private static SlotLayout layoutForInputOutput() {
         return SlotLayout.builder()
-            .add(
-                SlotLayout.Role.input,
-                new SlotLayout.Key(Namespace.of("test", "input"), 0),
-                new SlotLayout.Reference.Index(0)
-            )
-            .add(
-                SlotLayout.Role.output,
-                new SlotLayout.Key(Namespace.of("test", "output"), 0),
-                new SlotLayout.Reference.Index(1)
-            )
-            .build();
+                .add(
+                    SlotLayout.Role.input,
+                    new SlotLayout.Key(Namespace.of("test", "input"), 0),
+                    new SlotLayout.Reference.Index(0)
+                )
+                .add(
+                    SlotLayout.Role.output,
+                    new SlotLayout.Key(Namespace.of("test", "output"), 0),
+                    new SlotLayout.Reference.Index(1)
+                ).build();
     }
 
     private static final class FakeLayout implements SlotLayout {
         private static final SlotLayout.Index emptyIndex = new SlotLayout.Index() {
             @Override
-            public SlotLayout.Reference get(SlotLayout.Key key) {
+            public @Nullable SlotLayout.Reference get(SlotLayout.Key key) {
                 return null;
             }
 
@@ -961,12 +1033,10 @@ class SlotExecutionDriverTest {
         }
 
         @Override
-        public void open() {
-        }
+        public void open() {}
 
         @Override
-        public void close() {
-        }
+        public void close() {}
 
         @Override
         public ItemStack carried() {
@@ -979,7 +1049,11 @@ class SlotExecutionDriverTest {
         protected final SlotLayout.Reference inventorySlot;
         protected final Map<SlotLayout.Reference, AtomicInteger> quickMoveClicks = new ConcurrentHashMap<>();
 
-        private OutputMovingInteractionAccess(boolean open, SlotLayout.Reference outputSlot, SlotLayout.Reference inventorySlot) {
+        private OutputMovingInteractionAccess(
+            boolean open,
+            SlotLayout.Reference outputSlot,
+            SlotLayout.Reference inventorySlot
+        ) {
             super(open);
             this.outputSlot = outputSlot;
             this.inventorySlot = inventorySlot;
@@ -1072,7 +1146,12 @@ class SlotExecutionDriverTest {
         private ItemStack carried = ItemStack.EMPTY;
         private ItemStack input = ItemStack.EMPTY;
 
-        private RetryInteractionAccess(boolean open, AtomicInteger available, SlotLayout.Reference inputSlot, SlotLayout.Reference inventorySlot) {
+        private RetryInteractionAccess(
+            boolean open,
+            AtomicInteger available,
+            SlotLayout.Reference inputSlot,
+            SlotLayout.Reference inventorySlot
+        ) {
             this.open = open;
             this.available = available;
             this.inputSlot = inputSlot;
@@ -1126,12 +1205,10 @@ class SlotExecutionDriverTest {
         }
 
         @Override
-        public void open() {
-        }
+        public void open() {}
 
         @Override
-        public void close() {
-        }
+        public void close() {}
 
         @Override
         public ItemStack carried() {
@@ -1148,7 +1225,11 @@ class SlotExecutionDriverTest {
         private ItemStack inventory = ItemStack.EMPTY;
         private ItemStack carried = ItemStack.EMPTY;
 
-        private TagAwareInteractionAccess(boolean open, SlotLayout.Reference inputSlot, SlotLayout.Reference inventorySlot) {
+        private TagAwareInteractionAccess(
+            boolean open,
+            SlotLayout.Reference inputSlot,
+            SlotLayout.Reference inventorySlot
+        ) {
             this.open = open;
             this.inputSlot = inputSlot;
             this.inventorySlot = inventorySlot;
@@ -1225,12 +1306,10 @@ class SlotExecutionDriverTest {
         }
 
         @Override
-        public void open() {
-        }
+        public void open() {}
 
         @Override
-        public void close() {
-        }
+        public void close() {}
 
         @Override
         public ItemStack carried() {
@@ -1266,7 +1345,12 @@ class SlotExecutionDriverTest {
             if (access.state().open()) {
                 return StepResult.success();
             }
-            return StepResult.paused(new PauseReason(PauseReasons.awaitingPlayerAction, ExecutionGuidance.simple(Component.literal("Interaction closed"))));
+            return StepResult.paused(
+                new PauseReason(
+                    PauseReasons.awaitingPlayerAction,
+                    ExecutionGuidance.simple(Component.literal("Interaction closed"))
+                )
+            );
         }
 
         @Override
@@ -1289,7 +1373,10 @@ class SlotExecutionDriverTest {
 
         @Override
         public PauseReason pauseReason(Context context, Failure failure) {
-            return new PauseReason(PauseReasons.awaitingPlayerAction, ExecutionGuidance.simple(Component.literal("Paused")));
+            return new PauseReason(
+                PauseReasons.awaitingPlayerAction,
+                ExecutionGuidance.simple(Component.literal("Paused"))
+            );
         }
 
         @Override
@@ -1313,8 +1400,13 @@ class SlotExecutionDriverTest {
         @Override
         public StepResult open(Context context, InteractionStep.OpenInteractionStep step) {
             return access.state().open()
-                ? StepResult.success()
-                : StepResult.paused(new PauseReason(PauseReasons.awaitingPlayerAction, ExecutionGuidance.simple(Component.literal("Interaction closed"))));
+                    ? StepResult.success()
+                    : StepResult.paused(
+                        new PauseReason(
+                            PauseReasons.awaitingPlayerAction,
+                            ExecutionGuidance.simple(Component.literal("Interaction closed"))
+                        )
+                    );
         }
 
         @Override
@@ -1334,7 +1426,10 @@ class SlotExecutionDriverTest {
 
         @Override
         public PauseReason pauseReason(Context context, Failure failure) {
-            return new PauseReason(PauseReasons.awaitingPlayerAction, ExecutionGuidance.simple(Component.literal("Paused")));
+            return new PauseReason(
+                PauseReasons.awaitingPlayerAction,
+                ExecutionGuidance.simple(Component.literal("Paused"))
+            );
         }
 
         @Override
@@ -1360,7 +1455,7 @@ class SlotExecutionDriverTest {
         }
     }
 
-    private static final TestRecipeSystem TEST_RECIPE_SYSTEM = new TestRecipeSystem();
+    private static final TestRecipeSystem testRecipeSystem = new TestRecipeSystem();
 
     private static final class TestRecipeSystem implements RecipeSystem<TestRecipe> {
         private final Map<String, TestRecipe> byId = new ConcurrentHashMap<>();
@@ -1382,12 +1477,12 @@ class SlotExecutionDriverTest {
         }
 
         @Override
-        public TestRecipe findRecipe(String uniqueId) {
+        public @Nullable TestRecipe findRecipe(String uniqueId) {
             return byId.get(uniqueId);
         }
 
         @Override
-        public TestRecipe findRecipe(ResourceLocation registryName) {
+        public @Nullable TestRecipe findRecipe(ResourceLocation registryName) {
             return byId.get(registryName.getPath());
         }
 

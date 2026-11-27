@@ -23,7 +23,7 @@ import net.neoforged.neoforge.fluids.FluidStack;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Objects;
@@ -36,8 +36,7 @@ import java.util.Objects;
  */
 public final class InteractionExecutionPlanDebugText {
 
-    private InteractionExecutionPlanDebugText() {
-    }
+    private InteractionExecutionPlanDebugText() {}
 
     //region plan
 
@@ -48,7 +47,9 @@ public final class InteractionExecutionPlanDebugText {
 
         MutableList<String> lines = Lists.mutable.empty();
         lines.add("interaction-plan target=" + describeRecipe(plan.targetRecipe()) + " x" + plan.targetTimes());
-        lines.add("steps=" + plan.steps().size() + " capabilities=" + plan.requiredCapabilities().makeString("[", ", ", "]"));
+        lines.add(
+            "steps=" + plan.steps().size() + " capabilities=" + plan.requiredCapabilities().makeString("[", ", ", "]")
+        );
         for (int index = 0; index < plan.steps().size(); index++) {
             lines.addAllIterable(describeLines(index, plan.steps().get(index)));
         }
@@ -60,24 +61,27 @@ public final class InteractionExecutionPlanDebugText {
         String prefix = "[" + index + "] ";
         String suffix = sideCapabilitySuffix(step);
         switch (step) {
-            case InteractionStep.EnsureAccessibleStep ensure ->
-                lines.add(prefix + "ensure-accessible " + describeAccessTarget(ensure.target())
-                    + " x" + ensure.requestedAmount() + suffix);
-            case InteractionStep.WithdrawResourceStep withdraw ->
-                lines.add(prefix + "withdraw " + describeWithdrawTarget(withdraw.target())
-                    + " x" + withdraw.requestedAmount() + suffix);
-            case InteractionStep.ReserveCatalystStep reserve ->
-                lines.add(prefix + "reserve-catalyst " + describeInput(reserve.input())
-                    + " x" + reserve.amount() + suffix);
-            case InteractionStep.EnsureCapacityStep capacity ->
-                lines.add(prefix + "ensure-capacity " + describeResource(capacity.resource())
-                    + " x" + capacity.amount() + suffix);
-            case InteractionStep.StoreOutputsStep store ->
-                lines.add(prefix + "store-output " + describeResource(store.resource())
-                    + " x" + store.amount() + suffix);
-            case InteractionStep.OpenInteractionStep open ->
-                lines.add(prefix + "open " + describeRecipe(open.recipe()) + " x" + open.times()
-                    + " interaction=" + open.interactionId() + suffix);
+            case InteractionStep.EnsureAccessibleStep ensure -> lines.add(
+                prefix + "ensure-accessible " + describeAccessTarget(ensure.target()) + " x" + ensure.requestedAmount()
+                        + suffix
+            );
+            case InteractionStep.WithdrawResourceStep withdraw -> lines.add(
+                prefix + "withdraw " + describeWithdrawTarget(withdraw.target()) + " x" + withdraw.requestedAmount()
+                        + suffix
+            );
+            case InteractionStep.ReserveCatalystStep reserve -> lines.add(
+                prefix + "reserve-catalyst " + describeInput(reserve.input()) + " x" + reserve.amount() + suffix
+            );
+            case InteractionStep.EnsureCapacityStep capacity -> lines.add(
+                prefix + "ensure-capacity " + describeResource(capacity.resource()) + " x" + capacity.amount() + suffix
+            );
+            case InteractionStep.StoreOutputsStep store -> lines.add(
+                prefix + "store-output " + describeResource(store.resource()) + " x" + store.amount() + suffix
+            );
+            case InteractionStep.OpenInteractionStep open -> lines.add(
+                prefix + "open " + describeRecipe(open.recipe()) + " x" + open.times() + " interaction="
+                        + open.interactionId() + suffix
+            );
             case InteractionStep.PrepareInputsStep prepare -> {
                 lines.add(prefix + "prepare " + describeRecipe(prepare.recipe()) + suffix);
                 lines.add("  inputs: " + describeInputs(prepare.inputs()));
@@ -124,7 +128,7 @@ public final class InteractionExecutionPlanDebugText {
             return "[]";
         }
         return bindings.collect(binding -> describeInput(binding.input()) + " x" + binding.amount())
-            .makeString("[", ", ", "]");
+                .makeString("[", ", ", "]");
     }
 
     private static String describeOutputs(ImmutableList<OutputBinding> bindings) {
@@ -132,7 +136,7 @@ public final class InteractionExecutionPlanDebugText {
             return "[]";
         }
         return bindings.collect(binding -> describeResource(binding.resource()) + " x" + binding.amount())
-            .makeString("[", ", ", "]");
+                .makeString("[", ", ", "]");
     }
 
     //endregion
@@ -179,9 +183,7 @@ public final class InteractionExecutionPlanDebugText {
         if (labels.isEmpty()) {
             return "unknown";
         }
-        return total > labels.size()
-            ? String.join(" | ", labels) + " | ..."
-            : String.join(" | ", labels);
+        return total > labels.size() ? String.join(" | ", labels) + " | ..." : String.join(" | ", labels);
     }
 
     private static String describeVariant(ContentVariant variant) {

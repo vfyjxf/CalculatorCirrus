@@ -1,18 +1,17 @@
 package dev.vfyjxf.cirrus.api.recipe.database;
 
-import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.RecipeApiRegistryBuilder;
-import dev.vfyjxf.cloudlib.api.search.SearchField;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
@@ -32,7 +31,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Guards the data-component path through database resolve: stacks that differ
@@ -97,7 +95,8 @@ class StackComponentsSearchTest {
 
         @Override
         public ResolveResult resolveFallback(ResolveContext ctx, FixtureRecipe recipe) {
-            return ResolveResult.resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
+            return ResolveResult
+                    .resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
         }
 
         @Override
@@ -112,29 +111,43 @@ class StackComponentsSearchTest {
         ItemStack enchanted = new ItemStack(Items.IRON_INGOT);
         enchanted.set(DataComponents.CUSTOM_NAME, Component.literal("✦a1b2"));
 
-        InputContent plainInput = InputContent.fromStack(ContentStack.fromStack(CirrusTypes.Contents.ITEM_STACK, plain, 1));
-        InputContent markedInput = InputContent.fromStack(ContentStack.fromStack(CirrusTypes.Contents.ITEM_STACK, enchanted, 1));
-        OutputContent output = OutputContent.fromStack(ContentStack.fromStack(CirrusTypes.Contents.ITEM_STACK, new ItemStack(Items.GOLD_INGOT), 1));
+        InputContent plainInput = InputContent
+                .fromStack(ContentStack.fromStack(CirrusTypes.Contents.itemStack, plain, 1));
+        InputContent markedInput = InputContent
+                .fromStack(ContentStack.fromStack(CirrusTypes.Contents.itemStack, enchanted, 1));
+        OutputContent output = OutputContent
+                .fromStack(ContentStack.fromStack(CirrusTypes.Contents.itemStack, new ItemStack(Items.GOLD_INGOT), 1));
 
-        FixtureSystem system = new FixtureSystem(List.of(
-            new FixtureRecipe("plain_iron", List.of(plainInput), List.of(output)),
-            new FixtureRecipe("marked_iron", List.of(markedInput), List.of(output))
-        ));
+        FixtureSystem system = new FixtureSystem(
+            List.of(
+                new FixtureRecipe("plain_iron", List.of(plainInput), List.of(output)),
+                new FixtureRecipe("marked_iron", List.of(markedInput), List.of(output))
+            )
+        );
 
         DatabaseDefinition database = new DatabaseDefinition(
-            "components_db", "Components DB", DatabaseKind.system, true, 0, List.of(system.systemId()));
-        RecipeDatabaseIndex index = RecipeDatabaseIndex.build(
-            List.of(database), Lists.immutable.of(system), Map.of());
+            "components_db",
+            "Components DB",
+            DatabaseKind.system,
+            true,
+            0,
+            List.of(system.systemId())
+        );
+        RecipeDatabaseIndex index = RecipeDatabaseIndex.build(List.of(database), Lists.immutable.of(system), Map.of());
 
         Assertions.assertEquals(2, index.records().size(), "both recipes must resolve");
 
         var inText = index.textCandidates(CirrusSearchFields.in, 16);
-        Assertions.assertTrue(inText.stream().anyMatch(value -> value.contains("✦a1b2")),
-            "component-derived display name must be searchable, got: " + inText);
+        Assertions.assertTrue(
+            inText.stream().anyMatch(value -> value.contains("✦a1b2")),
+            "component-derived display name must be searchable, got: " + inText
+        );
 
         List<RecipeDatabaseResult> marked = index.search("✦a1b2");
         Assertions.assertEquals(1, marked.size(), "only the component-bearing recipe matches the marker");
-        Assertions.assertTrue(marked.getFirst().record().recipe().id().getPath().contains("marked"));
+        Assertions.assertTrue(
+            Objects.requireNonNull(marked.getFirst().record().recipe().id(), "recipe id").getPath().contains("marked")
+        );
 
         List<RecipeDatabaseResult> iron = index.search("iron ingot");
         Assertions.assertEquals(2, iron.size(), "plain-name search still matches both variants");

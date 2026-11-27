@@ -4,10 +4,7 @@ import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 
 import java.util.Objects;
 
-public record OverrideStockFeedback(
-        ResourceKey resource,
-        long newAvailableAmount
-) implements HumanFeedback {
+public record OverrideStockFeedback(ResourceKey resource, long newAvailableAmount) implements HumanFeedback {
 
     public OverrideStockFeedback {
         Objects.requireNonNull(resource, "resource");

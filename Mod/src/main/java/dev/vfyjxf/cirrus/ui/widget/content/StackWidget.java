@@ -35,4 +35,3 @@ public class StackWidget<T, S> extends Widget {
         renderer.render(canvas.layeredGraphics(), stack, width(), height(), partialTicks);
     }
 }
-

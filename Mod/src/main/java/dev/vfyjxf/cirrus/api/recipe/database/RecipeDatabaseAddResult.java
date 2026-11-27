@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.database;
 
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public record RecipeDatabaseAddResult(
     Status status,
@@ -10,11 +10,7 @@ public record RecipeDatabaseAddResult(
     @Nullable RecipeEntry<?> recipe
 ) {
     public enum Status {
-        added,
-        alreadyPresent,
-        readOnly,
-        unsupported,
-        failed
+        added, alreadyPresent, readOnly, unsupported, failed
     }
 
     public boolean success() {

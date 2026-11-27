@@ -12,7 +12,6 @@ import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.neoforged.testframework.junit.EphemeralTestServerProvider;
@@ -24,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -110,8 +110,10 @@ class InteractionExecutionPlanDebugTextTest {
             binding.outputs()
         );
 
-        String prepareText = InteractionExecutionPlanDebugText.describeLines(10, prepare).makeString(System.lineSeparator());
-        String executeText = InteractionExecutionPlanDebugText.describeLines(11, execute).makeString(System.lineSeparator());
+        String prepareText = InteractionExecutionPlanDebugText.describeLines(10, prepare)
+                .makeString(System.lineSeparator());
+        String executeText = InteractionExecutionPlanDebugText.describeLines(11, execute)
+                .makeString(System.lineSeparator());
 
         assertTrue(prepareText.contains("[10] prepare test:craft_planks"), prepareText);
         assertTrue(prepareText.contains("inputs: [minecraft:oak_log x1]"), prepareText);
@@ -119,11 +121,7 @@ class InteractionExecutionPlanDebugTextTest {
         assertTrue(executeText.contains("outputs: [minecraft:oak_planks x4]"), executeText);
     }
 
-    private record IngredientBinding(
-        ImmutableList<InputBinding> inputs,
-        ImmutableList<OutputBinding> outputs
-    ) {
-    }
+    private record IngredientBinding(ImmutableList<InputBinding> inputs, ImmutableList<OutputBinding> outputs) {}
 
     private static final class Fixture {
         private final FakeRecipeSystem system = new FakeRecipeSystem();
@@ -132,8 +130,8 @@ class InteractionExecutionPlanDebugTextTest {
         private Fixture() {
             FakeRecipe recipe = new FakeRecipe(
                 "craft_planks",
-                java.util.List.of(InputContent.fromItemStack(new ItemStack(Items.OAK_LOG), 1)),
-                java.util.List.of(OutputContent.fromItemStack(new ItemStack(Items.OAK_PLANKS), 4))
+                List.of(InputContent.fromItemStack(new ItemStack(Items.OAK_LOG), 1)),
+                List.of(OutputContent.fromItemStack(new ItemStack(Items.OAK_PLANKS), 4))
             );
             system.register(recipe);
             entry = RecipeEntry.of(system, recipe);
@@ -145,18 +143,14 @@ class InteractionExecutionPlanDebugTextTest {
 
         private IngredientBinding craftPlanks(int times) {
             return new IngredientBinding(
-                Lists.immutable.of(new InputBinding(InputContent.fromItemStack(new ItemStack(Items.OAK_LOG), 1), times)),
+                Lists.immutable
+                        .of(new InputBinding(InputContent.fromItemStack(new ItemStack(Items.OAK_LOG), 1), times)),
                 Lists.immutable.of(new OutputBinding(oakPlanks(), Math.multiplyExact(4L, times)))
             );
         }
     }
 
-    private record FakeRecipe(
-        String id,
-        Collection<InputContent> inputs,
-        Collection<OutputContent> outputs
-    ) {
-    }
+    private record FakeRecipe(String id, Collection<InputContent> inputs, Collection<OutputContent> outputs) {}
 
     private static final class FakeRecipeSystem implements RecipeSystem<FakeRecipe> {
         private final Map<String, FakeRecipe> byId = new ConcurrentHashMap<>();
@@ -202,7 +196,8 @@ class InteractionExecutionPlanDebugTextTest {
 
         @Override
         public ResolveResult resolveFallback(ResolveContext context, FakeRecipe recipe) {
-            return ResolveResult.resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
+            return ResolveResult
+                    .resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
         }
 
         @Override

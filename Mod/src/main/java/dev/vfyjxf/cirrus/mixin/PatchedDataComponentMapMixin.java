@@ -6,5 +6,4 @@ import org.spongepowered.asm.mixin.Mixin;
 @Mixin(PatchedDataComponentMap.class)
 public class PatchedDataComponentMapMixin {
 
-
 }

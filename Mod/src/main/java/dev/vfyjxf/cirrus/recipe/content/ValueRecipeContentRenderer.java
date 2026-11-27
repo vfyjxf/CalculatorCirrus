@@ -9,12 +9,17 @@ public final class ValueRecipeContentRenderer implements BatchableRecipeContentR
 
     public static final ValueRecipeContentRenderer instance = new ValueRecipeContentRenderer();
 
-    private ValueRecipeContentRenderer() {
-    }
+    private ValueRecipeContentRenderer() {}
 
     @Override
-    public void render(GuiGraphics graphics, ValueContent<?> content, int visualIndex, int width, int height, float delta) {
-    }
+    public void render(
+        GuiGraphics graphics,
+        ValueContent<?> content,
+        int visualIndex,
+        int width,
+        int height,
+        float delta
+    ) {}
 
     @Override
     public Component getName(ValueContent<?> content) {

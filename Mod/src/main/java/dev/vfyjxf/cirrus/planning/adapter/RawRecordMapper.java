@@ -11,7 +11,7 @@ import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassifyContent;
 import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifyView;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -28,10 +28,10 @@ import java.util.Set;
 
 public final class RawRecordMapper {
 
-    public static final long FLUID_TAG_FALLBACK_AMOUNT = 1000L;
+    public static final long fluidTagFallbackAmount = 1000L;
 
     public record TagTypeRegistry(Set<String> fluidTags, Set<String> itemTags, boolean present) {
-        public static final TagTypeRegistry ABSENT = new TagTypeRegistry(Set.of(), Set.of(), false);
+        public static final TagTypeRegistry absent = new TagTypeRegistry(Set.of(), Set.of(), false);
 
         public TagTypeRegistry {
             fluidTags = fluidTags == null ? Set.of() : Set.copyOf(fluidTags);
@@ -40,19 +40,19 @@ public final class RawRecordMapper {
 
         public String resolveTagContentType(String tagId, long slotAmount) {
             if (!present) {
-                return slotAmount == FLUID_TAG_FALLBACK_AMOUNT
-                        ? StackIdentity.FLUID_CONTENT_TYPE
-                        : StackIdentity.ITEM_CONTENT_TYPE;
+                return slotAmount == fluidTagFallbackAmount
+                        ? StackIdentity.fluidContentType
+                        : StackIdentity.itemContentType;
             }
             boolean inFluid = fluidTags.contains(tagId);
             boolean inItem = itemTags.contains(tagId);
             if (inFluid && !inItem) {
-                return StackIdentity.FLUID_CONTENT_TYPE;
+                return StackIdentity.fluidContentType;
             }
-            if (inFluid && inItem && slotAmount == FLUID_TAG_FALLBACK_AMOUNT) {
-                return StackIdentity.FLUID_CONTENT_TYPE;
+            if (inFluid && inItem && slotAmount == fluidTagFallbackAmount) {
+                return StackIdentity.fluidContentType;
             }
-            return StackIdentity.ITEM_CONTENT_TYPE;
+            return StackIdentity.itemContentType;
         }
     }
 
@@ -63,10 +63,10 @@ public final class RawRecordMapper {
         private final Map<Set<String>, Set<String>> internedIdSets = new HashMap<>(2048);
 
         public ResourceKey internBare(String contentTypeId, String resourceId) {
-            if (StackIdentity.ITEM_CONTENT_TYPE.equals(contentTypeId)) {
+            if (StackIdentity.itemContentType.equals(contentTypeId)) {
                 return bareItems.computeIfAbsent(resourceId, ResourceKey::item);
             }
-            if (StackIdentity.FLUID_CONTENT_TYPE.equals(contentTypeId)) {
+            if (StackIdentity.fluidContentType.equals(contentTypeId)) {
                 return bareFluids.computeIfAbsent(resourceId, ResourceKey::fluid);
             }
             return new ResourceKey(contentTypeId, resourceId, Optional.empty());
@@ -100,15 +100,15 @@ public final class RawRecordMapper {
     }
 
     public record MappingResult(
-            @Nullable RawRecipeRecord record,
-            @Nullable RecipeClassifyView classifyView,
-            @Nullable DropReason dropReason
+        @Nullable RawRecipeRecord record,
+        @Nullable RecipeClassifyView classifyView,
+        @Nullable DropReason dropReason
     ) {
         public static MappingResult kept(RawRecipeRecord record, RecipeClassifyView view) {
             return new MappingResult(
-                    Objects.requireNonNull(record, "record"),
-                    Objects.requireNonNull(view, "view"),
-                    null
+                Objects.requireNonNull(record, "record"),
+                Objects.requireNonNull(view, "view"),
+                null
             );
         }
 
@@ -130,7 +130,7 @@ public final class RawRecordMapper {
     }
 
     public RawRecordMapper() {
-        this(TagTypeRegistry.ABSENT, new CandidatePool());
+        this(TagTypeRegistry.absent, new CandidatePool());
     }
 
     public MappingResult mapJsonRecipe(JsonObject obj, long sourceRef, int classifyIndex) {
@@ -147,7 +147,7 @@ public final class RawRecordMapper {
         JsonArray inputsArr = arrayOrNull(obj, "inputs");
         JsonArray outputsArr = arrayOrNull(obj, "outputs");
         if (inputsArr == null || inputsArr.isEmpty() || outputsArr == null || outputsArr.isEmpty()) {
-            return MappingResult.dropped(DropReason.EMPTY_SLOT_LISTS);
+            return MappingResult.dropped(DropReason.emptySlotLists);
         }
 
         List<RawIngredientSlot> inputs = new ArrayList<>(inputsArr.size());
@@ -160,13 +160,13 @@ public final class RawRecordMapper {
         for (int i = 0; i < inputsArr.size(); i++) {
             JsonElement elem = inputsArr.get(i);
             if (!elem.isJsonObject()) {
-                return MappingResult.dropped(DropReason.UNKNOWN_KIND);
+                return MappingResult.dropped(DropReason.unknownKind);
             }
             JsonObject slot = elem.getAsJsonObject();
             String kind = stringOrEmpty(slot, "kind");
             double chance = parseChance(slot);
             if (!Double.isFinite(chance) || chance < 0.0 || chance > 1.0 || (chance > 0.0 && chance < 1.0)) {
-                return MappingResult.dropped(DropReason.PROBABILISTIC);
+                return MappingResult.dropped(DropReason.probabilistic);
             }
             boolean catalyst = chance == 0.0;
 
@@ -175,7 +175,7 @@ public final class RawRecordMapper {
                     String valueType = stringOrEmpty(slot, "valueType");
                     Double numeric = parseFiniteDouble(slot.get("value"));
                     if (valueType.isEmpty() || numeric == null) {
-                        return MappingResult.dropped(DropReason.INVALID_AMOUNT);
+                        return MappingResult.dropped(DropReason.invalidAmount);
                     }
                     if (!catalyst) {
                         if (recipeValues == null) {
@@ -183,27 +183,29 @@ public final class RawRecordMapper {
                         }
                         recipeValues.merge(valueType, numeric, Math::max);
                     }
-                    classifyInputs.add(new ClassifyContent(ClassifyContent.Kind.value, Set.of(), null, numeric, chance));
+                    classifyInputs
+                            .add(new ClassifyContent(ClassifyContent.Kind.value, Set.of(), null, numeric, chance));
                 }
                 case "complex" -> {
-                    return MappingResult.dropped(DropReason.COMPLEX_SLOT);
+                    return MappingResult.dropped(DropReason.complexSlot);
                 }
                 case "stack" -> {
                     Long amount = parseExactPositiveLong(slot.get("amount"));
                     if (amount == null) {
-                        return MappingResult.dropped(DropReason.INVALID_AMOUNT);
+                        return MappingResult.dropped(DropReason.invalidAmount);
                     }
-                    Optional<StackIdentity.MatchFlags> flags = StackIdentity.MatchFlags.parse(stringOrNull(slot, "matchStrategy"));
+                    Optional<StackIdentity.MatchFlags> flags = StackIdentity.MatchFlags
+                            .parse(stringOrNull(slot, "matchStrategy"));
                     if (flags.isEmpty() || flags.get().toSlotMatchMode().isEmpty()) {
-                        return MappingResult.dropped(DropReason.UNSUPPORTED_MATCH_STRATEGY);
+                        return MappingResult.dropped(DropReason.unsupportedMatchStrategy);
                     }
                     JsonObject stackObj = objectOrNull(slot, "stack");
                     if (stackObj == null) {
-                        return MappingResult.dropped(DropReason.INVALID_STACK);
+                        return MappingResult.dropped(DropReason.invalidStack);
                     }
                     StackIdentity.MappedStack mapped = mapStackObject(stackObj, flags.get(), true);
                     if (mapped.key().isEmpty()) {
-                        return MappingResult.dropped(DropReason.INVALID_STACK);
+                        return MappingResult.dropped(DropReason.invalidStack);
                     }
                     ResourceKey key = mapped.key().get();
                     SlotMatchMode mode = mapped.mode().orElseThrow();
@@ -219,12 +221,12 @@ public final class RawRecordMapper {
                 case "tag" -> {
                     Long amount = parseExactPositiveLong(slot.get("amount"));
                     if (amount == null) {
-                        return MappingResult.dropped(DropReason.INVALID_AMOUNT);
+                        return MappingResult.dropped(DropReason.invalidAmount);
                     }
                     String tagId = stringOrEmpty(slot, "tag");
                     JsonArray valuesArr = arrayOrNull(slot, "values");
                     if (tagId.isEmpty() || valuesArr == null || valuesArr.isEmpty()) {
-                        return MappingResult.dropped(DropReason.EMPTY_SLOT_CANDIDATES);
+                        return MappingResult.dropped(DropReason.emptySlotCandidates);
                     }
                     String contentTypeId = tagRegistry.resolveTagContentType(tagId, amount);
                     LinkedHashSet<ResourceKey> unique = new LinkedHashSet<>(valuesArr.size());
@@ -240,49 +242,55 @@ public final class RawRecordMapper {
                         }
                     }
                     if (unique.isEmpty()) {
-                        return MappingResult.dropped(DropReason.EMPTY_SLOT_CANDIDATES);
+                        return MappingResult.dropped(DropReason.emptySlotCandidates);
                     }
                     List<ResourceKey> candidates = pool.internList(new ArrayList<>(unique));
                     if (catalyst) {
                         if (candidates.size() == 1) {
-                            inputs.add(new RawIngredientSlot(Optional.empty(), candidates, amount, SlotMatchMode.IDENTITY));
+                            inputs.add(
+                                new RawIngredientSlot(Optional.empty(), candidates, amount, SlotMatchMode.identity)
+                            );
                             if (catalystReturnOutputs == null) {
                                 catalystReturnOutputs = new ArrayList<>(2);
                             }
                             catalystReturnOutputs.add(new RawOutputSlot(candidates.get(0), amount));
                         } else {
-                            inputs.add(new RawIngredientSlot(Optional.of(tagId), candidates, 0L, SlotMatchMode.IDENTITY, 0, 1));
+                            inputs.add(
+                                new RawIngredientSlot(Optional.of(tagId), candidates, 0L, SlotMatchMode.identity, 0, 1)
+                            );
                         }
                     } else {
-                        inputs.add(new RawIngredientSlot(Optional.of(tagId), candidates, amount, SlotMatchMode.IDENTITY));
+                        inputs.add(
+                            new RawIngredientSlot(Optional.of(tagId), candidates, amount, SlotMatchMode.identity)
+                        );
                     }
                     classifyInputs.add(ClassifyContent.tag(tagId, pool.internIdSet(idStrings), amount, chance));
                 }
                 case "any", "typedAny" -> {
                     Long amount = parseExactPositiveLong(slot.get("amount"));
                     if (amount == null) {
-                        return MappingResult.dropped(DropReason.INVALID_AMOUNT);
+                        return MappingResult.dropped(DropReason.invalidAmount);
                     }
                     JsonArray stacksArr = arrayOrNull(slot, "stacks");
                     if (stacksArr == null || stacksArr.isEmpty()) {
-                        return MappingResult.dropped(DropReason.EMPTY_SLOT_CANDIDATES);
+                        return MappingResult.dropped(DropReason.emptySlotCandidates);
                     }
                     LinkedHashSet<ResourceKey> unique = new LinkedHashSet<>(stacksArr.size());
                     LinkedHashSet<String> idStrings = new LinkedHashSet<>(stacksArr.size());
                     for (int j = 0; j < stacksArr.size(); j++) {
                         JsonElement se = stacksArr.get(j);
                         if (!se.isJsonObject()) {
-                            return MappingResult.dropped(DropReason.INVALID_STACK);
+                            return MappingResult.dropped(DropReason.invalidStack);
                         }
                         Optional<ResourceKey> key = mapConcreteStackObject(se.getAsJsonObject());
                         if (key.isEmpty()) {
-                            return MappingResult.dropped(DropReason.INVALID_STACK);
+                            return MappingResult.dropped(DropReason.invalidStack);
                         }
                         unique.add(key.get());
                         idStrings.add(key.get().resourceId());
                     }
                     if (unique.isEmpty()) {
-                        return MappingResult.dropped(DropReason.EMPTY_SLOT_CANDIDATES);
+                        return MappingResult.dropped(DropReason.emptySlotCandidates);
                     }
                     List<ResourceKey> candidates = pool.internList(new ArrayList<>(unique));
                     SlotMatchMode mode = StackIdentity.listSlotMatchMode(candidates);
@@ -305,25 +313,25 @@ public final class RawRecordMapper {
                     classifyInputs.add(new ClassifyContent(cKind, pool.internIdSet(idStrings), null, amount, chance));
                 }
                 default -> {
-                    return MappingResult.dropped(DropReason.UNKNOWN_KIND);
+                    return MappingResult.dropped(DropReason.unknownKind);
                 }
             }
         }
 
         if (inputs.isEmpty()) {
-            return MappingResult.dropped(DropReason.NO_INPUT_AFTER_VALUES);
+            return MappingResult.dropped(DropReason.noInputAfterValues);
         }
 
         for (int i = 0; i < outputsArr.size(); i++) {
             JsonElement elem = outputsArr.get(i);
             if (!elem.isJsonObject()) {
-                return MappingResult.dropped(DropReason.UNKNOWN_KIND);
+                return MappingResult.dropped(DropReason.unknownKind);
             }
             JsonObject slot = elem.getAsJsonObject();
             String kind = stringOrEmpty(slot, "kind");
             double chance = parseChance(slot);
             if (!Double.isFinite(chance) || chance < 0.0 || chance > 1.0 || (chance > 0.0 && chance < 1.0)) {
-                return MappingResult.dropped(DropReason.PROBABILISTIC);
+                return MappingResult.dropped(DropReason.probabilistic);
             }
             boolean neverProduced = chance == 0.0;
 
@@ -332,7 +340,7 @@ public final class RawRecordMapper {
                     String valueType = stringOrEmpty(slot, "valueType");
                     Double numeric = parseFiniteDouble(slot.get("value"));
                     if (valueType.isEmpty() || numeric == null) {
-                        return MappingResult.dropped(DropReason.INVALID_AMOUNT);
+                        return MappingResult.dropped(DropReason.invalidAmount);
                     }
                     if (!neverProduced) {
                         if (recipeValues == null) {
@@ -340,23 +348,24 @@ public final class RawRecordMapper {
                         }
                         recipeValues.merge(valueType, numeric, Math::max);
                     }
-                    classifyOutputs.add(new ClassifyContent(ClassifyContent.Kind.value, Set.of(), null, numeric, chance));
+                    classifyOutputs
+                            .add(new ClassifyContent(ClassifyContent.Kind.value, Set.of(), null, numeric, chance));
                 }
                 case "complex" -> {
-                    return MappingResult.dropped(DropReason.COMPLEX_SLOT);
+                    return MappingResult.dropped(DropReason.complexSlot);
                 }
                 case "stack" -> {
                     Long amount = parseExactPositiveLong(slot.get("amount"));
                     if (amount == null) {
-                        return MappingResult.dropped(DropReason.INVALID_AMOUNT);
+                        return MappingResult.dropped(DropReason.invalidAmount);
                     }
                     JsonObject stackObj = objectOrNull(slot, "stack");
                     if (stackObj == null) {
-                        return MappingResult.dropped(DropReason.INVALID_STACK);
+                        return MappingResult.dropped(DropReason.invalidStack);
                     }
                     Optional<ResourceKey> key = mapConcreteStackObject(stackObj);
                     if (key.isEmpty()) {
-                        return MappingResult.dropped(DropReason.INVALID_STACK);
+                        return MappingResult.dropped(DropReason.invalidStack);
                     }
                     if (!neverProduced) {
                         outputs.add(new RawOutputSlot(key.get(), amount));
@@ -366,12 +375,12 @@ public final class RawRecordMapper {
                 case "tag" -> {
                     Long amount = parseExactPositiveLong(slot.get("amount"));
                     if (amount == null) {
-                        return MappingResult.dropped(DropReason.INVALID_AMOUNT);
+                        return MappingResult.dropped(DropReason.invalidAmount);
                     }
                     String tagId = stringOrEmpty(slot, "tag");
                     JsonArray valuesArr = arrayOrNull(slot, "values");
                     if (tagId.isEmpty() || valuesArr == null || valuesArr.isEmpty()) {
-                        return MappingResult.dropped(DropReason.EMPTY_SLOT_CANDIDATES);
+                        return MappingResult.dropped(DropReason.emptySlotCandidates);
                     }
                     String contentTypeId = tagRegistry.resolveTagContentType(tagId, amount);
                     LinkedHashSet<ResourceKey> unique = new LinkedHashSet<>(valuesArr.size());
@@ -385,10 +394,10 @@ public final class RawRecordMapper {
                         }
                     }
                     if (unique.isEmpty()) {
-                        return MappingResult.dropped(DropReason.EMPTY_SLOT_CANDIDATES);
+                        return MappingResult.dropped(DropReason.emptySlotCandidates);
                     }
                     if (unique.size() > 1) {
-                        return MappingResult.dropped(DropReason.TAG_OUTPUT_MULTI);
+                        return MappingResult.dropped(DropReason.tagOutputMulti);
                     }
                     ResourceKey only = unique.iterator().next();
                     if (!neverProduced) {
@@ -399,29 +408,29 @@ public final class RawRecordMapper {
                 case "any", "typedAny" -> {
                     Long amount = parseExactPositiveLong(slot.get("amount"));
                     if (amount == null) {
-                        return MappingResult.dropped(DropReason.INVALID_AMOUNT);
+                        return MappingResult.dropped(DropReason.invalidAmount);
                     }
                     JsonArray stacksArr = arrayOrNull(slot, "stacks");
                     if (stacksArr == null || stacksArr.isEmpty()) {
-                        return MappingResult.dropped(DropReason.EMPTY_SLOT_CANDIDATES);
+                        return MappingResult.dropped(DropReason.emptySlotCandidates);
                     }
                     LinkedHashSet<ResourceKey> unique = new LinkedHashSet<>(stacksArr.size());
                     for (int j = 0; j < stacksArr.size(); j++) {
                         JsonElement se = stacksArr.get(j);
                         if (!se.isJsonObject()) {
-                            return MappingResult.dropped(DropReason.INVALID_STACK);
+                            return MappingResult.dropped(DropReason.invalidStack);
                         }
                         Optional<ResourceKey> key = mapConcreteStackObject(se.getAsJsonObject());
                         if (key.isEmpty()) {
-                            return MappingResult.dropped(DropReason.INVALID_STACK);
+                            return MappingResult.dropped(DropReason.invalidStack);
                         }
                         unique.add(key.get());
                     }
                     if (unique.isEmpty()) {
-                        return MappingResult.dropped(DropReason.EMPTY_SLOT_CANDIDATES);
+                        return MappingResult.dropped(DropReason.emptySlotCandidates);
                     }
                     if (unique.size() > 1) {
-                        return MappingResult.dropped(DropReason.MULTI_STACK_OUTPUT);
+                        return MappingResult.dropped(DropReason.multiStackOutput);
                     }
                     ResourceKey only = unique.iterator().next();
                     if (!neverProduced) {
@@ -430,43 +439,43 @@ public final class RawRecordMapper {
                     }
                 }
                 default -> {
-                    return MappingResult.dropped(DropReason.UNKNOWN_KIND);
+                    return MappingResult.dropped(DropReason.unknownKind);
                 }
             }
         }
 
         if (outputs.isEmpty()) {
-            return MappingResult.dropped(DropReason.NO_OUTPUT_AFTER_VALUES);
+            return MappingResult.dropped(DropReason.noOutputAfterValues);
         }
         if (catalystReturnOutputs != null) {
             outputs.addAll(catalystReturnOutputs);
         }
 
         RawRecipeRecord record = new RawRecipeRecord(
-                systemId,
-                sourceKind,
-                explicitId.isEmpty() ? Optional.empty() : Optional.of(explicitId),
-                machines,
-                inputs,
-                outputs,
-                recipeValues == null ? Map.of() : recipeValues,
-                sourceRef
+            systemId,
+            sourceKind,
+            explicitId.isEmpty() ? Optional.empty() : Optional.of(explicitId),
+            machines,
+            inputs,
+            outputs,
+            recipeValues == null ? Map.of() : recipeValues,
+            sourceRef
         );
         RecipeClassifyView view = new RecipeClassifyView(
-                classifyIndex,
-                systemId,
-                explicitId,
-                machines,
-                classifyInputs,
-                classifyOutputs
+            classifyIndex,
+            systemId,
+            explicitId,
+            machines,
+            classifyInputs,
+            classifyOutputs
         );
         return MappingResult.kept(record, view);
     }
 
     private StackIdentity.MappedStack mapStackObject(
-            JsonObject stackObj,
-            StackIdentity.MatchFlags matchFlags,
-            boolean internBare
+        JsonObject stackObj,
+        StackIdentity.MatchFlags matchFlags,
+        boolean internBare
     ) {
         String rawType = stringOrEmpty(stackObj, "type");
         String contentTypeId = StackIdentity.normalizeContentTypeId(rawType);
@@ -475,14 +484,13 @@ public final class RawRecordMapper {
             return new StackIdentity.MappedStack(Optional.empty(), matchFlags.toSlotMatchMode());
         }
         JsonElement components = stackObj.get("components");
-        if (internBare && (components == null || components.isJsonNull()
-                || (components.isJsonObject() && components.getAsJsonObject().isEmpty())
-                || matchFlags.toSlotMatchMode().orElse(SlotMatchMode.IDENTITY) == SlotMatchMode.IDENTITY)) {
+        if (internBare
+                && (components == null
+                        || components.isJsonNull()
+                        || (components.isJsonObject() && components.getAsJsonObject().isEmpty())
+                        || matchFlags.toSlotMatchMode().orElse(SlotMatchMode.identity) == SlotMatchMode.identity)) {
             Optional<SlotMatchMode> mode = matchFlags.toSlotMatchMode();
-            return new StackIdentity.MappedStack(
-                    Optional.of(pool.internBare(contentTypeId, resourceId)),
-                    mode
-            );
+            return new StackIdentity.MappedStack(Optional.of(pool.internBare(contentTypeId, resourceId)), mode);
         }
         return StackIdentity.mapInput(new StackIdentity.StackSpec(contentTypeId, resourceId, components, matchFlags));
     }
@@ -495,7 +503,8 @@ public final class RawRecordMapper {
             return Optional.empty();
         }
         JsonElement components = stackObj.get("components");
-        if (components == null || components.isJsonNull()
+        if (components == null
+                || components.isJsonNull()
                 || (components.isJsonObject() && components.getAsJsonObject().isEmpty())) {
             return Optional.of(pool.internBare(contentTypeId, resourceId));
         }
@@ -503,10 +512,10 @@ public final class RawRecordMapper {
     }
 
     private static String extractStackResourceId(JsonObject stackObj, String contentTypeId) {
-        if (StackIdentity.ITEM_CONTENT_TYPE.equals(contentTypeId)) {
+        if (StackIdentity.itemContentType.equals(contentTypeId)) {
             return stringOrEmpty(stackObj, "id");
         }
-        if (StackIdentity.FLUID_CONTENT_TYPE.equals(contentTypeId)) {
+        if (StackIdentity.fluidContentType.equals(contentTypeId)) {
             String fluid = stringOrEmpty(stackObj, "fluid");
             return !fluid.isEmpty() ? fluid : stringOrEmpty(stackObj, "id");
         }

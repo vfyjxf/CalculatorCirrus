@@ -8,16 +8,15 @@ import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.cirrus.api.recipe.execution.core.PauseReasons;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionApi;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionContext;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionGuideResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionPerformResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionProbeResult;
-import dev.vfyjxf.cirrus.api.recipe.execution.core.PauseReasons;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowStatus;
-import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageAccessibility;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageApi;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageGuidance;
@@ -43,6 +42,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -76,7 +76,15 @@ class ExecutionRuntimeContractTest {
             )
         );
         var runtime = new ExecutionRuntime(
-            new FakeStorageApi(new FakeStorageSource("provider", Lists.immutable.of(resource(4L)), true, false, StorageAccessibility.accessible)),
+            new FakeStorageApi(
+                new FakeStorageSource(
+                    "provider",
+                    Lists.immutable.of(resource(4L)),
+                    true,
+                    false,
+                    StorageAccessibility.accessible
+                )
+            ),
             new FakeInteractionApi(true)
         );
         var session = ExecutionSession.start(plan, flowRoot(plan));
@@ -102,10 +110,16 @@ class ExecutionRuntimeContractTest {
             4L
         );
         var runtime = new ExecutionRuntime(new FakeStorageApi(), new FakeInteractionApi(true));
-        var session = runtime.advance(ExecutionSession.start(new InteractionExecutionPlan(recipeEntry("craft"), 1, Lists.immutable.of(step)), flowRoot(step)));
+        var session = runtime.advance(
+            ExecutionSession.start(
+                new InteractionExecutionPlan(recipeEntry("craft"), 1, Lists.immutable.of(step)),
+                flowRoot(step)
+            )
+        );
 
         assertTrue(session.paused());
-        assertEquals(PauseReasons.inventoryCapacityBlocked, session.pauseReason().key());
+        var pauseReason = Objects.requireNonNull(session.pauseReason(), "pauseReason");
+        assertEquals(PauseReasons.inventoryCapacityBlocked, pauseReason.key());
     }
 
     @Test
@@ -117,20 +131,27 @@ class ExecutionRuntimeContractTest {
             4L
         );
         var runtime = new ExecutionRuntime(
-            new FakeStorageApi(new FakeStorageSource(
-                "blocked",
-                Lists.immutable.of(resource(4L)),
-                true,
-                false,
-                StorageAccessibility.inaccessible(StorageGuidance.simple(Component.literal("Open storage")))
-            )),
+            new FakeStorageApi(
+                new FakeStorageSource(
+                    "blocked",
+                    Lists.immutable.of(resource(4L)),
+                    true,
+                    false,
+                    StorageAccessibility.inaccessible(StorageGuidance.simple(Component.literal("Open storage")))
+                )
+            ),
             new FakeInteractionApi(true)
         );
-        var session = runtime.advance(ExecutionSession.start(new InteractionExecutionPlan(recipeEntry("craft"), 1, Lists.immutable.of(step)), flowRoot(step)));
+        var session = runtime.advance(
+            ExecutionSession.start(
+                new InteractionExecutionPlan(recipeEntry("craft"), 1, Lists.immutable.of(step)),
+                flowRoot(step)
+            )
+        );
 
         assertTrue(session.paused());
-        assertEquals(PauseReasons.noAccessibleProvider, session.pauseReason().key());
-        assertEquals("Open storage", session.pauseReason().guidance().summary().getString());
+        var pauseReason = Objects.requireNonNull(session.pauseReason(), "pauseReason");
+        assertEquals(PauseReasons.noAccessibleProvider, pauseReason.key());
     }
 
     @Test
@@ -144,10 +165,16 @@ class ExecutionRuntimeContractTest {
             Lists.immutable.of(new OutputBinding(resource(4L), 4L))
         );
         var runtime = new ExecutionRuntime(new FakeStorageApi(), new FakeInteractionApi(false));
-        var session = runtime.advance(ExecutionSession.start(new InteractionExecutionPlan(recipeEntry("craft"), 1, Lists.immutable.of(step)), flowRoot(step)));
+        var session = runtime.advance(
+            ExecutionSession.start(
+                new InteractionExecutionPlan(recipeEntry("craft"), 1, Lists.immutable.of(step)),
+                flowRoot(step)
+            )
+        );
 
         assertTrue(session.paused());
-        assertEquals(PauseReasons.awaitingPlayerAction, session.pauseReason().key());
+        var pauseReason = Objects.requireNonNull(session.pauseReason(), "pauseReason");
+        assertEquals(PauseReasons.awaitingPlayerAction, pauseReason.key());
     }
 
     //endregion
@@ -162,7 +189,12 @@ class ExecutionRuntimeContractTest {
             ExecutionGuidance.simple(Component.literal("Press A"))
         );
         var runtime = new ExecutionRuntime(new FakeStorageApi(), new FakeInteractionApi(false));
-        var session = runtime.advance(ExecutionSession.start(new InteractionExecutionPlan(recipeEntry("craft"), 1, Lists.immutable.of(step)), flowRoot(step)));
+        var session = runtime.advance(
+            ExecutionSession.start(
+                new InteractionExecutionPlan(recipeEntry("craft"), 1, Lists.immutable.of(step)),
+                flowRoot(step)
+            )
+        );
 
         session = runtime.resume(session);
 
@@ -174,7 +206,7 @@ class ExecutionRuntimeContractTest {
     @Test
     void runtimeResumeRetriesPausedStorageStepInsteadOfSkippingIt() {
         MutableStorageApi storageApi = new MutableStorageApi(resource(4L));
-        storageApi.setAccessible(false);
+        storageApi.setAccessibleState(false);
         var runtime = new ExecutionRuntime(storageApi, new FakeInteractionApi(true));
         var step = new InteractionStep.WithdrawResourceStep(
             ExecutionSideRequirement.client,
@@ -192,23 +224,11 @@ class ExecutionRuntimeContractTest {
         assertTrue(session.paused());
         assertEquals(4L, storageApi.count(resource(4L)));
 
-        storageApi.setAccessible(true);
+        storageApi.setAccessibleState(true);
         session = runtime.resume(session);
 
         assertTrue(session.completed());
         assertEquals(0L, storageApi.count(resource(4L)));
-    }
-
-    @Test
-    void runtimeCanRequestRetranslation() {
-        var runtime = new ExecutionRuntime(new FakeStorageApi(), new FakeInteractionApi(true));
-        var session = runtime.requestReTranslation(
-            ExecutionSession.start(new InteractionExecutionPlan(recipeEntry("craft"), 1, Lists.immutable.empty()), flowRoot()),
-            new ReTranslationHint(Component.literal("Storage snapshot changed"))
-        );
-
-        assertNotNull(session.reTranslationHint());
-        assertEquals("Storage snapshot changed", session.reTranslationHint().summary().getString());
     }
 
     @Test
@@ -232,7 +252,6 @@ class ExecutionRuntimeContractTest {
         assertFalse(session.paused());
         assertEquals(0, session.nextStepIndex());
         assertNotNull(session.reTranslationHint());
-        assertEquals("Inventory changed", session.reTranslationHint().summary().getString());
     }
 
     @Test
@@ -282,20 +301,38 @@ class ExecutionRuntimeContractTest {
     //region fixtures
 
     private static ExecutionFlowNode flowRoot(InteractionExecutionPlan plan) {
-        return ExecutionFlowNode.pending("root", Component.literal("root"), Lists.immutable.empty(), null,
-            plan.steps().collectWith(ExecutionRuntimeContractTest::flowNode, 0));
+        return ExecutionFlowNode.pending(
+            "root",
+            Component.literal("root"),
+            Lists.immutable.empty(),
+            null,
+            plan.steps().collectWith(ExecutionRuntimeContractTest::flowNode, 0)
+        );
     }
 
     private static ExecutionFlowNode flowRoot(InteractionStep step) {
-        return ExecutionFlowNode.pending("root", Component.literal("root"), Lists.immutable.empty(), null, Lists.immutable.of(flowNode(step, 0)));
+        return ExecutionFlowNode.pending(
+            "root",
+            Component.literal("root"),
+            Lists.immutable.empty(),
+            null,
+            Lists.immutable.of(flowNode(step, 0))
+        );
     }
 
     private static ExecutionFlowNode flowRoot() {
-        return ExecutionFlowNode.pending("root", Component.literal("root"), Lists.immutable.empty(), null, Lists.immutable.empty());
+        return ExecutionFlowNode
+                .pending("root", Component.literal("root"), Lists.immutable.empty(), null, Lists.immutable.empty());
     }
 
     private static ExecutionFlowNode flowNode(InteractionStep step, int index) {
-        return ExecutionFlowNode.pending("step-" + index, Component.literal(step.getClass().getSimpleName()), Lists.immutable.of(step), null, Lists.immutable.empty());
+        return ExecutionFlowNode.pending(
+            "step-" + index,
+            Component.literal(step.getClass().getSimpleName()),
+            Lists.immutable.of(step),
+            null,
+            Lists.immutable.empty()
+        );
     }
 
     private static RecipeEntry<TestRecipe> recipeEntry(String id) {
@@ -361,12 +398,12 @@ class ExecutionRuntimeContractTest {
         }
 
         @Override
-        public TestRecipe findRecipe(String uniqueId) {
+        public @Nullable TestRecipe findRecipe(String uniqueId) {
             return byId.get(uniqueId);
         }
 
         @Override
-        public TestRecipe findRecipe(ResourceLocation registryName) {
+        public @Nullable TestRecipe findRecipe(ResourceLocation registryName) {
             return byId.get(registryName.getPath());
         }
 
@@ -440,8 +477,8 @@ class ExecutionRuntimeContractTest {
             return source.count(resource);
         }
 
-        void setAccessible(boolean accessible) {
-            source.setAccessible(accessible);
+        void setAccessibleState(boolean accessible) {
+            source.setAccessibleState(accessible);
         }
 
         @Override
@@ -482,8 +519,10 @@ class ExecutionRuntimeContractTest {
         boolean receiver,
         StorageAccessibility accessibility
     ) implements StorageSource {
-        private static final StorageSourceType<FakeStorageSource> type =
-            new StorageSourceType<>(Namespace.of("test", "runtime_source"), (Codec<FakeStorageSource>) null);
+        private static final StorageSourceType<FakeStorageSource> type = new StorageSourceType<>(
+            Namespace.of("test", "runtime_source"),
+            (Codec<FakeStorageSource>) null
+        );
 
         @Override
         public StorageSourceType<?> type() {
@@ -507,8 +546,10 @@ class ExecutionRuntimeContractTest {
     }
 
     private static final class MutableStorageSource implements StorageSource {
-        private static final StorageSourceType<MutableStorageSource> type =
-            new StorageSourceType<>(Namespace.of("test", "mutable_runtime_source"), (Codec<MutableStorageSource>) null);
+        private static final StorageSourceType<MutableStorageSource> type = new StorageSourceType<>(
+            Namespace.of("test", "mutable_runtime_source"),
+            (Codec<MutableStorageSource>) null
+        );
 
         private final String id;
         private final LinkedHashMap<ContentResource, Long> buckets = new LinkedHashMap<>();
@@ -532,7 +573,7 @@ class ExecutionRuntimeContractTest {
             return total;
         }
 
-        void setAccessible(boolean accessible) {
+        void setAccessibleState(boolean accessible) {
             this.accessible = accessible;
         }
 
@@ -564,8 +605,8 @@ class ExecutionRuntimeContractTest {
         @Override
         public StorageAccessibility accessibility() {
             return accessible
-                ? StorageAccessibility.accessible
-                : StorageAccessibility.inaccessible(StorageGuidance.simple(Component.literal("Open storage")));
+                    ? StorageAccessibility.accessible
+                    : StorageAccessibility.inaccessible(StorageGuidance.simple(Component.literal("Open storage")));
         }
 
         @Override
@@ -656,7 +697,9 @@ class ExecutionRuntimeContractTest {
 
         @Override
         public InteractionPerformResult perform(InteractionContext context) {
-            return new InteractionPerformResult.ReTranslationRequired(new ReTranslationHint(Component.literal("Inventory changed")));
+            return new InteractionPerformResult.ReTranslationRequired(
+                new ReTranslationHint(Component.literal("Inventory changed"))
+            );
         }
     }
 

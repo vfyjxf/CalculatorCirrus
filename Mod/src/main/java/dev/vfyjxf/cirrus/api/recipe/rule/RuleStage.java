@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.rule;
 
 import com.mojang.serialization.Codec;
+import dev.vfyjxf.cloudlib.api.util.Codecs;
 
 /**
  * The pipeline stage a rule participates in:
@@ -14,8 +15,7 @@ import com.mojang.serialization.Codec;
  * </ul>
  */
 public enum RuleStage {
-    catalog,
-    candidate;
+    catalog, candidate;
 
-    public static final Codec<RuleStage> CODEC = dev.vfyjxf.cloudlib.api.util.Codecs.lowerCaseEnum(RuleStage.class);
+    public static final Codec<RuleStage> codec = Codecs.lowerCaseEnum(RuleStage.class);
 }

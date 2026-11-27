@@ -7,38 +7,38 @@ import dev.vfyjxf.cirrus.ui.execution.tooltip.JeiRecipeTooltipComponent;
 import dev.vfyjxf.cloudlib.util.Checks;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
+import mezz.jei.api.helpers.IJeiHelpers;
 import mezz.jei.api.ingredients.subtypes.ISubtypeManager;
-import mezz.jei.api.registration.IModIngredientRegistration;
 import mezz.jei.api.recipe.IFocusFactory;
 import mezz.jei.api.recipe.IRecipeManager;
 import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.registration.IAdvancedRegistration;
-import mezz.jei.api.helpers.IJeiHelpers;
+import mezz.jei.api.registration.IModIngredientRegistration;
+import mezz.jei.api.registration.IRecipeCategoryRegistration;
 import mezz.jei.api.runtime.IIngredientManager;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.stream.Stream;
 
 @JeiPlugin
 public class CirrusJeiPlugin implements IModPlugin {
 
     private static final JeiSystemCatalog systemCatalog = new JeiSystemCatalog();
-    private static IRecipeManager recipeManager;
-    private static IIngredientManager ingredientManager;
-    private static volatile IJeiRuntime jeiRuntime;
+    private static @Nullable IRecipeManager recipeManager;
+    private static @Nullable IIngredientManager ingredientManager;
+    private static volatile @Nullable IJeiRuntime jeiRuntime;
     private static volatile List<RecipeType<?>> knownRecipeTypes = List.of();
 
-    public static IFocusFactory focusFactory;
+    private static @Nullable IFocusFactory focusFactory;
 
-    private static ISubtypeManager subtypeManager;
+    private static @Nullable ISubtypeManager subtypeManager;
 
     public static IRecipeManager recipeManager() {
-        Checks.checkNotNull(recipeManager, "recipeManager");
-        return recipeManager;
+        return Checks.checkNotNull(recipeManager, "recipeManager");
     }
 
     public static @Nullable IRecipeManager recipeManagerOrNull() {
@@ -46,8 +46,7 @@ public class CirrusJeiPlugin implements IModPlugin {
     }
 
     public static IFocusFactory focusFactory() {
-        Checks.checkNotNull(focusFactory, "focusFactory");
-        return focusFactory;
+        return Checks.checkNotNull(focusFactory, "focusFactory");
     }
 
     public static @Nullable IFocusFactory focusFactoryOrNull() {
@@ -79,6 +78,10 @@ public class CirrusJeiPlugin implements IModPlugin {
     }
 
     public static ISubtypeManager subtypeManager() {
+        return Checks.checkNotNull(subtypeManager, "subtypeManager");
+    }
+
+    public static @Nullable ISubtypeManager subtypeManagerOrNull() {
         return subtypeManager;
     }
 
@@ -89,18 +92,24 @@ public class CirrusJeiPlugin implements IModPlugin {
 
     @Override
     public void onRuntimeAvailable(IJeiRuntime runtime) {
-        CirrusJeiPlugin.jeiRuntime = runtime;
-        CirrusJeiPlugin.recipeManager = runtime.getRecipeManager();
-        CirrusJeiPlugin.ingredientManager = runtime.getIngredientManager();
+        jeiRuntime = runtime;
+        recipeManager = runtime.getRecipeManager();
+        ingredientManager = runtime.getIngredientManager();
         IJeiHelpers helpers = runtime.getJeiHelpers();
-        CirrusJeiPlugin.focusFactory = helpers == null ? null : helpers.getFocusFactory();
+        focusFactory = helpers == null ? null : helpers.getFocusFactory();
         updateKnownRecipeTypes(recipeTypesOrEmpty(helpers));
         JeiRecipeTooltipComponent.clearLayoutCache();
         JeiRecipeLayoutResolver.clearIgnoredLayouts();
-        systemCatalog.rebuild(CirrusJeiPlugin.recipeManager);
+        dev.vfyjxf.cirrus.api.recipe.system.RecipeLookup.invalidateCache();
+        systemCatalog.rebuild(recipeManager);
         // the system catalog is final here; release anything that waited for the
         // full set (e.g. the client-lifecycle database index prewarm)
         JeiIntegration.markSystemsReady();
+    }
+
+    @Override
+    public void registerCategories(IRecipeCategoryRegistration registration) {
+        registration.addRecipeCategories(new PlanFlowRecipeCategory(registration.getJeiHelpers().getGuiHelper()));
     }
 
     @Override

@@ -5,7 +5,7 @@ import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.DriverContext;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.InteractionContext;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.SideContext;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,8 +28,7 @@ public interface DriverLookup {
 
     default DriverLookup with(DriverContext... contexts) {
         ArrayList<DriverContext> merged = new ArrayList<>(contexts());
-        outer:
-        for (DriverContext context : contexts) {
+        outer : for (DriverContext context : contexts) {
             for (int index = 0; index < merged.size(); index++) {
                 if (merged.get(index).getClass() == context.getClass()) {
                     merged.set(index, context);

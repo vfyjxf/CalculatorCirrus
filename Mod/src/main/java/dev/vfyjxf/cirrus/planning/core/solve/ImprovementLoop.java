@@ -4,16 +4,18 @@ import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.OwnedMachineGroup;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningBudget;
 import dev.vfyjxf.cirrus.api.planning.cost.CostMetadataProvider;
-import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.cost.CostWeights;
 import dev.vfyjxf.cirrus.api.planning.cost.ObjectivePreset;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.OutputSlot;
+import dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
 import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
+import dev.vfyjxf.cirrus.api.planning.plan.CycleLoopStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
@@ -22,6 +24,7 @@ import dev.vfyjxf.cirrus.planning.core.cost.StepCosts;
 import dev.vfyjxf.cirrus.planning.core.graph.MachineCapabilityGroups;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
 import dev.vfyjxf.cirrus.planning.core.lang.WorkBudget;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -31,6 +34,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
@@ -38,12 +42,11 @@ import java.util.TreeMap;
 public final class ImprovementLoop {
 
     public record SearchOutcome(
-            ChoiceTable bestChoices,
-            ProductionPlan bestPlan,
-            List<ProductionPlan> discoveredPlans,
-            int coupledEvaluated
-    ) {
-    }
+        ChoiceTable bestChoices,
+        ProductionPlan bestPlan,
+        List<ProductionPlan> discoveredPlans,
+        int coupledEvaluated
+    ) {}
 
     private final BitmaskAndGreedySetCover setCoverSolver = new BitmaskAndGreedySetCover();
     private final BatchCouplingSolver batchSolver;
@@ -57,26 +60,27 @@ public final class ImprovementLoop {
     }
 
     public SearchOutcome refine(
-            ConeModel cone,
-            PlanningRequest request,
-            ObjectivePreset preset,
-            CostWeights weights,
-            CostMetadataProvider meta,
-            Potentials potentials,
-            ChoiceTable initialChoices,
-            ProductionPlan seedPlan,
-            String strategyLabel,
-            WorkBudget budget,
-            long perspectiveWorkLimit
+        ConeModel cone,
+        PlanningRequest request,
+        ObjectivePreset preset,
+        CostWeights weights,
+        CostMetadataProvider meta,
+        Potentials potentials,
+        ChoiceTable initialChoices,
+        ProductionPlan seedPlan,
+        String strategyLabel,
+        WorkBudget budget,
+        long perspectiveWorkLimit
     ) {
         List<ProductionPlan> discovered = new ArrayList<>();
         discovered.add(seedPlan);
         int coupledEvaluated = 0;
 
+        HumanGuidanceView guidance = request.context().guidance();
         ChoiceTable incumbent = initialChoices.copy();
         ProductionPlan incumbentPlan = seedPlan;
         int incAdv = advisoryWeight(cone, incumbentPlan);
-        double incScalar = weights.scalarize(incumbentPlan.totalCost());
+        double incScalar = guidedScalar(incumbentPlan, weights, guidance);
 
         Set<Long> seenFingerprints = new HashSet<>();
         seenFingerprints.add(incumbent.fingerprint());
@@ -91,12 +95,12 @@ public final class ImprovementLoop {
                 ChoiceTable cand = incumbent.copy();
                 applyMachineCover(cone, cand, incumbentPlan, coverChoice);
                 if (seenFingerprints.add(cand.fingerprint()) && budget.consumeWork()) {
-                    ProductionPlan p = SchedulerAndFinalizer.assembleWithRepair(
-                            cone, request, potentials, cand, meta, strategyLabel + "_setcover");
+                    ProductionPlan p = SchedulerAndFinalizer
+                            .assembleWithRepair(cone, request, potentials, cand, meta, strategyLabel + "_setcover");
                     if (p != null) {
                         discovered.add(p);
                         int a = advisoryWeight(cone, p);
-                        double s = weights.scalarize(p.totalCost());
+                        double s = guidedScalar(p, weights, guidance);
                         if (isStrictlyBetter(a, s, p.steps().size(), incAdv, incScalar, incumbentPlan.steps().size())) {
                             incumbent = cand;
                             incumbentPlan = p;
@@ -123,7 +127,8 @@ public final class ImprovementLoop {
                 if (comp == null) continue;
                 coupledEvaluated++;
 
-                Optional<Map<CompiledRecipeKey, Long>> mixOpt = batchSolver.refine(comp, request, budget.softDeadlineNanos());
+                Optional<Map<CompiledRecipeKey, Long>> mixOpt = batchSolver
+                        .refine(comp, request, budget.softDeadlineNanos());
                 if (mixOpt.isEmpty() || mixOpt.get().size() < 2) continue;
 
                 List<ChoiceTable.BatchSplit> splits = new ArrayList<>(mixOpt.get().size());
@@ -140,12 +145,12 @@ public final class ImprovementLoop {
                 ChoiceTable cand = incumbent.copy();
                 cand.batchMix.put(u, splits);
                 if (seenFingerprints.add(cand.fingerprint()) && budget.consumeWork()) {
-                    ProductionPlan p = SchedulerAndFinalizer.assembleWithRepair(
-                            cone, request, potentials, cand, meta, "mixed_batch_refined");
+                    ProductionPlan p = SchedulerAndFinalizer
+                            .assembleWithRepair(cone, request, potentials, cand, meta, "mixed_batch_refined");
                     if (p != null) {
                         discovered.add(p);
                         int a = advisoryWeight(cone, p);
-                        double s = weights.scalarize(p.totalCost());
+                        double s = guidedScalar(p, weights, guidance);
                         if (isStrictlyBetter(a, s, p.steps().size(), incAdv, incScalar, incumbentPlan.steps().size())) {
                             incumbent = cand;
                             incumbentPlan = p;
@@ -168,13 +173,20 @@ public final class ImprovementLoop {
                     ChoiceTable cand = incumbent.copy();
                     cand.sourceByRes[u] = Potentials.SourceChoice.convert(r);
                     if (seenFingerprints.add(cand.fingerprint()) && budget.consumeWork()) {
-                        ProductionPlan p = SchedulerAndFinalizer.assembleWithRepair(
-                                cone, request, potentials, cand, meta, strategyLabel);
+                        ProductionPlan p = SchedulerAndFinalizer
+                                .assembleWithRepair(cone, request, potentials, cand, meta, strategyLabel);
                         if (p != null) {
                             discovered.add(p);
                             int a = advisoryWeight(cone, p);
-                            double s = weights.scalarize(p.totalCost());
-                            if (isStrictlyBetter(a, s, p.steps().size(), incAdv, incScalar, incumbentPlan.steps().size())) {
+                            double s = guidedScalar(p, weights, guidance);
+                            if (isStrictlyBetter(
+                                a,
+                                s,
+                                p.steps().size(),
+                                incAdv,
+                                incScalar,
+                                incumbentPlan.steps().size()
+                            )) {
                                 incumbent = cand;
                                 incumbentPlan = p;
                                 incAdv = a;
@@ -196,6 +208,13 @@ public final class ImprovementLoop {
             });
             for (int u : resOrder) {
                 if (!canContinue(budget, startWork, perspectiveWorkLimit)) break;
+                Potentials.SourceChoice curSource = incumbent.sourceByRes[u];
+                if (curSource != null
+                        && curSource.kind() == Potentials.SourceKind.recipe
+                        && curSource.localRecipe() >= 0
+                        && cone.recPinned[curSource.localRecipe()]) {
+                    continue;
+                }
                 int ps = cone.prodStart[u], pe = cone.prodStart[u + 1];
                 int tried = 0;
                 for (int pi = ps; pi < pe && tried < 6; pi++) {
@@ -203,7 +222,7 @@ public final class ImprovementLoop {
                     int r = cone.prodRecipe[pi];
                     if (!cone.isStandardActive(r)) continue;
                     Potentials.SourceChoice cur = incumbent.sourceByRes[u];
-                    if (cur != null && cur.kind() == Potentials.SourceKind.RECIPE && cur.localRecipe() == r) {
+                    if (cur != null && cur.kind() == Potentials.SourceKind.recipe && cur.localRecipe() == r) {
                         continue;
                     }
                     tried++;
@@ -211,13 +230,20 @@ public final class ImprovementLoop {
                     cand.batchMix.remove(u);
                     cand.sourceByRes[u] = Potentials.SourceChoice.recipe(r, potentials.bestMachine[r]);
                     if (seenFingerprints.add(cand.fingerprint()) && budget.consumeWork()) {
-                        ProductionPlan p = SchedulerAndFinalizer.assembleWithRepair(
-                                cone, request, potentials, cand, meta, strategyLabel);
+                        ProductionPlan p = SchedulerAndFinalizer
+                                .assembleWithRepair(cone, request, potentials, cand, meta, strategyLabel);
                         if (p != null) {
                             discovered.add(p);
                             int a = advisoryWeight(cone, p);
-                            double s = weights.scalarize(p.totalCost());
-                            if (isStrictlyBetter(a, s, p.steps().size(), incAdv, incScalar, incumbentPlan.steps().size())) {
+                            double s = guidedScalar(p, weights, guidance);
+                            if (isStrictlyBetter(
+                                a,
+                                s,
+                                p.steps().size(),
+                                incAdv,
+                                incScalar,
+                                incumbentPlan.steps().size()
+                            )) {
                                 incumbent = cand;
                                 incumbentPlan = p;
                                 incAdv = a;
@@ -228,19 +254,27 @@ public final class ImprovementLoop {
                 }
                 // Also try direct acquire if acquirable and not currently acquiring.
                 if ((cone.acquireOption[u] != null || cone.freeBase[u])
-                        && (incumbent.sourceByRes[u] == null || incumbent.sourceByRes[u].kind() != Potentials.SourceKind.ACQUIRE)
+                        && (incumbent.sourceByRes[u] == null
+                                || incumbent.sourceByRes[u].kind() != Potentials.SourceKind.acquire)
                         && canContinue(budget, startWork, perspectiveWorkLimit)) {
                     ChoiceTable cand = incumbent.copy();
                     cand.batchMix.remove(u);
-                    cand.sourceByRes[u] = Potentials.SourceChoice.ACQUIRE;
+                    cand.sourceByRes[u] = Potentials.SourceChoice.acquire;
                     if (seenFingerprints.add(cand.fingerprint()) && budget.consumeWork()) {
-                        ProductionPlan p = SchedulerAndFinalizer.assembleWithRepair(
-                                cone, request, potentials, cand, meta, strategyLabel);
+                        ProductionPlan p = SchedulerAndFinalizer
+                                .assembleWithRepair(cone, request, potentials, cand, meta, strategyLabel);
                         if (p != null) {
                             discovered.add(p);
                             int a = advisoryWeight(cone, p);
-                            double s = weights.scalarize(p.totalCost());
-                            if (isStrictlyBetter(a, s, p.steps().size(), incAdv, incScalar, incumbentPlan.steps().size())) {
+                            double s = guidedScalar(p, weights, guidance);
+                            if (isStrictlyBetter(
+                                a,
+                                s,
+                                p.steps().size(),
+                                incAdv,
+                                incScalar,
+                                incumbentPlan.steps().size()
+                            )) {
                                 incumbent = cand;
                                 incumbentPlan = p;
                                 incAdv = a;
@@ -253,7 +287,7 @@ public final class ImprovementLoop {
         }
 
         // Move 5: A13 SetupLineStep automation branch under INVEST_AUTOMATION / MIN_HUMAN_TIME.
-        if ((preset == ObjectivePreset.INVEST_AUTOMATION || preset == ObjectivePreset.MIN_HUMAN_TIME)
+        if ((preset == ObjectivePreset.factoryScale || preset == ObjectivePreset.stayAtBase)
                 && canContinue(budget, startWork, perspectiveWorkLimit)) {
             List<CraftStep> heavyCrafts = new ArrayList<>();
             for (PlanStep step : incumbentPlan.steps()) {
@@ -261,13 +295,20 @@ public final class ImprovementLoop {
                     String sysId = cs.recipeKey().systemId();
                     MachineCapabilityId cap = MachineCapabilityGroups.capabilityOf(sysId);
                     double setupH = meta.estimateLineSetupHumanSeconds(sysId, cap);
-                    if (cs.stepCost().humanActiveSeconds() > setupH + 0.5) {
+                    if (cs.batches() >= 32L
+                            || cs.stepCost().passiveWaitSeconds() >= 120.0
+                            || cs.stepCost().totalActiveSeconds() > setupH * 0.25) {
                         heavyCrafts.add(cs);
                     }
                 }
             }
-            heavyCrafts.sort(Comparator.comparingDouble(
-                    (CraftStep cs) -> cs.stepCost().humanActiveSeconds()).reversed());
+            heavyCrafts
+                    .sort(
+                        Comparator.comparingDouble(
+                            (CraftStep cs) -> cs.stepCost().passiveWaitSeconds()
+                                    + cs.stepCost().totalActiveSeconds() * 4.0
+                        ).reversed()
+                    );
             int tries = Math.min(3, heavyCrafts.size());
             for (int i = 0; i < tries && canContinue(budget, startWork, perspectiveWorkLimit); i++) {
                 CraftStep cs = heavyCrafts.get(i);
@@ -278,12 +319,12 @@ public final class ImprovementLoop {
                 ChoiceTable cand = incumbent.copy();
                 cand.automatedRecipes.add(lr);
                 if (seenFingerprints.add(cand.fingerprint()) && budget.consumeWork()) {
-                    ProductionPlan p = SchedulerAndFinalizer.assembleWithRepair(
-                            cone, request, potentials, cand, meta, "invest_automation_line");
+                    ProductionPlan p = SchedulerAndFinalizer
+                            .assembleWithRepair(cone, request, potentials, cand, meta, "invest_automation_line");
                     if (p != null) {
                         discovered.add(p);
                         int a = advisoryWeight(cone, p);
-                        double s = weights.scalarize(p.totalCost());
+                        double s = guidedScalar(p, weights, guidance);
                         if (isStrictlyBetter(a, s, p.steps().size(), incAdv, incScalar, incumbentPlan.steps().size())) {
                             incumbent = cand;
                             incumbentPlan = p;
@@ -299,12 +340,12 @@ public final class ImprovementLoop {
     }
 
     private Set<String> runMachineSetCover(
-            ConeModel cone,
-            PlanningRequest request,
-            CostWeights weights,
-            CostMetadataProvider meta,
-            Potentials potentials,
-            ProductionPlan plan
+        ConeModel cone,
+        PlanningRequest request,
+        CostWeights weights,
+        CostMetadataProvider meta,
+        Potentials potentials,
+        ProductionPlan plan
     ) {
         FacilitySnapshot fac = request.context().facilities();
         HumanGuidanceView guidance = request.context().guidance();
@@ -327,7 +368,10 @@ public final class ImprovementLoop {
             boolean owned = rec.machineRequirement().capabilityId().map(ownedCaps::contains).orElse(false);
             if (!owned) {
                 for (String m : rec.machineRequirement().compatibleMachineIds()) {
-                    if (ownedMachines.contains(m)) { owned = true; break; }
+                    if (ownedMachines.contains(m)) {
+                        owned = true;
+                        break;
+                    }
                 }
             }
             if (!owned && !rec.machineRequirement().compatibleMachineIds().isEmpty()) {
@@ -353,16 +397,24 @@ public final class ImprovementLoop {
         List<BitmaskAndGreedySetCover.CandidateMachine> cands = new ArrayList<>(coverByMachine.size());
         for (var e : coverByMachine.entrySet()) {
             String mid = e.getKey();
-            double setup = weights.scalarize(StepCosts.provisionMachineCost(mid, sysByMachine.get(mid), 1, meta));
+            double setup = weights.scalarize(
+                StepCosts.provisionMachineCost(mid, Objects.requireNonNull(sysByMachine.get(mid)), 1, meta)
+            );
             int mLocal = cone.localRes(ResourceKey.item(mid));
             double itemPot = (mLocal >= 0 && Double.isFinite(potentials.potInCost[mLocal]))
-                    ? potentials.potInCost[mLocal] : 0.0;
+                    ? potentials.potInCost[mLocal]
+                    : setup * 2.0 + 50.0;
             cands.add(new BitmaskAndGreedySetCover.CandidateMachine(mid, e.getValue(), setup + itemPot));
         }
         return setCoverSolver.solve(k, cands);
     }
 
-    private static void applyMachineCover(ConeModel cone, ChoiceTable choices, ProductionPlan plan, Set<String> chosen) {
+    private static void applyMachineCover(
+        ConeModel cone,
+        ChoiceTable choices,
+        ProductionPlan plan,
+        Set<String> chosen
+    ) {
         for (PlanStep step : plan.steps()) {
             if (!(step instanceof CraftStep cs)) continue;
             Optional<CompiledRecipe> recOpt = cone.graph.recipeByKey(cs.recipeKey());
@@ -388,7 +440,11 @@ public final class ImprovementLoop {
                 for (OutputSlot out : recOpt.get().outputs()) {
                     int lu = cone.localRes(out.resource());
                     if (lu >= 0) {
-                        demands.merge(lu, SafeMath.mulSaturating(cs.batches(), out.amountPerBatch()), SafeMath::addSaturating);
+                        demands.merge(
+                            lu,
+                            SafeMath.mulSaturating(cs.batches(), out.amountPerBatch()),
+                            SafeMath::addSaturating
+                        );
                     }
                 }
             }
@@ -405,14 +461,14 @@ public final class ImprovementLoop {
         return demands;
     }
 
-    private static BatchCouplingComponent buildBatchComponent(
-            ConeModel cone,
-            PlanningRequest request,
-            CostWeights weights,
-            CostMetadataProvider meta,
-            Potentials potentials,
-            int u,
-            long demand
+    private static @Nullable BatchCouplingComponent buildBatchComponent(
+        ConeModel cone,
+        PlanningRequest request,
+        CostWeights weights,
+        CostMetadataProvider meta,
+        Potentials potentials,
+        int u,
+        long demand
     ) {
         FacilitySnapshot fac = request.context().facilities();
         HumanGuidanceView guidance = request.context().guidance();
@@ -425,7 +481,7 @@ public final class ImprovementLoop {
             int r = cone.prodRecipe[pi];
             if (!cone.isStandardActive(r)) continue;
             CompiledRecipe rec = cone.recObjects[r];
-            if (rec.advisory() != dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory.NONE && !cone.recPinned[r]) {
+            if (rec.advisory() != RecipeAdvisory.none && !cone.recPinned[r]) {
                 continue;
             }
             long outPerBatch = 0L;
@@ -449,20 +505,55 @@ public final class ImprovementLoop {
             if (!ok) continue;
             Optional<String> mach = Optional.ofNullable(potentials.bestMachine[r]);
             boolean auto = fac.automatedRecipe(rec.key()).isPresent();
-            double runCost = weights.scalarize(StepCosts.craftCost(rec, 1L, mach, auto, fac, meta, guidance));
-            double perBatchCost = inputPot + runCost;
+            double runCost = weights.scalarize(StepCosts.craftCost(rec, 1L, mach, auto, fac, meta));
+            double softMult = guidance.softCostMultiplier(rec.key(), mach);
+            double perBatchCost = (inputPot + runCost) * softMult;
             if (outPerBatch > 1L || rec.isMultiOutput()) {
                 hasBatchGt1OrMulti = true;
             }
             long singleBatches = SafeMath.ceilDiv(demand, outPerBatch);
             bestSingleCost = Math.min(bestSingleCost, singleBatches * perBatchCost);
-            cands.add(new BatchCouplingComponent.CandidateRecipe(rec.key(), outPerBatch, perBatchCost, rec.isMultiOutput()));
+            cands.add(
+                new BatchCouplingComponent.CandidateRecipe(rec.key(), outPerBatch, perBatchCost, rec.isMultiOutput())
+            );
         }
 
         if (cands.size() < 2 || !hasBatchGt1OrMulti || !Double.isFinite(bestSingleCost)) {
             return null;
         }
         return new BatchCouplingComponent(cone.resKeys[u], demand, cands, bestSingleCost);
+    }
+
+    public static double guidedScalar(ProductionPlan plan, CostWeights weights, HumanGuidanceView guidance) {
+        double base = weights.scalarize(plan.totalCost());
+        if (guidance == null || guidance.allRules().isEmpty()) {
+            return base;
+        }
+        double adj = 0.0;
+        for (PlanStep step : plan.steps()) {
+            if (step instanceof CraftStep cs) {
+                if (guidance.isRecipePinned(cs.recipeKey())) {
+                    adj -= Math.max(1000.0, weights.scalarize(cs.stepCost()) * 10.0);
+                }
+                double m = guidance.softCostMultiplier(cs.recipeKey(), cs.chosenMachineId());
+                if (m != 1.0) {
+                    adj += Math.max(5.0, weights.scalarize(cs.stepCost())) * (m - 1.0);
+                }
+            } else if (step instanceof AcquireStep ac) {
+                double m = guidance.resourceSoftMultiplier(ac.resource());
+                if (m != 1.0) {
+                    adj += Math.max(2.0, weights.scalarize(ac.stepCost())) * (m - 1.0);
+                }
+            } else if (step instanceof CycleLoopStep cl) {
+                for (CraftStep inner : cl.singleIterationTemplate()) {
+                    double m = guidance.softCostMultiplier(inner.recipeKey(), inner.chosenMachineId());
+                    if (m != 1.0) {
+                        adj += Math.max(5.0, weights.scalarize(inner.stepCost())) * cl.iterations() * (m - 1.0);
+                    }
+                }
+            }
+        }
+        return Math.max(0.0, base + adj);
     }
 
     private static int advisoryWeight(ConeModel cone, ProductionPlan plan) {

@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.api.recipe.database;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.crafting.RecipeHolder;
+import org.jspecify.annotations.Nullable;
 
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -10,8 +11,7 @@ import java.util.function.Supplier;
 public final class RecipeDatabaseFailureCapture {
     private static final ThreadLocal<Context> current = new ThreadLocal<>();
 
-    private RecipeDatabaseFailureCapture() {
-    }
+    private RecipeDatabaseFailureCapture() {}
 
     public static <T> T capture(
         String database,
@@ -23,7 +23,7 @@ public final class RecipeDatabaseFailureCapture {
 
     public static <T> T capture(
         String database,
-        DatabaseRecipeRef ref,
+        @Nullable DatabaseRecipeRef ref,
         String recipeClass,
         Consumer<RecipeDatabaseFailureRegistry.Failure> failures,
         Supplier<T> action
@@ -57,12 +57,14 @@ public final class RecipeDatabaseFailureCapture {
             record(throwable);
             return;
         }
-        context.failures().accept(RecipeDatabaseFailureRegistry.Failure.from(
-            new DatabaseRecipeRef(system.systemId(), id),
-            context.database(),
-            recipeClassName(recipe),
-            throwable
-        ));
+        context.failures().accept(
+            RecipeDatabaseFailureRegistry.Failure.from(
+                new DatabaseRecipeRef(system.systemId(), id),
+                context.database(),
+                recipeClassName(recipe),
+                throwable
+            )
+        );
     }
 
     public static void record(Throwable throwable) {
@@ -70,17 +72,15 @@ public final class RecipeDatabaseFailureCapture {
         if (context == null || context.failures() == null || context.ref() == null || throwable == null) {
             return;
         }
-        context.failures().accept(RecipeDatabaseFailureRegistry.Failure.from(
-            context.ref(),
-            context.database(),
-            context.recipeClass(),
-            throwable
-        ));
+        context.failures().accept(
+            RecipeDatabaseFailureRegistry.Failure
+                    .from(context.ref(), context.database(), context.recipeClass(), throwable)
+        );
     }
 
     private record Context(
         String database,
-        DatabaseRecipeRef ref,
+        @Nullable DatabaseRecipeRef ref,
         String recipeClass,
         Consumer<RecipeDatabaseFailureRegistry.Failure> failures
     ) {

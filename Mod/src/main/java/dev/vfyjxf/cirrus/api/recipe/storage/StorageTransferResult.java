@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.storage;
 
 import dev.vfyjxf.cloudlib.util.Checks;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Result of a simulated or real storage transfer operation.
@@ -20,11 +20,19 @@ public record StorageTransferResult(
 
     //region factories
 
-    public static StorageTransferResult none(@Nullable StorageSource source, StorageTransferRequest request, @Nullable StorageGuidance guidance) {
+    public static StorageTransferResult none(
+        @Nullable StorageSource source,
+        StorageTransferRequest request,
+        @Nullable StorageGuidance guidance
+    ) {
         return new StorageTransferResult(source, request, 0L, guidance);
     }
 
-    public static StorageTransferResult transferred(@Nullable StorageSource source, StorageTransferRequest request, long transferredAmount) {
+    public static StorageTransferResult transferred(
+        @Nullable StorageSource source,
+        StorageTransferRequest request,
+        long transferredAmount
+    ) {
         return new StorageTransferResult(source, request, transferredAmount, null);
     }
 

@@ -6,10 +6,12 @@ import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationSink;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationTags;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassifyContent;
 import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifyView;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Tags recolor recipes: an already-colored family member plus (usually) a dye
@@ -27,34 +29,43 @@ import java.util.Set;
 public final class RecolorStructuralRule implements ClassificationRule {
 
     public static final RecolorStructuralRule instance = new RecolorStructuralRule();
-    public static final String ID = "cirrus:structural/recolor";
+    public static final String id = "cirrus:structural/recolor";
 
     /**
      * The sixteen vanilla dye colors; two-word colors first so token scanning
      * prefers the longest match.
      */
-    private static final List<String> COLORS = List.of(
-        "light_blue", "light_gray",
-        "white", "orange", "magenta", "yellow", "lime", "pink", "gray",
-        "cyan", "purple", "blue", "brown", "green", "red", "black"
+    private static final List<String> colors = List.of(
+        "light_blue",
+        "light_gray",
+        "white",
+        "orange",
+        "magenta",
+        "yellow",
+        "lime",
+        "pink",
+        "gray",
+        "cyan",
+        "purple",
+        "blue",
+        "brown",
+        "green",
+        "red",
+        "black"
     );
 
     /** {@link #COLORS} pre-split on {@code _}; aligned by index. */
-    private static final List<String[]> COLOR_TOKENS = COLORS.stream()
-        .map(color -> color.split("_"))
-        .toList();
+    private static final List<String[]> colorTokens = colors.stream().map(color -> color.split("_")).toList();
 
     /** Every token appearing in any color name; fast reject for uncolored ids. */
-    private static final Set<String> COLOR_WORDS = COLOR_TOKENS.stream()
-        .flatMap(java.util.Arrays::stream)
-        .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    private static final Set<String> colorWords = colorTokens.stream().flatMap(Arrays::stream)
+            .collect(Collectors.toUnmodifiableSet());
 
-    private RecolorStructuralRule() {
-    }
+    private RecolorStructuralRule() {}
 
     @Override
     public String id() {
-        return ID;
+        return id;
     }
 
     @Override
@@ -69,7 +80,7 @@ public final class RecolorStructuralRule implements ClassificationRule {
                     continue;
                 }
                 if (hasColoredFamilyInput(recipe, out)) {
-                    sink.tag(ClassificationTags.RECOLOR);
+                    sink.tag(ClassificationTags.recolor);
                     return;
                 }
             }
@@ -108,7 +119,7 @@ public final class RecolorStructuralRule implements ClassificationRule {
             String[] tokens = path.split("_");
             boolean maybeColored = false;
             for (String token : tokens) {
-                if (COLOR_WORDS.contains(token)) {
+                if (colorWords.contains(token)) {
                     maybeColored = true;
                     break;
                 }
@@ -116,17 +127,17 @@ public final class RecolorStructuralRule implements ClassificationRule {
             if (!maybeColored) {
                 return null;
             }
-            for (int c = 0; c < COLORS.size(); c++) {
-                String color = COLORS.get(c);
-                String[] colorTokens = COLOR_TOKENS.get(c);
-                int at = indexOfColor(tokens, colorTokens);
+            for (int c = 0; c < colors.size(); c++) {
+                String color = colors.get(c);
+                String[] colorTokenParts = colorTokens.get(c);
+                int at = indexOfColor(tokens, colorTokenParts);
                 if (at < 0) {
                     continue;
                 }
                 StringBuilder base = new StringBuilder(namespace).append(':');
                 boolean first = true;
                 for (int i = 0; i < tokens.length; i++) {
-                    if (i >= at && i < at + colorTokens.length) {
+                    if (i >= at && i < at + colorTokenParts.length) {
                         continue;
                     }
                     if (!first) {
@@ -141,8 +152,7 @@ public final class RecolorStructuralRule implements ClassificationRule {
         }
 
         private static int indexOfColor(String[] tokens, String[] colorTokens) {
-            outer:
-            for (int i = 0; i + colorTokens.length <= tokens.length; i++) {
+            outer : for (int i = 0; i + colorTokens.length <= tokens.length; i++) {
                 for (int j = 0; j < colorTokens.length; j++) {
                     if (!tokens[i + j].equals(colorTokens[j])) {
                         continue outer;

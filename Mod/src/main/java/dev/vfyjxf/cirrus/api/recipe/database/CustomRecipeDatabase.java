@@ -19,13 +19,17 @@ public record CustomRecipeDatabase(
     public static final String builtinId = "builtin";
     public static final String builtinName = "Builtin";
 
-    public static final Codec<CustomRecipeDatabase> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-        Codec.STRING.fieldOf("id").forGetter(CustomRecipeDatabase::id),
-        Codec.STRING.fieldOf("name").forGetter(CustomRecipeDatabase::name),
-        DatabaseRecipeRef.CODEC.listOf().fieldOf("recipes").forGetter(CustomRecipeDatabase::recipes),
-        Namespace.codec.listOf().fieldOf("sources").forGetter(CustomRecipeDatabase::sources),
-        Namespace.codec.listOf().fieldOf("disabled_sources").forGetter(CustomRecipeDatabase::disabledSources)
-    ).apply(instance, CustomRecipeDatabase::new));
+    public static final Codec<CustomRecipeDatabase> codec = RecordCodecBuilder
+            .create(
+                instance -> instance.group(
+                    Codec.STRING.fieldOf("id").forGetter(CustomRecipeDatabase::id),
+                    Codec.STRING.fieldOf("name").forGetter(CustomRecipeDatabase::name),
+                    DatabaseRecipeRef.codec.listOf().fieldOf("recipes").forGetter(CustomRecipeDatabase::recipes),
+                    Namespace.codec.listOf().fieldOf("sources").forGetter(CustomRecipeDatabase::sources),
+                    Namespace.codec.listOf().fieldOf("disabled_sources")
+                            .forGetter(CustomRecipeDatabase::disabledSources)
+                ).apply(instance, CustomRecipeDatabase::new)
+            );
 
     public CustomRecipeDatabase {
         Checks.checkNotNull(id, "id");

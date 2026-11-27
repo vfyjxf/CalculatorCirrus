@@ -5,7 +5,6 @@ import dev.vfyjxf.cirrus.api.planning.context.OwnedMachineGroup;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledCycleMacro;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
-import dev.vfyjxf.cirrus.api.planning.model.CompiledCycleMacroKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
 import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
@@ -13,37 +12,37 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.planning.core.cone.ConeModel;
 import dev.vfyjxf.cirrus.planning.core.graph.MachineCapabilityGroups;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
+import org.jspecify.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.PriorityQueue;
 import java.util.Set;
 
 public final class Netting {
 
-    public static final String REASON_NO_SOURCE = "NO_SOURCE";
-    public static final String REASON_HUMAN_RULE = "HUMAN_RULE";
-    public static final String REASON_RESOURCE_BANNED = "RESOURCE_BANNED";
-    public static final String REASON_MACHINE_UNBUILDABLE = "MACHINE_UNBUILDABLE";
-    public static final String REASON_BUDGET_TRUNCATED = "BUDGET_TRUNCATED";
-    public static final String REASON_EXPLOSION = "EXPLOSION";
+    public static final String reasonNoSource = "NO_SOURCE";
+    public static final String reasonHumanRule = "HUMAN_RULE";
+    public static final String reasonResourceBanned = "RESOURCE_BANNED";
+    public static final String reasonMachineUnbuildable = "MACHINE_UNBUILDABLE";
+    public static final String reasonBudgetTruncated = "BUDGET_TRUNCATED";
+    public static final String reasonExplosion = "EXPLOSION";
 
-    private static final long MAX_TOTAL_BATCHES = 1_000_000L;
-    private static final int MAX_HEAP_ROUNDS = 100_000;
+    private static final long maxTotalBatches = 1_000_000L;
+    private static final int maxHeapRounds = 100_000;
 
-    private Netting() {
-    }
+    private Netting() {}
 
     public static ProductionVector settle(
-            ConeModel cone,
-            PlanningRequest request,
-            Potentials potentials,
-            ChoiceTable choices,
-            Map<Integer, Long> extraPresenceNeed
+        ConeModel cone,
+        PlanningRequest request,
+        Potentials potentials,
+        ChoiceTable choices,
+        Map<Integer, Long> extraPresenceNeed
     ) {
         int n = cone.nodeCount;
         int rCount = cone.recipeCount;
@@ -77,7 +76,7 @@ public final class Netting {
         for (TargetDemand td : request.targets()) {
             int u = cone.localRes(td.resource());
             if (u < 0) {
-                vec.unmetReasons.put(td.resource(), cone.truncatedByBudget ? REASON_BUDGET_TRUNCATED : REASON_NO_SOURCE);
+                vec.unmetReasons.put(td.resource(), cone.truncatedByBudget ? reasonBudgetTruncated : reasonNoSource);
                 continue;
             }
             vec.need[u] = SafeMath.addSaturating(vec.need[u], td.amount());
@@ -113,8 +112,8 @@ public final class Netting {
 
         int rounds = 0;
         while (!heap.isEmpty()) {
-            if (++rounds > MAX_HEAP_ROUNDS || totalBatchesUsed[0] > MAX_TOTAL_BATCHES) {
-                vec.exploded = true;
+            if (++rounds > maxHeapRounds || totalBatchesUsed[0] > maxTotalBatches) {
+                vec.markExploded();
                 break;
             }
             int u = heap.poll();
@@ -124,7 +123,7 @@ public final class Netting {
                 continue;
             }
             if (cone.bannedRes[u]) {
-                vec.unmetReasons.put(cone.resKeys[u], REASON_RESOURCE_BANNED);
+                vec.unmetReasons.put(cone.resKeys[u], reasonResourceBanned);
                 collectBlocking(cone, u, vec);
                 continue;
             }
@@ -136,9 +135,27 @@ public final class Netting {
                 for (ChoiceTable.BatchSplit split : mix) {
                     if (split.batches() <= 0L) continue;
                     int r = split.localRecipe();
-                    if (applyStandardRecipe(cone, request, potentials, choices, vec, r, split.batches(),
-                            availableMachines, availableCaps, ownedMachines, ownedCaps,
-                            activeConversionPairs, forbiddenRecipes, totalBatchesUsed, heap, inHeap)) {
+                    if (applyStandardRecipe(
+                        cone,
+                        request,
+                        potentials,
+                        choices,
+                        vec,
+                        u,
+                        r,
+                        remaining,
+                        split.batches(),
+                        availableMachines,
+                        availableCaps,
+                        ownedMachines,
+                        ownedCaps,
+                        activeConversionPairs,
+                        forbiddenMacros,
+                        forbiddenRecipes,
+                        totalBatchesUsed,
+                        heap,
+                        inHeap
+                    )) {
                         remaining = vec.need[u] - vec.net[u];
                     }
                 }
@@ -150,10 +167,24 @@ public final class Netting {
 
             // 2. Try primary choice, then deterministic fallback chain.
             boolean resolved = tryResolve(
-                    cone, request, potentials, choices, vec, u, deficit,
-                    availableMachines, availableCaps, ownedMachines, ownedCaps,
-                    activeConversionPairs, forbiddenMacros, forbiddenRecipes,
-                    totalBatchesUsed, heap, inHeap, false
+                cone,
+                request,
+                potentials,
+                choices,
+                vec,
+                u,
+                deficit,
+                availableMachines,
+                availableCaps,
+                ownedMachines,
+                ownedCaps,
+                activeConversionPairs,
+                forbiddenMacros,
+                forbiddenRecipes,
+                totalBatchesUsed,
+                heap,
+                inHeap,
+                false
             );
 
             if (!resolved && vec.need[u] > vec.net[u]) {
@@ -163,38 +194,56 @@ public final class Netting {
             }
         }
 
-        if (!vec.exploded && vec.unmetReasons.isEmpty()) {
+        if (!vec.exploded() && vec.unmetReasons.isEmpty()) {
             pruneRedundantBatches(cone, vec);
         }
         return vec;
     }
 
     private static boolean tryResolve(
-            ConeModel cone,
-            PlanningRequest request,
-            Potentials potentials,
-            ChoiceTable choices,
-            ProductionVector vec,
-            int u,
-            long deficit,
-            Set<String> availableMachines,
-            Set<MachineCapabilityId> availableCaps,
-            Set<String> ownedMachines,
-            Set<MachineCapabilityId> ownedCaps,
-            Set<Long> activeConvPairs,
-            Map<Integer, Set<String>> forbiddenMacros,
-            Map<Integer, Set<Integer>> forbiddenRecipes,
-            long[] totalBatchesUsed,
-            PriorityQueue<Integer> heap,
-            boolean[] inHeap,
-            boolean nonMacroOnly
+        ConeModel cone,
+        PlanningRequest request,
+        Potentials potentials,
+        ChoiceTable choices,
+        ProductionVector vec,
+        int u,
+        long deficit,
+        Set<String> availableMachines,
+        Set<MachineCapabilityId> availableCaps,
+        Set<String> ownedMachines,
+        Set<MachineCapabilityId> ownedCaps,
+        Set<Long> activeConvPairs,
+        Map<Integer, Set<String>> forbiddenMacros,
+        Map<Integer, Set<Integer>> forbiddenRecipes,
+        long[] totalBatchesUsed,
+        PriorityQueue<Integer> heap,
+        boolean[] inHeap,
+        boolean nonMacroOnly
     ) {
         // Build ordered candidate sources: primary choice first, then backups.
         Potentials.SourceChoice primary = choices.sourceByRes[u];
-        if (primary != null && primary.kind() != Potentials.SourceKind.NONE) {
-            if (applyChoice(cone, request, potentials, choices, vec, u, deficit, primary,
-                    availableMachines, availableCaps, ownedMachines, ownedCaps,
-                    activeConvPairs, forbiddenMacros, forbiddenRecipes, totalBatchesUsed, heap, inHeap, nonMacroOnly)) {
+        if (primary != null && primary.kind() != Potentials.SourceKind.none) {
+            if (applyChoice(
+                cone,
+                request,
+                potentials,
+                choices,
+                vec,
+                u,
+                deficit,
+                primary,
+                availableMachines,
+                availableCaps,
+                ownedMachines,
+                ownedCaps,
+                activeConvPairs,
+                forbiddenMacros,
+                forbiddenRecipes,
+                totalBatchesUsed,
+                heap,
+                inHeap,
+                nonMacroOnly
+            )) {
                 if (vec.need[u] <= vec.net[u]) {
                     return true;
                 }
@@ -221,12 +270,27 @@ public final class Netting {
                 }
             }
             if (cone.isStandardActive(r)) {
-                long outPerBatch = outputAmountOf(cone, r, u);
-                if (outPerBatch <= 0L) continue;
-                long b = SafeMath.ceilDiv(deficit, outPerBatch);
-                if (applyStandardRecipe(cone, request, potentials, choices, vec, r, b,
-                        availableMachines, availableCaps, ownedMachines, ownedCaps,
-                        activeConvPairs, forbiddenRecipes, totalBatchesUsed, heap, inHeap)) {
+                if (applyStandardRecipe(
+                    cone,
+                    request,
+                    potentials,
+                    choices,
+                    vec,
+                    u,
+                    r,
+                    deficit,
+                    Long.MAX_VALUE,
+                    availableMachines,
+                    availableCaps,
+                    ownedMachines,
+                    ownedCaps,
+                    activeConvPairs,
+                    forbiddenMacros,
+                    forbiddenRecipes,
+                    totalBatchesUsed,
+                    heap,
+                    inHeap
+                )) {
                     if (vec.need[u] <= vec.net[u]) return true;
                     deficit = vec.need[u] - vec.net[u];
                 }
@@ -238,13 +302,28 @@ public final class Netting {
             List<CompiledCycleMacro> macros = cone.macrosByLocalOut.get(u);
             if (macros != null) {
                 for (CompiledCycleMacro m : macros) {
-                    if (primary != null && primary.macro() != null
-                            && primary.macro().macroKey().equals(m.macroKey())) {
+                    if (primary != null && primary.macro() != null && primary.macro().macroKey().equals(m.macroKey())) {
                         continue;
                     }
-                    if (applyMacro(cone, request, potentials, choices, vec, u, m,
-                            availableMachines, availableCaps, ownedMachines, ownedCaps,
-                            activeConvPairs, forbiddenMacros, forbiddenRecipes, totalBatchesUsed, heap, inHeap)) {
+                    if (applyMacro(
+                        cone,
+                        request,
+                        potentials,
+                        choices,
+                        vec,
+                        u,
+                        m,
+                        availableMachines,
+                        availableCaps,
+                        ownedMachines,
+                        ownedCaps,
+                        activeConvPairs,
+                        forbiddenMacros,
+                        forbiddenRecipes,
+                        totalBatchesUsed,
+                        heap,
+                        inHeap
+                    )) {
                         if (vec.need[u] <= vec.net[u]) return true;
                         deficit = vec.need[u] - vec.net[u];
                     }
@@ -264,69 +343,98 @@ public final class Netting {
     }
 
     private static boolean applyChoice(
-            ConeModel cone,
-            PlanningRequest request,
-            Potentials potentials,
-            ChoiceTable choices,
-            ProductionVector vec,
-            int u,
-            long deficit,
-            Potentials.SourceChoice sc,
-            Set<String> availableMachines,
-            Set<MachineCapabilityId> availableCaps,
-            Set<String> ownedMachines,
-            Set<MachineCapabilityId> ownedCaps,
-            Set<Long> activeConvPairs,
-            Map<Integer, Set<String>> forbiddenMacros,
-            Map<Integer, Set<Integer>> forbiddenRecipes,
-            long[] totalBatchesUsed,
-            PriorityQueue<Integer> heap,
-            boolean[] inHeap,
-            boolean nonMacroOnly
+        ConeModel cone,
+        PlanningRequest request,
+        Potentials potentials,
+        ChoiceTable choices,
+        ProductionVector vec,
+        int u,
+        long deficit,
+        Potentials.SourceChoice sc,
+        Set<String> availableMachines,
+        Set<MachineCapabilityId> availableCaps,
+        Set<String> ownedMachines,
+        Set<MachineCapabilityId> ownedCaps,
+        Set<Long> activeConvPairs,
+        Map<Integer, Set<String>> forbiddenMacros,
+        Map<Integer, Set<Integer>> forbiddenRecipes,
+        long[] totalBatchesUsed,
+        PriorityQueue<Integer> heap,
+        boolean[] inHeap,
+        boolean nonMacroOnly
     ) {
         return switch (sc.kind()) {
-            case LINE -> {
+            case line -> {
                 if (cone.bestLine[u] == null) yield false;
                 vec.line[u] = SafeMath.addSaturating(vec.line[u], deficit);
                 vec.net[u] = SafeMath.addSaturating(vec.net[u], deficit);
                 vec.gross[u] = SafeMath.addSaturating(vec.gross[u], deficit);
                 yield true;
             }
-            case ACQUIRE -> {
+            case acquire -> {
                 if (cone.acquireOption[u] == null && !cone.freeBase[u]) yield false;
                 vec.acq[u] = SafeMath.addSaturating(vec.acq[u], deficit);
                 vec.net[u] = SafeMath.addSaturating(vec.net[u], deficit);
                 vec.gross[u] = SafeMath.addSaturating(vec.gross[u], deficit);
                 yield true;
             }
-            case CONVERT -> applyConvert(cone, vec, u, sc.localRecipe(), deficit,
-                    activeConvPairs, totalBatchesUsed, heap, inHeap);
-            case RECIPE -> {
-                int r = sc.localRecipe();
-                long outPerBatch = outputAmountOf(cone, r, u);
-                if (outPerBatch <= 0L) yield false;
-                long b = SafeMath.ceilDiv(deficit, outPerBatch);
-                yield applyStandardRecipe(cone, request, potentials, choices, vec, r, b,
-                        availableMachines, availableCaps, ownedMachines, ownedCaps,
-                        activeConvPairs, forbiddenRecipes, totalBatchesUsed, heap, inHeap);
-            }
-            case MACRO -> !nonMacroOnly && applyMacro(cone, request, potentials, choices, vec, u, sc.macro(),
-                    availableMachines, availableCaps, ownedMachines, ownedCaps,
-                    activeConvPairs, forbiddenMacros, forbiddenRecipes, totalBatchesUsed, heap, inHeap);
-            case NONE -> false;
+            case convert ->
+                applyConvert(cone, vec, u, sc.localRecipe(), deficit, activeConvPairs, totalBatchesUsed, heap, inHeap);
+            case recipe -> applyStandardRecipe(
+                cone,
+                request,
+                potentials,
+                choices,
+                vec,
+                u,
+                sc.localRecipe(),
+                deficit,
+                Long.MAX_VALUE,
+                availableMachines,
+                availableCaps,
+                ownedMachines,
+                ownedCaps,
+                activeConvPairs,
+                forbiddenMacros,
+                forbiddenRecipes,
+                totalBatchesUsed,
+                heap,
+                inHeap
+            );
+            case macro -> !nonMacroOnly
+                    && applyMacro(
+                        cone,
+                        request,
+                        potentials,
+                        choices,
+                        vec,
+                        u,
+                        Objects.requireNonNull(sc.macro()),
+                        availableMachines,
+                        availableCaps,
+                        ownedMachines,
+                        ownedCaps,
+                        activeConvPairs,
+                        forbiddenMacros,
+                        forbiddenRecipes,
+                        totalBatchesUsed,
+                        heap,
+                        inHeap
+                    );
+            case none -> false;
         };
     }
 
     private static boolean applyConvert(
-            ConeModel cone,
-            ProductionVector vec,
-            int outU,
-            int r,
-            long deficit,
-            Set<Long> activeConvPairs,
-            long[] totalBatchesUsed,
-            PriorityQueue<Integer> heap,
-            boolean[] inHeap
+        ConeModel cone,
+        ProductionVector vec,
+        int outU,
+        int r,
+        long deficit,
+        Set<Long> activeConvPairs,
+        long[] totalBatchesUsed,
+        PriorityQueue<Integer> heap,
+        boolean[] inHeap
     ) {
         if (r < 0 || !cone.isConvertActive(r)) return false;
         int inS = cone.inStart[r];
@@ -363,8 +471,8 @@ public final class Netting {
         }
 
         totalBatchesUsed[0] = SafeMath.addSaturating(totalBatchesUsed[0], batchesToRun);
-        if (totalBatchesUsed[0] > MAX_TOTAL_BATCHES) {
-            vec.exploded = true;
+        if (totalBatchesUsed[0] > maxTotalBatches) {
+            vec.markExploded();
             return false;
         }
         vec.convertBatches[r] = SafeMath.addSaturating(vec.convertBatches[r], batchesToRun);
@@ -384,24 +492,29 @@ public final class Netting {
     }
 
     private static boolean applyStandardRecipe(
-            ConeModel cone,
-            PlanningRequest request,
-            Potentials potentials,
-            ChoiceTable choices,
-            ProductionVector vec,
-            int r,
-            long batchesToAdd,
-            Set<String> availableMachines,
-            Set<MachineCapabilityId> availableCaps,
-            Set<String> ownedMachines,
-            Set<MachineCapabilityId> ownedCaps,
-            Set<Long> activeConvPairs,
-            Map<Integer, Set<Integer>> forbiddenRecipes,
-            long[] totalBatchesUsed,
-            PriorityQueue<Integer> heap,
-            boolean[] inHeap
+        ConeModel cone,
+        PlanningRequest request,
+        Potentials potentials,
+        ChoiceTable choices,
+        ProductionVector vec,
+        int targetOutU,
+        int r,
+        long deficit,
+        long maxBatches,
+        Set<String> availableMachines,
+        Set<MachineCapabilityId> availableCaps,
+        Set<String> ownedMachines,
+        Set<MachineCapabilityId> ownedCaps,
+        Set<Long> activeConvPairs,
+        Map<Integer, Set<String>> forbiddenMacros,
+        Map<Integer, Set<Integer>> forbiddenRecipes,
+        long[] totalBatchesUsed,
+        PriorityQueue<Integer> heap,
+        boolean[] inHeap
     ) {
-        if (r < 0 || batchesToAdd <= 0L || !cone.isStandardActive(r)) return false;
+        if (r < 0 || deficit <= 0L || maxBatches <= 0L || !cone.isStandardActive(r)) return false;
+        long outPerBatch = outputAmountOf(cone, r, targetOutU);
+        if (outPerBatch <= 0L) return false;
         for (int oi = cone.outStart[r]; oi < cone.outStart[r + 1]; oi++) {
             Set<Integer> forb = forbiddenRecipes.get(cone.outRes[oi]);
             if (forb != null && forb.contains(r)) return false;
@@ -457,18 +570,95 @@ public final class Netting {
             catBinds[cpos - catS] = chosen;
         }
 
+        // Bootstrap self-amplifying catalysts externally before finalizing batch count.
+        long estBatches = Math.min(maxBatches, SafeMath.ceilDiv(deficit, outPerBatch));
+        for (int i = 0; i < catBinds.length; i++) {
+            int cpos = catS + i;
+            int catU = catBinds[i];
+            if (outputAmountOf(cone, r, catU) <= 0L) {
+                continue;
+            }
+            int dur = cone.catDurCost[cpos];
+            int maxDur = cone.catMaxDur[cpos];
+            long minNeeded = (dur > 0 && maxDur > 0)
+                    ? SafeMath.ceilDiv(
+                        SafeMath.mulSaturating(SafeMath.addSaturating(vec.batches[r], estBatches), dur),
+                        maxDur
+                    )
+                    : 1L;
+            if (minNeeded > vec.presenceNeed[catU]) {
+                vec.presenceNeed[catU] = minNeeded;
+            }
+            long missing = vec.presenceNeed[catU] - vec.gross[catU];
+            if (missing > 0L) {
+                Set<Integer> forbSet = forbiddenRecipes.computeIfAbsent(catU, ignored -> new HashSet<>());
+                boolean addedForb = forbSet.add(r);
+                long oldNeed = vec.need[catU];
+                vec.need[catU] = SafeMath.addSaturating(vec.net[catU], missing);
+                boolean supplied;
+                try {
+                    supplied = tryResolve(
+                        cone,
+                        request,
+                        potentials,
+                        choices,
+                        vec,
+                        catU,
+                        missing,
+                        availableMachines,
+                        availableCaps,
+                        ownedMachines,
+                        ownedCaps,
+                        activeConvPairs,
+                        forbiddenMacros,
+                        forbiddenRecipes,
+                        totalBatchesUsed,
+                        heap,
+                        inHeap,
+                        true
+                    );
+                } finally {
+                    vec.need[catU] = oldNeed;
+                    if (addedForb) {
+                        forbSet.remove(r);
+                    }
+                }
+                if (!supplied || vec.gross[catU] < vec.presenceNeed[catU]) {
+                    return false;
+                }
+            }
+        }
+
+        long remainingDeficit = vec.need[targetOutU] - vec.net[targetOutU];
+        if (remainingDeficit <= 0L) {
+            return true;
+        }
+        long batchesToAdd = Math.min(maxBatches, SafeMath.ceilDiv(remainingDeficit, outPerBatch));
+
         // Resolve machine & optional SetupLineStep (A13).
         String machine = resolveAndProvisionMachine(
-                cone, request, potentials, choices, vec, r,
-                availableMachines, availableCaps, ownedMachines, ownedCaps, heap, inHeap);
-        if (!cone.recHandCraftable[r] && machine == null
+            cone,
+            request,
+            potentials,
+            choices,
+            vec,
+            r,
+            availableMachines,
+            availableCaps,
+            ownedMachines,
+            ownedCaps,
+            heap,
+            inHeap
+        );
+        if (!cone.recHandCraftable[r]
+                && machine == null
                 && (cone.recCapability[r] == null || !availableCaps.contains(cone.recCapability[r]))) {
             return false;
         }
 
         totalBatchesUsed[0] = SafeMath.addSaturating(totalBatchesUsed[0], batchesToAdd);
-        if (totalBatchesUsed[0] > MAX_TOTAL_BATCHES) {
-            vec.exploded = true;
+        if (totalBatchesUsed[0] > maxTotalBatches) {
+            vec.markExploded();
             return false;
         }
 
@@ -521,23 +711,23 @@ public final class Netting {
     }
 
     private static boolean applyMacro(
-            ConeModel cone,
-            PlanningRequest request,
-            Potentials potentials,
-            ChoiceTable choices,
-            ProductionVector vec,
-            int outU,
-            CompiledCycleMacro macro,
-            Set<String> availableMachines,
-            Set<MachineCapabilityId> availableCaps,
-            Set<String> ownedMachines,
-            Set<MachineCapabilityId> ownedCaps,
-            Set<Long> activeConvPairs,
-            Map<Integer, Set<String>> forbiddenMacros,
-            Map<Integer, Set<Integer>> forbiddenRecipes,
-            long[] totalBatchesUsed,
-            PriorityQueue<Integer> heap,
-            boolean[] inHeap
+        ConeModel cone,
+        PlanningRequest request,
+        Potentials potentials,
+        ChoiceTable choices,
+        ProductionVector vec,
+        int outU,
+        CompiledCycleMacro macro,
+        Set<String> availableMachines,
+        Set<MachineCapabilityId> availableCaps,
+        Set<String> ownedMachines,
+        Set<MachineCapabilityId> ownedCaps,
+        Set<Long> activeConvPairs,
+        Map<Integer, Set<String>> forbiddenMacros,
+        Map<Integer, Set<Integer>> forbiddenRecipes,
+        long[] totalBatchesUsed,
+        PriorityQueue<Integer> heap,
+        boolean[] inHeap
     ) {
         if (macro == null) return false;
         String mid = macro.macroKey().macroId();
@@ -565,11 +755,32 @@ public final class Netting {
                     }
                 }
                 long oldNeed = vec.need[su];
-                vec.need[su] = Math.max(vec.need[su], vec.net[su] + missing);
-                boolean supplied = tryResolve(cone, request, potentials, choices, vec, su, missing,
-                        availableMachines, availableCaps, ownedMachines, ownedCaps,
-                        activeConvPairs, forbiddenMacros, forbiddenRecipes, totalBatchesUsed, heap, inHeap, true);
-                vec.need[su] = oldNeed;
+                vec.need[su] = SafeMath.addSaturating(vec.net[su], missing);
+                boolean supplied;
+                try {
+                    supplied = tryResolve(
+                        cone,
+                        request,
+                        potentials,
+                        choices,
+                        vec,
+                        su,
+                        missing,
+                        availableMachines,
+                        availableCaps,
+                        ownedMachines,
+                        ownedCaps,
+                        activeConvPairs,
+                        forbiddenMacros,
+                        forbiddenRecipes,
+                        totalBatchesUsed,
+                        heap,
+                        inHeap,
+                        true
+                    );
+                } finally {
+                    vec.need[su] = oldNeed;
+                }
                 if (!supplied || vec.gross[su] < reqSeed) {
                     return false;
                 }
@@ -581,9 +792,21 @@ public final class Netting {
             int lr = cone.localRecipe(inner.compactId());
             if (lr >= 0) {
                 String mach = resolveAndProvisionMachine(
-                        cone, request, potentials, choices, vec, lr,
-                        availableMachines, availableCaps, ownedMachines, ownedCaps, heap, inHeap);
-                if (!cone.recHandCraftable[lr] && mach == null
+                    cone,
+                    request,
+                    potentials,
+                    choices,
+                    vec,
+                    lr,
+                    availableMachines,
+                    availableCaps,
+                    ownedMachines,
+                    ownedCaps,
+                    heap,
+                    inHeap
+                );
+                if (!cone.recHandCraftable[lr]
+                        && mach == null
                         && (cone.recCapability[lr] == null || !availableCaps.contains(cone.recCapability[lr]))) {
                     return false;
                 }
@@ -598,8 +821,8 @@ public final class Netting {
         }
         long iters = SafeMath.ceilDiv(d2, netGain);
         totalBatchesUsed[0] = SafeMath.addSaturating(totalBatchesUsed[0], iters);
-        if (totalBatchesUsed[0] > MAX_TOTAL_BATCHES) {
-            vec.exploded = true;
+        if (totalBatchesUsed[0] > maxTotalBatches) {
+            vec.markExploded();
             return false;
         }
 
@@ -619,19 +842,19 @@ public final class Netting {
         return true;
     }
 
-    private static String resolveAndProvisionMachine(
-            ConeModel cone,
-            PlanningRequest request,
-            Potentials potentials,
-            ChoiceTable choices,
-            ProductionVector vec,
-            int r,
-            Set<String> availableMachines,
-            Set<MachineCapabilityId> availableCaps,
-            Set<String> ownedMachines,
-            Set<MachineCapabilityId> ownedCaps,
-            PriorityQueue<Integer> heap,
-            boolean[] inHeap
+    private static @Nullable String resolveAndProvisionMachine(
+        ConeModel cone,
+        PlanningRequest request,
+        Potentials potentials,
+        ChoiceTable choices,
+        ProductionVector vec,
+        int r,
+        Set<String> availableMachines,
+        Set<MachineCapabilityId> availableCaps,
+        Set<String> ownedMachines,
+        Set<MachineCapabilityId> ownedCaps,
+        PriorityQueue<Integer> heap,
+        boolean[] inHeap
     ) {
         CompiledRecipe rec = cone.recObjects[r];
         String sysId = rec.key().systemId();
@@ -647,9 +870,15 @@ public final class Netting {
             if (primary != null && guidance.isWillingToBuild(primary)) {
                 if (!vec.setupLines.containsKey(sysId)) {
                     ResourceKey primaryOut = cone.resKeys[cone.outRes[cone.outStart[r]]];
-                    vec.setupLines.put(sysId, new ProductionVector.SetupLineMeta(
-                            sysId, primary, primaryOut,
-                            cap != null ? cap : MachineCapabilityGroups.capabilityOf(sysId)));
+                    vec.setupLines.put(
+                        sysId,
+                        new ProductionVector.SetupLineMeta(
+                            sysId,
+                            primary,
+                            primaryOut,
+                            cap != null ? cap : MachineCapabilityGroups.capabilityOf(sysId)
+                        )
+                    );
                     availableMachines.add(primary);
                     if (cap != null) availableCaps.add(cap);
                 }
@@ -705,8 +934,11 @@ public final class Netting {
         return picked;
     }
 
-    private static String pickMachineId(
-            String override, String potPick, List<String> compat, HumanGuidanceView guidance
+    private static @Nullable String pickMachineId(
+        @Nullable String override,
+        @Nullable String potPick,
+        List<String> compat,
+        HumanGuidanceView guidance
     ) {
         if (override != null && guidance.isWillingToBuild(override)) return override;
         if (potPick != null && guidance.isWillingToBuild(potPick)) return potPick;
@@ -717,15 +949,15 @@ public final class Netting {
     }
 
     private static void provisionMachine(
-            ConeModel cone,
-            ProductionVector vec,
-            String machineId,
-            String systemId,
-            MachineCapabilityId cap,
-            Set<String> availableMachines,
-            Set<MachineCapabilityId> availableCaps,
-            PriorityQueue<Integer> heap,
-            boolean[] inHeap
+        ConeModel cone,
+        ProductionVector vec,
+        String machineId,
+        String systemId,
+        MachineCapabilityId cap,
+        Set<String> availableMachines,
+        Set<MachineCapabilityId> availableCaps,
+        PriorityQueue<Integer> heap,
+        boolean[] inHeap
     ) {
         availableMachines.add(machineId);
         if (cap != null) availableCaps.add(cap);
@@ -735,7 +967,7 @@ public final class Netting {
         vec.provisionedMachines.put(machineId, new ProductionVector.ProvisionMeta(machineId, systemId, cap, 1));
         ResourceKey mk = ResourceKey.item(machineId);
         int mu = cone.localRes(mk);
-        if (mu >= 0 && cone.tier[mu] < ConeModel.INF_TIER && !cone.bannedRes[mu]) {
+        if (mu >= 0 && cone.tier[mu] < ConeModel.infTier && !cone.bannedRes[mu]) {
             vec.need[mu] = SafeMath.addSaturating(vec.need[mu], 1L);
             pushIfDeficit(vec, mu, heap, inHeap);
         } else {
@@ -772,8 +1004,8 @@ public final class Netting {
                     for (int pos = cone.inStart[r]; pos < cone.inStart[r + 1]; pos++) {
                         int inU = vec.chosenSlotBind[pos];
                         if (inU >= 0) {
-                            vec.net[inU] = SafeMath.addSaturating(vec.net[inU],
-                                    SafeMath.mulSaturating(removable, cone.inAmount[pos]));
+                            vec.net[inU] = SafeMath
+                                    .addSaturating(vec.net[inU], SafeMath.mulSaturating(removable, cone.inAmount[pos]));
                         }
                     }
                     changed = true;
@@ -820,11 +1052,11 @@ public final class Netting {
 
     private static String classifyUnmetReason(ConeModel cone, int u, HumanGuidanceView guidance) {
         ResourceKey rk = cone.resKeys[u];
-        if (cone.bannedRes[u]) return REASON_RESOURCE_BANNED;
+        if (cone.bannedRes[u]) return reasonResourceBanned;
         Set<String> rules = cone.blockingRuleIds.get(rk);
-        if (rules != null && !rules.isEmpty()) return REASON_HUMAN_RULE;
-        if (cone.truncatedByBudget && !cone.graph.producersOf(rk).isEmpty()) return REASON_BUDGET_TRUNCATED;
-        return REASON_NO_SOURCE;
+        if (rules != null && !rules.isEmpty()) return reasonHumanRule;
+        if (cone.truncatedByBudget && !cone.graph.producersOf(rk).isEmpty()) return reasonBudgetTruncated;
+        return reasonNoSource;
     }
 
     private static void collectBlocking(ConeModel cone, int u, ProductionVector vec) {

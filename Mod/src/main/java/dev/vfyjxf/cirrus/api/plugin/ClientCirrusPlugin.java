@@ -27,8 +27,7 @@ import java.util.ServiceLoader;
 public interface ClientCirrusPlugin extends ModPlugin {
 
     Namespace builtin = CirrusNamespaces.ofMod("client/builtin");
-    PluginDependency afterBuiltin = new PluginDependency(ClientCirrusPlugin.builtin, Order.after, Constraint.required);
-
+    PluginDependency afterBuiltin = new PluginDependency(builtin, Order.after, Constraint.required);
 
     //region client content registryKey
 
@@ -41,7 +40,6 @@ public interface ClientCirrusPlugin extends ModPlugin {
     default void registerHandlerEntryRenderer(MachineEntryRendererRegister register) {}
 
     //endregion
-
 
     //region storage source renderer
 

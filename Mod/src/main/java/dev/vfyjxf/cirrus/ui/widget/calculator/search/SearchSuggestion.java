@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.ui.widget.calculator.search;
 
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 
@@ -25,7 +25,9 @@ public record SearchSuggestion(
         Objects.requireNonNull(token, "token");
         Objects.requireNonNull(replacement, "replacement");
         if (replaceStart < 0 || replaceEnd < replaceStart) {
-            throw new IllegalArgumentException("Invalid suggestion replacement range: " + replaceStart + ".." + replaceEnd);
+            throw new IllegalArgumentException(
+                "Invalid suggestion replacement range: " + replaceStart + ".." + replaceEnd
+            );
         }
     }
 

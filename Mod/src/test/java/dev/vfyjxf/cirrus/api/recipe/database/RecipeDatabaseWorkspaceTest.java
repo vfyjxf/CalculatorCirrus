@@ -12,9 +12,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class RecipeDatabaseWorkspaceTest {
     @Test
     void builtinDatabaseIsAlwaysPresentAndFirst() {
-        RecipeDatabaseWorkspace workspace = new RecipeDatabaseWorkspace(List.of(
-            new CustomRecipeDatabase("machines", "Machines", List.of(), List.of(), List.of())
-        ), "machines");
+        RecipeDatabaseWorkspace workspace = new RecipeDatabaseWorkspace(
+            List.of(new CustomRecipeDatabase("machines", "Machines", List.of(), List.of(), List.of())),
+            "machines"
+        );
 
         assertEquals(CustomRecipeDatabase.builtinId, workspace.customDatabases().getFirst().id());
         assertEquals("machines", workspace.activeDatabaseId());
@@ -35,7 +36,10 @@ class RecipeDatabaseWorkspaceTest {
             List.of()
         );
 
-        RecipeDatabaseWorkspace workspace = new RecipeDatabaseWorkspace(List.of(mutatedBuiltin), CustomRecipeDatabase.builtinId);
+        RecipeDatabaseWorkspace workspace = new RecipeDatabaseWorkspace(
+            List.of(mutatedBuiltin),
+            CustomRecipeDatabase.builtinId
+        );
         CustomRecipeDatabase builtin = workspace.activeDatabase();
 
         assertEquals(CustomRecipeDatabase.builtinName, builtin.name());
@@ -46,10 +50,13 @@ class RecipeDatabaseWorkspaceTest {
 
     @Test
     void deletingActiveCustomDatabaseSelectsBuiltin() {
-        RecipeDatabaseWorkspace workspace = new RecipeDatabaseWorkspace(List.of(
-            CustomRecipeDatabase.builtinDatabase(),
-            new CustomRecipeDatabase("scratch", "Scratch", List.of(), List.of(), List.of())
-        ), "scratch");
+        RecipeDatabaseWorkspace workspace = new RecipeDatabaseWorkspace(
+            List.of(
+                CustomRecipeDatabase.builtinDatabase(),
+                new CustomRecipeDatabase("scratch", "Scratch", List.of(), List.of(), List.of())
+            ),
+            "scratch"
+        );
 
         RecipeDatabaseWorkspace deleted = workspace.withoutDatabase("scratch");
 

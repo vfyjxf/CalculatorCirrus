@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.planning.core.cost;
 
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
+import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CycleLoopStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
@@ -13,16 +14,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * 6D Physical CostVector aggregator (M1.3):
+ * aggregates H_craft, H_trip (deduplicating shared trip episodes), parallel passive wall-clock W,
+ * K_mach, M_scarcity, and F_steps without leaking any soft rules into reported physical quantities.
+ */
 public final class PlanCosts {
 
-    private PlanCosts() {
-    }
+    private PlanCosts() {}
 
     public static CostVector aggregate(List<PlanStep> steps) {
-        double h = 0.0;
+        double hCraft = 0.0;
+        double hTrip = 0.0;
         double k = 0.0;
         double s = 0.0;
-        double c = 0.0;
+        double f = 0.0;
         double maxFinishP = 0.0;
 
         Map<String, Double> finishP = new HashMap<>(steps.size() * 2);
@@ -30,10 +36,11 @@ public final class PlanCosts {
 
         for (PlanStep step : steps) {
             CostVector sc = step.stepCost();
-            h += sc.humanActiveSeconds();
+            hCraft += sc.humanActiveSeconds();
+            hTrip += sc.tripActiveSeconds();
             k += sc.machineSetupCapital();
             s += sc.materialScarcity();
-            c += sc.cognitiveFriction();
+            f += sc.cognitiveFriction();
 
             double depMax = 0.0;
             for (String depId : step.dependsOnStepIds()) {
@@ -51,8 +58,8 @@ public final class PlanCosts {
             collectMachines(step, distinctMachines);
         }
 
-        c += 0.5 * distinctMachines.size();
-        return new CostVector(h, maxFinishP, k, s, c);
+        f += 0.5 * distinctMachines.size();
+        return new CostVector(hCraft, hTrip, maxFinishP, k, s, f);
     }
 
     private static void collectMachines(PlanStep step, Set<String> machines) {
@@ -65,8 +72,7 @@ public final class PlanCosts {
                     inner.chosenMachineId().ifPresent(machines::add);
                 }
             }
-            default -> {
-            }
+            default -> {}
         }
     }
 }

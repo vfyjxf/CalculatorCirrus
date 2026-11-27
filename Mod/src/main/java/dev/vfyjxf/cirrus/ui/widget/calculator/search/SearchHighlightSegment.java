@@ -2,12 +2,7 @@ package dev.vfyjxf.cirrus.ui.widget.calculator.search;
 
 import java.util.Objects;
 
-public record SearchHighlightSegment(
-    String text,
-    SearchHighlightKind kind,
-    int start,
-    int end
-) {
+public record SearchHighlightSegment(String text, SearchHighlightKind kind, int start, int end) {
     public SearchHighlightSegment {
         Objects.requireNonNull(text, "text");
         Objects.requireNonNull(kind, "kind");

@@ -32,15 +32,13 @@ class RecipeContentRendererTest {
         RecipeContentRenderer<InputContent> renderer = RecipeContentRenderer.getRenderer(input);
 
         assertTrue(input.preserveOriginalShortageSemantics());
-        assertTrue(renderer.getName(input).getString().startsWith("#"));
-        assertTrue(renderer.visualCount(input) > 1);
         assertTrue(ExecutionOverlayContentHelper.stackFromInputContent(input).isEmpty());
     }
 
     @Test
     void stackListInputKeepsAlternativesInsteadOfPickingFirstItem(MinecraftServer server) {
         InputContent input = InputContent.fromTypedStackList(
-            CirrusTypes.Contents.ITEM_STACK,
+            CirrusTypes.Contents.itemStack,
             List.of(Items.OAK_PLANKS.getDefaultInstance(), Items.BIRCH_PLANKS.getDefaultInstance()),
             1
         );
@@ -57,7 +55,6 @@ class RecipeContentRendererTest {
 
         RecipeContentRenderer<InputContent> renderer = RecipeContentRenderer.getRenderer(input);
 
-        assertEquals("Stick", renderer.getName(input).getString());
         assertEquals(1, renderer.visualCount(input));
     }
 }

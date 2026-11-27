@@ -22,10 +22,9 @@ public record MimicManifest(
     @Nullable List<MimicSystem> systems
 ) {
 
-    public record MimicSystem(String id, @Nullable String machine) {
-    }
+    public record MimicSystem(String id, @Nullable String machine) {}
 
-    private static final MimicManifest EMPTY = new MimicManifest(null, List.of(), List.of(), List.of());
+    private static final MimicManifest empty = new MimicManifest(null, List.of(), List.of(), List.of());
 
     private static volatile MimicManifest cached;
 
@@ -58,13 +57,12 @@ public record MimicManifest(
     private static MimicManifest read() {
         InputStream stream = MimicManifest.class.getResourceAsStream("/data/cirrus_test/mimic_manifest.json");
         if (stream == null) {
-            return EMPTY;
+            return empty;
         }
         try (stream) {
-            MimicManifest manifest = new Gson().fromJson(
-                new InputStreamReader(stream, StandardCharsets.UTF_8), MimicManifest.class
-            );
-            return manifest == null ? EMPTY : manifest;
+            MimicManifest manifest = new Gson()
+                    .fromJson(new InputStreamReader(stream, StandardCharsets.UTF_8), MimicManifest.class);
+            return manifest == null ? empty : manifest;
         } catch (Exception exception) {
             throw new IllegalStateException("failed to load mimic_manifest.json", exception);
         }

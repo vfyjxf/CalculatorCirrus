@@ -15,16 +15,19 @@ class ExecutionKeysContractTest {
     //region null rejection
 
     @Test
+    @SuppressWarnings("NullAway")
     void executionStatusKeyRejectsNull() {
         assertThrows(NullPointerException.class, () -> new ExecutionStatusKey(null));
     }
 
     @Test
+    @SuppressWarnings("NullAway")
     void executionModeKeyRejectsNull() {
         assertThrows(NullPointerException.class, () -> new ExecutionModeKey(null));
     }
 
     @Test
+    @SuppressWarnings("NullAway")
     void pauseReasonKeyRejectsNull() {
         assertThrows(NullPointerException.class, () -> new PauseReasonKey(null));
     }

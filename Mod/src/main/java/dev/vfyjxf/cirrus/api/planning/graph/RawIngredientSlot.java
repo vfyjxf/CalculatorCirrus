@@ -8,19 +8,19 @@ import java.util.Objects;
 import java.util.Optional;
 
 public record RawIngredientSlot(
-        Optional<String> tagId,
-        List<ResourceKey> candidates,
-        long amount,
-        SlotMatchMode matchMode,
-        int durabilityCostPerBatch,
-        int maxDurability
+    Optional<String> tagId,
+    List<ResourceKey> candidates,
+    long amount,
+    SlotMatchMode matchMode,
+    int durabilityCostPerBatch,
+    int maxDurability
 ) {
 
     public RawIngredientSlot(
-            Optional<String> tagId,
-            List<ResourceKey> candidates,
-            long amount,
-            SlotMatchMode matchMode
+        Optional<String> tagId,
+        List<ResourceKey> candidates,
+        long amount,
+        SlotMatchMode matchMode
     ) {
         this(tagId, candidates, amount, matchMode, 0, 0);
     }
@@ -36,5 +36,9 @@ public record RawIngredientSlot(
         if (maxDurability < 0) {
             throw new IllegalArgumentException("maxDurability must be >= 0");
         }
+    }
+
+    public boolean catalyst() {
+        return amount == 0L || (durabilityCostPerBatch > 0 && maxDurability > 0);
     }
 }

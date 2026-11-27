@@ -1,19 +1,23 @@
 package dev.vfyjxf.cirrus.internal.integration.jei;
 
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.RecipeApiRegistryBuilder;
 import dev.vfyjxf.cirrus.recipe.system.CraftingRecipeSystem;
 import dev.vfyjxf.cirrus.recipe.system.jei.JeiCategoryRecipeSystem;
+import dev.vfyjxf.cirrus.testutil.Reflect;
 import mezz.jei.api.constants.RecipeTypes;
 import mezz.jei.api.helpers.IJeiHelpers;
-import mezz.jei.api.recipe.RecipeType;
+import mezz.jei.api.recipe.IFocusFactory;
 import mezz.jei.api.recipe.IRecipeCategoriesLookup;
 import mezz.jei.api.recipe.IRecipeManager;
-import mezz.jei.api.recipe.IFocusFactory;
+import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.runtime.IIngredientManager;
 import mezz.jei.api.runtime.IJeiRuntime;
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.stream.Stream;
 
@@ -27,16 +31,29 @@ class JeiFallbackRecipeSystemPluginTest {
     @Test
     void registersFallbackSystemsThroughNormalRecipeRegistry() {
         RecipeApiRegistryBuilder builder = new RecipeApiRegistryBuilder();
-        new JeiFallbackRecipeSystemPlugin().registerRecipeSystem(builder);
+        JeiFallbackRecipeSystemPlugin plugin = new JeiFallbackRecipeSystemPlugin();
+        plugin.registerRecipeSystem(builder);
+        plugin.registerRecipeSystemTag(builder);
 
         RecipeApiImpl api = new RecipeApiImpl(builder);
 
         assertNotNull(api.findSystem(JeiCategoryRecipeSystem.systemId(RecipeTypes.CRAFTING)));
-        assertTrue(api.allSystems().anySatisfy(system -> system instanceof JeiCategoryRecipeSystem<?>));
+        assertTrue(
+            api.getSystemTags(JeiCategoryRecipeSystem.systemId(RecipeTypes.CRAFTING))
+                    .contains(RecipeSystemTags.jeiFallback)
+        );
+        assertTrue(
+            api.getSystemTags(JeiCategoryRecipeSystem.systemId(RecipeTypes.CRAFTING))
+                    .contains(RecipeSystemTags.mirrorDuplicate)
+        );
+        assertTrue(
+            api.getSystemTags(JeiCategoryRecipeSystem.systemId(RecipeTypes.FUELING))
+                    .contains(RecipeSystemTags.displayOnly)
+        );
     }
 
     @Test
-    void nativeAndFallbackJeiTypesRemainIndependentlyAddressable() {
+    void nativeAndFallbackJeiTypesRemainIndependentlyAddressable() throws Exception {
         RecipeApiRegistryBuilder builder = new RecipeApiRegistryBuilder();
         CraftingRecipeSystem nativeSystem = new CraftingRecipeSystem();
         new JeiFallbackRecipeSystemPlugin().registerRecipeSystem(builder);
@@ -45,12 +62,24 @@ class JeiFallbackRecipeSystemPluginTest {
         new JeiFallbackRecipeSystemPlugin().registerJeiRecipeTypeBridge(builder);
 
         RecipeApiImpl api = new RecipeApiImpl(builder);
+        Object previous = Reflect.staticField(RecipeApiImpl.class, "instance");
+        Object previousCanonical = Reflect.staticField(RecipeApiImpl.class, "canonicalInstance");
         RecipeApiImpl.attach(api);
-
-        assertTrue(api.getJeiRecipeTypeForSystem(nativeSystem.systemId()).contains(RecipeTypes.CRAFTING));
-        assertTrue(api.getJeiRecipeTypeForSystem(JeiCategoryRecipeSystem.systemId(RecipeTypes.SMELTING)).contains(RecipeTypes.SMELTING));
-        assertTrue(api.getJeiRecipeTypeForSystem(JeiCategoryRecipeSystem.systemId(RecipeTypes.CRAFTING)).contains(RecipeTypes.CRAFTING));
-        assertNotNull(api.findSystem(JeiCategoryRecipeSystem.systemId(RecipeTypes.CRAFTING)));
+        try {
+            assertTrue(api.getJeiRecipeTypeForSystem(nativeSystem.systemId()).contains(RecipeTypes.CRAFTING));
+            assertTrue(
+                api.getJeiRecipeTypeForSystem(JeiCategoryRecipeSystem.systemId(RecipeTypes.SMELTING))
+                        .contains(RecipeTypes.SMELTING)
+            );
+            assertTrue(
+                api.getJeiRecipeTypeForSystem(JeiCategoryRecipeSystem.systemId(RecipeTypes.CRAFTING))
+                        .contains(RecipeTypes.CRAFTING)
+            );
+            assertNotNull(api.findSystem(JeiCategoryRecipeSystem.systemId(RecipeTypes.CRAFTING)));
+        } finally {
+            Reflect.setStatic(RecipeApiImpl.class, "instance", previous);
+            Reflect.setStatic(RecipeApiImpl.class, "canonicalInstance", previousCanonical);
+        }
     }
 
     @Test
@@ -85,16 +114,14 @@ class JeiFallbackRecipeSystemPluginTest {
 
     @Test
     void runtimeCallbackDoesNotRequireRecipeApiInstance() throws Exception {
-        var field = RecipeApiImpl.class.getDeclaredField("instance");
-        field.setAccessible(true);
-        Object previous = field.get(null);
-        field.set(null, null);
+        Object previous = Reflect.staticField(RecipeApiImpl.class, "instance");
+        Reflect.setStatic(RecipeApiImpl.class, "instance", null);
 
         try {
             assertNull(RecipeApiImpl.instance());
             new CirrusJeiPlugin().onRuntimeAvailable(runtimeWithNoCategories());
         } finally {
-            field.set(null, previous);
+            Reflect.setStatic(RecipeApiImpl.class, "instance", previous);
         }
     }
 
@@ -138,6 +165,7 @@ class JeiFallbackRecipeSystemPluginTest {
     }
 
     private interface ProxyAnswer {
-        Object invoke(java.lang.reflect.Method method);
+        @Nullable
+        Object invoke(Method method);
     }
 }

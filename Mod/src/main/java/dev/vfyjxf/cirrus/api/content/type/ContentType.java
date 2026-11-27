@@ -11,7 +11,7 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.checkerframework.dataflow.qual.Deterministic;
 import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 
@@ -63,7 +63,9 @@ public interface ContentType<T> {
         return false;
     }
 
-    default @Nullable DataComponentMap getComponents(T value) {return null;}
+    default @Nullable DataComponentMap getComponents(T value) {
+        return null;
+    }
 
     /**
      *
@@ -77,7 +79,8 @@ public interface ContentType<T> {
      *
      * @return the registry key of this content type
      */
-    @Nullable ResourceKey<Registry<T>> getRegistryKey();
+    @Nullable
+    ResourceKey<Registry<T>> getRegistryKey();
 
     /**
      *
@@ -88,7 +91,6 @@ public interface ContentType<T> {
     default Holder<T> getHolder(T value) throws UnsupportedOperationException {
         throw new UnsupportedOperationException("This content type does not support registry.");
     }
-
 
     //endregion
 
@@ -118,7 +120,8 @@ public interface ContentType<T> {
      */
     int hash(T value);
 
-    @Nullable Codec<T> contentCodec();
+    @Nullable
+    Codec<T> contentCodec();
 
     //endregion
 

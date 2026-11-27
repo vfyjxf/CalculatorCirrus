@@ -5,8 +5,7 @@ import dev.vfyjxf.cirrus.ui.CirrusTextures.Background;
 
 public final class CirrusSliderSkins {
 
-    private CirrusSliderSkins() {
-    }
+    private CirrusSliderSkins() {}
 
     public static LongSliderWidget.Skin scroll() {
         return new LongSliderWidget.Skin(

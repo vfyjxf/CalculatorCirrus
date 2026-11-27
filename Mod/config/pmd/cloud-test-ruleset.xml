@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================================
+  CalculatorCirrus test-antipattern ruleset — pmdTest / pmdUitest / pmdTestmod.
+  ============================================================================================
+
+  WHAT THIS IS
+    The ruleset behind the three test-source-set PMD tasks. Mod/build.gradle attaches it to
+    pmdTest, pmdUitest and pmdTestmod unconditionally; pmdMain keeps its own ruleset
+    (pmd/cloudlib-ruleset.xml, unpacked into build/cloudpmd). There is deliberately no build
+    switch that can turn this gate off.
+
+  WHAT STAYED HERE, AND WHY
+    Only the rules whose evidence is the literal text of the source file: a literal that carries
+    indentation or a copied source snippet, a test that reads src/main as text, and a substring
+    check on text that is named like source. PMD's Java AST has no reliable type or data-flow view,
+    so anything that has to know what a call resolved to or where a value came from is not here.
+
+  WHERE THE SEMANTIC RULES LIVE
+    cloudlang-plugin/cloudtestplugin (an Error Prone plugin jar) is attached to the annotation
+    processor path of compileTestJava, compileUitestJava and compileTestmodJava. It runs on javac's
+    attributed tree, so every judgement there reads the resolved symbol, the attributed type, or
+    the method-local def-use chain: TestAssertsComponentString, TestPositiveSizeAssertion,
+    TestConditionalAssertion, TestInstanceofAssertion, TestSelfProvingAssertion,
+    TestVacuousStreamAssertion, TestAssertsToString, TestAssertsExceptionMessage,
+    TestRawReflection, TestNoEffectiveAssertion, TestAllowWeakTestMisuse. The authoritative id list
+    ships inside that jar at META-INF/cloudtestplugin/checks.txt.
+
+  MESSAGES
+    Each message is three parts, joined by full stops: what was hit ({0} is the violation node's
+    image, e.g. the method name or the literal), why it is a problem (what it cannot verify, and
+    when it goes red or stays falsely green), and what to write instead. PMD interpolates only
+    {0}; computed values such as a word count cannot be interpolated, which is why the exemption
+    audit moved to the Error Prone check TestAllowWeakTestMisuse, where the count is a real number
+    in the message.
+
+  EXEMPTIONS
+    @dev.vfyjxf.cirrus.testutil.AllowWeakTest exempts a method or a class, but only when all three
+    hold: the reason is a string literal of at least 20 whitespace-separated words, every character
+    is printable ASCII (0x20-0x7E), and its rules list names this rule (or the Error Prone check).
+    A missing or empty rules list is an invalid exemption, reported by TestAllowWeakTestMisuse,
+    never a wildcard. AllowWeakTestAuditTest re-checks the same three conditions in the test source
+    set, refuses unknown ids from either gate, and fails once the number of exemptions exceeds its
+    budget constant.
+
+  XPATH 3.1 / PMD 7.28.0 AST FACTS THESE FOUR RULES RELY ON (measured, not assumed)
+    * No ArgumentList wrapper holds positional children named Argument: arguments are
+    MethodCall/ArgumentList/* directly. A call's qualifier is a sibling of ArgumentList.
+    * A bare identifier used as an expression qualifier is an AmbiguousName whose @Image is the
+    name; VariableAccess/@Name and ClassType/@SimpleName carry their own names. Qualifier tests
+    therefore check Image, Name and SimpleName together.
+    * FieldAccess carries @Name (not @FieldName).
+    * StringLiteral carries @ConstValue (unquoted, unescaped) and @Image (quoted source text).
+    * Annotation/@SimpleName; its arguments are MemberValuePair/@Image (the member name) with the
+    value expressions as direct children (no MemberValue node).
+    * MethodDeclaration/@Image is the method name.
+    * PMD 7's Java AST has no comment nodes, so TestCommentedOutAssertion is not part of this
+    ruleset.
+  ============================================================================================
+-->
+<ruleset name="calculator-cirrus-test-antipatterns"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>
+        The textual half of the test-antipattern gate: a test may not assert on the characters of a
+        source file, on a copied source snippet, on indentation, or on text that is named like
+        source. Everything that needs a resolved type or method-local data flow is an Error Prone
+        check in cloudlang-plugin/cloudtestplugin instead.
+    </description>
+
+<rule name="TestReadsProductionSources"
+          language="java"
+          message="读了产品源码文件 {0}。实现改名或格式化就会误报，而真实行为回归它测不出来。改为断言被测 API 的返回值或状态；需要内部状态时用 dev.vfyjxf.cirrus.testutil.Reflect。"
+          class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
+        <description>
+            Reading src/main text asserts that a file contains characters, not that the code behaves: a rename or a reformat turns it red while a behavioural regression keeps it green. Assert on the value the source produces, or read internals through the shared Reflect helper.
+        </description>
+        <priority>1</priority>
+        <properties>
+            <property name="xpath">
+                <value><![CDATA[
+                    //MethodCall[@MethodName = ('readString', 'readAllLines', 'readAllBytes', 'lines')]
+                        [matches(string-join(.//StringLiteral/string(@ConstValue), '/'), 'src/main|src/test|\.java')]
+                    [not(ancestor-or-self::*
+                            [ModifierList/Annotation[@SimpleName = 'AllowWeakTest']
+                            [count(tokenize(normalize-space(.//MemberValuePair[@Image = 'reason']/StringLiteral/@ConstValue), ' ')) >= 20]
+                            [every $c in string-to-codepoints(string(.//MemberValuePair[@Image = 'reason']/StringLiteral/@ConstValue))
+                                satisfies ($c >= 32 and $c <= 126)]
+                            [.//MemberValuePair[@Image = 'rules']//StringLiteral[string(@ConstValue) = 'TestReadsProductionSources']]])]
+                ]]></value>
+            </property>
+        </properties>
+    </rule>
+
+<rule name="TestStringContainsOnSourceText"
+          language="java"
+          message="对名为 {0} 的文本做了 contains/startsWith 断言。文本内容不代表行为，改一行注释就可能假绿或假红。改为断言解析后的对象或组件树。"
+          class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
+        <description>
+            A substring check whose receiver is named like file text asserts on source characters. It cannot see behaviour and breaks on reformatting. Resolve what the text would have been parsed into and assert on that object.
+        </description>
+        <priority>1</priority>
+        <properties>
+            <property name="xpath">
+                <value><![CDATA[
+//MethodCall[matches(@MethodName,'^(assert|verify|expect|should|fail)')]
+    /descendant::MethodCall[@MethodName = ('contains', 'startsWith', 'matches')]
+    /*[@Image = ('source', 'src', 'contents', 'panelSource', 'fileText')
+        or @Name = ('source', 'src', 'contents', 'panelSource', 'fileText')]
+[not(ancestor-or-self::*
+        [ModifierList/Annotation[@SimpleName = 'AllowWeakTest']
+        [count(tokenize(normalize-space(.//MemberValuePair[@Image = 'reason']/StringLiteral/@ConstValue), ' ')) >= 20]
+        [every $c in string-to-codepoints(string(.//MemberValuePair[@Image = 'reason']/StringLiteral/@ConstValue))
+            satisfies ($c >= 32 and $c <= 126)]
+        [.//MemberValuePair[@Image = 'rules']//StringLiteral[string(@ConstValue) = 'TestStringContainsOnSourceText']]])]
+                ]]></value>
+            </property>
+        </properties>
+    </rule>
+
+<rule name="TestAssertsIndentation"
+          language="java"
+          message="断言里的字符串 {0} 带缩进或制表符。格式由 Spotless 负责，断言缩进只会因重排而误报。改为断言解析出的值。"
+          class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
+        <description>
+            A literal carrying a tab or a run of spaces together with a semicolon is an embedded source snippet whose formatting is being compared. Indentation is the formatter's job; assert the parsed value.
+        </description>
+        <priority>1</priority>
+        <properties>
+            <property name="xpath">
+                <value><![CDATA[
+                    (//MethodCall[matches(@MethodName, '^(assert|verify|expect|should|fail)')]
+                        [not(@MethodName = ('assertEquals', 'assertNotEquals', 'assertArrayEquals', 'assertIterableEquals', 'assertLinesMatch'))]
+                        /ArgumentList/*[1]/descendant-or-self::StringLiteral
+                        [matches(string(@ConstValue), '[\t]|\s\s')][contains(string(@ConstValue), ';')]
+                    [not(ancestor-or-self::*
+                            [ModifierList/Annotation[@SimpleName = 'AllowWeakTest']
+                            [count(tokenize(normalize-space(.//MemberValuePair[@Image = 'reason']/StringLiteral/@ConstValue), ' ')) >= 20]
+                            [every $c in string-to-codepoints(string(.//MemberValuePair[@Image = 'reason']/StringLiteral/@ConstValue))
+                                satisfies ($c >= 32 and $c <= 126)]
+                            [.//MemberValuePair[@Image = 'rules']//StringLiteral[string(@ConstValue) = 'TestAssertsIndentation']]])]
+                     | //MethodCall[@MethodName = ('assertEquals', 'assertNotEquals')]
+                        /ArgumentList/*[position() <= 2]/descendant-or-self::StringLiteral
+                        [matches(string(@ConstValue), '[\t]|\s\s')][contains(string(@ConstValue), ';')]
+                    [not(ancestor-or-self::*
+                            [ModifierList/Annotation[@SimpleName = 'AllowWeakTest']
+                            [count(tokenize(normalize-space(.//MemberValuePair[@Image = 'reason']/StringLiteral/@ConstValue), ' ')) >= 20]
+                            [every $c in string-to-codepoints(string(.//MemberValuePair[@Image = 'reason']/StringLiteral/@ConstValue))
+                                satisfies ($c >= 32 and $c <= 126)]
+                            [.//MemberValuePair[@Image = 'rules']//StringLiteral[string(@ConstValue) = 'TestAssertsIndentation']]])])
+                ]]></value>
+            </property>
+        </properties>
+    </rule>
+
+<rule name="TestAssertsSourceSnippet"
+          language="java"
+          message="断言里的字符串 {0} 是一段源码。断言源码文本在重构后必然失效，且测不到运行时行为。改为断言被调用 API 的输出。"
+          class="net.sourceforge.pmd.lang.rule.xpath.XPathRule">
+        <description>
+            A literal of 24+ characters containing a semicolon, an arrow or a call is copied Java. Comparing against it re-implements the compiler inside the test and dies on every refactor.
+        </description>
+        <priority>1</priority>
+        <properties>
+            <property name="xpath">
+                <value><![CDATA[
+                    (//MethodCall[matches(@MethodName, '^(assert|verify|expect|should|fail)')]
+                        [not(@MethodName = ('assertEquals', 'assertNotEquals', 'assertArrayEquals', 'assertIterableEquals', 'assertLinesMatch'))]
+                        /ArgumentList/*[1]/descendant-or-self::StringLiteral
+                        [string-length(string(@ConstValue)) >= 24]
+                        [contains(string(@ConstValue), ';') or contains(string(@ConstValue), '->') or contains(string(@ConstValue), '()')]
+                    [not(ancestor-or-self::*
+                            [ModifierList/Annotation[@SimpleName = 'AllowWeakTest']
+                            [count(tokenize(normalize-space(.//MemberValuePair[@Image = 'reason']/StringLiteral/@ConstValue), ' ')) >= 20]
+                            [every $c in string-to-codepoints(string(.//MemberValuePair[@Image = 'reason']/StringLiteral/@ConstValue))
+                                satisfies ($c >= 32 and $c <= 126)]
+                            [.//MemberValuePair[@Image = 'rules']//StringLiteral[string(@ConstValue) = 'TestAssertsSourceSnippet']]])]
+                     | //MethodCall[@MethodName = ('assertEquals', 'assertNotEquals')]
+                        /ArgumentList/*[position() <= 2]/descendant-or-self::StringLiteral
+                        [string-length(string(@ConstValue)) >= 24]
+                        [contains(string(@ConstValue), ';') or contains(string(@ConstValue), '->') or contains(string(@ConstValue), '()')]
+                    [not(ancestor-or-self::*
+                            [ModifierList/Annotation[@SimpleName = 'AllowWeakTest']
+                            [count(tokenize(normalize-space(.//MemberValuePair[@Image = 'reason']/StringLiteral/@ConstValue), ' ')) >= 20]
+                            [every $c in string-to-codepoints(string(.//MemberValuePair[@Image = 'reason']/StringLiteral/@ConstValue))
+                                satisfies ($c >= 32 and $c <= 126)]
+                            [.//MemberValuePair[@Image = 'rules']//StringLiteral[string(@ConstValue) = 'TestAssertsSourceSnippet']]])])
+                ]]></value>
+            </property>
+        </properties>
+    </rule>
+
+</ruleset>

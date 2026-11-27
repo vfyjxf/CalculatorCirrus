@@ -2,9 +2,11 @@ package dev.vfyjxf.cirrus.api.recipe.rule;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
+import dev.vfyjxf.cloudlib.api.util.Codecs;
 import dev.vfyjxf.cloudlib.util.Checks;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * One action executed when a rule's condition matches. Actions split into
@@ -23,19 +25,10 @@ import org.jetbrains.annotations.Nullable;
  * { "do": "reject",  "reason": "probabilistic output" }
  * }</pre>
  */
-public sealed interface RuleAction permits
-    RuleAction.Tag,
-    RuleAction.Exclude,
-    RuleAction.Include,
-    RuleAction.Hint,
-    RuleAction.ScoreAdjust,
-    RuleAction.Reject {
+public sealed interface RuleAction permits RuleAction.Tag, RuleAction.Exclude, RuleAction.Include, RuleAction.Hint,
+        RuleAction.ScoreAdjust, RuleAction.Reject {
 
-    Codec<RuleAction> CODEC = Codec.STRING.dispatch(
-        "do",
-        RuleAction::codecKind,
-        RuleAction::codecForType
-    );
+    Codec<RuleAction> codec = Codec.STRING.dispatch("do", RuleAction::codecKind, RuleAction::codecForType);
 
     /** The {@code "do"} dispatch key. */
     default String codecKind() {
@@ -62,10 +55,11 @@ public sealed interface RuleAction permits
     private static MapCodec<? extends RuleAction> codecForType(String kind) {
         return switch (kind) {
             case "tag" -> Codec.STRING.fieldOf("tag").xmap(Tag::new, Tag::tag);
-            case "exclude" -> Codec.BOOL.optionalFieldOf("force", false).xmap(ignored -> new Exclude(), ignored -> false);
-            case "include" -> Codec.BOOL.optionalFieldOf("override", true).xmap(ignored -> new Include(), ignored -> true);
-            case "hint" -> dev.vfyjxf.cloudlib.api.util.Codecs.lowerCaseEnum(RecipeUsePolicy.class)
-                .fieldOf("policy").xmap(Hint::new, Hint::policy);
+            case "exclude" ->
+                Codec.BOOL.optionalFieldOf("force", false).xmap(ignored -> new Exclude(), ignored -> false);
+            case "include" ->
+                Codec.BOOL.optionalFieldOf("override", true).xmap(ignored -> new Include(), ignored -> true);
+            case "hint" -> Codecs.lowerCaseEnum(RecipeUsePolicy.class).fieldOf("policy").xmap(Hint::new, Hint::policy);
             case "penalize" -> ScoreAdjust.codec(false);
             case "boost" -> ScoreAdjust.codec(true);
             case "reject" -> Codec.STRING.optionalFieldOf("reason", "").xmap(Reject::new, Reject::reason);
@@ -129,27 +123,26 @@ public sealed interface RuleAction permits
      * @param scale     optional scaling of the amount
      * @param boost     {@code true} for boost, {@code false} for penalize
      */
-    record ScoreAdjust(
-        String component,
-        double amount,
-        ScoreScale scale,
-        boolean boost
-    ) implements RuleAction {
+    record ScoreAdjust(String component, double amount, ScoreScale scale, boolean boost) implements RuleAction {
 
         public enum ScoreScale {
             none,
             /** Multiply the amount by {@code 1 - coverage} (stock shortage). */
             coverageShortage;
 
-            public static final Codec<ScoreScale> CODEC = dev.vfyjxf.cloudlib.api.util.Codecs.lowerCaseEnum(ScoreScale.class);
+            public static final Codec<ScoreScale> codec = Codecs.lowerCaseEnum(ScoreScale.class);
         }
 
         static MapCodec<ScoreAdjust> codec(boolean boost) {
-            return com.mojang.serialization.codecs.RecordCodecBuilder.mapCodec(instance -> instance.group(
-                Codec.STRING.fieldOf("component").forGetter(ScoreAdjust::component),
-                Codec.DOUBLE.fieldOf("amount").forGetter(ScoreAdjust::amount),
-                ScoreScale.CODEC.optionalFieldOf("scale", ScoreScale.none).forGetter(ScoreAdjust::scale)
-            ).apply(instance, (component, amount, scale) -> new ScoreAdjust(component, amount, scale, boost)));
+            return RecordCodecBuilder.mapCodec(
+                instance -> instance
+                        .group(
+                            Codec.STRING.fieldOf("component").forGetter(ScoreAdjust::component),
+                            Codec.DOUBLE.fieldOf("amount").forGetter(ScoreAdjust::amount),
+                            ScoreScale.codec.optionalFieldOf("scale", ScoreScale.none).forGetter(ScoreAdjust::scale)
+                        )
+                        .apply(instance, (component, amount, scale) -> new ScoreAdjust(component, amount, scale, boost))
+            );
         }
 
         public ScoreAdjust {
@@ -171,8 +164,8 @@ public sealed interface RuleAction permits
         /** Signed contribution to the component (lower score is better). */
         public double signedAmount(double coverage) {
             double scaled = scale == ScoreScale.coverageShortage
-                ? amount * (1.0d - Math.min(1.0d, Math.max(0.0d, coverage)))
-                : amount;
+                    ? amount * (1.0d - Math.min(1.0d, Math.max(0.0d, coverage)))
+                    : amount;
             return boost ? -scaled : scaled;
         }
 

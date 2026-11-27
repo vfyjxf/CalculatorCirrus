@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.classify;
 
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -26,8 +28,8 @@ public final class ClassificationContext {
 
     /** Builds the context indexes over the given catalog of views. */
     public static ClassificationContext of(List<RecipeClassifyView> recipes) {
-        Map<String, IntBag> producers = new java.util.HashMap<>();
-        Map<String, IntBag> consumers = new java.util.HashMap<>();
+        Map<String, IntBag> producers = new HashMap<>();
+        Map<String, IntBag> consumers = new HashMap<>();
         for (RecipeClassifyView view : recipes) {
             for (String output : view.allOutputIds()) {
                 producers.computeIfAbsent(output, k -> new IntBag()).add(view.index());
@@ -40,7 +42,7 @@ public final class ClassificationContext {
     }
 
     private static Map<String, int[]> freeze(Map<String, IntBag> source) {
-        Map<String, int[]> out = new java.util.HashMap<>(source.size());
+        Map<String, int[]> out = new HashMap<>(source.size());
         source.forEach((key, bag) -> out.put(key, bag.toArray()));
         return out;
     }
@@ -73,13 +75,13 @@ public final class ClassificationContext {
 
         void add(int value) {
             if (size == data.length) {
-                data = java.util.Arrays.copyOf(data, data.length * 2);
+                data = Arrays.copyOf(data, data.length * 2);
             }
             data[size++] = value;
         }
 
         int[] toArray() {
-            return size == data.length ? data : java.util.Arrays.copyOf(data, size);
+            return Arrays.copyOf(data, size);
         }
     }
 }

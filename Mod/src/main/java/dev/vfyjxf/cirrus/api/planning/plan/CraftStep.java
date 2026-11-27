@@ -12,15 +12,15 @@ import java.util.Optional;
 import java.util.TreeMap;
 
 public record CraftStep(
-        String stepId,
-        List<String> dependsOnStepIds,
-        CompiledRecipeKey recipeKey,
-        long batches,
-        Optional<String> chosenMachineId,
-        boolean executedByAutomation,
-        Map<Integer, SlotBinding> slotBindings,
-        Map<Integer, ResourceKey> catalystBindings,
-        CostVector stepCost
+    String stepId,
+    List<String> dependsOnStepIds,
+    CompiledRecipeKey recipeKey,
+    long batches,
+    Optional<String> chosenMachineId,
+    boolean executedByAutomation,
+    Map<Integer, SlotBinding> slotBindings,
+    Map<Integer, ResourceKey> catalystBindings,
+    CostVector stepCost
 ) implements PlanStep {
 
     public CraftStep {

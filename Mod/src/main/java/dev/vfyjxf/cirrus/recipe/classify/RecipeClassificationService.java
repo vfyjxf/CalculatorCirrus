@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.recipe.classify;
 
 import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifier;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Shared access to the default {@link RecipeClassifier}.
@@ -11,10 +12,9 @@ import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifier;
  */
 public final class RecipeClassificationService {
 
-    private static volatile RecipeClassifier defaultClassifier;
+    private static volatile @Nullable RecipeClassifier defaultClassifier;
 
-    private RecipeClassificationService() {
-    }
+    private RecipeClassificationService() {}
 
     /** Returns the shared default classifier. */
     public static RecipeClassifier classifier() {

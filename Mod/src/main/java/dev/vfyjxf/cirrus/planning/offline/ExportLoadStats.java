@@ -7,11 +7,7 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Objects;
 
-public record ExportLoadStats(
-        long rawRecipes,
-        long keptRecipes,
-        Map<DropReason, Long> droppedByReason
-) {
+public record ExportLoadStats(long rawRecipes, long keptRecipes, Map<DropReason, Long> droppedByReason) {
 
     public ExportLoadStats {
         if (rawRecipes < 0L) {

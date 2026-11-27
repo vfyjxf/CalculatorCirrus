@@ -17,7 +17,8 @@ public class ResolverTest {
     void testFluidContainer(MinecraftServer server) {
         ContentApi api = ContentApi.instance();
         var stack = new ItemStack(Items.BUCKET);
-        var resolver = api.findStackResolver(CirrusTypes.ContentResolvers.FLUID_CONTAINER, CirrusTypes.Contents.ITEM_STACK, stack);
+        var resolver = api
+                .findStackResolver(CirrusTypes.ContentResolvers.fluidContainer, CirrusTypes.Contents.itemStack, stack);
         Assertions.assertNotNull(resolver);
         ItemStack resolved = resolver.resolve(stack.getItem(), stack);
         Assertions.assertSame(Items.BUCKET, resolved.getItem());

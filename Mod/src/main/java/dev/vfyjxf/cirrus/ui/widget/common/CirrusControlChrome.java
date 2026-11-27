@@ -1,15 +1,18 @@
 package dev.vfyjxf.cirrus.ui.widget.common;
 
-import dev.vfyjxf.cirrus.ui.CirrusTextures;
+import dev.vfyjxf.cirrus.ui.CirrusThemeTextures;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
+import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.api.ui.texture.SizedTexture;
+import net.minecraft.client.gui.Font;
+import org.jspecify.annotations.Nullable;
 
 public final class CirrusControlChrome {
     private static final int iconYOffset = -1;
     private static final int checkboxIconYOffset = -1;
 
-    private CirrusControlChrome() {
-    }
+    private CirrusControlChrome() {}
 
     public static void renderButtonBackground(
         SceneCanvas canvas,
@@ -21,8 +24,36 @@ public final class CirrusControlChrome {
         boolean hovered,
         boolean enabled
     ) {
+        renderButtonBackground(canvas, CirrusThemeTextures.atelierStone, x, y, width, height, down, hovered, enabled);
+    }
+
+    public static void renderButtonBackground(
+        SceneCanvas canvas,
+        @Nullable Widget widget,
+        int x,
+        int y,
+        int width,
+        int height,
+        boolean down,
+        boolean hovered,
+        boolean enabled
+    ) {
+        renderButtonBackground(canvas, CirrusUiTheme.textures(widget), x, y, width, height, down, hovered, enabled);
+    }
+
+    public static void renderButtonBackground(
+        SceneCanvas canvas,
+        CirrusThemeTextures textures,
+        int x,
+        int y,
+        int width,
+        int height,
+        boolean down,
+        boolean hovered,
+        boolean enabled
+    ) {
         canvas.texture(
-            down ? CirrusTextures.Toggle.Button.down : enabled && hovered ? CirrusTextures.Toggle.Button.hover : CirrusTextures.Toggle.Button.up,
+            down ? textures.buttonDown() : enabled && hovered ? textures.buttonHover() : textures.buttonUp(),
             x,
             y,
             Math.max(0, width),
@@ -44,6 +75,12 @@ public final class CirrusControlChrome {
 
     public static int centeredIconY(int height, int iconHeight, int offset) {
         return Math.max(0, (height - iconHeight) / 2 + offset);
+    }
+
+    public static int centeredTextY(int rowY, int rowHeight, @Nullable Font font) {
+        int lineHeight = font == null ? 9 : font.lineHeight;
+        int glyphHeight = Math.max(7, lineHeight - 1);
+        return rowY + Math.max(0, (rowHeight - glyphHeight) / 2);
     }
 
     public static void renderCenteredIcon(

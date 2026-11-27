@@ -3,11 +3,9 @@ package dev.vfyjxf.cirrus.api.planning.model;
 import java.util.Objects;
 import java.util.Optional;
 
-public record CompiledRecipeKey(
-        String systemId,
-        Optional<String> explicitRecipeId,
-        long structuralHash64
-) implements Comparable<CompiledRecipeKey> {
+public record CompiledRecipeKey(String systemId, Optional<String> explicitRecipeId, long structuralHash64)
+        implements
+            Comparable<CompiledRecipeKey> {
 
     public CompiledRecipeKey {
         Objects.requireNonNull(systemId, "systemId");
@@ -21,8 +19,7 @@ public record CompiledRecipeKey(
     }
 
     public String shortString() {
-        return explicitRecipeId
-                .map(id -> systemId + "::" + id)
+        return explicitRecipeId.map(id -> systemId + "::" + id)
                 .orElseGet(() -> systemId + "::#" + Long.toHexString(structuralHash64));
     }
 

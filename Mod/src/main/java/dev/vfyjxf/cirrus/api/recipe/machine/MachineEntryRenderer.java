@@ -14,7 +14,6 @@ public interface MachineEntryRenderer<T extends MachineEntry> {
         return (MachineEntryRenderer<T>) ClientContentApiImpl.instance().getHandlerEntryRenderer(type);
     }
 
-
     void render(T entry, GuiGraphics graphics, int width, int height, float delta);
 
     Tooltip getTooltip(T entry);

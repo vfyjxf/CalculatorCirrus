@@ -3,10 +3,8 @@ package dev.vfyjxf.cirrus.planning.core.graph;
 import dev.vfyjxf.cirrus.api.planning.graph.SccTopology;
 import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -67,10 +65,10 @@ public final class IterativeTarjanScc implements SccTopology {
 
     /** Computes resource SCCs on the bipartite (Resources + CandidateLists) graph. */
     static IterativeTarjanScc computeBipartite(
-            ResourceDictionary dict,
-            CandidateTable candidates,
-            int[] listOutStart,
-            int[] listOutRes
+        ResourceDictionary dict,
+        CandidateTable candidates,
+        int[] listOutStart,
+        int[] listOutRes
     ) {
         int rCount = dict.size();
         int lCount = candidates.count();
@@ -107,8 +105,7 @@ public final class IterativeTarjanScc implements SccTopology {
         return new IterativeTarjanScc(dict, res.sccIdByRes, res.sccSizes, res.largestSize);
     }
 
-    private record TarjanResult(int[] sccIdByRes, int[] sccSizes, int largestSize) {
-    }
+    private record TarjanResult(int[] sccIdByRes, int[] sccSizes, int largestSize) {}
 
     private static TarjanResult runPrimitive(int resourceCount, int totalVertices, int[] start, int[] succ) {
         int[] index = new int[totalVertices];

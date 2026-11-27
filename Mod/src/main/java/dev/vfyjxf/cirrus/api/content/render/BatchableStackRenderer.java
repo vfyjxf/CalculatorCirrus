@@ -2,7 +2,7 @@ package dev.vfyjxf.cirrus.api.content.render;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import net.minecraft.client.gui.GuiGraphics;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -31,7 +31,12 @@ public interface BatchableStackRenderer<T, S> extends StackRenderer<T, S> {
         }
     }
 
-    default void renderBaseBatch(GuiGraphics graphics, List<Entry<T, S>> entries, float delta, @Nullable Object context) {
+    default void renderBaseBatch(
+        GuiGraphics graphics,
+        List<Entry<T, S>> entries,
+        float delta,
+        @Nullable Object context
+    ) {
         renderBaseBatch(graphics, entries, delta);
     }
 
@@ -45,14 +50,7 @@ public interface BatchableStackRenderer<T, S> extends StackRenderer<T, S> {
         decorateBatch(graphics, entries, delta);
     }
 
-    record Entry<T, S>(
-        ContentStack<T, S> stack,
-        int x,
-        int y,
-        int width,
-        int height
-    ) {
-    }
+    record Entry<T, S>(ContentStack<T, S> stack, int x, int y, int width, int height) {}
 
     final class Batch {
         private final GuiGraphics graphics;
@@ -151,15 +149,33 @@ public interface BatchableStackRenderer<T, S> extends StackRenderer<T, S> {
         private void renderFallback(StackRenderer renderer, List<Entry<?, ?>> entries, boolean baseOnly) {
             for (Entry entry : entries) {
                 if (baseOnly) {
-                    renderer.renderBaseAt(graphics, entry.stack(), entry.x(), entry.y(), entry.width(), entry.height(), delta);
+                    renderer.renderBaseAt(
+                        graphics,
+                        entry.stack(),
+                        entry.x(),
+                        entry.y(),
+                        entry.width(),
+                        entry.height(),
+                        delta
+                    );
                 } else {
-                    renderer.renderAt(graphics, entry.stack(), entry.x(), entry.y(), entry.width(), entry.height(), delta);
+                    renderer.renderAt(
+                        graphics,
+                        entry.stack(),
+                        entry.x(),
+                        entry.y(),
+                        entry.width(),
+                        entry.height(),
+                        delta
+                    );
                 }
             }
         }
 
         private RendererState createState(StackRenderer<?, ?> renderer) {
-            Object context = renderer instanceof BatchableStackRenderer<?, ?> batchable ? batchable.createBatchContext() : null;
+            Object context = renderer instanceof BatchableStackRenderer<?, ?> batchable
+                    ? batchable.createBatchContext()
+                    : null;
             return new RendererState(context);
         }
 

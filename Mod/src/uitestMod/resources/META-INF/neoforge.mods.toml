@@ -1,0 +1,42 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT License"
+
+# CalculatorCirrus 的无头 UI 测试场景，作为独立 mod 只被 harness run 加载。
+[[mods]]
+modId = "calculatorcirrusuitest"
+version = "0"
+displayName = "CalculatorCirrus UI Test Scenarios"
+description = '''
+    CalculatorCirrus 的 dev-only 客户端 UI 测试场景。CloudLib harness 通过注解扫描发现它们，
+    只有 clientTests run 加载这个 mod。
+'''
+authors = "vfyjxf"
+
+[[dependencies.calculatorcirrusuitest]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.calculatorcirrusuitest]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.calculatorcirrusuitest]]
+modId = "calculator_cirrus"
+type = "required"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.calculatorcirrusuitest]]
+modId = "cloudlib"
+type = "required"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"

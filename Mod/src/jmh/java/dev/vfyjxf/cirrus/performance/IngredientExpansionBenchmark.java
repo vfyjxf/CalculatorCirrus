@@ -63,9 +63,10 @@ public class IngredientExpansionBenchmark {
                 multi[i] = Ingredient.of(
                     items.get((i * 3) % items.size()),
                     items.get((i * 3 + 1) % items.size()),
-                    items.get((i * 3 + 2) % items.size()));
-                tag[i] = Ingredient.of(TagKey.create(
-                    Registries.ITEM, ResourceLocation.parse("minecraft:bench_tag_" + (i % 64))));
+                    items.get((i * 3 + 2) % items.size())
+                );
+                tag[i] = Ingredient
+                        .of(TagKey.create(Registries.ITEM, ResourceLocation.parse("minecraft:bench_tag_" + (i % 64))));
             }
         }
     }

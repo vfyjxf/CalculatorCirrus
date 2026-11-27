@@ -7,18 +7,18 @@ import java.util.Objects;
 import java.util.Optional;
 
 public record DecisionOption(
-        String optionId,
-        String labelKey,
-        CostVector estimatedDelta,
-        List<GuidanceRule> compiledRules,
-        Optional<HumanFeedback> followUp
+    String optionId,
+    String labelKey,
+    CostVector estimatedDelta,
+    List<GuidanceRule> compiledRules,
+    Optional<HumanFeedback> followUp
 ) {
 
     public DecisionOption(
-            String optionId,
-            String labelKey,
-            CostVector estimatedDelta,
-            List<GuidanceRule> compiledRules
+        String optionId,
+        String labelKey,
+        CostVector estimatedDelta,
+        List<GuidanceRule> compiledRules
     ) {
         this(optionId, labelKey, estimatedDelta, compiledRules, Optional.empty());
     }

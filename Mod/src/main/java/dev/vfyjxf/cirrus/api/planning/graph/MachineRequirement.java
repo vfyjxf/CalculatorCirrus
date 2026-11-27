@@ -7,9 +7,9 @@ import java.util.Objects;
 import java.util.Optional;
 
 public record MachineRequirement(
-        Optional<MachineCapabilityId> capabilityId,
-        List<String> compatibleMachineIds,
-        boolean handCraftable
+    Optional<MachineCapabilityId> capabilityId,
+    List<String> compatibleMachineIds,
+    boolean handCraftable
 ) {
 
     public MachineRequirement {

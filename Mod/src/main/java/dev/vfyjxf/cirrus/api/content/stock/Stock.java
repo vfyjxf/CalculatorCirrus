@@ -13,7 +13,7 @@ import it.unimi.dsi.fastutil.objects.Object2LongMap;
 import it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -340,7 +340,7 @@ public class Stock {
 
         long total = 0L;
         for (ContentStack<?, ?> existing : stacks) {
-            long available = stackAmounts.getOrDefault(existing, 0L);
+            long available = stackAmounts.getOrDefault(existing.componentKey(), 0L);
             if (available > 0L && input.satisfy(existing)) {
                 total = safeAdd(total, available);
             }
@@ -703,12 +703,14 @@ public class Stock {
         TransactionScope scope = transactionScopes.get(transactionScopes.size() - 1);
         if (scope.addValueAmountKey(key)) {
             boolean existed = valueAmounts.containsKey(key);
-            scope.changes.add(new ValueAmountChange(
+            scope.changes.add(
+                new ValueAmountChange(
                     key,
                     existed,
                     existed ? valueAmounts.getLong(key) : 0L,
                     valueTypeAmounts.getLong(key.type())
-            ));
+                )
+            );
         }
     }
 
@@ -735,8 +737,7 @@ public class Stock {
         }
     }
 
-    public record ConsumedResource(ContentResource resource, long amount) {
-    }
+    public record ConsumedResource(ContentResource resource, long amount) {}
 
     public static final class Mark {
         private final TransactionScope scope;
@@ -750,9 +751,9 @@ public class Stock {
     private static final class TransactionScope {
         private static final int smallKeySetLimit = 8;
         private final ArrayList<StockChange> changes = new ArrayList<>();
-        private @Nullable Object[] smallStackAmountKeys;
+        private Object @Nullable [] smallStackAmountKeys;
         private int smallStackAmountKeyCount;
-        private @Nullable Object[] smallValueAmountKeys;
+        private Object @Nullable [] smallValueAmountKeys;
         private int smallValueAmountKeyCount;
         private @Nullable HashSet<ComponentStackKey> stackAmountKeys;
         private @Nullable HashSet<ContentValue<?>> valueAmountKeys;
@@ -764,10 +765,12 @@ public class Stock {
                 return keys.add(key);
             }
             Object[] smallKeys = smallStackAmountKeys;
-            for (int i = 0; i < smallStackAmountKeyCount; i++) {
-                Object existing = smallKeys[i];
-                if (existing.equals(key)) {
-                    return false;
+            if (smallKeys != null) {
+                for (int i = 0; i < smallStackAmountKeyCount; i++) {
+                    Object existing = smallKeys[i];
+                    if (existing.equals(key)) {
+                        return false;
+                    }
                 }
             }
             if (smallStackAmountKeyCount < smallKeySetLimit) {
@@ -775,8 +778,10 @@ public class Stock {
                 return true;
             }
             keys = new HashSet<>(smallKeySetLimit * 2);
-            for (int i = 0; i < smallStackAmountKeyCount; i++) {
-                keys.add((ComponentStackKey) smallKeys[i]);
+            if (smallKeys != null) {
+                for (int i = 0; i < smallStackAmountKeyCount; i++) {
+                    keys.add((ComponentStackKey) smallKeys[i]);
+                }
             }
             smallStackAmountKeys = null;
             stackAmountKeys = keys;
@@ -789,10 +794,12 @@ public class Stock {
                 return keys.add(key);
             }
             Object[] smallKeys = smallValueAmountKeys;
-            for (int i = 0; i < smallValueAmountKeyCount; i++) {
-                Object existing = smallKeys[i];
-                if (existing.equals(key)) {
-                    return false;
+            if (smallKeys != null) {
+                for (int i = 0; i < smallValueAmountKeyCount; i++) {
+                    Object existing = smallKeys[i];
+                    if (existing.equals(key)) {
+                        return false;
+                    }
                 }
             }
             if (smallValueAmountKeyCount < smallKeySetLimit) {
@@ -800,15 +807,17 @@ public class Stock {
                 return true;
             }
             keys = new HashSet<>(smallKeySetLimit * 2);
-            for (int i = 0; i < smallValueAmountKeyCount; i++) {
-                keys.add((ContentValue<?>) smallKeys[i]);
+            if (smallKeys != null) {
+                for (int i = 0; i < smallValueAmountKeyCount; i++) {
+                    keys.add((ContentValue<?>) smallKeys[i]);
+                }
             }
             smallValueAmountKeys = null;
             valueAmountKeys = keys;
             return keys.add(key);
         }
 
-        private static Object[] appendSmallKey(@Nullable Object[] keys, int index, Object key) {
+        private static Object[] appendSmallKey(Object @Nullable [] keys, int index, Object key) {
             if (keys == null) {
                 keys = new Object[2];
             } else if (index >= keys.length) {
@@ -835,12 +844,9 @@ public class Stock {
         }
     }
 
-    private record ValueAmountChange(
-            ContentValue<?> key,
-            boolean existed,
-            long oldValue,
-            long oldTypeValue
-    ) implements StockChange {
+    private record ValueAmountChange(ContentValue<?> key, boolean existed, long oldValue, long oldTypeValue)
+            implements
+                StockChange {
         @Override
         public void rollback(Stock stock) {
             if (existed) {

@@ -9,6 +9,7 @@ import dev.vfyjxf.cirrus.content.ContentApiImpl;
 import dev.vfyjxf.cirrus.event.EventListeners;
 import dev.vfyjxf.cirrus.internal.integration.jei.JeiBookmarkOverlayButtons;
 import dev.vfyjxf.cirrus.internal.integration.jei.JeiFallbackRecipeSystemPlugin;
+import dev.vfyjxf.cirrus.internal.integration.jei.PlanFlowRecipeCategory;
 import dev.vfyjxf.cirrus.internal.lifecycle.CirrusClientRuntime;
 import dev.vfyjxf.cirrus.internal.lifecycle.CirrusLifecycleSources;
 import dev.vfyjxf.cirrus.internal.lifecycle.CirrusLifecycleStates;
@@ -25,6 +26,7 @@ import dev.vfyjxf.cloudlib.api.plugin.PluginLoader;
 import dev.vfyjxf.cloudlib.api.plugin.ProgressTracker;
 import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -45,7 +47,12 @@ public final class CirrusClient extends Cirrus {
         super(modBus);
         ExecutionOverlayClientConfig.register(modContainer);
         registerLifecycleDriver(modBus);
-        clientPlugins = PluginLoader.loadAndDispatcher(logger, "Client Cirrus Plugin", AnnotationPluginLookup.of(ClientCirrusPlugin.class), pluginExecutor);
+        clientPlugins = PluginLoader.loadAndDispatcher(
+            logger,
+            "Client Cirrus Plugin",
+            AnnotationPluginLookup.of(ClientCirrusPlugin.class),
+            pluginExecutor
+        );
         modBus.addListener(this::registerTooltipFactories);
         modBus.addListener(this::registerKeyMappings);
         registerJeiBookmarkOverlayButtons();
@@ -55,19 +62,33 @@ public final class CirrusClient extends Cirrus {
         EventListeners.register(ScreenEvent.Render.Post.class, JeiBookmarkOverlayButtons::render);
         EventListeners.register(ScreenEvent.MouseButtonPressed.Pre.class, JeiBookmarkOverlayButtons::mousePressed);
         EventListeners.register(ScreenEvent.MouseButtonReleased.Pre.class, JeiBookmarkOverlayButtons::mouseReleased);
+        EventListeners.register(
+            ScreenEvent.MouseButtonPressed.Pre.class,
+            EventPriority.HIGH,
+            PlanFlowRecipeCategory::onMousePressed
+        );
+        EventListeners.register(
+            ScreenEvent.MouseDragged.Pre.class,
+            EventPriority.HIGH,
+            PlanFlowRecipeCategory::onMouseDragged
+        );
+        EventListeners.register(
+            ScreenEvent.MouseButtonReleased.Pre.class,
+            EventPriority.HIGH,
+            PlanFlowRecipeCategory::onMouseReleased
+        );
+        EventListeners.register(
+            ScreenEvent.MouseScrolled.Pre.class,
+            EventPriority.HIGH,
+            PlanFlowRecipeCategory::onMouseScrolled
+        );
     }
 
     private void registerLifecycleDriver(IEventBus modBus) {
-        LifecycleDriver.builder("Calculator Cirrus Client")
-                .logger(logger)
-                .require(CirrusLifecycleStates.clientConnection)
-                .require(CirrusLifecycleStates.tagsReady)
-                .require(CirrusLifecycleStates.recipesReady)
-                .require(CirrusLifecycleStates.dataMapsReady)
-                .source(CirrusLifecycleSources.client(modBus))
-                .onLoad(this::load)
-                .onUnload(this::unload)
-                .build();
+        LifecycleDriver.builder("Calculator Cirrus Client").logger(logger)
+                .require(CirrusLifecycleStates.clientConnection).require(CirrusLifecycleStates.tagsReady)
+                .require(CirrusLifecycleStates.recipesReady).require(CirrusLifecycleStates.dataMapsReady)
+                .source(CirrusLifecycleSources.client(modBus)).onLoad(this::load).onUnload(this::unload).build();
     }
 
     @Override
@@ -101,10 +122,10 @@ public final class CirrusClient extends Cirrus {
         var contentRegistry = new ClientContentRegistryBuilder();
         buildCommonContentApi(contentRegistry, tracker);
         clientPlugins.dispatchLogged(
-                plugin -> plugin.registerContentRenderer(contentRegistry),
-                "Registering Content Renderers",
-                logger,
-                tracker.phase("Registering Content Renderers")
+            plugin -> plugin.registerContentRenderer(contentRegistry),
+            "Registering Content Renderers",
+            logger,
+            tracker.phase("Registering Content Renderers")
         );
         var contentApi = new ClientContentApiImpl(contentRegistry);
         ContentApiImpl.attach(contentApi);
@@ -113,10 +134,10 @@ public final class CirrusClient extends Cirrus {
     @Override
     protected void buildExecutionDriverApi(ExecutionDriverRegistry driverRegistry, ProgressTracker tracker) {
         clientPlugins.dispatchLogged(
-                plugin -> plugin.registerExecutionDriver(driverRegistry),
-                "Registering Client Execution Drivers",
-                logger,
-                tracker.phase("Registering Client Execution Drivers")
+            plugin -> plugin.registerExecutionDriver(driverRegistry),
+            "Registering Client Execution Drivers",
+            logger,
+            tracker.phase("Registering Client Execution Drivers")
         );
     }
 

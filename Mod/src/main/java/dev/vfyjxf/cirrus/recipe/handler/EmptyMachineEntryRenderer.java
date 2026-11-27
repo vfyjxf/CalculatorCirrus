@@ -12,8 +12,7 @@ public class EmptyMachineEntryRenderer implements MachineEntryRenderer<EmptyMach
     private EmptyMachineEntryRenderer() {}
 
     @Override
-    public void render(EmptyMachineEntry entry, GuiGraphics graphics, int width, int height, float delta) {
-    }
+    public void render(EmptyMachineEntry entry, GuiGraphics graphics, int width, int height, float delta) {}
 
     @Override
     public Tooltip getTooltip(EmptyMachineEntry entry) {

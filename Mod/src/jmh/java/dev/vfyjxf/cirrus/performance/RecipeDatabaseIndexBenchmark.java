@@ -79,9 +79,16 @@ public class RecipeDatabaseIndexBenchmark {
         public void setup() {
             scenario = CalculatorSyntheticScenario.create(competingRecipes);
             previousApi = CalculatorSyntheticScenario.attachRecipeApi(scenario.system());
-            databases = List.of(new DatabaseDefinition(
-                    "bench", "Bench", DatabaseKind.system, true, 0,
-                    List.of(scenario.system().systemId())));
+            databases = List.of(
+                new DatabaseDefinition(
+                    "bench",
+                    "Bench",
+                    DatabaseKind.system,
+                    true,
+                    0,
+                    List.of(scenario.system().systemId())
+                )
+            );
         }
 
         @TearDown(Level.Trial)
@@ -111,16 +118,19 @@ public class RecipeDatabaseIndexBenchmark {
                 if ((i & 1) == 0) {
                     inputs.add(stackInput(pool.get((3 * i + 13) % pool.size()), 1));
                 }
-                recipeList.add(new StackRecipe(
+                recipeList.add(
+                    new StackRecipe(
                         "item_recipe_" + i,
                         List.copyOf(inputs),
-                        List.of(stackOutput(pool.get((11 * i + 5) % pool.size()), 1))));
+                        List.of(stackOutput(pool.get((11 * i + 5) % pool.size()), 1))
+                    )
+                );
             }
             system = new StackRecipeSystem(Lists.immutable.ofAll(recipeList));
             previousApi = attachRecipeApi(system);
-            databases = List.of(new DatabaseDefinition(
-                    "bench", "Bench", DatabaseKind.system, true, 0,
-                    List.of(system.systemId())));
+            databases = List.of(
+                new DatabaseDefinition("bench", "Bench", DatabaseKind.system, true, 0, List.of(system.systemId()))
+            );
         }
 
         @TearDown(Level.Trial)
@@ -154,39 +164,32 @@ public class RecipeDatabaseIndexBenchmark {
 
     @Benchmark
     public RecipeDatabaseIndex buildIndex(SyntheticCatalog catalog) {
-        return RecipeDatabaseIndex.build(
-                catalog.databases,
-                Lists.immutable.of(catalog.scenario.system()),
-                Map.of());
+        return RecipeDatabaseIndex.build(catalog.databases, Lists.immutable.of(catalog.scenario.system()), Map.of());
     }
 
     @Benchmark
     public RecipeDatabaseIndex buildIndexWithRealItemStacks(ItemStackCatalog catalog) {
-        return RecipeDatabaseIndex.build(
-                catalog.databases,
-                Lists.immutable.of(catalog.system),
-                Map.of());
+        return RecipeDatabaseIndex.build(catalog.databases, Lists.immutable.of(catalog.system), Map.of());
     }
 
     @Benchmark
     public RecipeDatabaseIndex catalogCacheRebuild(RebuiltCatalog catalog) throws Exception {
-        CalculatorSyntheticScenario.SyntheticRecipeSystem system = SYNTHETIC_SYSTEM_CONSTRUCTOR.newInstance(catalog.recipeSnapshot);
+        CalculatorSyntheticScenario.SyntheticRecipeSystem system = syntheticSystemConstructor
+                .newInstance(catalog.recipeSnapshot);
         catalog.previousApi = CalculatorSyntheticScenario.attachRecipeApi(system);
-        return RecipeDatabaseCatalogCache.getOrBuild(
-                List.of(system),
-                Map.of(),
-                RecipeDatabaseIndex.BuildProgress.none());
+        return RecipeDatabaseCatalogCache
+                .getOrBuild(List.of(system), Map.of(), RecipeDatabaseIndex.BuildProgress.none());
     }
 
     // SyntheticRecipeSystem's constructor is private (instances normally come from
     // CalculatorSyntheticScenario.create); reflection reuses the production class so the
     // rebuild benchmark exercises the exact resolve path instead of a stand-in.
-    private static final Constructor<CalculatorSyntheticScenario.SyntheticRecipeSystem> SYNTHETIC_SYSTEM_CONSTRUCTOR = syntheticSystemConstructor();
+    private static final Constructor<CalculatorSyntheticScenario.SyntheticRecipeSystem> syntheticSystemConstructor = syntheticSystemConstructor();
 
     private static Constructor<CalculatorSyntheticScenario.SyntheticRecipeSystem> syntheticSystemConstructor() {
         try {
-            Constructor<CalculatorSyntheticScenario.SyntheticRecipeSystem> constructor =
-                    CalculatorSyntheticScenario.SyntheticRecipeSystem.class.getDeclaredConstructor(RichIterable.class);
+            Constructor<CalculatorSyntheticScenario.SyntheticRecipeSystem> constructor = CalculatorSyntheticScenario.SyntheticRecipeSystem.class
+                    .getDeclaredConstructor(RichIterable.class);
             constructor.setAccessible(true);
             return constructor;
         } catch (NoSuchMethodException e) {
@@ -210,15 +213,11 @@ public class RecipeDatabaseIndexBenchmark {
         // kept as a method-local array: referencing Items.* in a static field would run
         // the benchmark class' <clinit> before McBenchmarkBootstrap had a chance to boot
         // the vanilla registries (JMH instantiates the benchmark class ahead of @Setup).
-        Item[] plainItems = {
-                Items.IRON_INGOT, Items.COPPER_INGOT, Items.GOLD_INGOT, Items.DIAMOND,
-                Items.EMERALD, Items.REDSTONE, Items.LAPIS_LAZULI, Items.COAL,
-                Items.COBBLESTONE, Items.OAK_LOG, Items.OAK_PLANKS, Items.STICK,
-                Items.GLASS, Items.SAND, Items.CLAY_BALL, Items.BRICK,
-                Items.NETHER_BRICK, Items.QUARTZ, Items.AMETHYST_SHARD, Items.GLOWSTONE_DUST,
-                Items.BLAZE_ROD, Items.ENDER_PEARL, Items.SLIME_BALL, Items.LEATHER,
-                Items.WHEAT, Items.CARROT, Items.POTATO, Items.SUGAR
-        };
+        Item[] plainItems = {Items.IRON_INGOT, Items.COPPER_INGOT, Items.GOLD_INGOT, Items.DIAMOND, Items.EMERALD,
+                Items.REDSTONE, Items.LAPIS_LAZULI, Items.COAL, Items.COBBLESTONE, Items.OAK_LOG, Items.OAK_PLANKS,
+                Items.STICK, Items.GLASS, Items.SAND, Items.CLAY_BALL, Items.BRICK, Items.NETHER_BRICK, Items.QUARTZ,
+                Items.AMETHYST_SHARD, Items.GLOWSTONE_DUST, Items.BLAZE_ROD, Items.ENDER_PEARL, Items.SLIME_BALL,
+                Items.LEATHER, Items.WHEAT, Items.CARROT, Items.POTATO, Items.SUGAR};
         List<ContentStack<Item, ItemStack>> pool = new ArrayList<>(32);
         for (Item item : plainItems) {
             pool.add(ContentStack.fromStack(new ItemStack(item)));
@@ -256,12 +255,7 @@ public class RecipeDatabaseIndexBenchmark {
         return OutputContent.fromStack(stack.copyWithAmount(amount));
     }
 
-    public record StackRecipe(
-            String id,
-            List<InputContent> inputs,
-            List<OutputContent> outputs
-    ) {
-    }
+    public record StackRecipe(String id, List<InputContent> inputs, List<OutputContent> outputs) {}
 
     public static final class StackRecipeSystem implements RecipeSystem<StackRecipe> {
         private final RichIterable<StackRecipe> recipes;
@@ -309,7 +303,8 @@ public class RecipeDatabaseIndexBenchmark {
 
         @Override
         public ResolveResult resolveFallback(ResolveContext context, StackRecipe recipe) {
-            return ResolveResult.resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
+            return ResolveResult
+                    .resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
         }
 
         @Override

@@ -16,7 +16,7 @@ public class PaintingVariantType extends BasicVariantType<Item, ItemStack> {
     public static final PaintingVariantType instance = new PaintingVariantType();
 
     private PaintingVariantType() {
-        super(Namespace.ofMc("painting"), CirrusTypes.Contents.ITEM_STACK);
+        super(Namespace.ofMc("painting"), CirrusTypes.Contents.itemStack);
     }
 
     @Override

@@ -3,11 +3,9 @@ package dev.vfyjxf.cirrus.api.planning.model;
 import java.util.Objects;
 import java.util.Optional;
 
-public record ResourceKey(
-        String contentTypeId,
-        String resourceId,
-        Optional<String> canonicalVariantHash
-) implements Comparable<ResourceKey> {
+public record ResourceKey(String contentTypeId, String resourceId, Optional<String> canonicalVariantHash)
+        implements
+            Comparable<ResourceKey> {
 
     public ResourceKey {
         Objects.requireNonNull(contentTypeId, "contentTypeId");
@@ -29,8 +27,11 @@ public record ResourceKey(
     }
 
     public static ResourceKey item(String itemId, String variantHash) {
-        return new ResourceKey("minecraft:item", itemId,
-                (variantHash == null || variantHash.isEmpty()) ? Optional.empty() : Optional.of(variantHash));
+        return new ResourceKey(
+            "minecraft:item",
+            itemId,
+            (variantHash == null || variantHash.isEmpty()) ? Optional.empty() : Optional.of(variantHash)
+        );
     }
 
     public static ResourceKey fluid(String fluidId) {
@@ -39,6 +40,11 @@ public record ResourceKey(
 
     public boolean sameBaseIdentity(ResourceKey other) {
         return contentTypeId.equals(other.contentTypeId) && resourceId.equals(other.resourceId);
+    }
+
+    public String canonicalString() {
+        String suffix = canonicalVariantHash.map(h -> "|" + h).orElse("");
+        return contentTypeId + "|" + resourceId + suffix;
     }
 
     public String shortString() {

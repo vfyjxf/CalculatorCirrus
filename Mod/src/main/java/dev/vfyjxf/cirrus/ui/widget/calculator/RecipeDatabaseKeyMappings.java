@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.ui.widget.calculator;
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.vfyjxf.cirrus.CirrusConstants;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.settings.KeyConflictContext;
 import net.neoforged.neoforge.client.settings.KeyModifier;
@@ -20,8 +21,7 @@ public final class RecipeDatabaseKeyMappings {
         category
     );
 
-    private RecipeDatabaseKeyMappings() {
-    }
+    private RecipeDatabaseKeyMappings() {}
 
     public static void register(RegisterKeyMappingsEvent event) {
         event.register(openRecipeInCalculator);
@@ -35,7 +35,7 @@ public final class RecipeDatabaseKeyMappings {
         return openRecipeInCalculator.isActiveAndMatches(key);
     }
 
-    public static net.minecraft.network.chat.Component keyName(KeyMapping keyMapping) {
+    public static Component keyName(KeyMapping keyMapping) {
         return keyMapping.getTranslatedKeyMessage();
     }
 }

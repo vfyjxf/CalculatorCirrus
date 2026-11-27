@@ -67,8 +67,7 @@ public sealed interface RecipeContent permits InputContent, OutputContent {
      * @see OutputContent
      */
     default boolean constantly() {
-        return chance() == MAX_CHANCE ||
-               chance() == MIN_CHANCE;
+        return chance() == MAX_CHANCE || chance() == MIN_CHANCE;
     }
 
     RecipeContentType<? extends RecipeContent> recipeType();

@@ -2,11 +2,9 @@ package dev.vfyjxf.cirrus.api.planning.human;
 
 import java.util.Objects;
 
-public record DeclareOwnedMachineFeedback(
-        String machineId,
-        int ownedCount,
-        boolean persistToWorld
-) implements HumanFeedback {
+public record DeclareOwnedMachineFeedback(String machineId, int ownedCount, boolean persistToWorld)
+        implements
+            HumanFeedback {
 
     public DeclareOwnedMachineFeedback {
         Objects.requireNonNull(machineId, "machineId");

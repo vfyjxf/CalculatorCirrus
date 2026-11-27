@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.rule;
 
+import java.util.Arrays;
+
 /**
  * Mutable carrier for one candidate's feature values, indexed by
  * {@link FeatureType#ordinal()}. Instances are reused by the planner's
@@ -12,7 +14,7 @@ public final class FeatureVector {
 
     /** Zeroes all features. */
     public void clear() {
-        java.util.Arrays.fill(values, 0.0d);
+        Arrays.fill(values, 0.0d);
     }
 
     public double get(FeatureType feature) {
@@ -27,8 +29,8 @@ public final class FeatureVector {
         values[feature.ordinal()] += delta;
     }
 
-    /** Package-private raw access for {@link ScoreModel.Compiled}. */
-    double[] values() {
-        return values;
+    /** Package-private scalar access for {@link ScoreModel.Compiled}. */
+    double valueAt(int ordinal) {
+        return values[ordinal];
     }
 }

@@ -8,12 +8,12 @@ import java.util.List;
 import java.util.Objects;
 
 public record AcquireStep(
-        String stepId,
-        List<String> dependsOnStepIds,
-        ResourceKey resource,
-        long amount,
-        AcquisitionKind acquisitionKind,
-        CostVector stepCost
+    String stepId,
+    List<String> dependsOnStepIds,
+    ResourceKey resource,
+    long amount,
+    AcquisitionKind acquisitionKind,
+    CostVector stepCost
 ) implements PlanStep {
 
     public AcquireStep {

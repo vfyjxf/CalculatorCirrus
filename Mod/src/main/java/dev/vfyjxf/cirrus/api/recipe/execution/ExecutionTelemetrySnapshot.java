@@ -8,7 +8,7 @@ import net.minecraft.network.chat.Component;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
 
@@ -41,23 +41,25 @@ public record ExecutionTelemetrySnapshot(
         Checks.checkArgument(ratePerSecond >= 0.0d, "ratePerSecond must be non-negative");
     }
 
-    public record NodeContext(
-        String id,
-        String label,
-        @Nullable String detail
-    ) {}
+    public record NodeContext(String id, String label, @Nullable String detail) {}
 
-    public static ExecutionTelemetrySnapshot from(ExecutionSession session, double ratePerSecond, boolean autoAdvanceEnabled) {
+    public static ExecutionTelemetrySnapshot from(
+        ExecutionSession session,
+        double ratePerSecond,
+        boolean autoAdvanceEnabled
+    ) {
         ExecutionFlowNode root = session.flowViewModel().root();
         InteractionStep currentStep = session.currentStep();
         InteractionStep nextStep = nextStep(session);
 
-        NodePath currentPath = currentStep == null
-            ? rootPath(root)
-            : findPath(root, currentStep);
+        NodePath currentPath = currentStep == null ? rootPath(root) : findPath(root, currentStep);
         NodeContext current = currentPath.path().getLast();
-        NodeContext parent = currentPath.path().size() > 1 ? currentPath.path().get(currentPath.path().size() - 2) : null;
-        NodeContext next = nextStep == null ? null : nodeContext(findNode(root, nextStep).orElse(null), nextStep, false);
+        NodeContext parent = currentPath.path().size() > 1
+                ? currentPath.path().get(currentPath.path().size() - 2)
+                : null;
+        NodeContext next = nextStep == null
+                ? null
+                : nodeContext(findNode(root, nextStep).orElse(null), nextStep, false);
         ImmutableList<String> warnings = warningStrings(session.pauseReason());
         String errorSummary = errorSummary(session.pauseReason());
         String errorDetail = errorDetail(session.pauseReason());
@@ -131,7 +133,11 @@ public record ExecutionTelemetrySnapshot(
         return pauseReason.guidance().detail().getString();
     }
 
-    private static NodeContext nodeContext(@Nullable ExecutionFlowNode node, @Nullable InteractionStep step, boolean pathNode) {
+    private static NodeContext nodeContext(
+        @Nullable ExecutionFlowNode node,
+        @Nullable InteractionStep step,
+        boolean pathNode
+    ) {
         if (node == null) {
             return new NodeContext("unknown", pathNode ? "Unknown" : "Unknown step", null);
         }

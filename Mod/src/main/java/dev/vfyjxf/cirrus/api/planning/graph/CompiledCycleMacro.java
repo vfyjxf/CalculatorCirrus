@@ -10,11 +10,11 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 public record CompiledCycleMacro(
-        CompiledCycleMacroKey macroKey,
-        List<CompiledRecipe> innerRecipes,
-        List<Long> innerMultipliers,
-        Map<ResourceKey, Long> workingSeeds,
-        Map<ResourceKey, Long> netDeltaPerIter
+    CompiledCycleMacroKey macroKey,
+    List<CompiledRecipe> innerRecipes,
+    List<Long> innerMultipliers,
+    Map<ResourceKey, Long> workingSeeds,
+    Map<ResourceKey, Long> netDeltaPerIter
 ) {
 
     public CompiledCycleMacro {

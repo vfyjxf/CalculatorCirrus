@@ -6,11 +6,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-public record EquivalenceClass(
-        ResourceKey representative,
-        List<ResourceKey> members,
-        Optional<String> sourceTagId
-) {
+public record EquivalenceClass(ResourceKey representative, List<ResourceKey> members, Optional<String> sourceTagId) {
 
     public EquivalenceClass {
         Objects.requireNonNull(representative, "representative");

@@ -8,11 +8,7 @@ import dev.vfyjxf.cloudlib.util.Checks;
 
 import java.util.function.BiPredicate;
 
-public record ClauseType(
-    Namespace id,
-    ProjectionPlugin plugin,
-    BiPredicate<RecipeEntry<?>, RecipeContent> selector
-) {
+public record ClauseType(Namespace id, ProjectionPlugin plugin, BiPredicate<RecipeEntry<?>, RecipeContent> selector) {
 
     public ClauseType {
         Checks.checkNotNull(id, "id");

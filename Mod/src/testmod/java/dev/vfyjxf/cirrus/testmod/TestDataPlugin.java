@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.testmod;
 
 import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.plugin.CirrusPlugin;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
@@ -16,6 +17,8 @@ import dev.vfyjxf.cirrus.api.register.RecipeSystemRegister;
 import dev.vfyjxf.cloudlib.api.plugin.PluginDependency;
 import dev.vfyjxf.cloudlib.api.plugin.PluginMarker;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
@@ -64,14 +67,14 @@ import java.util.function.Supplier;
 @PluginMarker
 public final class TestDataPlugin implements CirrusPlugin {
 
-    private static final Namespace PLUGIN_ID = Namespace.of(TestMod.MOD_ID, "test_data");
+    private static final Namespace pluginId = Namespace.of(TestMod.modId, "test_data");
 
     /** raw system id -> recipes; parsed once from bulk_recipes.json on first use */
     private static volatile Map<String, List<DummyRecipe>> bulkCache;
 
     @Override
     public Namespace pluginId() {
-        return PLUGIN_ID;
+        return pluginId;
     }
 
     @Override
@@ -81,23 +84,27 @@ public final class TestDataPlugin implements CirrusPlugin {
 
     @Override
     public void registerRecipeSystem(RecipeSystemRegister register) {
+        MegaDagShowcase.registerRecipeSystems(register);
         if (!TestMod.testEnabled()) {
             return; // clean client: no mimic recipe systems, no bulk replay
         }
-        register.registerSystem(new DummyRecipeSystem(
-            Namespace.of(TestMod.MOD_ID, "dummy"),
-            cached(TestDataPlugin::dummyRecipes)
-        ));
-        register.registerSystem(new DummyRecipeSystem(
-            Namespace.of(TestMod.MOD_ID, "fake/archaeology"),
-            cached(TestDataPlugin::archaeologyRecipes)
-        ));
+        register.registerSystem(
+            new DummyRecipeSystem(Namespace.of(TestMod.modId, "dummy"), cached(TestDataPlugin::dummyRecipes))
+        );
+        register.registerSystem(
+            new DummyRecipeSystem(
+                Namespace.of(TestMod.modId, "fake/archaeology"),
+                cached(TestDataPlugin::archaeologyRecipes)
+            )
+        );
         for (MimicManifest.MimicSystem system : MimicManifest.load().systemList()) {
-            register.registerSystem(new DummyRecipeSystem(
-                Namespace.of(TestMod.MOD_ID, TestMod.mimicName(system.id())),
-                cached(() -> bulkRecipes(system.id())),
-                system.machine()
-            ));
+            register.registerSystem(
+                new DummyRecipeSystem(
+                    Namespace.of(TestMod.modId, TestMod.mimicName(system.id())),
+                    cached(() -> bulkRecipes(system.id())),
+                    system.machine()
+                )
+            );
         }
     }
 
@@ -107,16 +114,13 @@ public final class TestDataPlugin implements CirrusPlugin {
         return List.of(
             new DummyRecipe(
                 "crystal_from_fluid",
-                List.of(
-                    in(TestMod.DUMMY_INGOT.get(), 1),
-                    inFluid(new FluidStack(TestMod.DUMMY_FLUID.get(), 250))
-                ),
-                List.of(out(TestMod.DUMMY_CRYSTAL.get(), 1))
+                List.of(in(TestMod.dummyIngot.get(), 1), inFluid(new FluidStack(TestMod.dummyFluid.get(), 250))),
+                List.of(out(TestMod.dummyCrystal.get(), 1))
             ),
             new DummyRecipe(
                 "crystal_expensive",
-                List.of(in(TestMod.DUMMY_INGOT.get(), 4)),
-                List.of(out(TestMod.DUMMY_CRYSTAL.get(), 1))
+                List.of(in(TestMod.dummyIngot.get(), 4)),
+                List.of(out(TestMod.dummyCrystal.get(), 1))
             )
         );
     }
@@ -125,8 +129,8 @@ public final class TestDataPlugin implements CirrusPlugin {
         return List.of(
             new DummyRecipe(
                 "relic_from_white_block",
-                List.of(in(TestMod.DUMMY_BLOCK_WHITE.get(), 1)),
-                List.of(out(TestMod.DUMMY_RELIC.get(), 1))
+                List.of(in(TestMod.dummyBlockWhite.get(), 1)),
+                List.of(out(TestMod.dummyRelic.get(), 1))
             )
         );
     }
@@ -223,27 +227,29 @@ public final class TestDataPlugin implements CirrusPlugin {
                     ItemStack stack = new ItemStack(TestMod.mimicItem(reader.nextString()));
                     long amount = reader.nextLong();
                     float chance = (float) reader.nextDouble();
-                    if (reader.peek() == com.google.gson.stream.JsonToken.STRING) {
+                    if (reader.peek() == JsonToken.STRING) {
                         reader.nextString(); // "c" component marker tag
-                        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
-                            net.minecraft.network.chat.Component.literal("✦" + reader.nextString()));
+                        stack.set(DataComponents.CUSTOM_NAME, Component.literal("✦" + reader.nextString()));
                     }
-                    slots.add(input
-                        ? InputContent.fromItemStack(stack, amount, chance)
-                        : OutputContent.fromItemStack(stack, amount, chance));
+                    slots.add(
+                        input
+                                ? InputContent.fromItemStack(stack, amount, chance)
+                                : OutputContent.fromItemStack(stack, amount, chance)
+                    );
                 }
                 case "f" -> {
                     FluidStack stack = new FluidStack(TestMod.mimicFluid(reader.nextString()), 1);
                     long amount = reader.nextLong();
                     float chance = (float) reader.nextDouble();
-                    if (reader.peek() == com.google.gson.stream.JsonToken.STRING) {
+                    if (reader.peek() == JsonToken.STRING) {
                         reader.nextString(); // "c" component marker tag
-                        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME,
-                            net.minecraft.network.chat.Component.literal("✦" + reader.nextString()));
+                        stack.set(DataComponents.CUSTOM_NAME, Component.literal("✦" + reader.nextString()));
                     }
-                    slots.add(input
-                        ? InputContent.fromFluidStack(stack, amount, chance)
-                        : OutputContent.fromFluidStack(stack, amount, chance));
+                    slots.add(
+                        input
+                                ? InputContent.fromFluidStack(stack, amount, chance)
+                                : OutputContent.fromFluidStack(stack, amount, chance)
+                    );
                 }
                 case "t" -> {
                     TagKey<Item> tag = TestMod.mimicItemTag(reader.nextString());
@@ -365,7 +371,8 @@ public final class TestDataPlugin implements CirrusPlugin {
         public @Nullable ResourceLocation getId(DummyRecipe recipe) {
             // getId sits on hot paths (database sort keys are extracted per
             // record); ResourceLocation construction must not repeat per call.
-            return recipeIds.computeIfAbsent(recipe.id(), id -> ResourceLocation.fromNamespaceAndPath(systemId.root(), id));
+            return recipeIds
+                    .computeIfAbsent(recipe.id(), id -> ResourceLocation.fromNamespaceAndPath(systemId.root(), id));
         }
 
         @Override
@@ -395,7 +402,8 @@ public final class TestDataPlugin implements CirrusPlugin {
 
         @Override
         public ResolveResult resolveFallback(ResolveContext context, DummyRecipe recipe) {
-            return ResolveResult.resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
+            return ResolveResult
+                    .resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
         }
 
         @Override

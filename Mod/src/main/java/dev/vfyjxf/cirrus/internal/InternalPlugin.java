@@ -3,13 +3,14 @@ package dev.vfyjxf.cirrus.internal;
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.CirrusTypes.IngredientResolvers;
 import dev.vfyjxf.cirrus.api.plugin.CirrusPlugin;
-import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
 import dev.vfyjxf.cirrus.api.register.*;
 import dev.vfyjxf.cirrus.content.resolver.fluid.VanillaFluidHandlerResolver;
 import dev.vfyjxf.cirrus.content.type.variant.*;
-import dev.vfyjxf.cirrus.recipe.execution.driver.slot.CraftingTableServerExecutionDriver;
 import dev.vfyjxf.cirrus.recipe.clause.DurabilityCostClause;
 import dev.vfyjxf.cirrus.recipe.clause.FluidContainerUnpackClause;
 import dev.vfyjxf.cirrus.recipe.clause.GuaranteedOutputClause;
@@ -23,33 +24,33 @@ import dev.vfyjxf.cirrus.recipe.content.TypedStackListRecipeContentRenderer;
 import dev.vfyjxf.cirrus.recipe.content.ValueRecipeContentRenderer;
 import dev.vfyjxf.cirrus.recipe.content.resolver.item.DataComponentIngredientResolver;
 import dev.vfyjxf.cirrus.recipe.content.resolver.item.DifferenceIngredientResolver;
+import dev.vfyjxf.cirrus.recipe.execution.driver.slot.CraftingTableServerExecutionDriver;
 import dev.vfyjxf.cirrus.recipe.storage.source.PlayerInventorySource;
+import dev.vfyjxf.cirrus.recipe.system.AnvilRecipeSystem;
 import dev.vfyjxf.cirrus.recipe.system.BrewingRecipeSystem;
+import dev.vfyjxf.cirrus.recipe.system.CompostingRecipeSystem;
 import dev.vfyjxf.cirrus.recipe.system.CookingRecipeSystem;
 import dev.vfyjxf.cirrus.recipe.system.CraftingRecipeSystem;
+import dev.vfyjxf.cirrus.recipe.system.FuelRecipeSystem;
+import dev.vfyjxf.cirrus.recipe.system.GrindstoneRecipeSystem;
 import dev.vfyjxf.cirrus.recipe.system.SmithingRecipeSystem;
 import dev.vfyjxf.cirrus.recipe.system.StonecuttingRecipeSystem;
+import dev.vfyjxf.cirrus.recipe.system.WorldInteractionRecipeSystem;
 import dev.vfyjxf.cirrus.recipe.system.jei.JeiRecipeLayoutSubsystem;
-import dev.vfyjxf.cirrus.util.CirrusNamespaces;
+import dev.vfyjxf.cloudlib.api.plugin.ModPlugin;
 import dev.vfyjxf.cloudlib.api.plugin.PluginMarker;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
+import mezz.jei.api.constants.RecipeTypes;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.neoforge.NeoForgeTypes;
-import mezz.jei.api.constants.RecipeTypes;
 import mezz.jei.api.recipe.RecipeType;
-import net.minecraft.world.item.crafting.RecipeHolder;
-import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
 
 @PluginMarker
-public class InternalPlugin implements CirrusPlugin {
-    private static final Namespace craftingSystemCategory = CirrusNamespaces.ofMod("system/crafting");
-    private static final Namespace cookingSystemCategory = CirrusNamespaces.ofMod("system/cooking");
-    private static final Namespace cuttingSystemCategory = CirrusNamespaces.ofMod("system/cutting");
-    private static final Namespace smithingSystemCategory = CirrusNamespaces.ofMod("system/smithing");
-    private static final Namespace brewingSystemCategory = CirrusNamespaces.ofMod("system/brewing");
-    private static final Namespace vanillaSystemCategory = CirrusNamespaces.ofMod("system/vanilla");
+public class InternalPlugin implements CirrusPlugin, ModPlugin {
 
     @Override
     public Namespace pluginId() {
@@ -58,15 +59,14 @@ public class InternalPlugin implements CirrusPlugin {
 
     @Override
     public void registerContentType(ContentTypeRegister register) {
-        register.registerContentType(CirrusTypes.Contents.ITEM);
-        register.registerContentType(CirrusTypes.Contents.FLUID);
+        register.registerContentType(CirrusTypes.Contents.item);
+        register.registerContentType(CirrusTypes.Contents.fluidConst);
 
-        register.registerTagType(CirrusTypes.Contents.ITEM, CirrusTypes.Contents.ITEM_TAG);
-        register.registerTagType(CirrusTypes.Contents.FLUID, CirrusTypes.Contents.FLUID_TAG);
+        register.registerTagType(CirrusTypes.Contents.item, CirrusTypes.Contents.itemTag);
+        register.registerTagType(CirrusTypes.Contents.fluidConst, CirrusTypes.Contents.fluidTag);
 
-
-        register.registerStackType(CirrusTypes.Contents.ITEM, CirrusTypes.Contents.ITEM_STACK);
-        register.registerStackType(CirrusTypes.Contents.FLUID, CirrusTypes.Contents.FLUID_STACK);
+        register.registerStackType(CirrusTypes.Contents.item, CirrusTypes.Contents.itemStack);
+        register.registerStackType(CirrusTypes.Contents.fluidConst, CirrusTypes.Contents.fluidStack);
     }
 
     @Override
@@ -95,15 +95,19 @@ public class InternalPlugin implements CirrusPlugin {
 
         //region stack
 
-        register.registerStackResolver(CirrusTypes.ContentResolvers.FLUID_CONTAINER, CirrusTypes.Contents.ITEM_STACK, VanillaFluidHandlerResolver.instance);
+        register.registerStackResolver(
+            CirrusTypes.ContentResolvers.fluidContainer,
+            CirrusTypes.Contents.itemStack,
+            VanillaFluidHandlerResolver.instance
+        );
 
         //endregion
     }
 
     @Override
     public void registerJeiTypeBridge(JeiTypeBridgeRegister register) {
-        register.registerStackTypeBridge(CirrusTypes.Contents.ITEM_STACK.typeId(), VanillaTypes.ITEM_STACK);
-        register.registerStackTypeBridge(CirrusTypes.Contents.FLUID_STACK.typeId(), NeoForgeTypes.FLUID_STACK);
+        register.registerStackTypeBridge(CirrusTypes.Contents.itemStack.typeId(), VanillaTypes.ITEM_STACK);
+        register.registerStackTypeBridge(CirrusTypes.Contents.fluidStack.typeId(), NeoForgeTypes.FLUID_STACK);
     }
 
     @Override
@@ -116,6 +120,11 @@ public class InternalPlugin implements CirrusPlugin {
         StonecuttingRecipeSystem stonecutting = new StonecuttingRecipeSystem();
         SmithingRecipeSystem smithing = new SmithingRecipeSystem();
         BrewingRecipeSystem brewing = new BrewingRecipeSystem();
+        CompostingRecipeSystem composting = new CompostingRecipeSystem();
+        FuelRecipeSystem fueling = new FuelRecipeSystem();
+        AnvilRecipeSystem anvil = new AnvilRecipeSystem();
+        GrindstoneRecipeSystem grindstone = new GrindstoneRecipeSystem();
+        WorldInteractionRecipeSystem worldInteraction = new WorldInteractionRecipeSystem();
 
         register.registerSystem(crafting);
         register.registerSystem(smelting);
@@ -125,6 +134,11 @@ public class InternalPlugin implements CirrusPlugin {
         register.registerSystem(stonecutting);
         register.registerSystem(smithing);
         register.registerSystem(brewing);
+        register.registerSystem(composting);
+        register.registerSystem(fueling);
+        register.registerSystem(anvil);
+        register.registerSystem(grindstone);
+        register.registerSystem(worldInteraction);
 
         registerJeiFallback(register, crafting, RecipeTypes.CRAFTING);
         registerJeiFallback(register, smelting, RecipeTypes.SMELTING);
@@ -137,31 +151,62 @@ public class InternalPlugin implements CirrusPlugin {
 
     private static <T extends Recipe<?>> void registerJeiFallback(
         RecipeSystemRegister register,
-        dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem<RecipeHolder<T>> system,
+        RecipeSystem<RecipeHolder<T>> system,
         RecipeType<RecipeHolder<T>> recipeType
     ) {
-        register.registerSubsystem(system.systemId(), JeiRecipeLayoutSubsystem.id, new JeiRecipeLayoutSubsystem<>(system, recipeType));
+        register.registerSubsystem(
+            system.systemId(),
+            JeiRecipeLayoutSubsystem.id,
+            new JeiRecipeLayoutSubsystem<>(system, recipeType)
+        );
     }
 
     @Override
     public void registerRecipeSystemTag(RecipeSystemTagRegister register) {
-        register.registerSystemTagEntry(craftingSystemCategory, CraftingRecipeSystem.systemId);
-        register.registerSystemTagEntry(cookingSystemCategory, CookingRecipeSystem.smeltingSystemId);
-        register.registerSystemTagEntry(cookingSystemCategory, CookingRecipeSystem.blastingSystemId);
-        register.registerSystemTagEntry(cookingSystemCategory, CookingRecipeSystem.smokingSystemId);
-        register.registerSystemTagEntry(cookingSystemCategory, CookingRecipeSystem.campfireCookingSystemId);
-        register.registerSystemTagEntry(cuttingSystemCategory, StonecuttingRecipeSystem.systemId);
-        register.registerSystemTagEntry(smithingSystemCategory, SmithingRecipeSystem.systemId);
-        register.registerSystemTagEntry(brewingSystemCategory, BrewingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.crafting, CraftingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.cooking, CookingRecipeSystem.smeltingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.cooking, CookingRecipeSystem.blastingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.cooking, CookingRecipeSystem.smokingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.cooking, CookingRecipeSystem.campfireCookingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.cutting, StonecuttingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.smithing, SmithingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.brewing, BrewingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.composting, CompostingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.fueling, FuelRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.anvil, AnvilRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.grindstone, GrindstoneRecipeSystem.systemId);
 
-        register.registerSystemTagEntry(vanillaSystemCategory, CraftingRecipeSystem.systemId);
-        register.registerSystemTagEntry(vanillaSystemCategory, CookingRecipeSystem.smeltingSystemId);
-        register.registerSystemTagEntry(vanillaSystemCategory, CookingRecipeSystem.blastingSystemId);
-        register.registerSystemTagEntry(vanillaSystemCategory, CookingRecipeSystem.smokingSystemId);
-        register.registerSystemTagEntry(vanillaSystemCategory, CookingRecipeSystem.campfireCookingSystemId);
-        register.registerSystemTagEntry(vanillaSystemCategory, StonecuttingRecipeSystem.systemId);
-        register.registerSystemTagEntry(vanillaSystemCategory, SmithingRecipeSystem.systemId);
-        register.registerSystemTagEntry(vanillaSystemCategory, BrewingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.vanilla, CraftingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.vanilla, CookingRecipeSystem.smeltingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.vanilla, CookingRecipeSystem.blastingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.vanilla, CookingRecipeSystem.smokingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.vanilla, CookingRecipeSystem.campfireCookingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.vanilla, StonecuttingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.vanilla, SmithingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.vanilla, BrewingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.vanilla, CompostingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.vanilla, FuelRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.vanilla, AnvilRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.vanilla, GrindstoneRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.vanilla, WorldInteractionRecipeSystem.systemId);
+
+        register.registerSystemTagEntry(RecipeSystemTags.displayOnly, FuelRecipeSystem.systemId);
+
+        register.registerSystemTagEntry(RecipeSystemTags.handOperable, CraftingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.handOperable, CookingRecipeSystem.campfireCookingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.handOperable, StonecuttingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.handOperable, SmithingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.handOperable, AnvilRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.handOperable, GrindstoneRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.handOperable, WorldInteractionRecipeSystem.systemId);
+
+        register.registerSystemTagEntry(RecipeSystemTags.worldInteraction, WorldInteractionRecipeSystem.systemId);
+
+        register.registerSystemTagEntry(RecipeSystemTags.automatable, CookingRecipeSystem.smeltingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.automatable, CookingRecipeSystem.blastingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.automatable, CookingRecipeSystem.smokingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.automatable, BrewingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.automatable, CompostingRecipeSystem.systemId);
     }
 
     @Override
@@ -173,15 +218,18 @@ public class InternalPlugin implements CirrusPlugin {
     public void registerRecipeClause(RecipeClauseRegister register) {
         register.registerContentTransformer(FluidContainerUnpackClause.type, FluidContainerUnpackClause.transformer);
         register.registerContentTransformer(DurabilityCostClause.type, DurabilityCostClause.transformer);
-        register.registerProjectionTransformer(GuaranteedOutputClause.type, GuaranteedOutputClause.projectionTransformer);
+        register.registerProjectionTransformer(
+            GuaranteedOutputClause.type,
+            GuaranteedOutputClause.projectionTransformer
+        );
         register.registerClauseType(ResolvePolicyClause.type);
     }
 
     @Override
     public void registerRecipeContentRenderer(RecipeContentRendererRegister register) {
-        register.registerRenderer(RecipeContentType.EMPTY, EmptyRecipeContentRenderer.instance);
+        register.registerRenderer(RecipeContentType.empty, EmptyRecipeContentRenderer.instance);
         register.registerRenderer(RecipeContentType.STACK, StackRecipeContentRenderer.instance);
-        register.registerRenderer(RecipeContentType.VALUE, ValueRecipeContentRenderer.instance);
+        register.registerRenderer(RecipeContentType.value, ValueRecipeContentRenderer.instance);
         register.registerRenderer(RecipeContentType.TAG_STACK, TagStackRecipeContentRenderer.instance);
         register.registerRenderer(RecipeContentType.STACK_LIST, StackListRecipeContentRenderer.instance);
         register.registerRenderer(RecipeContentType.TYPED_STACK_LIST, TypedStackListRecipeContentRenderer.instance);
@@ -198,6 +246,10 @@ public class InternalPlugin implements CirrusPlugin {
         register.registerRecipeTypeForSystem(StonecuttingRecipeSystem.systemId, RecipeTypes.STONECUTTING);
         register.registerRecipeTypeForSystem(SmithingRecipeSystem.systemId, RecipeTypes.SMITHING);
         register.registerRecipeTypeForSystem(BrewingRecipeSystem.systemId, RecipeTypes.BREWING);
+        register.registerRecipeTypeForSystem(CompostingRecipeSystem.systemId, RecipeTypes.COMPOSTING);
+        register.registerRecipeTypeForSystem(FuelRecipeSystem.systemId, RecipeTypes.FUELING);
+        register.registerRecipeTypeForSystem(AnvilRecipeSystem.systemId, RecipeTypes.ANVIL);
+        register.registerRecipeTypeForSystem(GrindstoneRecipeSystem.systemId, RecipeTypes.GRINDSTONE);
     }
 
     @Override
@@ -223,6 +275,10 @@ public class InternalPlugin implements CirrusPlugin {
             MachineEntry.fromItemStack(new ItemStack(Items.CAMPFIRE))
         );
         register.registerMachineForSystem(
+            CookingRecipeSystem.campfireCookingSystemId,
+            MachineEntry.fromItemStack(new ItemStack(Items.SOUL_CAMPFIRE))
+        );
+        register.registerMachineForSystem(
             StonecuttingRecipeSystem.systemId,
             MachineEntry.fromItemStack(new ItemStack(Items.STONECUTTER))
         );
@@ -234,12 +290,44 @@ public class InternalPlugin implements CirrusPlugin {
             BrewingRecipeSystem.systemId,
             MachineEntry.fromItemStack(new ItemStack(Items.BREWING_STAND))
         );
+        register.registerMachineForSystem(
+            CompostingRecipeSystem.systemId,
+            MachineEntry.fromItemStack(new ItemStack(Items.COMPOSTER))
+        );
+        register.registerMachineForSystem(
+            FuelRecipeSystem.systemId,
+            MachineEntry.fromItemStack(new ItemStack(Items.FURNACE))
+        );
+        register.registerMachineForSystem(
+            FuelRecipeSystem.systemId,
+            MachineEntry.fromItemStack(new ItemStack(Items.BLAST_FURNACE))
+        );
+        register.registerMachineForSystem(
+            FuelRecipeSystem.systemId,
+            MachineEntry.fromItemStack(new ItemStack(Items.SMOKER))
+        );
+        register.registerMachineForSystem(
+            AnvilRecipeSystem.systemId,
+            MachineEntry.fromItemStack(new ItemStack(Items.ANVIL))
+        );
+        register.registerMachineForSystem(
+            AnvilRecipeSystem.systemId,
+            MachineEntry.fromItemStack(new ItemStack(Items.CHIPPED_ANVIL))
+        );
+        register.registerMachineForSystem(
+            AnvilRecipeSystem.systemId,
+            MachineEntry.fromItemStack(new ItemStack(Items.DAMAGED_ANVIL))
+        );
+        register.registerMachineForSystem(
+            GrindstoneRecipeSystem.systemId,
+            MachineEntry.fromItemStack(new ItemStack(Items.GRINDSTONE))
+        );
     }
 
     @Override
     public void registerIngredientResolver(IngredientResolverRegister register) {
-        register.registerIngredientResolver(IngredientResolvers.CUSTOM, DataComponentIngredientResolver.instance);
-        register.registerIngredientResolver(IngredientResolvers.CUSTOM, DifferenceIngredientResolver.instance);
+        register.registerIngredientResolver(IngredientResolvers.custom, DataComponentIngredientResolver.instance);
+        register.registerIngredientResolver(IngredientResolvers.custom, DifferenceIngredientResolver.instance);
     }
 
     @Override
@@ -249,6 +337,9 @@ public class InternalPlugin implements CirrusPlugin {
 
     @Override
     public void registerExecutionDriver(ExecutionDriverRegister register) {
-        register.registerServer(CraftingTableServerExecutionDriver.selector, CraftingTableServerExecutionDriver::create);
+        register.registerServer(
+            CraftingTableServerExecutionDriver.selector,
+            CraftingTableServerExecutionDriver::create
+        );
     }
 }

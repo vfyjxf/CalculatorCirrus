@@ -15,8 +15,8 @@ import mezz.jei.api.ingredients.IIngredientType;
 import mezz.jei.api.ingredients.IIngredientTypeWithSubtypes;
 import org.eclipse.collections.api.RichIterable;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnmodifiableView;
+import org.jspecify.annotations.Nullable;
 
 @ApiStatus.NonExtendable
 public interface ContentApi {
@@ -262,7 +262,10 @@ public interface ContentApi {
      * @param <R>         the resolver type
      * @return an unmodifiable view of all resolvers for the given type and content type
      */
-    <T, R> @UnmodifiableView RichIterable<ContentResolver<T, R>> getResolver(ContentResolverType<R> type, ContentType<T> contentType);
+    <T, R> @UnmodifiableView RichIterable<ContentResolver<T, R>> getResolver(
+        ContentResolverType<R> type,
+        ContentType<T> contentType
+    );
 
     /**
      * @param type        the resolver type
@@ -272,7 +275,10 @@ public interface ContentApi {
      * @param <R>         the resolver type
      * @return an unmodifiable view of all resolvers for the given type and stack type
      */
-    <T, S, R> @UnmodifiableView RichIterable<StackResolver<T, S, R>> getStackResolver(ContentResolverType<R> type, StackType<T, S> stackType);
+    <T, S, R> @UnmodifiableView RichIterable<StackResolver<T, S, R>> getStackResolver(
+        ContentResolverType<R> type,
+        StackType<T, S> stackType
+    );
 
     /**
      * @param type        the resolver type
@@ -283,7 +289,11 @@ public interface ContentApi {
      * @param <R>         the resolver type
      * @return a resolver for the given type, stack type and stack, or null if no resolver is found
      */
-    <T, S, R> @Nullable StackResolver<T, S, R> findStackResolver(ContentResolverType<R> type, StackType<T, S> stackType, S stack);
+    <T, S, R> @Nullable StackResolver<T, S, R> findStackResolver(
+        ContentResolverType<R> type,
+        StackType<T, S> stackType,
+        S stack
+    );
 
     /**
      * Find a content resolver for the given type, content type and content
@@ -295,7 +305,11 @@ public interface ContentApi {
      * @param <R>         the resolver type
      * @return a resolver for the given type, content type and content, or null if no resolver is found
      */
-    <T, R> @Nullable ContentResolver<T, R> findContentResolver(ContentResolverType<R> type, ContentType<T> contentType, T content);
+    <T, R> @Nullable ContentResolver<T, R> findContentResolver(
+        ContentResolverType<R> type,
+        ContentType<T> contentType,
+        T content
+    );
 
     //endregion
 
@@ -309,7 +323,8 @@ public interface ContentApi {
      * @param <S>            the stack type
      * @return the stack type for the given ingredient type, or null if no stack type is found
      */
-    @Nullable <T, S> StackType<T, S> findStackTypeForIngredientType(IIngredientTypeWithSubtypes<T, S> ingredientType);
+    @Nullable
+    <T, S> StackType<T, S> findStackTypeForIngredientType(IIngredientTypeWithSubtypes<T, S> ingredientType);
 
     /**
      * Find a stack type for the given ingredient type
@@ -318,7 +333,8 @@ public interface ContentApi {
      * @param <S>            the stack type
      * @return the stack type for the given ingredient type, or null if no stack type is found
      */
-    @Nullable <S> StackType<?, S> findStackTypeForIngredientType(IIngredientType<S> ingredientType);
+    @Nullable
+    <S> StackType<?, S> findStackTypeForIngredientType(IIngredientType<S> ingredientType);
 
     /**
      * Find a value type bridge for the given ingredient type
@@ -328,7 +344,8 @@ public interface ContentApi {
      * @param <T>            the value type
      * @return the value type bridge for the given ingredient type, or null if no value type bridge is found
      */
-    @Nullable <S, T> JeiValueTypeBridge<S, T> findValueTypeBridge(IIngredientType<S> ingredientType);
+    @Nullable
+    <S, T> JeiValueTypeBridge<S, T> findValueTypeBridge(IIngredientType<S> ingredientType);
 
     //endregion
 

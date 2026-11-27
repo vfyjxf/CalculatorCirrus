@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.rule;
 
 import com.mojang.serialization.Codec;
+import dev.vfyjxf.cloudlib.api.util.Codecs;
 
 /**
  * Named per-candidate features the score model can build components from.
@@ -36,5 +37,5 @@ public enum FeatureType {
     /** Raw integer routing-hint penalty from heuristic rules. */
     hintPenalty;
 
-    public static final Codec<FeatureType> CODEC = dev.vfyjxf.cloudlib.api.util.Codecs.lowerCaseEnum(FeatureType.class);
+    public static final Codec<FeatureType> codec = Codecs.lowerCaseEnum(FeatureType.class);
 }

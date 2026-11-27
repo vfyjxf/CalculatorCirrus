@@ -1,6 +1,5 @@
 package dev.vfyjxf.cirrus.recipe.execution.driver.slot;
 
-import dev.vfyjxf.cirrus.recipe.execution.ExecutionRuntime;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.DriverLookup;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.DriverSelector;
@@ -8,10 +7,10 @@ import dev.vfyjxf.cirrus.api.recipe.execution.driver.DriverSelector.MatchResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.ExecutionDriverSnapshot;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.InteractionContext;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.MenuContext;
-import dev.vfyjxf.cirrus.recipe.execution.driver.slot.SlotExecutionDriver;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayViewModel;
-import dev.vfyjxf.cirrus.recipe.execution.interaction.CraftingTableLikeInteraction;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageApi;
+import dev.vfyjxf.cirrus.recipe.execution.ExecutionRuntime;
+import dev.vfyjxf.cirrus.recipe.execution.interaction.CraftingTableLikeInteraction;
 import net.minecraft.world.inventory.CraftingMenu;
 
 /**
@@ -42,10 +41,7 @@ public class CraftingTableServerExecutionDriver extends SlotExecutionDriver {
 
     public static CraftingTableServerExecutionDriver create(DriverLookup lookup) {
         var interactionApi = CraftingTableLikeInteraction.automatic(CraftingTableExecutionDriver.interactionId);
-        var runtime = new ExecutionRuntime(
-            StorageApi.instance(),
-            interactionApi
-        );
+        var runtime = new ExecutionRuntime(StorageApi.instance(), interactionApi);
         return new CraftingTableServerExecutionDriver(runtime, interactionApi);
     }
 
@@ -56,9 +52,9 @@ public class CraftingTableServerExecutionDriver extends SlotExecutionDriver {
     public ExecutionDriverSnapshot snapshot() {
         ExecutionDriverSnapshot base = super.snapshot();
         ExecutionSession session = base.session();
-		return new ExecutionDriverSnapshot(
+        return new ExecutionDriverSnapshot(
             session,
-            ExecutionOverlayViewModel.derive(session),
+            session == null ? null : ExecutionOverlayViewModel.derive(session),
             base.telemetry(),
             base.materials(),
             base.targetProgress(),
@@ -69,4 +65,3 @@ public class CraftingTableServerExecutionDriver extends SlotExecutionDriver {
         );
     }
 }
-

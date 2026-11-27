@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.classify;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -54,7 +56,7 @@ public record RecipeClassifyView(
      * Primary output id: the single output id when there is exactly one
      * concrete output id, otherwise the first output's first id, or null.
      */
-    public String primaryOutputId() {
+    public @Nullable String primaryOutputId() {
         Set<String> all = allOutputIds();
         if (all.size() == 1) {
             return all.iterator().next();

@@ -1,24 +1,27 @@
 package dev.vfyjxf.cirrus.ui.widget.common;
 
-import dev.vfyjxf.cirrus.ui.CirrusTextures;
+import dev.vfyjxf.cirrus.ui.CirrusPalette;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
+import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
+import dev.vfyjxf.cloudlib.api.math.Rect;
 import dev.vfyjxf.cloudlib.api.ui.InputContext;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
+import dev.vfyjxf.cloudlib.api.ui.style.UIStyle;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.textMuted;
-import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.textPrimary;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.background;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.heightOf;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minWidth;
 
@@ -36,11 +39,27 @@ public class CirrusTextInputWidget extends Widget {
     private @Nullable Consumer<String> onTextChanged;
     private @Nullable Consumer<String> onEnterPressed;
     private @Nullable Supplier<Tooltip> tooltipSupplier;
+    private @Nullable WorkbenchThemeMode appliedTheme;
 
     public CirrusTextInputWidget() {
         setFocusable(true);
+        addStyleClass("cirrus-input");
         useStyle(heightOf(18), minWidth(0));
+        syncDefaultBackground(true);
+        onMount(
+            (scene, context, handle) -> CirrusUiTheme
+                    .bindThemeListener(this, handle, () -> syncDefaultBackground(false))
+        );
         setupEvents();
+    }
+
+    private void syncDefaultBackground(boolean force) {
+        WorkbenchThemeMode mode = CirrusUiTheme.mode(this);
+        if (!force && mode == appliedTheme) {
+            return;
+        }
+        appliedTheme = mode;
+        defaultStyle(UIStyle.of(background(CirrusUiTheme.textures(this).recessed())));
     }
 
     public String text() {
@@ -183,7 +202,10 @@ public class CirrusTextInputWidget extends Widget {
                 if (hasSelection()) {
                     deleteSelection();
                 } else if (cursorPosition > 0) {
-                    replaceText(text.substring(0, cursorPosition - 1) + text.substring(cursorPosition), cursorPosition - 1);
+                    replaceText(
+                        text.substring(0, cursorPosition - 1) + text.substring(cursorPosition),
+                        cursorPosition - 1
+                    );
                 }
                 return EventDispatch.consumed;
             }
@@ -322,24 +344,38 @@ public class CirrusTextInputWidget extends Widget {
         return Math.max(0, Math.min(best, text.length()));
     }
 
+    public Rect localTextClipRect() {
+        int visibleWidth = Math.max(0, width() - paddingLeft - paddingRight);
+        return new Rect(paddingLeft, 0, visibleWidth, height());
+    }
+
     @Override
     protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
-        canvas.texture(CirrusTextures.Background.Outlined.inset, 0, 0, width(), height());
+        CirrusPalette palette = CirrusUiTheme.palette(this);
+        canvas.texture(CirrusUiTheme.textures(this).recessed(), 0, 0, width(), height());
+        if (focused()) {
+            canvas.strokeRect(0, 0, width(), height(), palette.focusRing(), 1);
+        }
 
         Font font = context().font();
-        int textY = (height() - font.lineHeight) / 2 + 1;
-        int visibleWidth = Math.max(0, width() - paddingLeft - paddingRight);
+        int textY = CirrusControlChrome.centeredTextY(0, height(), font);
+        Rect clip = localTextClipRect();
+        int visibleWidth = clip.width();
         syncScroll(font, visibleWidth);
 
-        int absX = absolutePos().x();
-        int absY = absolutePos().y();
-        canvas.pushClip(absX + paddingLeft, absY, visibleWidth, height());
+        canvas.pushClip(clip.x(), clip.y(), clip.width(), clip.height());
         if (text.isEmpty() && !placeholder.isEmpty() && !focused()) {
-            canvas.text(Component.literal(fit(font, placeholder, visibleWidth)), paddingLeft, textY, textMuted, false);
+            canvas.text(
+                Component.literal(fit(font, placeholder, visibleWidth)),
+                paddingLeft,
+                textY,
+                palette.textMuted(),
+                false
+            );
         } else {
-            renderSelection(canvas, font, textY);
-            canvas.text(text, paddingLeft - scrollOffset, textY, textPrimary, false);
-            renderCursor(canvas, font, textY);
+            renderSelection(canvas, font, textY, palette);
+            canvas.text(text, paddingLeft - scrollOffset, textY, palette.textPrimary(), false);
+            renderCursor(canvas, font, textY, palette);
         }
         canvas.popClip();
     }
@@ -358,21 +394,27 @@ public class CirrusTextInputWidget extends Widget {
         }
     }
 
-    private void renderCursor(SceneCanvas canvas, Font font, int textY) {
+    private void renderCursor(SceneCanvas canvas, Font font, int textY, CirrusPalette palette) {
         if (!focused() || ((System.currentTimeMillis() - cursorBlinkEpoch) / 500) % 2 != 0) {
             return;
         }
         int cursorX = paddingLeft + font.width(text.substring(0, cursorPosition)) - scrollOffset;
-        canvas.fill(cursorX, textY - 1, 1, font.lineHeight + 2, 0xFFFFFFFF);
+        canvas.fill(cursorX, textY - 1, 1, font.lineHeight + 2, palette.focusRing());
     }
 
-    private void renderSelection(SceneCanvas canvas, Font font, int textY) {
+    private void renderSelection(SceneCanvas canvas, Font font, int textY, CirrusPalette palette) {
         if (!focused() || !hasSelection()) {
             return;
         }
         int x1 = paddingLeft + font.width(text.substring(0, selectionStart())) - scrollOffset;
         int x2 = paddingLeft + font.width(text.substring(0, selectionEnd())) - scrollOffset;
-        canvas.fill(x1, textY - 1, Math.max(1, x2 - x1), font.lineHeight + 2, 0x663C78D8);
+        canvas.fill(
+            x1,
+            textY - 1,
+            Math.max(1, x2 - x1),
+            font.lineHeight + 2,
+            (palette.focusRing() & 0x00FFFFFF) | 0x55000000
+        );
     }
 
     private static String fit(Font font, String text, int maxWidth) {

@@ -1,15 +1,20 @@
 package dev.vfyjxf.cirrus.ui.widget.common;
 
+import dev.vfyjxf.cirrus.ui.CirrusPalette;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
+
+import java.util.function.ToIntFunction;
 
 public class CirrusWrappedTextWidget extends Widget {
     private Component text;
     private int color;
+    private @Nullable ToIntFunction<CirrusPalette> paletteColor;
     private boolean shadow;
     private int padding;
     private int lineGap;
@@ -24,6 +29,25 @@ public class CirrusWrappedTextWidget extends Widget {
         this(text == null ? Component.empty() : text.component(args), color);
     }
 
+    public CirrusWrappedTextWidget(Component text, ToIntFunction<CirrusPalette> paletteColor) {
+        this.text = text == null ? Component.empty() : text;
+        this.paletteColor = paletteColor;
+        CirrusPalette fallback = CirrusUiTheme.palette(null);
+        this.color = paletteColor == null ? fallback.textPrimary() : paletteColor.applyAsInt(fallback);
+    }
+
+    public CirrusWrappedTextWidget(LangEntry text, ToIntFunction<CirrusPalette> paletteColor, Object... args) {
+        this(text == null ? Component.empty() : text.component(args), paletteColor);
+    }
+
+    public static CirrusWrappedTextWidget primary(Component text) {
+        return new CirrusWrappedTextWidget(text, CirrusPalette::textPrimary);
+    }
+
+    public static CirrusWrappedTextWidget muted(LangEntry text, Object... args) {
+        return new CirrusWrappedTextWidget(text, CirrusPalette::textMuted, args);
+    }
+
     public CirrusWrappedTextWidget text(Component text) {
         this.text = text == null ? Component.empty() : text;
         return this;
@@ -35,7 +59,20 @@ public class CirrusWrappedTextWidget extends Widget {
 
     public CirrusWrappedTextWidget color(int color) {
         this.color = color;
+        this.paletteColor = null;
         return this;
+    }
+
+    public CirrusWrappedTextWidget color(ToIntFunction<CirrusPalette> paletteColor) {
+        this.paletteColor = paletteColor;
+        if (paletteColor != null) {
+            this.color = paletteColor.applyAsInt(CirrusUiTheme.palette(this));
+        }
+        return this;
+    }
+
+    public int resolvedColor() {
+        return paletteColor != null ? paletteColor.applyAsInt(CirrusUiTheme.palette(this)) : color;
     }
 
     public CirrusWrappedTextWidget shadow(boolean shadow) {
@@ -81,8 +118,9 @@ public class CirrusWrappedTextWidget extends Widget {
         }
         int count = Math.min(lines.size(), availableLineCount());
         int y = padding;
+        int ink = resolvedColor();
         for (int i = 0; i < count; i++) {
-            canvas.text(lines.get(i), padding, y, color, shadow);
+            canvas.text(lines.get(i), padding, y, ink, shadow);
             y += font.lineHeight + lineGap;
         }
     }

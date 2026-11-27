@@ -5,11 +5,11 @@ import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import java.util.Objects;
 
 public record ResourceRule(
-        String ruleId,
-        GuidanceScope scope,
-        RuleStrength strength,
-        ResourceKey resource,
-        boolean treatAsFreeBaseSource
+    String ruleId,
+    GuidanceScope scope,
+    RuleStrength strength,
+    ResourceKey resource,
+    boolean treatAsFreeBaseSource
 ) implements GuidanceRule {
 
     public ResourceRule {

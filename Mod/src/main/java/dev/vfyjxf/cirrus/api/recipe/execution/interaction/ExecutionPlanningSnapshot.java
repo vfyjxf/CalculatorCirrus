@@ -9,10 +9,7 @@ import dev.vfyjxf.cirrus.api.content.stock.Stock;
  * Concrete drivers can expose whatever slots or buffers are visible to the current
  * interaction without leaking machine-specific details into shared planning code.
  */
-public record ExecutionPlanningSnapshot(
-    Stock stock,
-    long fingerprint
-) {
+public record ExecutionPlanningSnapshot(Stock stock, long fingerprint) {
 
     private static final ExecutionPlanningSnapshot emptySnapshot = new ExecutionPlanningSnapshot(Stock.empty(), 0L);
 

@@ -1,15 +1,16 @@
 package dev.vfyjxf.cirrus.api.recipe.execution;
 
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Declares which runtime side can execute a translated interaction step.
  */
 public enum ExecutionSideRequirement {
-    environmentAgnostic(true, true, true),
-    client(true, false, true),
-    server(false, true, true),
-    player(true, false, false);
+    environmentAgnostic(true, true, true), client(true, false, true), server(false, true, true), player(
+        true,
+        false,
+        false
+    );
 
     //region shared instances
 
@@ -24,7 +25,11 @@ public enum ExecutionSideRequirement {
     private final boolean allowsServerExecution;
     private final boolean onlyRunsAutomatically;
 
-    ExecutionSideRequirement(boolean allowsClientExecution, boolean allowsServerExecution, boolean onlyRunsAutomatically) {
+    ExecutionSideRequirement(
+        boolean allowsClientExecution,
+        boolean allowsServerExecution,
+        boolean onlyRunsAutomatically
+    ) {
         this.allowsClientExecution = allowsClientExecution;
         this.allowsServerExecution = allowsServerExecution;
         this.onlyRunsAutomatically = onlyRunsAutomatically;

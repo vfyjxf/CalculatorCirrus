@@ -16,34 +16,30 @@ import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.set.MutableSet;
 import org.eclipse.collections.impl.collector.Collectors2;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
-//TODO:我们应该扩充Tag的概念吗，支持不使用minecraft注册表的系统？
-public record TagType<T>(
-        Namespace typeId,
-        ContentType<T> contentType,
-        ResourceKey<Registry<T>> registryKey
-) {
+//TODO: should Tag grow to cover systems that do not use a Minecraft registry?
+public record TagType<T>(Namespace typeId, ContentType<T> contentType, ResourceKey<Registry<T>> registryKey) {
     private static final Map<CacheKey, MutableSet<TagKey<?>>> allTagsCache = new ConcurrentHashMap<>();
     private static final Map<ResourceLocation, Registry<?>> registryCache = new ConcurrentHashMap<>();
     private static final Map<TagValuesKey, ImmutableList<?>> tagValuesCache = new ConcurrentHashMap<>();
 
     public static <T> TagType<T> fromRegistry(
-            String id,
-            ContentType<T> contentType,
-            ResourceKey<Registry<T>> registryKey
+        String id,
+        ContentType<T> contentType,
+        ResourceKey<Registry<T>> registryKey
     ) {
         return fromRegistry(Namespace.parse(id), contentType, registryKey);
     }
 
     public static <T> TagType<T> fromRegistry(
-            Namespace id,
-            ContentType<T> contentType,
-            ResourceKey<Registry<T>> registryKey
+        Namespace id,
+        ContentType<T> contentType,
+        ResourceKey<Registry<T>> registryKey
     ) {
         return new TagType<>(id, contentType, registryKey);
     }
@@ -53,7 +49,10 @@ public record TagType<T>(
         Checks.checkNotNull(contentType, "contentType");
         Checks.checkNotNull(registryKey, "registryKey");
         Checks.checkArgument(contentType.hasRegistry(), "TagType must have a registry!");
-        Checks.checkArgument(contentType.getRegistryKey() == registryKey, "TagType must have the same registry key as its content type!");
+        Checks.checkArgument(
+            contentType.getRegistryKey() == registryKey,
+            "TagType must have the same registry key as its content type!"
+        );
     }
 
     //region simple query
@@ -61,28 +60,22 @@ public record TagType<T>(
     @SuppressWarnings("unchecked")
     private Registry<T> registry() {
         return (Registry<T>) registryCache.computeIfAbsent(
-                registryKey.location(),
-                location -> Objects.requireNonNull(BuiltInRegistries.REGISTRY).get(location)
+            registryKey.location(),
+            location -> Objects.requireNonNull(BuiltInRegistries.REGISTRY).get(location)
         );
     }
 
-
     public boolean hasTag(ResourceLocation tagKey) {
-        return registry()
-                .getTags()
-                .anyMatch(tag -> tag.getFirst().location().equals(tagKey));
+        return registry().getTags().anyMatch(tag -> tag.getFirst().location().equals(tagKey));
     }
 
     public boolean hasTag(TagKey<T> tagKey) {
         return registry().getTag(tagKey).isPresent();
     }
 
-    public @Nullable HolderSet.Named<T> getTagSet(ResourceLocation tagKey) {
-        return registry().getTags()
-                         .filter(tag -> tag.getFirst().location().equals(tagKey))
-                         .findAny()
-                         .map(Pair::getSecond)
-                         .orElse(null);
+    public HolderSet.@Nullable Named<T> getTagSet(ResourceLocation tagKey) {
+        return registry().getTags().filter(tag -> tag.getFirst().location().equals(tagKey)).findAny()
+                .map(Pair::getSecond).orElse(null);
     }
 
     public HolderSet.@Nullable Named<T> getTagSet(TagKey<T> tagKey) {
@@ -91,10 +84,7 @@ public record TagType<T>(
 
     public MutableSet<TagKey<T>> getTagFor(T value) {
         var registry = registry();
-        return registry.getHolder(registry.getId(value))
-                       .stream()
-                       .flatMap(Holder::tags)
-                       .collect(Collectors2.toSet());
+        return registry.getHolder(registry.getId(value)).stream().flatMap(Holder::tags).collect(Collectors2.toSet());
     }
 
     public MutableSet<T> getTagValues(ResourceLocation location) {
@@ -125,27 +115,21 @@ public record TagType<T>(
     @SuppressWarnings("unchecked")
     private ImmutableList<T> cachedTagValues(TagKey<T> tagKey) {
         return (ImmutableList<T>) tagValuesCache.computeIfAbsent(
-                new TagValuesKey(registryKey.location(), tagKey.location()),
-                ignored -> registry().getTag(tagKey)
-                                     .stream()
-                                     .flatMap(HolderSet.Named::stream)
-                                     .map(Holder::value)
-                                     .collect(Collectors2.toImmutableList())
+            new TagValuesKey(registryKey.location(), tagKey.location()),
+            ignored -> registry().getTag(tagKey).stream().flatMap(HolderSet.Named::stream).map(Holder::value)
+                    .collect(Collectors2.toImmutableList())
         );
     }
 
     public <S> MutableSet<S> getAsStacks(TagKey<T> tagKey, StackType<T, S> stackType) {
-        return this.getTagValues(tagKey)
-                   .collect(content -> stackType.fromContent(content, stackType.quantity()));
+        return this.getTagValues(tagKey).collect(content -> stackType.fromContent(content, stackType.quantity()));
     }
 
     public MutableSet<TagKey<T>> allTags() {
         CacheKey key = new CacheKey(typeId, registryKey.location());
         @SuppressWarnings("unchecked")
-        MutableSet<TagKey<T>> tags = (MutableSet<TagKey<T>>) (MutableSet<?>) allTagsCache.computeIfAbsent(
-                key,
-                ignored -> registry().getTagNames().collect(Collectors2.toSet())
-        );
+        MutableSet<TagKey<T>> tags = (MutableSet<TagKey<T>>) (MutableSet<?>) allTagsCache
+                .computeIfAbsent(key, ignored -> registry().getTagNames().collect(Collectors2.toSet()));
         return tags;
     }
 
@@ -168,10 +152,7 @@ public record TagType<T>(
 
     @Override
     public String toString() {
-        return "Tag{" +
-                "typeId=" + typeId +
-                ", contentType=" + contentType +
-                '}';
+        return "Tag{" + "typeId=" + typeId + ", contentType=" + contentType + '}';
     }
 
     private record CacheKey(Namespace typeId, ResourceLocation registryLocation) {}

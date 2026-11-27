@@ -1,9 +1,11 @@
 package dev.vfyjxf.cirrus.api.content;
 
+import dev.vfyjxf.cirrus.api.CirrusTypes;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionContents;
@@ -26,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 class ComponentCanonicalizerTest {
 
     @Test
-    void equalMapsFromIndependentConstructionShareCanonical(net.minecraft.server.MinecraftServer server) {
+    void equalMapsFromIndependentConstructionShareCanonical(MinecraftServer server) {
         DataComponentMap first = sword("Shared").getComponents();
         DataComponentMap second = sword("Shared").getComponents();
 
@@ -36,13 +38,13 @@ class ComponentCanonicalizerTest {
     }
 
     @Test
-    void canonicalIsIdempotent(net.minecraft.server.MinecraftServer server) {
+    void canonicalIsIdempotent(MinecraftServer server) {
         DataComponentMap map = sword("Idempotent").getComponents();
         assertSame(ComponentCanonicalizer.canonical(map), ComponentCanonicalizer.canonical(map));
     }
 
     @Test
-    void unequalMapsGetDifferentCanonicals(net.minecraft.server.MinecraftServer server) {
+    void unequalMapsGetDifferentCanonicals(MinecraftServer server) {
         DataComponentMap first = sword("A").getComponents();
         DataComponentMap second = sword("B").getComponents();
         assertNotEquals(first, second, "fixture sanity");
@@ -50,11 +52,11 @@ class ComponentCanonicalizerTest {
     }
 
     @Test
-    void plainStacksShareThePrototypeCanonical(net.minecraft.server.MinecraftServer server) {
-        var itemStackType = dev.vfyjxf.cirrus.api.CirrusTypes.Contents.ITEM_STACK;
+    void plainStacksShareThePrototypeCanonical(MinecraftServer server) {
+        var itemStackType = CirrusTypes.Contents.itemStack;
         assertSame(
-                itemStackType.canonicalComponents(new ItemStack(Items.STONE)),
-                itemStackType.canonicalComponents(new ItemStack(Items.STONE))
+            itemStackType.canonicalComponents(new ItemStack(Items.STONE)),
+            itemStackType.canonicalComponents(new ItemStack(Items.STONE))
         );
         // Vanilla interns item prototypes (Item.Properties.buildComponents uses a Guava Interner),
         // so simple items with value-equal prototypes may even share one canonical across items —
@@ -62,17 +64,17 @@ class ComponentCanonicalizerTest {
     }
 
     @Test
-    void emptyMapCanonicalizesToItself(net.minecraft.server.MinecraftServer server) {
+    void emptyMapCanonicalizesToItself(MinecraftServer server) {
         assertSame(DataComponentMap.EMPTY, ComponentCanonicalizer.canonical(DataComponentMap.EMPTY));
     }
 
     @Test
-    void nullMapReturnsNull(net.minecraft.server.MinecraftServer server) {
+    void nullMapReturnsNull(MinecraftServer server) {
         assertNull(ComponentCanonicalizer.canonical(null));
     }
 
     @Test
-    void potionAndContainerMapsCanonicalize(net.minecraft.server.MinecraftServer server) {
+    void potionAndContainerMapsCanonicalize(MinecraftServer server) {
         DataComponentMap firstPotion = potion().getComponents();
         DataComponentMap secondPotion = potion().getComponents();
         assertSame(ComponentCanonicalizer.canonical(firstPotion), ComponentCanonicalizer.canonical(secondPotion));
@@ -82,13 +84,13 @@ class ComponentCanonicalizerTest {
         assertSame(ComponentCanonicalizer.canonical(firstContainer), ComponentCanonicalizer.canonical(secondContainer));
 
         assertNotEquals(
-                ComponentCanonicalizer.canonical(firstPotion),
-                ComponentCanonicalizer.canonical(firstContainer)
+            ComponentCanonicalizer.canonical(firstPotion),
+            ComponentCanonicalizer.canonical(firstContainer)
         );
     }
 
     @Test
-    void canonicalSurvivesPoolClear(net.minecraft.server.MinecraftServer server) {
+    void canonicalSurvivesPoolClear(MinecraftServer server) {
         DataComponentMap first = sword("PostClear").getComponents();
         DataComponentMap beforeClear = ComponentCanonicalizer.canonical(first);
         ComponentCanonicalizer.clear();
@@ -121,10 +123,10 @@ class ComponentCanonicalizerTest {
 
     private static ItemStack container() {
         ItemStack stack = new ItemStack(Items.BUNDLE);
-        stack.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(
-                new ItemStack(Items.DIAMOND),
-                new ItemStack(Items.EMERALD)
-        )));
+        stack.set(
+            DataComponents.CONTAINER,
+            ItemContainerContents.fromItems(List.of(new ItemStack(Items.DIAMOND), new ItemStack(Items.EMERALD)))
+        );
         return stack;
     }
 

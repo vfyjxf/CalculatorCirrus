@@ -4,7 +4,7 @@ import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Comparator;
 
@@ -21,10 +21,7 @@ public record ResolvePolicy(
         effects.forEach(effect -> Checks.checkNotNull(effect, "effect"));
     }
 
-    public ResolvePolicy(
-        ImmutableList<ResolveGuard> guards,
-        ImmutableList<ResolveEffect> effects
-    ) {
+    public ResolvePolicy(ImmutableList<ResolveGuard> guards, ImmutableList<ResolveEffect> effects) {
         this(guards, effects, null);
     }
 
@@ -48,8 +45,5 @@ public record ResolvePolicy(
 
     //endregion
 
-    private record IndexedEffect(
-        int declaredIndex,
-        ResolveEffect effect
-    ) {}
+    private record IndexedEffect(int declaredIndex, ResolveEffect effect) {}
 }

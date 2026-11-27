@@ -14,9 +14,9 @@ import dev.vfyjxf.cloudlib.util.Checks;
 
 public interface RecipeContentType<C extends RecipeContent> {
 
-    RecipeContentType<EmptyRecipeContent> EMPTY = builtin("empty");
+    RecipeContentType<EmptyRecipeContent> empty = builtin("empty");
     RecipeContentType<StackContent<?, ?>> STACK = builtin("stack");
-    RecipeContentType<ValueContent<?>> VALUE = builtin("value");
+    RecipeContentType<ValueContent<?>> value = builtin("value");
     RecipeContentType<TagStackContent<?>> TAG_STACK = builtin("tag_stack");
     RecipeContentType<StackListContent> STACK_LIST = builtin("stack_list");
     RecipeContentType<TypedStackListContent<?, ?>> TYPED_STACK_LIST = builtin("typed_stack_list");
@@ -28,9 +28,9 @@ public interface RecipeContentType<C extends RecipeContent> {
     static <C extends RecipeContent> RecipeContentType<C> of(RecipeContent content) {
         Checks.checkNotNull(content, "content");
         return (RecipeContentType<C>) switch (content) {
-            case EmptyRecipeContent ignored -> EMPTY;
+            case EmptyRecipeContent ignored -> empty;
             case StackContent<?, ?> ignored -> STACK;
-            case ValueContent<?> ignored -> VALUE;
+            case ValueContent<?> ignored -> value;
             case TagStackContent<?> ignored -> TAG_STACK;
             case StackListContent ignored -> STACK_LIST;
             case TypedStackListContent<?, ?> ignored -> TYPED_STACK_LIST;
@@ -42,5 +42,3 @@ public interface RecipeContentType<C extends RecipeContent> {
         return new BuiltinRecipeContentType<>(CirrusNamespaces.ofMod("recipe_content/" + path));
     }
 }
-
-record BuiltinRecipeContentType<C extends RecipeContent>(Namespace typeId) implements RecipeContentType<C> {}

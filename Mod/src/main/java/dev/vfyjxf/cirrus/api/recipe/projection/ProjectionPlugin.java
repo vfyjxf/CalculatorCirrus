@@ -11,7 +11,7 @@ public record ProjectionPlugin(
     String labelKey,
     String descriptionKey
 ) {
-    public static final ProjectionPlugin builtin = ProjectionPlugin.of(
+    public static final ProjectionPlugin builtin = of(
         CirrusNamespaces.ofMod("projection/builtin"),
         "cirrus.ui.calculator.database.plugin.builtin",
         "cirrus.ui.calculator.database.plugin.builtin.desc",

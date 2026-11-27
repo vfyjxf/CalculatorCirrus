@@ -3,13 +3,13 @@ package dev.vfyjxf.cirrus.recipe.lookup;
 import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeLookup;
+import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.impl.lazy.LazyIterableAdapter;
 
 import java.util.Collection;
 import java.util.function.Predicate;
 
-//TODO:move to constraint api
 public class SystemRecipeLookup<T> implements RecipeLookup<T> {
 
     private Predicate<T> predicate = t -> true;
@@ -20,8 +20,14 @@ public class SystemRecipeLookup<T> implements RecipeLookup<T> {
     }
 
     @Override
-    public RecipeLookup<T> filter(Predicate<T> predicate) {
-        this.predicate = this.predicate.and(predicate);
+    public RecipeLookup<T> filter(Predicate<? super T> predicate) {
+        Predicate<T> current = this.predicate;
+        this.predicate = t -> current.test(t) && predicate.test(t);
+        return this;
+    }
+
+    @Override
+    public RecipeLookup<T> withId(ResourceLocation id) {
         return this;
     }
 

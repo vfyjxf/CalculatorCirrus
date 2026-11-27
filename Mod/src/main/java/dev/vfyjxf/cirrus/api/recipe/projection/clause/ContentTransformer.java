@@ -30,12 +30,25 @@ public interface ContentTransformer<T extends RecipeContent, F extends RecipeCla
             }
 
             @Override
-            public boolean select(ExecutionContext context, RecipeProjection projection, RecipeContent content, boolean asInput) {
+            public boolean select(
+                ExecutionContext context,
+                RecipeProjection projection,
+                RecipeContent content,
+                boolean asInput
+            ) {
                 return selector.select(context, projection, content, asInput);
             }
 
             @Override
-            public ActionResult transform(ExecutionContext context, RecipeEntry<?> recipe, T content, F facet, boolean asInput, IncrementOps increment, DecrementOps decrement) {
+            public ActionResult transform(
+                ExecutionContext context,
+                RecipeEntry<?> recipe,
+                T content,
+                F facet,
+                boolean asInput,
+                IncrementOps increment,
+                DecrementOps decrement
+            ) {
                 return transformation.transform(context, recipe, content, facet, asInput, increment, decrement);
             }
         };
@@ -50,9 +63,13 @@ public interface ContentTransformer<T extends RecipeContent, F extends RecipeCla
     boolean select(ExecutionContext context, RecipeProjection projection, RecipeContent content, boolean asInput);
 
     ActionResult transform(
-        ExecutionContext context, RecipeEntry<?> recipe,
-        T content, F facet, boolean asInput,
-        IncrementOps increment, DecrementOps decrement
+        ExecutionContext context,
+        RecipeEntry<?> recipe,
+        T content,
+        F facet,
+        boolean asInput,
+        IncrementOps increment,
+        DecrementOps decrement
     );
 
     //endregion
@@ -65,9 +82,13 @@ public interface ContentTransformer<T extends RecipeContent, F extends RecipeCla
 
     interface TransformFunction<T extends RecipeContent, F extends RecipeClause> {
         ActionResult transform(
-            ExecutionContext context, RecipeEntry<?> recipe,
-            T content, F facet, boolean asInput,
-            IncrementOps increment, DecrementOps decrement
+            ExecutionContext context,
+            RecipeEntry<?> recipe,
+            T content,
+            F facet,
+            boolean asInput,
+            IncrementOps increment,
+            DecrementOps decrement
         );
 
     }
@@ -83,11 +104,11 @@ public interface ContentTransformer<T extends RecipeContent, F extends RecipeCla
         /**
          * REMOVE the given content.
          */
-        REMOVE,
+        remove,
         /**
          * Retain the given content.
          */
-        RETAIN
+        retain
     }
 
     interface IncrementOps {

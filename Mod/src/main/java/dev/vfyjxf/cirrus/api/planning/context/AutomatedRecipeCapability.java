@@ -5,9 +5,9 @@ import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import java.util.Objects;
 
 public record AutomatedRecipeCapability(
-        CompiledRecipeKey recipeKey,
-        double passiveSecondsPerBatch,
-        int parallelCrafters
+    CompiledRecipeKey recipeKey,
+    double passiveSecondsPerBatch,
+    int parallelCrafters
 ) {
 
     public AutomatedRecipeCapability {

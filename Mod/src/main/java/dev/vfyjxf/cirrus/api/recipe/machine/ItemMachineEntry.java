@@ -6,22 +6,19 @@ import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
-public record ItemMachineEntry(
-    ContentStack<Item, ItemStack> machineStack,
-    MachineConstraint constraint
-) implements MachineEntry {
+public record ItemMachineEntry(ContentStack<Item, ItemStack> machineStack, MachineConstraint constraint)
+        implements
+            MachineEntry {
 
     public static ItemMachineEntry fromItemStack(ItemStack stack, MachineConstraint constraint) {
         ContentStack<Item, ItemStack> normalized = ContentStack.fromStack(stack).normalize();
         return new ItemMachineEntry(normalized, constraint);
     }
 
-
     public static ItemMachineEntry fromItemStack(ItemStack stack) {
         ContentStack<Item, ItemStack> normalized = ContentStack.fromStack(stack).normalize();
         return new ItemMachineEntry(normalized);
     }
-
 
     public ItemMachineEntry(ContentStack<Item, ItemStack> machineStack) {
         this(machineStack, MachineConstraint.empty);

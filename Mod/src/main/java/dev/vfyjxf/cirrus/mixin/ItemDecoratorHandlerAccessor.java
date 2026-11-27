@@ -10,5 +10,5 @@ import java.util.List;
 public interface ItemDecoratorHandlerAccessor {
 
     @Accessor("itemDecorators")
-    List<?> cirrus$getItemDecorators();
+    List<?> cirrusGetItemDecorators();
 }

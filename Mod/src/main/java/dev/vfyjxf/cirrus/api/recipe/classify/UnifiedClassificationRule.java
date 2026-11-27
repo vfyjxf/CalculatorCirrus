@@ -4,7 +4,7 @@ import dev.vfyjxf.cirrus.api.recipe.rule.CatalogRuleInput;
 import dev.vfyjxf.cirrus.api.recipe.rule.RuleEngine;
 import dev.vfyjxf.cirrus.api.recipe.rule.RuleSpec;
 import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 
@@ -23,7 +23,7 @@ import java.util.List;
  */
 public final class UnifiedClassificationRule implements ClassificationRule {
 
-    public static final String ID = "cirrus:unified/patterns";
+    public static final String id = "cirrus:unified/patterns";
 
     private final RuleEngine engine;
     private final ThreadLocal<RecipeClassifyView> lastView = new ThreadLocal<>();
@@ -40,7 +40,7 @@ public final class UnifiedClassificationRule implements ClassificationRule {
 
     @Override
     public String id() {
-        return ID;
+        return id;
     }
 
     @Override

@@ -1,6 +1,9 @@
 package dev.vfyjxf.cirrus.recipe.execution.interaction;
 
+import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionApi;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionContext;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionGuideResult;
@@ -9,6 +12,8 @@ import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionProbeResult
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 
 /**
  * Default interaction adapter for crafting-grid style recipe execution.
@@ -19,7 +24,11 @@ public final class CraftingTableLikeInteraction implements InteractionApi {
     private final boolean automaticPerformerAvailable;
     private final ExecutionGuidance guidance;
 
-    private CraftingTableLikeInteraction(Namespace interactionId, boolean automaticPerformerAvailable, ExecutionGuidance guidance) {
+    private CraftingTableLikeInteraction(
+        Namespace interactionId,
+        boolean automaticPerformerAvailable,
+        ExecutionGuidance guidance
+    ) {
         this.interactionId = interactionId;
         this.automaticPerformerAvailable = automaticPerformerAvailable;
         this.guidance = guidance;
@@ -70,7 +79,8 @@ public final class CraftingTableLikeInteraction implements InteractionApi {
             if (perCraftAmount <= 0L) {
                 continue;
             }
-            long inputBatchLimit = 64L / perCraftAmount;
+            long stackLimit = maxStackLimit(input.input());
+            long inputBatchLimit = stackLimit / perCraftAmount;
             if (inputBatchLimit <= 0L) {
                 return 1;
             }
@@ -79,6 +89,18 @@ public final class CraftingTableLikeInteraction implements InteractionApi {
         return Math.max(1, maxBatch);
     }
 
+    private static long maxStackLimit(InputContent input) {
+        if (input instanceof StackContent<?, ?> stackContent && !stackContent.isEmpty()) {
+            ContentStack<?, ?> content = stackContent.content();
+            if (content.notEmpty() && content.isItem()) {
+                ItemStack stack = content.<Item, ItemStack>cast().value();
+                if (!stack.isEmpty()) {
+                    return Math.max(1L, stack.getMaxStackSize());
+                }
+            }
+        }
+        return 64L;
+    }
+
     //endregion
 }
-

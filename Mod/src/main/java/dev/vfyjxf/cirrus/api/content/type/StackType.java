@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.content.type;
 
 import com.mojang.serialization.Codec;
+import dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer;
 import dev.vfyjxf.cirrus.api.content.ContentApi;
 import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
@@ -13,7 +14,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.function.Predicate;
@@ -92,7 +93,8 @@ public interface StackType<T, S> {
      * @param stack the stack to get components from
      * @return the components of the stack, or null if the type does not support components.
      */
-    @Nullable DataComponentMap getComponents(S stack);
+    @Nullable
+    DataComponentMap getComponents(S stack);
 
     /**
      * @param stack the stack to get components patch from
@@ -113,7 +115,7 @@ public interface StackType<T, S> {
      * @see dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer
      */
     default @Nullable DataComponentMap canonicalComponents(S stack) {
-        return dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer.canonical(getComponents(stack));
+        return ComponentCanonicalizer.canonical(getComponents(stack));
     }
 
     /**
@@ -132,9 +134,10 @@ public interface StackType<T, S> {
      * @return the component of the specified type, or null if the stack does not have the component or components are not supported.
      * @throws IllegalArgumentException if components are not supported for the stack type.
      */
-    <C> C getComponent(S stack, DataComponentType<? extends C> componentType) throws IllegalArgumentException;
+    <C> @Nullable C getComponent(S stack, DataComponentType<? extends C> componentType) throws IllegalArgumentException;
 
-    @Nullable Codec<S> stackCodec();
+    @Nullable
+    Codec<S> stackCodec();
 
     //endregion
 
@@ -160,7 +163,7 @@ public interface StackType<T, S> {
      * @see #matchesIdentity(Object, Object, VariantType)
      */
     default boolean matchesIdentity(S stack1, S stack2) {
-        //假设两个Stack的Identity相同，那么两个Stack的IdentityBase也一定相同，因此VariantType也相同。
+        // Equal identities imply equal identity bases, hence equal variant types.
         var identityBase = getContent(stack1);
         var variantType = ContentApi.instance().findVariantType(this, identityBase);
         return matchesIdentity(stack1, stack2, variantType);

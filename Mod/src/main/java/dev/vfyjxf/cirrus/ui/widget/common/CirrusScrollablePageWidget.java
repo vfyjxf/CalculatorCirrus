@@ -1,11 +1,15 @@
 package dev.vfyjxf.cirrus.ui.widget.common;
 
-import dev.vfyjxf.cirrus.ui.CirrusTextures;
 import dev.vfyjxf.cirrus.ui.CirrusScroll;
+import dev.vfyjxf.cirrus.ui.CirrusThemeTextures;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
+import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
 import dev.vfyjxf.cloudlib.api.math.FloatPos;
 import dev.vfyjxf.cloudlib.api.math.Rect;
 import dev.vfyjxf.cloudlib.api.ui.effect.UIEffects;
 import dev.vfyjxf.cloudlib.api.ui.scroll.ScrollState;
+import dev.vfyjxf.cloudlib.api.ui.texture.VisualTexture;
+import org.jspecify.annotations.Nullable;
 
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.paddingRight;
 
@@ -15,6 +19,8 @@ public class CirrusScrollablePageWidget extends CirrusPageWidget {
     private static final int scrollViewportVerticalInset = 4;
 
     private final ScrollState scrollState;
+    private @Nullable WorkbenchThemeMode appliedScrollTheme;
+    private VisualTexture appliedThumbTexture;
 
     public CirrusScrollablePageWidget() {
         this(6, 5);
@@ -22,16 +28,36 @@ public class CirrusScrollablePageWidget extends CirrusPageWidget {
 
     public CirrusScrollablePageWidget(int padding, int gap) {
         super(padding, gap);
-        this.scrollState = CirrusScroll.longVerticalState(12)
-            .smooth(true)
-            .smoothSpeed(0.35f)
-            .trackTexture(CirrusTextures.Background.scroll)
-            .thumbTexture(CirrusTextures.Icon.scrollBarVertical)
-            .scrollbarWidth(scrollbarWidth)
-            .minThumbSize(14)
-            .viewportInset(scrollViewportVerticalInset, scrollViewportInset, scrollViewportVerticalInset, scrollViewportInset);
+        CirrusThemeTextures initialTextures = CirrusUiTheme.textures(this);
+        this.appliedThumbTexture = initialTextures.scrollThumb();
+        this.scrollState = CirrusScroll.longVerticalState(12).smooth(true).smoothSpeed(0.35f)
+                .trackTexture(initialTextures.scrollTrack()).thumbTexture(initialTextures.scrollThumb())
+                .scrollbarWidth(scrollbarWidth).minThumbSize(14).viewportInset(
+                    scrollViewportVerticalInset,
+                    scrollViewportInset,
+                    scrollViewportVerticalInset,
+                    scrollViewportInset
+                );
         useEffect(UIEffects.scrollable(scrollState));
         useStyle(paddingRight(padding + scrollbarWidth + 2));
+        onMount(
+            (scene, context, handle) -> CirrusUiTheme.bindThemeListener(this, handle, () -> syncScrollTextures(false))
+        );
+    }
+
+    private void syncScrollTextures(boolean force) {
+        WorkbenchThemeMode mode = CirrusUiTheme.mode(this);
+        if (!force && mode == appliedScrollTheme) {
+            return;
+        }
+        appliedScrollTheme = mode;
+        CirrusThemeTextures textures = CirrusUiTheme.textures(this);
+        appliedThumbTexture = textures.scrollThumb();
+        scrollState.trackTexture(textures.scrollTrack()).thumbTexture(appliedThumbTexture);
+    }
+
+    public VisualTexture debugScrollThumbTexture() {
+        return appliedThumbTexture;
     }
 
     public ScrollState scrollState() {

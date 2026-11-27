@@ -1,13 +1,13 @@
 package dev.vfyjxf.cirrus.ui.execution.page;
 
-import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
-import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionEngine;
@@ -19,7 +19,7 @@ import dev.vfyjxf.cirrus.ui.process.ProcessNode;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -117,23 +117,19 @@ public record RecipeActiveContext(
         RecipeContent preview = previewContent(projected);
         List<RecipeContent> outputContents = outputContents(outputs, projected);
         List<ProcessNode.MaterialSlot> displayInputs = inputs.notEmpty()
-            ? mergeMaterialSlots(inputBindingSlots(inputs))
-            : projected == null
-                ? List.of()
-                : mergeMaterialSlots(inputContentSlots(projected.inputs()));
+                ? mergeMaterialSlots(inputBindingSlots(inputs))
+                : projected == null ? List.of() : mergeMaterialSlots(inputContentSlots(projected.inputs()));
         ImmutableList<InputBinding> previewBindings = previewBindings(inputs, projected);
         List<ProcessNode.MaterialSlot> displayInputGrid = previewBindings.notEmpty()
-            ? mapPreviewSlots(recipe, previewBindings)
-            : new ArrayList<>(displayInputs);
+                ? mapPreviewSlots(recipe, previewBindings)
+                : new ArrayList<>(displayInputs);
         List<ProcessNode.MaterialSlot> displayOutputs = outputs.notEmpty()
-            ? outputBindingSlots(outputs)
-            : projected == null
-                ? List.of()
-                : outputContentSlots(projected.outputs());
+                ? outputBindingSlots(outputs)
+                : projected == null ? List.of() : outputContentSlots(projected.outputs());
         String label = label(recipe, preview);
         RecipeContent content = preview.notEmpty()
-            ? preview
-            : firstContent(displayOutputs.isEmpty() ? displayInputs : displayOutputs);
+                ? preview
+                : firstContent(displayOutputs.isEmpty() ? displayInputs : displayOutputs);
         if (content.isEmpty()) {
             content = firstContent(displayInputs);
         }
@@ -181,7 +177,7 @@ public record RecipeActiveContext(
         return projected;
     }
 
-    private static ProjectedRecipe projectedRecipe(RecipeEntry<?> recipe) {
+    private static @Nullable ProjectedRecipe projectedRecipe(RecipeEntry<?> recipe) {
         RecipeProjection projection = recipe.resolve();
         if (projection == null) {
             return null;
@@ -208,11 +204,8 @@ public record RecipeActiveContext(
         if (outputs.notEmpty()) {
             ArrayList<RecipeContent> out = new ArrayList<>(outputs.size());
             for (OutputBinding output : outputs) {
-                RecipeContent content = ExecutionOverlayContentHelper.recipeContentFromResource(
-                    output.resource(),
-                    Math.max(1L, output.amount()),
-                    1.0d
-                );
+                RecipeContent content = ExecutionOverlayContentHelper
+                        .recipeContentFromResource(output.resource(), Math.max(1L, output.amount()), 1.0d);
                 if (content.notEmpty()) {
                     out.add(content);
                 }
@@ -284,8 +277,8 @@ public record RecipeActiveContext(
         RecipeEntry<?> recipe,
         ImmutableList<InputBinding> bindings
     ) {
-        ImmutableList<CraftingTableExecutionDriver.RecipePreviewSlot> previewSlots =
-            CraftingTableExecutionDriver.resolvePreviewSlots(recipe, bindings);
+        ImmutableList<CraftingTableExecutionDriver.RecipePreviewSlot> previewSlots = CraftingTableExecutionDriver
+                .resolvePreviewSlots(recipe, bindings);
         if (previewSlots.isEmpty()) {
             return new ArrayList<>(inputBindingSlots(bindings));
         }
@@ -296,8 +289,9 @@ public record RecipeActiveContext(
             }
             InputContent input = previewSlot.input();
             ProcessNode.MaterialSlot slot = input != null
-                ? ExecutionOverlayContentHelper.materialSlot(input.copyWithAmount(previewSlot.amount()))
-                : ExecutionOverlayContentHelper.materialSlot(InputContent.fromItemStack(previewSlot.template(), previewSlot.amount()));
+                    ? ExecutionOverlayContentHelper.materialSlot(input.copyWithAmount(previewSlot.amount()))
+                    : ExecutionOverlayContentHelper
+                            .materialSlot(InputContent.fromItemStack(previewSlot.template(), previewSlot.amount()));
             out.set(previewSlot.gridIndex(), slot);
         }
         return out;
@@ -328,17 +322,19 @@ public record RecipeActiveContext(
     private static String materialSlotKey(ProcessNode.MaterialSlot slot) {
         if (slot.content() != null && slot.content().notEmpty()) {
             if (slot.content() instanceof InputContent input && input.preserveOriginalShortageSemantics()) {
-                return ExecutionOverlayContentHelper.label(slot.content()) + "|" + slot.type() + "|" + slot.isCatalyst();
+                return ExecutionOverlayContentHelper.label(slot.content()) + "|" + slot.type() + "|"
+                        + slot.isCatalyst();
             }
-            return ExecutionOverlayContentHelper.recipeContentKey(slot.content()) + "|" + slot.type() + "|" + slot.isCatalyst();
+            return ExecutionOverlayContentHelper.recipeContentKey(slot.content()) + "|" + slot.type() + "|"
+                    + slot.isCatalyst();
         }
         return slot.materialName() + "|" + slot.type() + "|" + slot.isCatalyst();
     }
 
     private static ProcessNode.MaterialSlot copyWithAmount(ProcessNode.MaterialSlot slot, int amount) {
         RecipeContent content = slot.content() == null || slot.content().isEmpty()
-            ? RecipeContent.empty()
-            : slot.content().copyWithAmount(Math.max(1, amount));
+                ? RecipeContent.empty()
+                : slot.content().copyWithAmount(Math.max(1, amount));
         String label = ExecutionOverlayContentHelper.label(content);
         return new ProcessNode.MaterialSlot(
             label == null || label.isBlank() || "-".equals(label) ? slot.materialName() : label,

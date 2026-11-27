@@ -17,6 +17,6 @@ public interface SystemAdmissionPolicy {
     }
 
     default RecipeAdvisory advisoryOf(RawRecipeRecord record) {
-        return RecipeAdvisory.NONE;
+        return RecipeAdvisory.none;
     }
 }

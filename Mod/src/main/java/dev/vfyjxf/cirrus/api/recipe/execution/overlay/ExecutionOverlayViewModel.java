@@ -1,16 +1,17 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.overlay;
 
-import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
-import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
+import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSideRequirement;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.core.PauseReasons;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
@@ -20,7 +21,7 @@ import net.minecraft.network.chat.Component;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Locale;
 import java.util.Map;
@@ -58,16 +59,26 @@ public record ExecutionOverlayViewModel(
      * New step types fall back to class-name based conversion in {@link #stepKey(InteractionStep)}.
      */
     private static final Map<Class<? extends InteractionStep>, String> knownStepKeys = Map.of(
-        InteractionStep.EnsureAccessibleStep.class, "ensure_access",
-        InteractionStep.WithdrawResourceStep.class, "withdraw",
-        InteractionStep.ReserveCatalystStep.class, "reserve",
-        InteractionStep.EnsureCapacityStep.class, "ensure_capacity",
-        InteractionStep.OpenInteractionStep.class, "open",
-        InteractionStep.PrepareInputsStep.class, "prepare",
-        InteractionStep.ExecuteRecipeStep.class, "execute",
-        InteractionStep.CollectOutputsStep.class, "collect",
-        InteractionStep.StoreOutputsStep.class, "store",
-        InteractionStep.ManualCheckpointStep.class, "manual"
+        InteractionStep.EnsureAccessibleStep.class,
+        "ensure_access",
+        InteractionStep.WithdrawResourceStep.class,
+        "withdraw",
+        InteractionStep.ReserveCatalystStep.class,
+        "reserve",
+        InteractionStep.EnsureCapacityStep.class,
+        "ensure_capacity",
+        InteractionStep.OpenInteractionStep.class,
+        "open",
+        InteractionStep.PrepareInputsStep.class,
+        "prepare",
+        InteractionStep.ExecuteRecipeStep.class,
+        "execute",
+        InteractionStep.CollectOutputsStep.class,
+        "collect",
+        InteractionStep.StoreOutputsStep.class,
+        "store",
+        InteractionStep.ManualCheckpointStep.class,
+        "manual"
     );
 
     public ExecutionOverlayViewModel {
@@ -124,9 +135,11 @@ public record ExecutionOverlayViewModel(
             childNodes.add(project(child, session, focusStep, depth + 1));
         }
 
-        var laneSegments = source.steps().collectWithIndex((step, index) -> projectSegment(step, index, session, focusStep));
+        var laneSegments = source.steps()
+                .collectWithIndex((step, index) -> projectSegment(step, index, session, focusStep));
         var immutableChildren = childNodes.toImmutable();
-        boolean activeBranch = containsFocusStep(source, focusStep) || immutableChildren.anySatisfy(ExecutionOverlayNode::activeBranch);
+        boolean activeBranch = containsFocusStep(source, focusStep)
+                || immutableChildren.anySatisfy(ExecutionOverlayNode::activeBranch);
         boolean expanded = shouldExpandNode(depth, activeBranch, immutableChildren);
         return new ExecutionOverlayNode(
             source.nodeId(),
@@ -164,9 +177,9 @@ public record ExecutionOverlayViewModel(
 
     private static ExecutionOverlayNodeKind nodeKind(ExecutionFlowNode source) {
         return source.steps().anySatisfy(step -> step instanceof InteractionStep.ExecuteRecipeStep)
-            && (source.steps().size() > 1 || source.children().notEmpty())
-            ? ExecutionOverlayNodeKind.RECIPE
-            : ExecutionOverlayNodeKind.OPERATIONAL;
+                && (source.steps().size() > 1 || source.children().notEmpty())
+                        ? ExecutionOverlayNodeKind.recipe
+                        : ExecutionOverlayNodeKind.operational;
     }
 
     private static void flattenVisible(ExecutionOverlayNode node, MutableList<ExecutionOverlayNode> out) {
@@ -179,7 +192,11 @@ public record ExecutionOverlayViewModel(
         }
     }
 
-    private static boolean shouldExpandNode(int depth, boolean activeBranch, ImmutableList<ExecutionOverlayNode> children) {
+    private static boolean shouldExpandNode(
+        int depth,
+        boolean activeBranch,
+        ImmutableList<ExecutionOverlayNode> children
+    ) {
         if (children.isEmpty()) {
             return activeBranch;
         }
@@ -217,16 +234,16 @@ public record ExecutionOverlayViewModel(
         boolean activeBranch
     ) {
         if (laneSegments.anySatisfy(segment -> segment.status() == ExecutionFlowStatus.failed)
-            || childNodes.anySatisfy(child -> child.status() == ExecutionFlowStatus.failed)) {
+                || childNodes.anySatisfy(child -> child.status() == ExecutionFlowStatus.failed)) {
             return ExecutionFlowStatus.failed;
         }
         if (laneSegments.anySatisfy(segment -> segment.status() == ExecutionFlowStatus.paused)
-            || childNodes.anySatisfy(child -> child.status() == ExecutionFlowStatus.paused)) {
+                || childNodes.anySatisfy(child -> child.status() == ExecutionFlowStatus.paused)) {
             return ExecutionFlowStatus.paused;
         }
         if (laneSegments.anySatisfy(segment -> segment.status() == ExecutionFlowStatus.running)
-            || childNodes.anySatisfy(child -> child.status() == ExecutionFlowStatus.running)
-            || activeBranch && !session.paused() && !session.completed()) {
+                || childNodes.anySatisfy(child -> child.status() == ExecutionFlowStatus.running)
+                || activeBranch && !session.paused() && !session.completed()) {
             return ExecutionFlowStatus.running;
         }
         boolean ownCompleted = laneSegments.allSatisfy(segment -> segment.status() == ExecutionFlowStatus.completed);
@@ -291,7 +308,10 @@ public record ExecutionOverlayViewModel(
         int depth,
         boolean activeBranch
     ) {
-        if (session.paused() && containsFocusStep(source, focusStep) && session.pauseReason() != null && session.pauseReason().guidance() != null) {
+        if (session.paused()
+                && containsFocusStep(source, focusStep)
+                && session.pauseReason() != null
+                && session.pauseReason().guidance() != null) {
             return session.pauseReason().guidance().summary();
         }
         if (focusStep != null && source.steps().contains(focusStep) && depth > 0) {
@@ -317,7 +337,10 @@ public record ExecutionOverlayViewModel(
         return translateByKey(overlaySideKeyPrefix, sideKey(step.requiredSide()));
     }
 
-    private static @Nullable ExecutionGuidance footerGuidance(ExecutionSession session, @Nullable InteractionStep focusStep) {
+    private static @Nullable ExecutionGuidance footerGuidance(
+        ExecutionSession session,
+        @Nullable InteractionStep focusStep
+    ) {
         if (session.pauseReason() != null && session.pauseReason().guidance() != null) {
             return session.pauseReason().guidance();
         }
@@ -346,38 +369,22 @@ public record ExecutionOverlayViewModel(
                     ensureAccessibleStep.requestedAmount()
                 );
             };
-            case InteractionStep.WithdrawResourceStep withdrawResourceStep -> Component.translatable(
-                overlayStepKeyPrefix + "withdraw.desc",
-                withdrawResourceStep.requestedAmount()
-            );
-            case InteractionStep.ReserveCatalystStep reserveCatalystStep -> Component.translatable(
-                overlayStepKeyPrefix + "reserve.desc",
-                reserveCatalystStep.amount()
-            );
-            case InteractionStep.EnsureCapacityStep ensureCapacityStep -> Component.translatable(
-                overlayStepKeyPrefix + "ensure_capacity.desc",
-                ensureCapacityStep.amount()
-            );
-            case InteractionStep.OpenInteractionStep openInteractionStep -> Component.translatable(
-                overlayStepKeyPrefix + "open.desc",
-                openInteractionStep.times()
-            );
-            case InteractionStep.PrepareInputsStep prepareInputsStep -> Component.translatable(
-                overlayStepKeyPrefix + "prepare.desc",
-                prepareInputsStep.inputs().size()
-            );
-            case InteractionStep.ExecuteRecipeStep executeRecipeStep -> Component.translatable(
-                overlayStepKeyPrefix + "execute.desc",
-                executeRecipeStep.times()
-            );
-            case InteractionStep.CollectOutputsStep collectOutputsStep -> Component.translatable(
-                overlayStepKeyPrefix + "collect.desc",
-                collectOutputsStep.expectedOutputs().size()
-            );
-            case InteractionStep.StoreOutputsStep storeOutputsStep -> Component.translatable(
-                overlayStepKeyPrefix + "store.desc",
-                storeOutputsStep.amount()
-            );
+            case InteractionStep.WithdrawResourceStep withdrawResourceStep ->
+                Component.translatable(overlayStepKeyPrefix + "withdraw.desc", withdrawResourceStep.requestedAmount());
+            case InteractionStep.ReserveCatalystStep reserveCatalystStep ->
+                Component.translatable(overlayStepKeyPrefix + "reserve.desc", reserveCatalystStep.amount());
+            case InteractionStep.EnsureCapacityStep ensureCapacityStep ->
+                Component.translatable(overlayStepKeyPrefix + "ensure_capacity.desc", ensureCapacityStep.amount());
+            case InteractionStep.OpenInteractionStep openInteractionStep ->
+                Component.translatable(overlayStepKeyPrefix + "open.desc", openInteractionStep.times());
+            case InteractionStep.PrepareInputsStep prepareInputsStep ->
+                Component.translatable(overlayStepKeyPrefix + "prepare.desc", prepareInputsStep.inputs().size());
+            case InteractionStep.ExecuteRecipeStep executeRecipeStep ->
+                Component.translatable(overlayStepKeyPrefix + "execute.desc", executeRecipeStep.times());
+            case InteractionStep.CollectOutputsStep collectOutputsStep -> Component
+                    .translatable(overlayStepKeyPrefix + "collect.desc", collectOutputsStep.expectedOutputs().size());
+            case InteractionStep.StoreOutputsStep storeOutputsStep ->
+                Component.translatable(overlayStepKeyPrefix + "store.desc", storeOutputsStep.amount());
             case InteractionStep.ManualCheckpointStep manualCheckpointStep -> manualCheckpointStep.guidance().summary();
         };
     }
@@ -405,8 +412,8 @@ public record ExecutionOverlayViewModel(
         // Keep unknown step kinds usable without touching overlay code: FooBarStep -> foo_bar
         String simpleName = step.getClass().getSimpleName();
         String normalized = simpleName.endsWith("Step")
-            ? simpleName.substring(0, simpleName.length() - "Step".length())
-            : simpleName;
+                ? simpleName.substring(0, simpleName.length() - "Step".length())
+                : simpleName;
         return camelToSnake(normalized);
     }
 
@@ -436,7 +443,9 @@ public record ExecutionOverlayViewModel(
         int depth
     ) {
         if (depth == 0) {
-            RecipeContent targetContent = firstOutputContent(executeOutputsForRecipe(session, session.plan().targetRecipe()));
+            RecipeContent targetContent = firstOutputContent(
+                executeOutputsForRecipe(session, session.plan().targetRecipe())
+            );
             if (targetContent != null && targetContent.notEmpty()) {
                 return targetContent;
             }
@@ -497,10 +506,8 @@ public record ExecutionOverlayViewModel(
 
     private static @Nullable ExecutionOverlayRecipePreview recipePreviewFromStep(InteractionStep step) {
         return switch (step) {
-            case InteractionStep.OpenInteractionStep openInteractionStep -> ExecutionOverlayRecipePreview.recipeOnly(
-                openInteractionStep.recipe(),
-                openInteractionStep.times()
-            );
+            case InteractionStep.OpenInteractionStep openInteractionStep ->
+                ExecutionOverlayRecipePreview.recipeOnly(openInteractionStep.recipe(), openInteractionStep.times());
             case InteractionStep.PrepareInputsStep prepareInputsStep -> new ExecutionOverlayRecipePreview(
                 prepareInputsStep.recipe(),
                 1,
@@ -525,13 +532,18 @@ public record ExecutionOverlayViewModel(
 
     private static @Nullable RecipeContent recipeOutputFromStep(InteractionStep step) {
         return switch (step) {
-            case InteractionStep.ExecuteRecipeStep executeRecipeStep -> firstOutputContent(executeRecipeStep.expectedOutputs());
-            case InteractionStep.CollectOutputsStep collectOutputsStep -> firstOutputContent(collectOutputsStep.expectedOutputs());
+            case InteractionStep.ExecuteRecipeStep executeRecipeStep ->
+                firstOutputContent(executeRecipeStep.expectedOutputs());
+            case InteractionStep.CollectOutputsStep collectOutputsStep ->
+                firstOutputContent(collectOutputsStep.expectedOutputs());
             default -> null;
         };
     }
 
-    private static @Nullable RecipeContent footerContent(ExecutionSession session, @Nullable InteractionStep focusStep) {
+    private static @Nullable RecipeContent footerContent(
+        ExecutionSession session,
+        @Nullable InteractionStep focusStep
+    ) {
         if (session.pauseReason() != null && session.pauseReason().guidance() != null && focusStep != null) {
             return contentFromStep(focusStep);
         }
@@ -547,25 +559,34 @@ public record ExecutionOverlayViewModel(
         }
         var key = session.pauseReason().key();
         return key.equals(PauseReasons.noAccessibleProvider)
-            || key.equals(PauseReasons.noAccessibleReceiver)
-            || key.equals(PauseReasons.inventoryCapacityBlocked);
+                || key.equals(PauseReasons.noAccessibleReceiver)
+                || key.equals(PauseReasons.inventoryCapacityBlocked);
     }
 
     private static @Nullable RecipeContent contentFromStep(InteractionStep step) {
         return switch (step) {
             case InteractionStep.EnsureAccessibleStep ensureAccessibleStep -> switch (ensureAccessibleStep.target()) {
-                case InteractionStep.AccessTarget.Resource resourceTarget -> contentFromResource(resourceTarget.resource(), ensureAccessibleStep.requestedAmount());
-                case InteractionStep.AccessTarget.Input inputTarget -> inputTarget.input().copyWithAmount(Math.max(1L, ensureAccessibleStep.requestedAmount()));
+                case InteractionStep.AccessTarget.Resource resourceTarget ->
+                    contentFromResource(resourceTarget.resource(), ensureAccessibleStep.requestedAmount());
+                case InteractionStep.AccessTarget.Input inputTarget ->
+                    inputTarget.input().copyWithAmount(Math.max(1L, ensureAccessibleStep.requestedAmount()));
             };
             case InteractionStep.WithdrawResourceStep withdrawResourceStep -> switch (withdrawResourceStep.target()) {
-                case InteractionStep.WithdrawTarget.Resource resourceTarget -> contentFromResource(resourceTarget.resource(), withdrawResourceStep.requestedAmount());
-                case InteractionStep.WithdrawTarget.Input inputTarget -> inputTarget.input().copyWithAmount(Math.max(1L, withdrawResourceStep.requestedAmount()));
+                case InteractionStep.WithdrawTarget.Resource resourceTarget ->
+                    contentFromResource(resourceTarget.resource(), withdrawResourceStep.requestedAmount());
+                case InteractionStep.WithdrawTarget.Input inputTarget ->
+                    inputTarget.input().copyWithAmount(Math.max(1L, withdrawResourceStep.requestedAmount()));
             };
-            case InteractionStep.ReserveCatalystStep reserveCatalystStep -> reserveCatalystStep.input().copyWithAmount(Math.max(1L, reserveCatalystStep.amount()));
-            case InteractionStep.EnsureCapacityStep ensureCapacityStep -> contentFromResource(ensureCapacityStep.resource(), ensureCapacityStep.amount());
-            case InteractionStep.StoreOutputsStep storeOutputsStep -> contentFromResource(storeOutputsStep.resource(), storeOutputsStep.amount());
-            case InteractionStep.ExecuteRecipeStep executeRecipeStep -> firstOutputContent(executeRecipeStep.expectedOutputs());
-            case InteractionStep.CollectOutputsStep collectOutputsStep -> firstOutputContent(collectOutputsStep.expectedOutputs());
+            case InteractionStep.ReserveCatalystStep reserveCatalystStep ->
+                reserveCatalystStep.input().copyWithAmount(Math.max(1L, reserveCatalystStep.amount()));
+            case InteractionStep.EnsureCapacityStep ensureCapacityStep ->
+                contentFromResource(ensureCapacityStep.resource(), ensureCapacityStep.amount());
+            case InteractionStep.StoreOutputsStep storeOutputsStep ->
+                contentFromResource(storeOutputsStep.resource(), storeOutputsStep.amount());
+            case InteractionStep.ExecuteRecipeStep executeRecipeStep ->
+                firstOutputContent(executeRecipeStep.expectedOutputs());
+            case InteractionStep.CollectOutputsStep collectOutputsStep ->
+                firstOutputContent(collectOutputsStep.expectedOutputs());
             case InteractionStep.PrepareInputsStep prepareInputsStep -> firstInputContent(prepareInputsStep.inputs());
             default -> null;
         };
@@ -612,7 +633,7 @@ public record ExecutionOverlayViewModel(
         if (resource instanceof ContentStack<?, ?> stack && !stack.isEmpty()) {
             return OutputContent.fromStack(stack.copyWithAmount(Math.max(1L, amount)));
         }
-        if (resource instanceof dev.vfyjxf.cirrus.api.content.value.ContentValue<?> value) {
+        if (resource instanceof ContentValue<?> value) {
             return OutputContent.fromValue(value);
         }
         return null;

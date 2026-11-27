@@ -21,7 +21,7 @@ import net.neoforged.neoforge.event.TagsUpdatedEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.registries.datamaps.DataMapsUpdatedEvent;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public final class CirrusLifecycleSources {
 
@@ -32,23 +32,28 @@ public final class CirrusLifecycleSources {
     @OnlyIn(Dist.CLIENT)
     public static LifecycleSource client(IEventBus modBus) {
         return receiver -> {
-            NeoForge.EVENT_BUS.addListener((TagsUpdatedEvent event) ->
-                    eventIfConnected(receiver, CirrusLifecycleStates.tagsReady, event));
-            NeoForge.EVENT_BUS.addListener((RecipesUpdatedEvent event) ->
-                    eventIfConnected(receiver, CirrusLifecycleStates.recipesReady, event));
-            NeoForge.EVENT_BUS.addListener((DataMapsUpdatedEvent event) ->
-                    eventIfConnected(receiver, CirrusLifecycleStates.dataMapsReady, event));
+            NeoForge.EVENT_BUS.addListener(
+                (TagsUpdatedEvent event) -> eventIfConnected(receiver, CirrusLifecycleStates.tagsReady, event)
+            );
+            NeoForge.EVENT_BUS.addListener(
+                (RecipesUpdatedEvent event) -> eventIfConnected(receiver, CirrusLifecycleStates.recipesReady, event)
+            );
+            NeoForge.EVENT_BUS.addListener(
+                (DataMapsUpdatedEvent event) -> eventIfConnected(receiver, CirrusLifecycleStates.dataMapsReady, event)
+            );
             NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event) -> {
                 if (event.getPlayer() != null) {
                     receiver.clear(CirrusLifecycleStates.clientConnection, "clientLoggingOut");
                 }
             });
-            modBus.addListener((RegisterClientReloadListenersEvent event) ->
-                    event.registerReloadListener((ResourceManagerReloadListener) resourceManager -> {
-                        if (!receiver.reload("clientResourceReload")) {
-                            receiver.resetEvents("clientResourceReload");
-                        }
-                    }));
+            modBus.addListener(
+                (RegisterClientReloadListenersEvent event) -> event
+                        .registerReloadListener((ResourceManagerReloadListener) resourceManager -> {
+                            if (!receiver.reload("clientResourceReload")) {
+                                receiver.resetEvents("clientResourceReload");
+                            }
+                        })
+            );
         };
     }
 
@@ -60,24 +65,22 @@ public final class CirrusLifecycleSources {
                     receiver.event(CirrusLifecycleStates.serverDataReady, "serverStartedDataAvailable");
                 }
             });
-            NeoForge.EVENT_BUS.addListener((ServerStoppingEvent event) ->
-                    receiver.clear(CirrusLifecycleStates.serverStarted, "serverStopping"));
             NeoForge.EVENT_BUS.addListener(
-                    EventPriority.LOWEST,
-                    (TagsUpdatedEvent event) -> {
-                        if (event.getUpdateCause() == TagsUpdatedEvent.UpdateCause.SERVER_DATA_LOAD) {
-                            receiver.event(CirrusLifecycleStates.serverDataReady, "serverDataLoad");
-                        }
-                    }
+                (ServerStoppingEvent event) -> receiver.clear(CirrusLifecycleStates.serverStarted, "serverStopping")
             );
+            NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, (TagsUpdatedEvent event) -> {
+                if (event.getUpdateCause() == TagsUpdatedEvent.UpdateCause.SERVER_DATA_LOAD) {
+                    receiver.event(CirrusLifecycleStates.serverDataReady, "serverDataLoad");
+                }
+            });
         };
     }
 
     @OnlyIn(Dist.CLIENT)
     private static <T extends Event> void eventIfConnected(
-            LifecycleReceiver receiver,
-            LifecycleState<Void> state,
-            T event
+        LifecycleReceiver receiver,
+        LifecycleState<Void> state,
+        T event
     ) {
         if (!contextCurrentConnection(receiver, event.getClass().getSimpleName())) {
             return;

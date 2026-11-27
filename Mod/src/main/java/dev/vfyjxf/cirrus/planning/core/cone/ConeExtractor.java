@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning.core.cone;
 
+import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOption;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
 import dev.vfyjxf.cirrus.api.planning.context.AutomatedLine;
@@ -30,6 +31,7 @@ import dev.vfyjxf.cirrus.api.planning.human.RecipeRule;
 import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
+import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
 import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
@@ -40,10 +42,12 @@ import dev.vfyjxf.cirrus.planning.core.cost.DefaultAcquisitionOracle;
 import dev.vfyjxf.cirrus.planning.core.cost.StepCosts;
 import dev.vfyjxf.cirrus.planning.core.cost.SystemCostTiers;
 import dev.vfyjxf.cirrus.planning.core.graph.CandidateTable;
+import dev.vfyjxf.cirrus.planning.core.graph.DefaultSystemAdmissionPolicy;
 import dev.vfyjxf.cirrus.planning.core.graph.IndexedRecipeGraph;
 import dev.vfyjxf.cirrus.planning.core.graph.ResourceDictionary;
 import dev.vfyjxf.cirrus.planning.core.lang.IntIntMap;
 import dev.vfyjxf.cirrus.planning.core.lang.WorkBudget;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -59,14 +63,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 
 public final class ConeExtractor {
 
-    private static final int HIGH_FANOUT_THRESHOLD = 8;
-    private static final int[] RELAXATION_CAPS = {6, 16, 64, Integer.MAX_VALUE};
-    private static final int MAX_ADVISORY_PRODUCERS = 4;
+    private static final int highFanoutThreshold = 8;
+    private static final int[] relaxationCaps = {6, 16, 64, Integer.MAX_VALUE};
+    private static final int maxAdvisoryProducers = 4;
 
     private final CompiledRecipeGraph graph;
 
@@ -74,37 +77,34 @@ public final class ConeExtractor {
         this.graph = Objects.requireNonNull(graph, "graph");
     }
 
-    public ConeModel extract(
-            PlanningRequest request,
-            Set<Integer> maskedRecipeCompactIds,
-            WorkBudget workBudget
-    ) {
+    public ConeModel extract(PlanningRequest request, Set<Integer> maskedRecipeCompactIds, WorkBudget workBudget) {
         return extractWithExtraRoots(request, Set.of(), maskedRecipeCompactIds, workBudget);
     }
 
     public ConeModel extractWithExtraRoots(
-            PlanningRequest request,
-            Set<ResourceKey> extraRoots,
-            Set<Integer> maskedRecipeCompactIds,
-            WorkBudget workBudget
+        PlanningRequest request,
+        Set<ResourceKey> extraRoots,
+        Set<Integer> maskedRecipeCompactIds,
+        WorkBudget workBudget
     ) {
         Set<Integer> masked = maskedRecipeCompactIds == null ? Set.of() : maskedRecipeCompactIds;
         ConeModel last = null;
-        for (int attempt = 0; attempt < RELAXATION_CAPS.length; attempt++) {
-            int cap = RELAXATION_CAPS[attempt];
+        for (int attempt = 0; attempt < relaxationCaps.length; attempt++) {
+            int cap = relaxationCaps[attempt];
             last = extractSinglePass(request, extraRoots, masked, cap, workBudget);
-            if (allTargetsHaveFiniteTier(last, request) || !last.truncatedByBudget
+            if (allTargetsHaveFiniteTier(last, request)
+                    || !last.truncatedByBudget
                     || (workBudget != null && workBudget.isHardTimeExceeded())) {
                 return last;
             }
         }
-        return last;
+        return Objects.requireNonNull(last);
     }
 
     private static boolean allTargetsHaveFiniteTier(ConeModel cone, PlanningRequest request) {
         for (TargetDemand td : request.targets()) {
             int u = cone.localRes(td.resource());
-            if (u < 0 || cone.tier[u] >= ConeModel.INF_TIER) {
+            if (u < 0 || cone.tier[u] >= ConeModel.infTier) {
                 return false;
             }
         }
@@ -112,11 +112,11 @@ public final class ConeExtractor {
     }
 
     private ConeModel extractSinglePass(
-            PlanningRequest request,
-            Set<ResourceKey> extraRoots,
-            Set<Integer> masked,
-            int highFanoutCap,
-            WorkBudget workBudget
+        PlanningRequest request,
+        Set<ResourceKey> extraRoots,
+        Set<Integer> masked,
+        int highFanoutCap,
+        WorkBudget workBudget
     ) {
         PlanningContext ctx = request.context();
         InventorySnapshot inv = ctx.inventory();
@@ -142,8 +142,12 @@ public final class ConeExtractor {
         // Precompute one-hop stocked upstream flags for IndexedRecipeGraph when inventory is non-empty.
         IndexedRecipeGraph ig = (graph instanceof IndexedRecipeGraph indexed) ? indexed : null;
         boolean[] oneHopFromStock = null;
-        if (ig != null && !usableMap.isEmpty()) {
-            oneHopFromStock = computeOneHopStocked(ig, usableMap);
+        boolean[] oneHopFromPinnedTags = null;
+        if (ig != null) {
+            if (!usableMap.isEmpty()) {
+                oneHopFromStock = computeOneHopStocked(ig, usableMap);
+            }
+            oneHopFromPinnedTags = computeOneHopFromPinnedTags(ig, guidance);
         }
 
         // Index rule IDs touched by guidance for conflict diagnosis and OR quotient singletons.
@@ -157,22 +161,32 @@ public final class ConeExtractor {
         int maxRecipes = budget.maxSubgraphRecipes();
         int maxProdPerRes = budget.maxProducersPerResource();
 
-        // 1. Wave-based (depth-first-per-rank) extraction.
+        // 1. Wave-based (depth-first-per-rank) extraction with depth-tapered fanout.
         LinkedHashSet<ResourceKey> visitedNodes = new LinkedHashSet<>();
+        Map<ResourceKey, Integer> nodeDepth = new HashMap<>();
         Map<Integer, CompiledRecipe> extractedRecipes = new LinkedHashMap<>();
         Map<ResourceKey, List<CompiledRecipe>> rankedProducersCache = new HashMap<>();
         Map<ResourceKey, Set<String>> blockingRules = new HashMap<>();
         Set<ResourceKey> dormantResources = new HashSet<>();
         Map<Integer, List<ResourceKey>> highFanoutCache = new HashMap<>();
         Set<ResourceKey> targetSet = new HashSet<>();
+        boolean hasAnyPinRule = false;
+        for (GuidanceRule r : guidance.allRules()) {
+            if (r.strength() == RuleStrength.hardPin) {
+                hasAnyPinRule = true;
+                break;
+            }
+        }
         boolean truncated = false;
 
         for (TargetDemand td : request.targets()) {
             visitedNodes.add(td.resource());
+            nodeDepth.put(td.resource(), 0);
             targetSet.add(td.resource());
         }
         for (ResourceKey extra : extraRoots) {
             visitedNodes.add(extra);
+            nodeDepth.putIfAbsent(extra, 0);
         }
 
         // Also seed working seeds & reagents of active cycle macros producing any root target.
@@ -228,20 +242,74 @@ public final class ConeExtractor {
                     recordResourceBan(v, guidance, blockingRules);
                     continue;
                 }
-                List<CompiledRecipe> ranked = rankedProducersCache.computeIfAbsent(v, key ->
-                        rankProducers(key, targetSet.contains(key), ig, fac, guidance, ownedMachines, ownedCaps,
-                                masked, maxProdPerRes, dormantResources, blockingRules));
+                int vDepth = nodeDepth.getOrDefault(v, 2);
+                int depthCap = vDepth == 0
+                        ? maxProdPerRes
+                        : (vDepth == 1
+                                ? Math.min(maxProdPerRes, 8)
+                                : (vDepth == 2 ? Math.min(maxProdPerRes, 3) : Math.min(maxProdPerRes, 2)));
+                if (wave >= depthCap && !hasAnyPinRule) {
+                    continue;
+                }
+                // Skip non-target natural bases / active lines before materializing producers unless pinned or stock-adjacent.
+                if (!hasAnyPinRule && !targetSet.contains(v)) {
+                    if (guidance.isResourceTreatedAsBase(v)) {
+                        continue;
+                    }
+                    if (ctx.baseBoundary().activeContractFor(v).isPresent()
+                            || ctx.baseBoundary().isCertifiedNatural(v)
+                            || linesByRes.containsKey(v)) {
+                        if (ig == null || oneHopFromStock == null || usableMap.isEmpty()) {
+                            continue;
+                        }
+                        int gid = ig.resourceDict().idOf(v);
+                        if (gid < 0 || !oneHopFromStock[gid] || wave > 0) {
+                            continue;
+                        }
+                    }
+                }
+                List<CompiledRecipe> ranked = rankedProducersCache.computeIfAbsent(
+                    v,
+                    key -> rankProducers(
+                        key,
+                        targetSet.contains(key),
+                        ig,
+                        fac,
+                        guidance,
+                        ownedMachines,
+                        ownedCaps,
+                        usableMap,
+                        linesByRes,
+                        masked,
+                        maxProdPerRes,
+                        dormantResources,
+                        blockingRules
+                    )
+                );
 
-                if (guidance.isResourceTreatedAsBase(v)) {
-                    boolean hasPinned = !ranked.isEmpty() && guidance.isRecipePinned(ranked.get(0).key());
-                    if (!hasPinned) {
+                boolean hasPinned = !ranked.isEmpty() && guidance.isRecipePinned(ranked.get(0).key());
+                if (!hasPinned && guidance.isResourceTreatedAsBase(v)) {
+                    continue;
+                }
+                if (!hasPinned
+                        && !targetSet.contains(v)
+                        && (ctx.baseBoundary().activeContractFor(v).isPresent()
+                                || ctx.baseBoundary().isCertifiedNatural(v)
+                                || linesByRes.containsKey(v))) {
+                    if (ig == null || oneHopFromStock == null || usableMap.isEmpty()) {
+                        continue;
+                    }
+                    int gid = ig.resourceDict().idOf(v);
+                    if (gid < 0 || !oneHopFromStock[gid] || wave > 0) {
                         continue;
                     }
                 }
 
-                // In wave 0, expand rank 0; in wave k, expand any newly discovered node up to rank k.
-                int limit = Math.min(wave + 1, ranked.size());
-                int startRank = (wave == 0) ? 0 : Math.min(wave, ranked.size());
+                // In wave 0, expand rank 0; in wave k, expand up to depthCap (always including pinned recipes).
+                int effectiveCap = hasPinned ? maxProdPerRes : depthCap;
+                int limit = Math.min(Math.min(wave + 1, effectiveCap), ranked.size());
+                int startRank = (wave == 0) ? 0 : Math.min(wave, limit);
+                int childDepth = vDepth + 1;
                 for (int ri = startRank; ri < limit; ri++) {
                     CompiledRecipe r = ranked.get(ri);
                     if (extractedRecipes.size() >= maxRecipes && !extractedRecipes.containsKey(r.compactId())) {
@@ -252,25 +320,47 @@ public final class ConeExtractor {
                     if (!newlyAdded) {
                         continue;
                     }
-                    // Include any active cycle macros for newly added nodes if needed.
                     if (ig != null) {
                         enqueueSlotCandidatesFast(
-                                ig, r.compactId(), highFanoutCap, usableMap, linesByRes, guidance,
-                                oneHopFromStock, highFanoutCache, visitedNodes, waveQueue, maxNodes
+                            ig,
+                            r.compactId(),
+                            highFanoutCap,
+                            usableMap,
+                            linesByRes,
+                            guidance,
+                            oneHopFromStock,
+                            oneHopFromPinnedTags,
+                            highFanoutCache,
+                            visitedNodes,
+                            waveQueue,
+                            maxNodes,
+                            nodeDepth,
+                            childDepth
                         );
                         if (visitedNodes.size() >= maxNodes) {
                             truncated = true;
                         }
                     } else {
                         for (InputSlot slot : r.inputs()) {
-                            if (enqueueSlotGeneric(slot, highFanoutCap, usableMap, linesByRes, guidance,
-                                    visitedNodes, waveQueue, maxNodes)) {
+                            if (enqueueSlotGeneric(
+                                slot,
+                                highFanoutCap,
+                                usableMap,
+                                linesByRes,
+                                guidance,
+                                visitedNodes,
+                                waveQueue,
+                                maxNodes,
+                                nodeDepth,
+                                childDepth
+                            )) {
                                 truncated = true;
                             }
                         }
                         for (CatalystSlot cat : r.catalysts()) {
                             for (ResourceKey c : cat.candidates()) {
                                 if (visitedNodes.add(c)) {
+                                    nodeDepth.putIfAbsent(c, childDepth);
                                     waveQueue.add(c);
                                 }
                             }
@@ -283,45 +373,73 @@ public final class ConeExtractor {
             }
         }
 
-        // Also scan cycle macros for all cone nodes (not just top targets).
+        // Also scan cycle macros for non-base cone nodes within budget.
         for (ResourceKey node : List.copyOf(visitedNodes)) {
+            if (visitedNodes.size() >= maxNodes || extractedRecipes.size() >= maxRecipes) {
+                break;
+            }
+            if (!targetSet.contains(node)
+                    && (ctx.baseBoundary().activeContractFor(node).isPresent()
+                            || ctx.baseBoundary().isCertifiedNatural(node)
+                            || guidance.isResourceTreatedAsBase(node))) {
+                continue;
+            }
             for (CompiledCycleMacro m : graph.cycleMacrosProducing(node)) {
+                if (visitedNodes.size() >= maxNodes || extractedRecipes.size() >= maxRecipes) {
+                    break;
+                }
                 if (seenMacroIds.add(m.macroKey().macroId()) && isMacroAllowedWithGraph(m, fac, guidance, masked)) {
-                    boolean allInside = true;
                     for (ResourceKey s : m.workingSeeds().keySet()) {
-                        if (!visitedNodes.contains(s)) {
-                            visitedNodes.add(s);
-                        }
+                        visitedNodes.add(s);
                     }
                     for (var e : m.netDeltaPerIter().entrySet()) {
-                        if (e.getValue() < 0L && !visitedNodes.contains(e.getKey())) {
+                        if (e.getValue() < 0L) {
                             visitedNodes.add(e.getKey());
                         }
                     }
                     for (CompiledRecipe inner : m.innerRecipes()) {
                         extractedRecipes.putIfAbsent(inner.compactId(), inner);
                     }
-                    if (allInside) {
-                        candidateMacros.add(m);
-                    }
+                    candidateMacros.add(m);
                 }
             }
         }
 
         // Pull unowned candidate machine items into the same cone up to maxMachineRecursionDepth.
-        int maxMachDepth = Math.min(3, request.profile().maxMachineRecursionDepth());
+        boolean allTargetsHaveOwnedProd = true;
+        for (TargetDemand td : request.targets()) {
+            List<CompiledRecipe> tProds = rankedProducersCache.get(td.resource());
+            boolean hasOwned = false;
+            if (tProds != null) {
+                for (CompiledRecipe tr : tProds) {
+                    if (tr.machineRequirement().handCraftable() || isMachineOwned(tr, ownedMachines, ownedCaps)) {
+                        hasOwned = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasOwned) {
+                allTargetsHaveOwnedProd = false;
+                break;
+            }
+        }
+        int maxMachDepth = Math
+                .min(allTargetsHaveOwnedProd ? 2 : 6, Math.max(request.profile().maxMachineRecursionDepth(), 6));
+        int maxExpandedMachines = allTargetsHaveOwnedProd ? 8 : 32;
+        int perDepthMachRecCap = allTargetsHaveOwnedProd ? 32 : 128;
         Set<String> expandedMachineIds = new HashSet<>();
-        for (int depth = 0; depth < maxMachDepth && visitedNodes.size() < maxNodes
+        for (int depth = 0; depth < maxMachDepth
+                && visitedNodes.size() < maxNodes
                 && extractedRecipes.size() < maxRecipes; depth++) {
             List<ResourceKey> newMachineItems = new ArrayList<>();
             for (CompiledRecipe rec : List.copyOf(extractedRecipes.values())) {
-                if (rec.machineRequirement().handCraftable()
-                        || isMachineOwned(rec, ownedMachines, ownedCaps)) {
+                if (expandedMachineIds.size() >= maxExpandedMachines) break;
+                if (rec.machineRequirement().handCraftable() || isMachineOwned(rec, ownedMachines, ownedCaps)) {
                     continue;
                 }
                 int picked = 0;
                 for (String mid : rec.machineRequirement().compatibleMachineIds()) {
-                    if (picked >= 3) break;
+                    if (picked >= 2 || expandedMachineIds.size() >= maxExpandedMachines) break;
                     if (!guidance.isWillingToBuild(mid)) continue;
                     picked++;
                     if (expandedMachineIds.add(mid)) {
@@ -337,14 +455,34 @@ public final class ConeExtractor {
             }
             ArrayDeque<ResourceKey> machQueue = new ArrayDeque<>(newMachineItems);
             Set<ResourceKey> seenMachWave = new HashSet<>();
-            int machRecipesBudget = Math.min(maxRecipes - extractedRecipes.size(), 96);
+            int machRecipesBudget = Math.min(maxRecipes - extractedRecipes.size(), perDepthMachRecCap);
             int machAdded = 0;
             while (!machQueue.isEmpty() && machAdded < machRecipesBudget && visitedNodes.size() < maxNodes) {
                 ResourceKey mv = machQueue.poll();
                 if (!seenMachWave.add(mv) || guidance.isResourceBanned(mv)) continue;
-                List<CompiledRecipe> mProds = rankedProducersCache.computeIfAbsent(mv, key ->
-                        rankProducers(key, false, ig, fac, guidance, ownedMachines, ownedCaps,
-                                masked, Math.min(4, maxProdPerRes), dormantResources, blockingRules));
+                if (ctx.baseBoundary().activeContractFor(mv).isPresent()
+                        || ctx.baseBoundary().isCertifiedNatural(mv)
+                        || guidance.isResourceTreatedAsBase(mv)) {
+                    continue;
+                }
+                List<CompiledRecipe> mProds = rankedProducersCache.computeIfAbsent(
+                    mv,
+                    key -> rankProducers(
+                        key,
+                        false,
+                        ig,
+                        fac,
+                        guidance,
+                        ownedMachines,
+                        ownedCaps,
+                        usableMap,
+                        linesByRes,
+                        masked,
+                        Math.min(4, maxProdPerRes),
+                        dormantResources,
+                        blockingRules
+                    )
+                );
                 if (guidance.isResourceTreatedAsBase(mv)
                         && (mProds.isEmpty() || !guidance.isRecipePinned(mProds.get(0).key()))) {
                     continue;
@@ -355,13 +493,36 @@ public final class ConeExtractor {
                     if (extractedRecipes.putIfAbsent(mr.compactId(), mr) == null) {
                         machAdded++;
                         if (ig != null) {
-                            enqueueSlotCandidatesFast(ig, mr.compactId(), Math.min(4, highFanoutCap),
-                                    usableMap, linesByRes, guidance, oneHopFromStock, highFanoutCache,
-                                    visitedNodes, machQueue, maxNodes);
+                            enqueueSlotCandidatesFast(
+                                ig,
+                                mr.compactId(),
+                                Math.min(4, highFanoutCap),
+                                usableMap,
+                                linesByRes,
+                                guidance,
+                                oneHopFromStock,
+                                oneHopFromPinnedTags,
+                                highFanoutCache,
+                                visitedNodes,
+                                machQueue,
+                                maxNodes,
+                                nodeDepth,
+                                3
+                            );
                         } else {
                             for (InputSlot slot : mr.inputs()) {
-                                enqueueSlotGeneric(slot, Math.min(4, highFanoutCap), usableMap, linesByRes,
-                                        guidance, visitedNodes, machQueue, maxNodes);
+                                enqueueSlotGeneric(
+                                    slot,
+                                    Math.min(4, highFanoutCap),
+                                    usableMap,
+                                    linesByRes,
+                                    guidance,
+                                    visitedNodes,
+                                    machQueue,
+                                    maxNodes,
+                                    nodeDepth,
+                                    3
+                                );
                             }
                             for (CatalystSlot cat : mr.catalysts()) {
                                 for (ResourceKey c : cat.candidates()) {
@@ -459,7 +620,7 @@ public final class ConeExtractor {
                     AutomatedLine c = lines.get(i);
                     if (c.humanAttentionSecondsPerPull() < best.humanAttentionSecondsPerPull()
                             || (c.humanAttentionSecondsPerPull() == best.humanAttentionSecondsPerPull()
-                            && c.throughputPerMinute() > best.throughputPerMinute())) {
+                                    && c.throughputPerMinute() > best.throughputPerMinute())) {
                         best = c;
                     }
                 }
@@ -471,11 +632,17 @@ public final class ConeExtractor {
             if (!bannedRes[u]) {
                 Optional<CostVector> override = guidance.overriddenUnitCost(rk);
                 if (override.isPresent()) {
-                    acqOpts[u] = DefaultAcquisitionOracle.fromUnitCost(override.get(), DefaultAcquisitionOracle.KEY_OVERRIDE);
+                    acqOpts[u] = DefaultAcquisitionOracle
+                            .fromUnitCost(override.get(), DefaultAcquisitionOracle.keyOverride);
                 } else if (freeBase[u]) {
                     acqOpts[u] = new AcquisitionOption(
-                            dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind.PLAYER_DECLARED_FREE,
-                            0.0, 0.0, 0.0, 0.0, DefaultAcquisitionOracle.KEY_FREE);
+                        AcquisitionKind.baseSupply,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        DefaultAcquisitionOracle.keyFree
+                    );
                 } else {
                     acqOpts[u] = effectiveOracle.assess(rk, 1L, ctx.progression()).orElse(null);
                 }
@@ -484,7 +651,7 @@ public final class ConeExtractor {
 
         // 4. Incremental O(|E_cone|) Acquisition Stratification (A4/A5).
         int[] tier = new int[nodeCount];
-        Arrays.fill(tier, ConeModel.INF_TIER);
+        Arrays.fill(tier, ConeModel.infTier);
         int[] bfsQueue = new int[Math.max(16, nodeCount * 2)];
         int qHead = 0, qTail = 0;
         boolean[] inQueue = new boolean[nodeCount];
@@ -507,10 +674,10 @@ public final class ConeExtractor {
         int totalStratSlots = totalInSlots + totalCatSlots;
         int[] stratSlotStart = new int[recipeCount + 1];
         int[] slotMinTier = new int[totalStratSlots];
-        Arrays.fill(slotMinTier, ConeModel.INF_TIER);
+        Arrays.fill(slotMinTier, ConeModel.infTier);
         int[] unmetSlots = new int[recipeCount];
         int[] recBestTier = new int[recipeCount];
-        Arrays.fill(recBestTier, ConeModel.INF_TIER);
+        Arrays.fill(recBestTier, ConeModel.infTier);
 
         // Local candidate lists per strat-slot (filtered to in-cone & non-banned & HARD_PIN tag rule).
         int[][] stratSlotCands = new int[totalStratSlots][];
@@ -528,8 +695,13 @@ public final class ConeExtractor {
             stratSlotStart[r] = slotCur;
             int unmet = 0;
             for (InputSlot slot : rec.inputs()) {
-                int[] cands = resolveLocalCandidates(slot.tagId().orElse(null), slot.candidates(),
-                        localByKey, bannedRes, guidance);
+                int[] cands = resolveLocalCandidates(
+                    slot.tagId().orElse(null),
+                    slot.candidates(),
+                    localByKey,
+                    bannedRes,
+                    guidance
+                );
                 stratSlotCands[slotCur] = cands;
                 for (int u : cands) {
                     resToSlotCount[u]++;
@@ -550,7 +722,7 @@ public final class ConeExtractor {
 
             outStart[r] = outCur;
             for (OutputSlot o : rec.outputs()) {
-                outRes[outCur] = localByKey.get(o.resource());
+                outRes[outCur] = Objects.requireNonNull(localByKey.get(o.resource()));
                 outAmount[outCur] = o.amountPerBatch();
                 outCur++;
             }
@@ -576,7 +748,22 @@ public final class ConeExtractor {
             }
         }
 
-        // Propagate tiers through recipes and active cycle macros.
+        // Weighted tier step per recipe so unowned-machine shortcuts never undercut owned-machine vanilla chains.
+        int[] recTierStep = new int[recipeCount];
+        for (int r = 0; r < recipeCount; r++) {
+            int step = 1;
+            if (!recHandCraftable[r] && !isMachineOwned(recObjects[r], ownedMachines, ownedCaps)) {
+                step += 9;
+            }
+            if (recAdvisory[r] == RecipeAdvisory.discouraged) {
+                step += 20;
+            } else if (recAdvisory[r] == RecipeAdvisory.lastResort) {
+                step += 100;
+            }
+            recTierStep[r] = step;
+        }
+
+        // Propagate weighted monotone tiers through recipes and active cycle macros.
         while (qHead != qTail) {
             int u = bfsQueue[qHead++];
             if (qHead == bfsQueue.length) qHead = 0;
@@ -589,7 +776,7 @@ public final class ConeExtractor {
                     continue;
                 }
                 int r = resToSlotRec[idx];
-                if (slotMinTier[ss] == ConeModel.INF_TIER) {
+                if (slotMinTier[ss] == ConeModel.infTier) {
                     unmetSlots[r]--;
                 }
                 slotMinTier[ss] = tu;
@@ -600,7 +787,7 @@ public final class ConeExtractor {
                             maxSlot = slotMinTier[k];
                         }
                     }
-                    int rTier = maxSlot + 1;
+                    int rTier = maxSlot + recTierStep[r];
                     if (rTier < recBestTier[r]) {
                         recBestTier[r] = rTier;
                         for (int oi = outStart[r]; oi < outStart[r + 1]; oi++) {
@@ -624,7 +811,7 @@ public final class ConeExtractor {
                 boolean ok = true;
                 for (ResourceKey s : m.workingSeeds().keySet()) {
                     Integer ls = localByKey.get(s);
-                    if (ls == null || tier[ls] >= ConeModel.INF_TIER) {
+                    if (ls == null || tier[ls] >= ConeModel.infTier) {
                         ok = false;
                         break;
                     }
@@ -634,7 +821,7 @@ public final class ConeExtractor {
                 for (var e : m.netDeltaPerIter().entrySet()) {
                     if (e.getValue() < 0L) {
                         Integer lr = localByKey.get(e.getKey());
-                        if (lr == null || tier[lr] >= ConeModel.INF_TIER) {
+                        if (lr == null || tier[lr] >= ConeModel.infTier) {
                             ok = false;
                             break;
                         }
@@ -662,7 +849,7 @@ public final class ConeExtractor {
         // 5. Binding-level monotonicity & active recipe classification.
         byte[] recActive = new byte[recipeCount];
         int[] recPsi = new int[recipeCount];
-        Arrays.fill(recPsi, ConeModel.INF_TIER);
+        Arrays.fill(recPsi, ConeModel.infTier);
         boolean[] hasActiveProducer = new boolean[nodeCount];
         boolean[] isCoproduced = new boolean[nodeCount];
 
@@ -670,7 +857,7 @@ public final class ConeExtractor {
             if (unmetSlots[r] > 0) {
                 continue;
             }
-            int psi = ConeModel.INF_TIER;
+            int psi = ConeModel.infTier;
             boolean anyOutInScc = false;
             for (int oi = outStart[r]; oi < outStart[r + 1]; oi++) {
                 int v = outRes[oi];
@@ -680,7 +867,7 @@ public final class ConeExtractor {
                 }
             }
             recPsi[r] = psi;
-            if (psi >= ConeModel.INF_TIER) {
+            if (psi >= ConeModel.infTier) {
                 continue;
             }
 
@@ -709,21 +896,21 @@ public final class ConeExtractor {
                         }
                     }
                 }
-                byte mode = ConeModel.ACTIVE_NONE;
+                byte mode = ConeModel.activeNone;
                 if (inputHasStockOrLine) {
-                    mode |= ConeModel.ACTIVE_CONVERT;
+                    mode |= ConeModel.activeConvert;
                 }
                 if (allSlotsHaveMonotone || pinned) {
-                    mode |= ConeModel.ACTIVE_STANDARD;
+                    mode |= ConeModel.activeStandard;
                 }
                 recActive[r] = mode;
             } else {
                 if (allSlotsHaveMonotone || pinned) {
-                    recActive[r] = ConeModel.ACTIVE_STANDARD;
+                    recActive[r] = ConeModel.activeStandard;
                 }
             }
 
-            if (recActive[r] != ConeModel.ACTIVE_NONE) {
+            if (recActive[r] != ConeModel.activeNone) {
                 int oCnt = outStart[r + 1] - outStart[r];
                 for (int oi = outStart[r]; oi < outStart[r + 1]; oi++) {
                     int v = outRes[oi];
@@ -739,8 +926,12 @@ public final class ConeExtractor {
         String[] leafSigMemo = new String[nodeCount];
         boolean[] isSingletonRes = new boolean[nodeCount];
         for (int u = 0; u < nodeCount; u++) {
-            if (usableStock[u] > 0L || bestLines[u] != null || hasActiveProducer[u]
-                    || isCoproduced[u] || guidanceTouchedRes.contains(resKeys[u]) || acqOpts[u] == null) {
+            if (usableStock[u] > 0L
+                    || bestLines[u] != null
+                    || hasActiveProducer[u]
+                    || isCoproduced[u]
+                    || guidanceTouchedRes.contains(resKeys[u])
+                    || acqOpts[u] == null) {
                 isSingletonRes[u] = true;
             } else {
                 CostVector unitCost = StepCosts.acquireCost(acqOpts[u], 1L, freeBase[u]);
@@ -779,18 +970,25 @@ public final class ConeExtractor {
                 inClassStart[inCur] = classRepList.size();
 
                 int[] rawLocal = stratSlotCands[baseSS + i];
-                if (recActive[r] != ConeModel.ACTIVE_NONE && rawLocal.length > 0) {
+                if (recActive[r] != ConeModel.activeNone && rawLocal.length > 0) {
                     // Filter to reachable & (when in SCC and not convert-only) monotone candidates.
-                    boolean requireMono = enforceMonotone && recActive[r] == ConeModel.ACTIVE_STANDARD;
-                    int[] filtered = filterReachable(rawLocal, tier, requireMono ? psi : ConeModel.INF_TIER);
-                    if (filtered.length == 0 && recActive[r] != ConeModel.ACTIVE_NONE) {
-                        filtered = filterReachable(rawLocal, tier, ConeModel.INF_TIER);
+                    boolean requireMono = enforceMonotone && recActive[r] == ConeModel.activeStandard;
+                    int[] filtered = filterReachable(rawLocal, tier, requireMono ? psi : ConeModel.infTier);
+                    if (filtered.length == 0 && recActive[r] != ConeModel.activeNone) {
+                        filtered = filterReachable(rawLocal, tier, ConeModel.infTier);
                     }
                     String tagId = inTagId[inCur];
                     ResourceKey prefTag = tagId != null ? guidance.preferredTagMember(tagId).orElse(null) : null;
                     collapsedOr += buildQuotientClasses(
-                            filtered, prefTag, isSingletonRes, leafSigMemo, ig, resGlobalId,
-                            classRepList, classMemStartList, classMemResList
+                        filtered,
+                        prefTag,
+                        isSingletonRes,
+                        leafSigMemo,
+                        ig,
+                        resGlobalId,
+                        classRepList,
+                        classMemStartList,
+                        classMemResList
                     );
                 }
                 inCur++;
@@ -819,7 +1017,7 @@ public final class ConeExtractor {
                 catMaxDur[catCur] = cat.maxDurability();
                 catCandStart[catCur] = catCandResList.size();
                 for (int u : stratSlotCands[baseCatSS + i]) {
-                    if (tier[u] < ConeModel.INF_TIER) {
+                    if (tier[u] < ConeModel.infTier) {
                         catCandResList.add(u);
                     }
                 }
@@ -835,7 +1033,7 @@ public final class ConeExtractor {
             localProds.add(new ArrayList<>(2));
         }
         for (int r = 0; r < recipeCount; r++) {
-            if (recActive[r] == ConeModel.ACTIVE_NONE) continue;
+            if (recActive[r] == ConeModel.activeNone) continue;
             for (int oi = outStart[r]; oi < outStart[r + 1]; oi++) {
                 localProds.get(outRes[oi]).add(r);
             }
@@ -844,8 +1042,20 @@ public final class ConeExtractor {
         for (int u = 0; u < nodeCount; u++) {
             List<Integer> list = localProds.get(u);
             if (list.size() > 1) {
-                list.sort((a, b) -> compareLocalProducers(a, b, recPinned, recAdvisory, recHandCraftable,
-                        recCapability, recCompatMachines, recObjects, ownedMachines, ownedCaps));
+                list.sort(
+                    (a, b) -> compareLocalProducers(
+                        a,
+                        b,
+                        recPinned,
+                        recAdvisory,
+                        recHandCraftable,
+                        recCapability,
+                        recCompatMachines,
+                        recObjects,
+                        ownedMachines,
+                        ownedCaps
+                    )
+                );
             }
             prodStart[u + 1] = prodStart[u] + list.size();
         }
@@ -865,7 +1075,7 @@ public final class ConeExtractor {
             boolean feasible = true;
             for (ResourceKey s : m.workingSeeds().keySet()) {
                 Integer lu = localByKey.get(s);
-                if (lu == null || tier[lu] >= ConeModel.INF_TIER) {
+                if (lu == null || tier[lu] >= ConeModel.infTier) {
                     feasible = false;
                     break;
                 }
@@ -874,7 +1084,7 @@ public final class ConeExtractor {
             for (var e : m.netDeltaPerIter().entrySet()) {
                 if (e.getValue() < 0L) {
                     Integer lu = localByKey.get(e.getKey());
-                    if (lu == null || tier[lu] >= ConeModel.INF_TIER) {
+                    if (lu == null || tier[lu] >= ConeModel.infTier) {
                         feasible = false;
                         break;
                     }
@@ -895,42 +1105,97 @@ public final class ConeExtractor {
 
         // 8. Detect CoupledComponents (for QuerySubgraph diagnostics & Stage 2 metadata).
         List<CoupledComponent> coupled = detectCoupledComponents(
-                nodeCount, resKeys, prodStart, prodRecipe, recObjects, recActive, recHandCraftable,
-                recCapability, recCompatMachines, ownedMachines, ownedCaps, usableStock
+            nodeCount,
+            resKeys,
+            prodStart,
+            prodRecipe,
+            recObjects,
+            recActive,
+            recHandCraftable,
+            recCapability,
+            recCompatMachines,
+            ownedMachines,
+            ownedCaps,
+            usableStock
         );
 
         return new ConeModel(
-                graph, resKeys, resGlobalId, localByKey, localByGlobalRes,
-                tier, usableStock, freeBase, dormantArr, bannedRes, acqOpts, bestLines, allLinesArr,
-                recCompactId, recObjects, localByCompactId, recRole, recAdvisory, recPinned,
-                recHandCraftable, recCapability, recCompatMachines, recActive, recPsi,
-                inStart, inSlotIndex, inAmount, inTagId, inMatchMode, inOrigCandCount,
-                inClassStart, classRepList.toArray(), classMemStartList.toArray(), classMemResList.toArray(),
-                catStart, catSlotIndex, catDurCost, catMaxDur, catCandStart, catCandResList.toArray(),
-                outStart, outRes, outAmount, prodStart, prodRecipe,
-                List.copyOf(activeMacros), macrosByLocalOut, coupled,
-                collapsedOr, truncated, Collections.unmodifiableSet(dormantResources), blockingRules
+            graph,
+            resKeys,
+            resGlobalId,
+            localByKey,
+            localByGlobalRes,
+            tier,
+            usableStock,
+            freeBase,
+            dormantArr,
+            bannedRes,
+            acqOpts,
+            bestLines,
+            allLinesArr,
+            recCompactId,
+            recObjects,
+            localByCompactId,
+            recRole,
+            recAdvisory,
+            recPinned,
+            recHandCraftable,
+            recCapability,
+            recCompatMachines,
+            recActive,
+            recPsi,
+            inStart,
+            inSlotIndex,
+            inAmount,
+            inTagId,
+            inMatchMode,
+            inOrigCandCount,
+            inClassStart,
+            classRepList.toArray(),
+            classMemStartList.toArray(),
+            classMemResList.toArray(),
+            catStart,
+            catSlotIndex,
+            catDurCost,
+            catMaxDur,
+            catCandStart,
+            catCandResList.toArray(),
+            outStart,
+            outRes,
+            outAmount,
+            prodStart,
+            prodRecipe,
+            List.copyOf(activeMacros),
+            macrosByLocalOut,
+            coupled,
+            collapsedOr,
+            truncated,
+            Collections.unmodifiableSet(dormantResources),
+            blockingRules
         );
     }
 
     private List<CompiledRecipe> rankProducers(
-            ResourceKey target,
-            boolean isDirectTarget,
-            IndexedRecipeGraph ig,
-            FacilitySnapshot fac,
-            HumanGuidanceView guidance,
-            Set<String> ownedMachines,
-            Set<MachineCapabilityId> ownedCaps,
-            Set<Integer> masked,
-            int maxProdPerRes,
-            Set<ResourceKey> dormantResources,
-            Map<ResourceKey, Set<String>> blockingRules
+        ResourceKey target,
+        boolean isDirectTarget,
+        @Nullable IndexedRecipeGraph ig,
+        FacilitySnapshot fac,
+        HumanGuidanceView guidance,
+        Set<String> ownedMachines,
+        Set<MachineCapabilityId> ownedCaps,
+        Map<ResourceKey, Long> usableMap,
+        Map<ResourceKey, List<AutomatedLine>> linesByRes,
+        Set<Integer> masked,
+        int maxProdPerRes,
+        Set<ResourceKey> dormantResources,
+        Map<ResourceKey, Set<String>> blockingRules
     ) {
         List<CompiledRecipe> allProds = graph.producersOf(target);
         if (allProds.isEmpty()) {
             return List.of();
         }
-        List<CompiledRecipe> eligible = new ArrayList<>(Math.min(allProds.size(), maxProdPerRes * 2));
+        List<CompiledRecipe> standardEligible = new ArrayList<>(Math.min(allProds.size(), maxProdPerRes * 2));
+        List<CompiledRecipe> unstockedReversible = null;
         boolean anyBlockedByHuman = false;
         boolean anyBlockedBySystemOptIn = false;
 
@@ -953,7 +1218,7 @@ public final class ConeExtractor {
             SystemAdmission adm = graph.admissionOf(sysId);
             boolean unlocked = fac.unlockedSystems().contains(sysId);
             if (!guidance.isSystemEnabled(sysId, adm, unlocked)) {
-                if (adm == SystemAdmission.OPT_IN_ONLY && !unlocked) {
+                if (adm == SystemAdmission.optInOnly && !unlocked) {
                     anyBlockedBySystemOptIn = true;
                 } else {
                     anyBlockedByHuman = true;
@@ -961,13 +1226,29 @@ public final class ConeExtractor {
                 }
                 continue;
             }
-            if (!r.machineRequirement().handCraftable() && !canUseOrBuildMachine(r, ownedMachines, ownedCaps, guidance)) {
+            if (!r.machineRequirement().handCraftable()
+                    && !canUseOrBuildMachine(r, ownedMachines, ownedCaps, guidance)) {
                 anyBlockedByHuman = true;
                 recordMachineBan(target, r, guidance, blockingRules);
                 continue;
             }
-            eligible.add(r);
+            if (r.isReversibleConversion()
+                    && !isDirectTarget
+                    && !guidance.isRecipePinned(r.key())
+                    && !hasStockedOrLineInput(r, usableMap, linesByRes)) {
+                if (unstockedReversible == null) {
+                    unstockedReversible = new ArrayList<>(4);
+                }
+                unstockedReversible.add(r);
+                continue;
+            }
+            standardEligible.add(r);
         }
+
+        // Fall back to unstocked reversible recipes only when no standard producer exists (e.g. iron_block).
+        List<CompiledRecipe> eligible = !standardEligible.isEmpty()
+                ? standardEligible
+                : (unstockedReversible != null ? unstockedReversible : List.of());
 
         if (eligible.isEmpty()) {
             if (anyBlockedBySystemOptIn && !anyBlockedByHuman) {
@@ -983,11 +1264,17 @@ public final class ConeExtractor {
             int advA = pa ? 0 : a.advisory().ordinal();
             int advB = pb ? 0 : b.advisory().ordinal();
             if (advA != advB) return Integer.compare(advA, advB);
+            int revA = a.isReversibleConversion() ? 1 : 0;
+            int revB = b.isReversibleConversion() ? 1 : 0;
+            if (revA != revB) return Integer.compare(revA, revB);
             int ownA = isMachineOwned(a, ownedMachines, ownedCaps) ? 0 : 1;
             int ownB = isMachineOwned(b, ownedMachines, ownedCaps) ? 0 : 1;
             if (ownA != ownB) return Integer.compare(ownA, ownB);
-            int sysA = SystemCostTiers.systemPriority(a.key().systemId());
-            int sysB = SystemCostTiers.systemPriority(b.key().systemId());
+            int fidA = a.isSuspiciousJei() ? 1 : 0;
+            int fidB = b.isSuspiciousJei() ? 1 : 0;
+            if (fidA != fidB) return Integer.compare(fidA, fidB);
+            int sysA = SystemCostTiers.systemPriority(a.systemTags());
+            int sysB = SystemCostTiers.systemPriority(b.systemTags());
             if (sysA != sysB) return Integer.compare(sysA, sysB);
             int inA = a.inputs().size();
             int inB = b.inputs().size();
@@ -1009,8 +1296,8 @@ public final class ConeExtractor {
             if (capped.size() >= maxProdPerRes) {
                 break;
             }
-            if (r.advisory() != RecipeAdvisory.NONE) {
-                if (advCount >= MAX_ADVISORY_PRODUCERS && !capped.isEmpty()) {
+            if (r.advisory() != RecipeAdvisory.none) {
+                if (advCount >= maxAdvisoryProducers && !capped.isEmpty()) {
                     continue;
                 }
                 advCount++;
@@ -1021,17 +1308,20 @@ public final class ConeExtractor {
     }
 
     private void enqueueSlotCandidatesFast(
-            IndexedRecipeGraph ig,
-            int compactId,
-            int highFanoutCap,
-            Map<ResourceKey, Long> usableMap,
-            Map<ResourceKey, List<AutomatedLine>> linesByRes,
-            HumanGuidanceView guidance,
-            boolean[] oneHopFromStock,
-            Map<Integer, List<ResourceKey>> highFanoutCache,
-            LinkedHashSet<ResourceKey> visitedNodes,
-            ArrayDeque<ResourceKey> waveQueue,
-            int maxNodes
+        IndexedRecipeGraph ig,
+        int compactId,
+        int highFanoutCap,
+        Map<ResourceKey, Long> usableMap,
+        Map<ResourceKey, List<AutomatedLine>> linesByRes,
+        HumanGuidanceView guidance,
+        boolean @Nullable [] oneHopFromStock,
+        boolean @Nullable [] oneHopFromPinnedTags,
+        Map<Integer, List<ResourceKey>> highFanoutCache,
+        LinkedHashSet<ResourceKey> visitedNodes,
+        ArrayDeque<ResourceKey> waveQueue,
+        int maxNodes,
+        Map<ResourceKey, Integer> nodeDepth,
+        int childDepth
     ) {
         ResourceDictionary dict = ig.resourceDict();
         CandidateTable cands = ig.candidateTable();
@@ -1043,6 +1333,7 @@ public final class ConeExtractor {
                 Optional<ResourceKey> pref = guidance.preferredTagMember(tagId);
                 if (pref.isPresent() && !guidance.isResourceBanned(pref.get())) {
                     if (visitedNodes.add(pref.get())) {
+                        nodeDepth.putIfAbsent(pref.get(), childDepth);
                         waveQueue.add(pref.get());
                     }
                     if (guidance.isTagHardPinned(tagId)) {
@@ -1050,21 +1341,34 @@ public final class ConeExtractor {
                     }
                 }
             }
-            if (members.length <= HIGH_FANOUT_THRESHOLD) {
+            if (members.length <= highFanoutThreshold) {
                 for (int gid : members) {
                     ResourceKey rk = dict.keyOf(gid);
                     if (visitedNodes.size() < maxNodes && visitedNodes.add(rk)) {
+                        nodeDepth.putIfAbsent(rk, childDepth);
                         waveQueue.add(rk);
                     }
                 }
             } else {
-                List<ResourceKey> picks = highFanoutCache.computeIfAbsent(listId, lid ->
-                        selectHighFanoutFast(ig, members, highFanoutCap, usableMap, linesByRes, guidance, oneHopFromStock));
+                List<ResourceKey> picks = highFanoutCache.computeIfAbsent(
+                    listId,
+                    lid -> selectHighFanoutFast(
+                        ig,
+                        members,
+                        highFanoutCap,
+                        usableMap,
+                        linesByRes,
+                        guidance,
+                        oneHopFromStock,
+                        oneHopFromPinnedTags
+                    )
+                );
                 for (ResourceKey rk : picks) {
                     if (visitedNodes.size() >= maxNodes) break;
                     if (visitedNodes.add(rk)) {
-                        if (!DefaultAcquisitionOracle.isKnownBaseNatural(rk)
-                                && !guidance.isResourceTreatedAsBase(rk)) {
+                        nodeDepth.putIfAbsent(rk, childDepth);
+                        // Always allow bounded inward exploration of Tag candidates (never stop blindly at a Tag!).
+                        if (!guidance.isResourceTreatedAsBase(rk)) {
                             waveQueue.add(rk);
                         }
                     }
@@ -1073,10 +1377,11 @@ public final class ConeExtractor {
         }
         for (int ci = ig.catStart(compactId); ci < ig.catEnd(compactId); ci++) {
             int[] members = cands.membersOf(ig.catCandList(ci));
-            int limit = Math.min(members.length, Math.max(HIGH_FANOUT_THRESHOLD, highFanoutCap));
+            int limit = Math.min(members.length, Math.max(highFanoutThreshold, highFanoutCap));
             for (int i = 0; i < limit; i++) {
                 ResourceKey rk = dict.keyOf(members[i]);
                 if (visitedNodes.size() < maxNodes && visitedNodes.add(rk)) {
+                    nodeDepth.putIfAbsent(rk, childDepth);
                     waveQueue.add(rk);
                 }
             }
@@ -1084,13 +1389,14 @@ public final class ConeExtractor {
     }
 
     private static List<ResourceKey> selectHighFanoutFast(
-            IndexedRecipeGraph ig,
-            int[] members,
-            int cap,
-            Map<ResourceKey, Long> usableMap,
-            Map<ResourceKey, List<AutomatedLine>> linesByRes,
-            HumanGuidanceView guidance,
-            boolean[] oneHopFromStock
+        IndexedRecipeGraph ig,
+        int[] members,
+        int cap,
+        Map<ResourceKey, Long> usableMap,
+        Map<ResourceKey, List<AutomatedLine>> linesByRes,
+        HumanGuidanceView guidance,
+        boolean @Nullable [] oneHopFromStock,
+        boolean @Nullable [] oneHopFromPinnedTags
     ) {
         ResourceDictionary dict = ig.resourceDict();
         List<ResourceKey> direct = new ArrayList<>();
@@ -1104,13 +1410,6 @@ public final class ConeExtractor {
                 direct.add(rk);
                 continue;
             }
-            if (DefaultAcquisitionOracle.isKnownBaseNatural(rk)) {
-                if (firstNatural == null) {
-                    firstNatural = rk;
-                }
-                direct.add(rk);
-                continue;
-            }
             if (ig.producerCount(gid) > 0) {
                 producible.add(gid);
             } else if (direct.size() < 4) {
@@ -1120,15 +1419,18 @@ public final class ConeExtractor {
 
         if (cap < Integer.MAX_VALUE && producible.size() > cap) {
             producible.sort((a, b) -> {
+                int paPin = (oneHopFromPinnedTags != null && oneHopFromPinnedTags[a]) ? 0 : 1;
+                int pbPin = (oneHopFromPinnedTags != null && oneHopFromPinnedTags[b]) ? 0 : 1;
+                if (paPin != pbPin) return Integer.compare(paPin, pbPin);
                 int sa = (oneHopFromStock != null && oneHopFromStock[a]) ? 0 : 1;
                 int sb = (oneHopFromStock != null && oneHopFromStock[b]) ? 0 : 1;
                 if (sa != sb) return Integer.compare(sa, sb);
-                int pa = ig.producerCount(a);
-                int pb = ig.producerCount(b);
-                if (pa != pb) return Integer.compare(pa, pb);
                 int ca = ig.exactConsumerCount(a);
                 int cb = ig.exactConsumerCount(b);
                 if (ca != cb) return Integer.compare(cb, ca);
+                int pa = ig.producerCount(a);
+                int pb = ig.producerCount(b);
+                if (pa != pb) return Integer.compare(pb, pa);
                 return Integer.compare(a, b);
             });
             producible = producible.subList(0, cap);
@@ -1143,28 +1445,36 @@ public final class ConeExtractor {
     }
 
     private boolean enqueueSlotGeneric(
-            InputSlot slot,
-            int highFanoutCap,
-            Map<ResourceKey, Long> usableMap,
-            Map<ResourceKey, List<AutomatedLine>> linesByRes,
-            HumanGuidanceView guidance,
-            LinkedHashSet<ResourceKey> visitedNodes,
-            ArrayDeque<ResourceKey> waveQueue,
-            int maxNodes
+        InputSlot slot,
+        int highFanoutCap,
+        Map<ResourceKey, Long> usableMap,
+        Map<ResourceKey, List<AutomatedLine>> linesByRes,
+        HumanGuidanceView guidance,
+        LinkedHashSet<ResourceKey> visitedNodes,
+        ArrayDeque<ResourceKey> waveQueue,
+        int maxNodes,
+        Map<ResourceKey, Integer> nodeDepth,
+        int childDepth
     ) {
         boolean trunc = false;
         if (slot.tagId().isPresent()) {
             Optional<ResourceKey> pref = guidance.preferredTagMember(slot.tagId().get());
             if (pref.isPresent() && !guidance.isResourceBanned(pref.get())) {
-                if (visitedNodes.add(pref.get())) waveQueue.add(pref.get());
+                if (visitedNodes.add(pref.get())) {
+                    nodeDepth.putIfAbsent(pref.get(), childDepth);
+                    waveQueue.add(pref.get());
+                }
                 if (guidance.isTagHardPinned(slot.tagId().get())) return false;
             }
         }
         List<ResourceKey> cands = slot.candidates();
-        if (cands.size() <= HIGH_FANOUT_THRESHOLD) {
+        if (cands.size() <= highFanoutThreshold) {
             for (ResourceKey rk : cands) {
                 if (visitedNodes.size() >= maxNodes) return true;
-                if (visitedNodes.add(rk)) waveQueue.add(rk);
+                if (visitedNodes.add(rk)) {
+                    nodeDepth.putIfAbsent(rk, childDepth);
+                    waveQueue.add(rk);
+                }
             }
             return false;
         }
@@ -1172,19 +1482,44 @@ public final class ConeExtractor {
         for (ResourceKey rk : cands) {
             if (guidance.isResourceBanned(rk)) continue;
             if (visitedNodes.size() >= maxNodes) return true;
-            if (usableMap.containsKey(rk) || linesByRes.containsKey(rk)
-                    || guidance.isResourceTreatedAsBase(rk) || DefaultAcquisitionOracle.isKnownBaseNatural(rk)) {
-                if (visitedNodes.add(rk) && !DefaultAcquisitionOracle.isKnownBaseNatural(rk)) {
-                    waveQueue.add(rk);
+            if (usableMap.containsKey(rk)
+                    || linesByRes.containsKey(rk)
+                    || guidance.isResourceTreatedAsBase(rk)) {
+                if (visitedNodes.add(rk)) {
+                    nodeDepth.putIfAbsent(rk, childDepth);
+                    if (!guidance.isResourceTreatedAsBase(rk)) {
+                        waveQueue.add(rk);
+                    }
                 }
             } else if (nonBaseAdded < highFanoutCap) {
                 nonBaseAdded++;
-                if (visitedNodes.add(rk)) waveQueue.add(rk);
+                if (visitedNodes.add(rk)) {
+                    nodeDepth.putIfAbsent(rk, childDepth);
+                    waveQueue.add(rk);
+                }
             } else {
                 trunc = true;
             }
         }
         return trunc;
+    }
+
+    private static boolean hasStockedOrLineInput(
+        CompiledRecipe r,
+        Map<ResourceKey, Long> usableMap,
+        Map<ResourceKey, List<AutomatedLine>> linesByRes
+    ) {
+        if (usableMap.isEmpty() && linesByRes.isEmpty()) {
+            return false;
+        }
+        for (InputSlot slot : r.inputs()) {
+            for (ResourceKey c : slot.candidates()) {
+                if (usableMap.containsKey(c) || linesByRes.containsKey(c)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static boolean[] computeOneHopStocked(IndexedRecipeGraph ig, Map<ResourceKey, Long> usableMap) {
@@ -1203,12 +1538,33 @@ public final class ConeExtractor {
         return oneHop;
     }
 
+    private static boolean @Nullable [] computeOneHopFromPinnedTags(IndexedRecipeGraph ig, HumanGuidanceView guidance) {
+        ResourceDictionary dict = ig.resourceDict();
+        boolean[] oneHop = null;
+        for (GuidanceRule rule : guidance.allRules()) {
+            if (!(rule instanceof TagDefaultRule tagRule)) continue;
+            int gid = dict.idOf(tagRule.preferredMember());
+            if (gid < 0) continue;
+            if (oneHop == null) {
+                oneHop = new boolean[dict.size()];
+            }
+            oneHop[gid] = true;
+            for (int ci = ig.consStart(gid); ci < ig.consEnd(gid); ci++) {
+                int r = ig.consRecipe(ci);
+                for (int oi = ig.outStart(r); oi < ig.outEnd(r); oi++) {
+                    oneHop[ig.outRes(oi)] = true;
+                }
+            }
+        }
+        return oneHop;
+    }
+
     private static int[] resolveLocalCandidates(
-            String tagId,
-            List<ResourceKey> candidates,
-            Map<ResourceKey, Integer> localByKey,
-            boolean[] bannedRes,
-            HumanGuidanceView guidance
+        @Nullable String tagId,
+        List<ResourceKey> candidates,
+        Map<ResourceKey, Integer> localByKey,
+        boolean[] bannedRes,
+        HumanGuidanceView guidance
     ) {
         if (tagId != null && guidance.isTagHardPinned(tagId)) {
             Optional<ResourceKey> pref = guidance.preferredTagMember(tagId);
@@ -1245,15 +1601,15 @@ public final class ConeExtractor {
     }
 
     private static int buildQuotientClasses(
-            int[] cands,
-            ResourceKey prefTag,
-            boolean[] isSingleton,
-            String[] leafSig,
-            IndexedRecipeGraph ig,
-            int[] resGlobalId,
-            IntList classRepList,
-            IntList classMemStartList,
-            IntList classMemResList
+        int[] cands,
+        @Nullable ResourceKey prefTag,
+        boolean[] isSingleton,
+        String[] leafSig,
+        @Nullable IndexedRecipeGraph ig,
+        int[] resGlobalId,
+        IntList classRepList,
+        IntList classMemStartList,
+        IntList classMemResList
     ) {
         if (cands.length == 0) return 0;
         if (cands.length == 1) {
@@ -1284,8 +1640,7 @@ public final class ConeExtractor {
         }
 
         // Choose deterministic representative per class, then sort classes by representative.
-        record ClassPick(int rep, int[] members) {
-        }
+        record ClassPick(int rep, int[] members) {}
         List<ClassPick> picks = new ArrayList<>(classes.size());
         for (int[] mems : classes) {
             int rep = chooseRepresentative(mems, prefTag, ig, resGlobalId);
@@ -1303,7 +1658,12 @@ public final class ConeExtractor {
         return collapsed;
     }
 
-    private static int chooseRepresentative(int[] members, ResourceKey prefTag, IndexedRecipeGraph ig, int[] resGlobalId) {
+    private static int chooseRepresentative(
+        int[] members,
+        @Nullable ResourceKey prefTag,
+        @Nullable IndexedRecipeGraph ig,
+        int[] resGlobalId
+    ) {
         if (members.length == 1) {
             return members[0];
         }
@@ -1324,9 +1684,12 @@ public final class ConeExtractor {
     }
 
     private static boolean isStandardActiveOrAnyScc(
-            CompiledRecipe rec, int r, byte[] recActive, CompiledRecipeGraph graph
+        CompiledRecipe rec,
+        int r,
+        byte[] recActive,
+        CompiledRecipeGraph graph
     ) {
-        if (recActive[r] == ConeModel.ACTIVE_NONE) return false;
+        if (recActive[r] == ConeModel.activeNone) return false;
         for (OutputSlot o : rec.outputs()) {
             if (graph.sccTopology().isInNonTrivialScc(o.resource())) {
                 return true;
@@ -1336,15 +1699,21 @@ public final class ConeExtractor {
     }
 
     private static boolean isMacroAllowed(
-            CompiledCycleMacro macro, FacilitySnapshot fac, HumanGuidanceView guidance, Set<Integer> masked
+        CompiledCycleMacro macro,
+        FacilitySnapshot fac,
+        HumanGuidanceView guidance,
+        Set<Integer> masked
     ) {
         for (CompiledRecipe inner : macro.innerRecipes()) {
             if (masked.contains(inner.compactId()) || guidance.isRecipeBanned(inner.key())) {
                 return false;
             }
             String sysId = inner.key().systemId();
-            if (!guidance.isSystemEnabled(sysId, graphAdmissionStatic(inner, sysId),
-                    fac.unlockedSystems().contains(sysId))) {
+            if (!guidance.isSystemEnabled(
+                sysId,
+                graphAdmissionStatic(inner, sysId),
+                fac.unlockedSystems().contains(sysId)
+            )) {
                 return false;
             }
         }
@@ -1352,7 +1721,10 @@ public final class ConeExtractor {
     }
 
     private boolean isMacroAllowedWithGraph(
-            CompiledCycleMacro macro, FacilitySnapshot fac, HumanGuidanceView guidance, Set<Integer> masked
+        CompiledCycleMacro macro,
+        FacilitySnapshot fac,
+        HumanGuidanceView guidance,
+        Set<Integer> masked
     ) {
         for (CompiledRecipe inner : macro.innerRecipes()) {
             if (masked.contains(inner.compactId()) || guidance.isRecipeBanned(inner.key())) {
@@ -1367,12 +1739,13 @@ public final class ConeExtractor {
     }
 
     private static SystemAdmission graphAdmissionStatic(CompiledRecipe inner, String sysId) {
-        return dev.vfyjxf.cirrus.planning.core.graph.DefaultSystemAdmissionPolicy.defaults()
-                .classify(sysId, "");
+        return DefaultSystemAdmissionPolicy.defaults().classify(sysId, "");
     }
 
     private static boolean isMachineOwned(
-            CompiledRecipe r, Set<String> ownedMachines, Set<MachineCapabilityId> ownedCaps
+        CompiledRecipe r,
+        Set<String> ownedMachines,
+        Set<MachineCapabilityId> ownedCaps
     ) {
         if (r.machineRequirement().handCraftable()) return true;
         if (r.machineRequirement().capabilityId().isPresent()
@@ -1386,7 +1759,10 @@ public final class ConeExtractor {
     }
 
     private static boolean canUseOrBuildMachine(
-            CompiledRecipe r, Set<String> ownedMachines, Set<MachineCapabilityId> ownedCaps, HumanGuidanceView guidance
+        CompiledRecipe r,
+        Set<String> ownedMachines,
+        Set<MachineCapabilityId> ownedCaps,
+        HumanGuidanceView guidance
     ) {
         if (isMachineOwned(r, ownedMachines, ownedCaps)) return true;
         List<String> compat = r.machineRequirement().compatibleMachineIds();
@@ -1400,23 +1776,26 @@ public final class ConeExtractor {
     }
 
     private static int compareLocalProducers(
-            int a, int b,
-            boolean[] recPinned,
-            RecipeAdvisory[] recAdvisory,
-            boolean[] recHand,
-            MachineCapabilityId[] recCap,
-            List<String>[] recCompat,
-            CompiledRecipe[] recObjects,
-            Set<String> ownedMachines,
-            Set<MachineCapabilityId> ownedCaps
+        int a,
+        int b,
+        boolean[] recPinned,
+        RecipeAdvisory[] recAdvisory,
+        boolean[] recHand,
+        MachineCapabilityId[] recCap,
+        List<String>[] recCompat,
+        CompiledRecipe[] recObjects,
+        Set<String> ownedMachines,
+        Set<MachineCapabilityId> ownedCaps
     ) {
         if (recPinned[a] != recPinned[b]) return recPinned[a] ? -1 : 1;
         int advA = recPinned[a] ? 0 : recAdvisory[a].ordinal();
         int advB = recPinned[b] ? 0 : recAdvisory[b].ordinal();
         if (advA != advB) return Integer.compare(advA, advB);
-        int ownA = (recHand[a] || (recCap[a] != null && ownedCaps.contains(recCap[a]))
+        int ownA = (recHand[a]
+                || (recCap[a] != null && ownedCaps.contains(recCap[a]))
                 || anyOwned(recCompat[a], ownedMachines)) ? 0 : 1;
-        int ownB = (recHand[b] || (recCap[b] != null && ownedCaps.contains(recCap[b]))
+        int ownB = (recHand[b]
+                || (recCap[b] != null && ownedCaps.contains(recCap[b]))
                 || anyOwned(recCompat[b], ownedMachines)) ? 0 : 1;
         if (ownA != ownB) return Integer.compare(ownA, ownB);
         int sysA = SystemCostTiers.systemPriority(recObjects[a].key().systemId());
@@ -1433,18 +1812,18 @@ public final class ConeExtractor {
     }
 
     private static List<CoupledComponent> detectCoupledComponents(
-            int nodeCount,
-            ResourceKey[] resKeys,
-            int[] prodStart,
-            int[] prodRecipe,
-            CompiledRecipe[] recObjects,
-            byte[] recActive,
-            boolean[] recHand,
-            MachineCapabilityId[] recCap,
-            List<String>[] recCompat,
-            Set<String> ownedMachines,
-            Set<MachineCapabilityId> ownedCaps,
-            long[] usableStock
+        int nodeCount,
+        ResourceKey[] resKeys,
+        int[] prodStart,
+        int[] prodRecipe,
+        CompiledRecipe[] recObjects,
+        byte[] recActive,
+        boolean[] recHand,
+        MachineCapabilityId[] recCap,
+        List<String>[] recCompat,
+        Set<String> ownedMachines,
+        Set<MachineCapabilityId> ownedCaps,
+        long[] usableStock
     ) {
         List<CoupledComponent> out = new ArrayList<>();
         // BATCH_AND_COPRODUCTION components.
@@ -1461,12 +1840,9 @@ public final class ConeExtractor {
                 }
             }
             if (interesting) {
-                out.add(new CoupledComponent(
-                        CoupledKind.BATCH_AND_COPRODUCTION,
-                        Set.of(resKeys[u]),
-                        compactIds,
-                        Set.of()
-                ));
+                out.add(
+                    new CoupledComponent(CoupledKind.batchAndCoproduction, Set.of(resKeys[u]), compactIds, Set.of())
+                );
             }
         }
         // SHARED_MACHINE_SETUP component if multiple unowned-machine recipes share candidates.
@@ -1474,7 +1850,7 @@ public final class ConeExtractor {
         Set<Integer> machRecipes = new TreeSet<>();
         Set<ResourceKey> machRes = new TreeSet<>();
         for (int r = 0; r < recObjects.length; r++) {
-            if (recActive[r] == ConeModel.ACTIVE_NONE || recHand[r]) continue;
+            if (recActive[r] == ConeModel.activeNone || recHand[r]) continue;
             boolean owned = (recCap[r] != null && ownedCaps.contains(recCap[r]))
                     || anyOwned(recCompat[r], ownedMachines);
             if (!owned && !recCompat[r].isEmpty()) {
@@ -1486,13 +1862,16 @@ public final class ConeExtractor {
             }
         }
         if (machRecipes.size() >= 2 && !newMachines.isEmpty()) {
-            out.add(new CoupledComponent(CoupledKind.SHARED_MACHINE_SETUP, machRes, machRecipes, newMachines));
+            out.add(new CoupledComponent(CoupledKind.sharedMachineSetup, machRes, machRecipes, newMachines));
         }
         return List.copyOf(out);
     }
 
     private static void recordRecipeBan(
-            ResourceKey target, CompiledRecipeKey rk, HumanGuidanceView guidance, Map<ResourceKey, Set<String>> map
+        ResourceKey target,
+        CompiledRecipeKey rk,
+        HumanGuidanceView guidance,
+        Map<ResourceKey, Set<String>> map
     ) {
         for (GuidanceRule r : guidance.hardBanRules()) {
             if (r instanceof RecipeRule rr && rr.recipeKey().equals(rk)) {
@@ -1504,7 +1883,10 @@ public final class ConeExtractor {
     }
 
     private static void recordCycleBreakBan(
-            ResourceKey target, CompiledRecipeKey rk, HumanGuidanceView guidance, Map<ResourceKey, Set<String>> map
+        ResourceKey target,
+        CompiledRecipeKey rk,
+        HumanGuidanceView guidance,
+        Map<ResourceKey, Set<String>> map
     ) {
         for (GuidanceRule r : guidance.hardBanRules()) {
             if (r instanceof CycleBreakRule cbr
@@ -1516,7 +1898,10 @@ public final class ConeExtractor {
     }
 
     private static void recordSystemBan(
-            ResourceKey target, String sysId, HumanGuidanceView guidance, Map<ResourceKey, Set<String>> map
+        ResourceKey target,
+        String sysId,
+        HumanGuidanceView guidance,
+        Map<ResourceKey, Set<String>> map
     ) {
         for (GuidanceRule r : guidance.hardBanRules()) {
             if (r instanceof SystemRule sr && sr.systemId().equals(sysId)) {
@@ -1528,7 +1913,10 @@ public final class ConeExtractor {
     }
 
     private static void recordMachineBan(
-            ResourceKey target, CompiledRecipe rec, HumanGuidanceView guidance, Map<ResourceKey, Set<String>> map
+        ResourceKey target,
+        CompiledRecipe rec,
+        HumanGuidanceView guidance,
+        Map<ResourceKey, Set<String>> map
     ) {
         for (String mid : rec.machineRequirement().compatibleMachineIds()) {
             for (GuidanceRule r : guidance.hardBanRules()) {
@@ -1542,7 +1930,9 @@ public final class ConeExtractor {
     }
 
     private static void recordResourceBan(
-            ResourceKey target, HumanGuidanceView guidance, Map<ResourceKey, Set<String>> map
+        ResourceKey target,
+        HumanGuidanceView guidance,
+        Map<ResourceKey, Set<String>> map
     ) {
         for (GuidanceRule r : guidance.hardBanRules()) {
             if (r instanceof ResourceRule rr && rr.resource().equals(target)) {

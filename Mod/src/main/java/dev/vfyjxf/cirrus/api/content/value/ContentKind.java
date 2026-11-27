@@ -5,7 +5,7 @@ import dev.vfyjxf.cirrus.api.content.type.ContentType;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public sealed interface ContentKind<T> extends ContentVariant permits EmptyContentKind, TypedContentKind {
 
@@ -92,11 +92,11 @@ public sealed interface ContentKind<T> extends ContentVariant permits EmptyConte
     //region util
 
     default boolean isItem() {
-        return type() == CirrusTypes.Contents.ITEM;
+        return type() == CirrusTypes.Contents.item;
     }
 
     default boolean isFluid() {
-        return type() == CirrusTypes.Contents.FLUID;
+        return type() == CirrusTypes.Contents.fluidConst;
     }
 
     @SuppressWarnings("unchecked")

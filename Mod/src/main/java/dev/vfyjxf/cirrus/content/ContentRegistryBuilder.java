@@ -23,11 +23,12 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @ApiStatus.Internal
-public class ContentRegistryBuilder implements
-                                    ContentTypeRegister,
-                                    ContentVariantRegister,
-                                    ContentResolverRegister,
-                                    JeiTypeBridgeRegister {
+public class ContentRegistryBuilder
+        implements
+            ContentTypeRegister,
+            ContentVariantRegister,
+            ContentResolverRegister,
+            JeiTypeBridgeRegister {
 
     final ConcurrentHashMap<Namespace, ContentType<?>> contentTypes = new ConcurrentHashMap<>();
 
@@ -52,6 +53,7 @@ public class ContentRegistryBuilder implements
 
     //region content and stack
 
+    @Override
     public <T> void registerContentType(ContentType<T> contentType) {
         Checks.checkNotNull(contentType, "contentType");
         Namespace id = contentType.typeId();
@@ -61,6 +63,7 @@ public class ContentRegistryBuilder implements
         contentTypes.put(id, contentType);
     }
 
+    @Override
     public <T, S> void registerStackType(ContentType<T> contentType, StackType<T, S> stackType) {
         Checks.checkNotNull(contentType, "contentType");
         Checks.checkNotNull(stackType, "stackType");
@@ -84,6 +87,7 @@ public class ContentRegistryBuilder implements
         valueTypes.put(id, valueType);
     }
 
+    @Override
     public <T> void registerTagType(ContentType<T> contentType, TagType<T> tagType) {
         Checks.checkNotNull(contentType, "contentType");
         Checks.checkNotNull(tagType, "tagType");
@@ -102,6 +106,7 @@ public class ContentRegistryBuilder implements
 
     //region variant
 
+    @Override
     public <T, S> void registerVariantType(StackType<T, S> stackType, VariantType<T, S> variantType) {
         Checks.checkNotNull(stackType, "stackType");
         Checks.checkNotNull(variantType, "variantType");
@@ -114,6 +119,7 @@ public class ContentRegistryBuilder implements
         variantTypes.put(variantType.typeId(), variantType);
     }
 
+    @Override
     public <T, S> void registerVariantForContent(T content, VariantType<T, S> variantType) {
         Checks.checkNotNull(content, "content");
         Checks.checkNotNull(variantType, "variantType");
@@ -131,7 +137,11 @@ public class ContentRegistryBuilder implements
     //region resolver
 
     @Override
-    public <T, R> void registerContentResolver(ContentResolverType<R> type, ContentType<T> contentType, ContentResolver<T, R> resolver) {
+    public <T, R> void registerContentResolver(
+        ContentResolverType<R> type,
+        ContentType<T> contentType,
+        ContentResolver<T, R> resolver
+    ) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(contentType, "contentType");
         Checks.checkNotNull(resolver, "resolver");
@@ -139,7 +149,11 @@ public class ContentRegistryBuilder implements
     }
 
     @Override
-    public <T, R> void registerFallbackContentResolver(ContentResolverType<R> type, ContentType<T> contentType, ContentResolver<T, R> resolver) {
+    public <T, R> void registerFallbackContentResolver(
+        ContentResolverType<R> type,
+        ContentType<T> contentType,
+        ContentResolver<T, R> resolver
+    ) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(contentType, "contentType");
         Checks.checkNotNull(resolver, "resolver");
@@ -147,7 +161,11 @@ public class ContentRegistryBuilder implements
     }
 
     @Override
-    public <T, S, R> void registerStackResolver(ContentResolverType<R> type, StackType<T, S> stackType, StackResolver<T, S, R> resolver) {
+    public <T, S, R> void registerStackResolver(
+        ContentResolverType<R> type,
+        StackType<T, S> stackType,
+        StackResolver<T, S, R> resolver
+    ) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(stackType, "stackType");
         Checks.checkNotNull(resolver, "resolver");
@@ -155,7 +173,11 @@ public class ContentRegistryBuilder implements
     }
 
     @Override
-    public <T, S, R> void registerFallbackStackResolver(ContentResolverType<R> type, StackType<T, S> stackType, StackResolver<T, S, R> resolver) {
+    public <T, S, R> void registerFallbackStackResolver(
+        ContentResolverType<R> type,
+        StackType<T, S> stackType,
+        StackResolver<T, S, R> resolver
+    ) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(stackType, "stackType");
         Checks.checkNotNull(resolver, "resolver");
@@ -181,6 +203,5 @@ public class ContentRegistryBuilder implements
     }
 
     //endregion
-
 
 }

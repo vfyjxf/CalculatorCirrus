@@ -3,8 +3,6 @@ package dev.vfyjxf.cirrus.ui.widget.common;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
 import net.minecraft.network.chat.Component;
 
-import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.textMuted;
-import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.textPrimary;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.flexGrow;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.flexShrink;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minWidth;
@@ -20,11 +18,11 @@ public final class CirrusKeyValueRowWidget extends CirrusRowWidget {
     public CirrusKeyValueRowWidget(Component key, Component value, int keyWidth) {
         super(18, 4, Chrome.flat);
 
-        CirrusFittedTextWidget keyWidget = new CirrusFittedTextWidget(key, textMuted);
+        CirrusFittedTextWidget keyWidget = CirrusFittedTextWidget.muted(key);
         keyWidget.useStyle(widthOf(Math.max(34, keyWidth)), flexShrink(0));
         addWidget(keyWidget);
 
-        CirrusFittedTextWidget valueWidget = new CirrusFittedTextWidget(value, textPrimary);
+        CirrusFittedTextWidget valueWidget = CirrusFittedTextWidget.primary(value);
         valueWidget.useStyle(flexGrow(1), minWidth(0));
         addWidget(valueWidget);
     }

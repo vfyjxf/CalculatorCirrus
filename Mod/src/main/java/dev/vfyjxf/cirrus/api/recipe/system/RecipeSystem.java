@@ -1,6 +1,5 @@
 package dev.vfyjxf.cirrus.api.recipe.system;
 
-
 import com.mojang.serialization.Codec;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.constraint.RecipeConstraint;
@@ -13,10 +12,11 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import org.eclipse.collections.api.RichIterable;
+import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.impl.collector.Collectors2;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Unmodifiable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * <li>
@@ -26,7 +26,7 @@ import org.jetbrains.annotations.Unmodifiable;
  *
  * @param <R> the type of the recipe
  */
-//TODO:给RecipeSystem引入Tag类似的功能，允许用户对RecipeSystem进行分类，用于配方筛选
+//TODO: give RecipeSystem a Tag-like classification so users can filter recipes by system.
 public interface RecipeSystem<R> {
 
     //region system info
@@ -40,7 +40,9 @@ public interface RecipeSystem<R> {
      * @return the codec of the recipe
      */
     @Nullable
-    default Codec<R> codec() {return null;}
+    default Codec<R> codec() {
+        return null;
+    }
 
     //endregion
 
@@ -110,7 +112,9 @@ public interface RecipeSystem<R> {
      *
      * @return the convention machine with convention {@link dev.vfyjxf.cirrus.api.recipe.content.constraint.MachineConstraint} for this system
      */
-    default MachineEntry conventionMachine() {return MachineEntry.empty;}
+    default MachineEntry conventionMachine() {
+        return MachineEntry.empty;
+    }
 
     @Unmodifiable
     RichIterable<R> allRecipes();
@@ -122,18 +126,22 @@ public interface RecipeSystem<R> {
     static MutableList<ContentStack<Item, ItemStack>> getMachinesFromJei(RecipeType<?> recipeType) {
         var manager = CirrusJeiPlugin.recipeManagerOrNull();
         if (manager == null) {
-            return org.eclipse.collections.api.factory.Lists.mutable.empty();
+            return Lists.mutable.empty();
         }
-        return manager.createRecipeCatalystLookup(recipeType)
-                      .get()
-                      .flatMap(i -> i.getItemStack().stream())
-                      .map(ContentStack::fromStack)
-                      .collect(Collectors2.toList())
-                      .collect(ContentStack::normalize);
+        return manager.createRecipeCatalystLookup(recipeType).get().flatMap(i -> i.getItemStack().stream())
+                .map(ContentStack::fromStack).collect(Collectors2.toList()).collect(ContentStack::normalize);
+    }
+
+    /**
+     * Monotonic or content-sensitive version token used by {@link RecipeLookup} to detect when
+     * cached per-system indexes must be rebuilt.
+     */
+    default long lookupVersion() {
+        return 0L;
     }
 
     default RecipeLookup<R> createLookup() {
-        return RecipeLookup.empty();
+        return RecipeLookup.ofSystem(this);
     }
 
     //endregion

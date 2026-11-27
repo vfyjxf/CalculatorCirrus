@@ -1,9 +1,12 @@
 package dev.vfyjxf.cirrus.ui.widget.toggle.sw;
 
+import dev.vfyjxf.cirrus.ui.CirrusThemeTextures;
 import dev.vfyjxf.cirrus.ui.CirrusUiSound;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.texture.ImageTexture;
+import dev.vfyjxf.cloudlib.api.ui.texture.VisualTexture;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 
 import java.util.function.BooleanSupplier;
@@ -21,11 +24,7 @@ public class Slide extends Widget {
     /**
      * `getter` / `setter` use left=false, right=true.
      */
-    public Slide(
-        BooleanSupplier getter,
-        Consumer<Boolean> setter,
-        Supplier<Tooltip> tooltipSupplier
-    ) {
+    public Slide(BooleanSupplier getter, Consumer<Boolean> setter, Supplier<Tooltip> tooltipSupplier) {
         this.stateBinding = ToggleStateBinding.of(getter, setter);
         this.tooltipSupplier = tooltipSupplier;
         onHoverTooltip((mouseX, mouseY) -> tooltipSupplier.get());
@@ -42,8 +41,9 @@ public class Slide extends Widget {
 
         onRender((canvas, mouseX, mouseY, partialTicks, self, context) -> {
             boolean currentState = stateBinding.getAsBoolean();
-            ImageTexture texture = textureFor(currentState, hovered());
-            canvas.texture(texture, 0, currentState ? 0 : 1);
+            boolean hover = hovered();
+            VisualTexture texture = textureFor(CirrusUiTheme.textures(this), currentState, hover);
+            canvas.texture(texture, 0, 1, 20, 12);
         });
     }
 
@@ -53,5 +53,12 @@ public class Slide extends Widget {
             return hover ? offHover : off;
         }
         return hover ? onHover : on;
+    }
+
+    static VisualTexture textureFor(CirrusThemeTextures textures, boolean state, boolean hover) {
+        if (state) {
+            return hover ? textures.switchOnHover() : textures.switchOn();
+        }
+        return hover ? textures.switchOffHover() : textures.switchOff();
     }
 }

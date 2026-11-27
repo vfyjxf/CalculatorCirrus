@@ -1,0 +1,11 @@
+{
+  "name": "Cirrus Base",
+  "description": "Shared workbench and widget rules.",
+  "css": [
+    "workbench_rules.css"
+  ],
+  "extends": [
+    "cloudlib:standard"
+  ],
+  "default": false
+}

@@ -20,17 +20,25 @@ public final class TypedStackListContent<T, S> implements InputContent {
     private final long amount;
     private final float chance;
 
-    TypedStackListContent(StackType<T, S> type, Collection<? extends ContentStack<T, S>> stacks, long amount, float chance) {
+    TypedStackListContent(
+        StackType<T, S> type,
+        Collection<? extends ContentStack<T, S>> stacks,
+        long amount,
+        float chance
+    ) {
         this.type = type;
         this.amount = amount;
         this.chance = chance;
-        this.stacks = CollectionAdapter.adapt(stacks)
-                                       .reject(ContentStack::isEmpty)
-                                       .collect(ContentStack::normalize)
-                                       .toImmutableList();
+        this.stacks = CollectionAdapter.adapt(stacks).reject(ContentStack::isEmpty).collect(ContentStack::normalize)
+                .toImmutableList();
     }
 
-    private TypedStackListContent(StackType<T, S> type, ImmutableList<ContentStack<T, S>> stacks, long amount, float chance) {
+    private TypedStackListContent(
+        StackType<T, S> type,
+        ImmutableList<ContentStack<T, S>> stacks,
+        long amount,
+        float chance
+    ) {
         this.type = type;
         this.stacks = stacks;
         this.amount = amount;
@@ -119,13 +127,10 @@ public final class TypedStackListContent<T, S> implements InputContent {
 
     @Override
     public String toString() {
-        return "TypedStackListContent{" +
-               "type=" + type +
-               ", stacks=" + stacks +
-               ", amount=" + amount +
-               ", chance=" + chance +
-               '}';
+        return "TypedStackListContent{" + "type=" + type + ", stacks=" + stacks + ", amount=" + amount + ", chance="
+                + chance + '}';
     }
+
     @Override
     public RecipeContentType<? extends RecipeContent> recipeType() {
         return RecipeContentType.TYPED_STACK_LIST;

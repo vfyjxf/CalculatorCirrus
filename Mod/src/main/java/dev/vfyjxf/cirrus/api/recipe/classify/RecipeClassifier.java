@@ -9,10 +9,10 @@ import dev.vfyjxf.cirrus.api.recipe.classify.structural.GenerationStructuralRule
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.MassSinkStructuralRule;
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.RecolorStructuralRule;
 import dev.vfyjxf.cirrus.api.recipe.classify.structural.RecyclingStructuralRule;
-import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
 import dev.vfyjxf.cirrus.api.recipe.rule.RuleDocument;
 import dev.vfyjxf.cirrus.api.recipe.rule.RuleSpec;
-import org.jetbrains.annotations.Nullable;
+import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +28,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The classification pipeline. Runs an ordered list of {@link ClassificationRule}s
@@ -55,14 +56,13 @@ public final class RecipeClassifier {
      * structured catalog-stage rules derived from the exported modpack
      * datasets and the multi-pack routing/chain audits.
      */
-    public static final String BUILTIN_RULES_RESOURCE = "assets/calculator_cirrus/rules/builtin_rules.json";
+    public static final String builtinRulesResource = "assets/calculator_cirrus/rules/builtin_rules.json";
 
     private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Classifier");
-    private static final ClassificationContext EMPTY_CONTEXT = ClassificationContext.of(List.of());
+    private static final ClassificationContext emptyContext = ClassificationContext.of(List.of());
 
     /** Local-pass outcome: tags plus the routing hint declared by unified rules. */
-    public record LocalOutcome(Set<String> tags, @Nullable RecipeUsePolicy hint) {
-    }
+    public record LocalOutcome(Set<String> tags, @Nullable RecipeUsePolicy hint) {}
 
     /**
      * Per-recipe memo of local-pass outcomes, keyed by {@code systemId + '\n' +
@@ -74,7 +74,7 @@ public final class RecipeClassifier {
      * with an empty recipe id are never cached (distinct recipes share that
      * key). Cleared on client unload via {@link #clearLocalTagsCache()}.
      */
-    private final java.util.concurrent.ConcurrentHashMap<String, LocalOutcome> localOutcomeCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, LocalOutcome> localOutcomeCache = new ConcurrentHashMap<>();
 
     private final List<ClassificationRule> rules;
     private final List<ClassificationRule> localRules;
@@ -114,7 +114,7 @@ public final class RecipeClassifier {
      * degrading.
      */
     public static List<RuleSpec> loadBuiltinRuleSpecs() {
-        return loadRuleSpecs(BUILTIN_RULES_RESOURCE);
+        return loadRuleSpecs(builtinRulesResource);
     }
 
     /** Loads catalog-stage rule specs from an arbitrary classpath resource. */
@@ -122,16 +122,18 @@ public final class RecipeClassifier {
         ClassLoader loader = RecipeClassifier.class.getClassLoader();
         try (InputStream stream = loader.getResourceAsStream(resourcePath)) {
             if (stream == null) {
-                logger.error("rule resource not found: {} (classification falls back to structural rules)", resourcePath);
+                logger.error(
+                    "rule resource not found: {} (classification falls back to structural rules)",
+                    resourcePath
+                );
                 return List.of();
             }
             try (Reader reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
                 JsonObject document = JsonParser.parseReader(reader).getAsJsonObject();
-                return RuleDocument.CODEC
-                    .parse(JsonOps.INSTANCE, document)
-                    .resultOrPartial(error -> logger.error("rule resource {} failed to decode: {}", resourcePath, error))
-                    .map(RuleDocument::rules)
-                    .orElseGet(List::of);
+                return RuleDocument.codec.parse(JsonOps.INSTANCE, document)
+                        .resultOrPartial(
+                            error -> logger.error("rule resource {} failed to decode: {}", resourcePath, error)
+                        ).map(RuleDocument::rules).orElseGet(List::of);
             }
         } catch (IOException | RuntimeException e) {
             logger.error("rule resource {} failed to load: {}", resourcePath, e.toString());
@@ -149,7 +151,7 @@ public final class RecipeClassifier {
      * rules are skipped, so two-way/group classifications are absent; intended
      * for graph-build-time hint derivation where only one recipe is resolved.
      */
-    public java.util.Set<String> classifyLocal(RecipeClassifyView view) {
+    public Set<String> classifyLocal(RecipeClassifyView view) {
         return classifyLocalOutcome(view).tags();
     }
 
@@ -167,10 +169,10 @@ public final class RecipeClassifier {
     }
 
     private LocalOutcome classifyLocalUncached(RecipeClassifyView view) {
-        java.util.Set<String> tags = new LinkedHashSet<>();
+        Set<String> tags = new LinkedHashSet<>();
         ClassificationSink sink = tags::add;
         for (ClassificationRule rule : localRules) {
-            rule.classify(view, EMPTY_CONTEXT, sink);
+            rule.classify(view, emptyContext, sink);
         }
         RecipeUsePolicy hint = unified != null ? unified.hintOf(view) : null;
         return new LocalOutcome(Set.copyOf(tags), hint);
@@ -237,8 +239,10 @@ public final class RecipeClassifier {
             }
         }
         for (MassSinkStructuralRule groupRule : groupRules) {
-            groupRule.classifyAll(context, (index, tag) ->
-                tags.computeIfAbsent(tag, k -> new BitSet(recipes.size())).set(index));
+            groupRule.classifyAll(
+                context,
+                (index, tag) -> tags.computeIfAbsent(tag, k -> new BitSet(recipes.size())).set(index)
+            );
         }
 
         return new ClassificationResult(recipes.size(), tags);

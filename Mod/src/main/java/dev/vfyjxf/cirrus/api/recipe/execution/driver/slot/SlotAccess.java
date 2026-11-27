@@ -32,11 +32,7 @@ public interface SlotAccess {
     /**
      * Snapshot of the active interaction binding for a slot access.
      */
-    record State(
-        boolean open,
-        Namespace interactionId,
-        ExecutionSideRequirement side
-    ) {}
+    record State(boolean open, Namespace interactionId, ExecutionSideRequirement side) {}
 
     record Click(SlotLayout.Reference slot, ClickType type, int button) {}
 }

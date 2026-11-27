@@ -4,7 +4,7 @@ import com.mojang.serialization.Codec;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public abstract class BasicStackType<T, S> implements StackType<T, S> {
 
@@ -13,7 +13,12 @@ public abstract class BasicStackType<T, S> implements StackType<T, S> {
     private final long maxAmount;
     private final @Nullable Codec<S> stackCodec;
 
-    protected BasicStackType(Namespace typeId, ContentType<T> contentType, long maxAmount, @Nullable Codec<S> stackCodec) {
+    protected BasicStackType(
+        Namespace typeId,
+        ContentType<T> contentType,
+        long maxAmount,
+        @Nullable Codec<S> stackCodec
+    ) {
         this.contentType = contentType;
         this.typeId = typeId;
         this.maxAmount = maxAmount;

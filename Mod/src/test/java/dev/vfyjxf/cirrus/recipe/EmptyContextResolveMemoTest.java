@@ -122,8 +122,7 @@ class EmptyContextResolveMemoTest {
         return new RecipeApiImpl(builder);
     }
 
-    private record TestRecipe(String id, boolean unclaimed) {
-    }
+    private record TestRecipe(String id, boolean unclaimed) {}
 
     /**
      * Counts every fallback invocation — {@link RecipeApiImpl} falls back directly

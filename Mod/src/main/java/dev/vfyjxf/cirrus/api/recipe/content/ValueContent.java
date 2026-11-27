@@ -103,13 +103,11 @@ public final class ValueContent<T> implements InputContent, OutputContent {
 
     @Override
     public String toString() {
-        return "ValueContent{" +
-               "content=" + content +
-               ", chance=" + chance +
-               '}';
+        return "ValueContent{" + "content=" + content + ", chance=" + chance + '}';
     }
+
     @Override
     public RecipeContentType<? extends RecipeContent> recipeType() {
-        return RecipeContentType.VALUE;
+        return RecipeContentType.value;
     }
 }

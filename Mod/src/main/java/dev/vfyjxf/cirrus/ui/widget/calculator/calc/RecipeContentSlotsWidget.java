@@ -7,15 +7,19 @@ import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentVisual;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentVisualCache;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
+import dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltip;
+import dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiTooltipProvider;
 import dev.vfyjxf.cirrus.util.NumberUtils;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
+import dev.vfyjxf.cloudlib.api.ui.texture.VisualTexture;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 
@@ -24,7 +28,7 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeOf;
 /**
  * Compact slot strip for recipe previews that can expose more than one output.
  */
-public class RecipeContentSlotsWidget extends Widget {
+public class RecipeContentSlotsWidget extends Widget implements OreUiTooltipProvider {
 
     public static final int slotSize = RecipeContentSlotWidget.slotSize;
     public static final int slotBorder = 1;
@@ -75,8 +79,9 @@ public class RecipeContentSlotsWidget extends Widget {
     @Override
     protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
         super.renderInternal(canvas, mouseX, mouseY, partialTicks);
-        renderBackgrounds(canvas, contents, 0, 0, limit, gap, slotBackground);
-        BatchableRecipeContentRenderer.Batch batch = BatchableRecipeContentRenderer.Batch.create(canvas.layeredGraphics(), partialTicks);
+        renderBackgrounds(canvas, this, contents, 0, 0, limit, gap, slotBackground);
+        BatchableRecipeContentRenderer.Batch batch = BatchableRecipeContentRenderer.Batch
+                .create(canvas.layeredGraphics(), partialTicks);
         submitContents(batch, visualCache, contents, 0, 0, limit, gap, decorated);
         batch.flush();
         renderOverflowIndicator(canvas, contents, 0, 0, limit, gap);
@@ -84,8 +89,20 @@ public class RecipeContentSlotsWidget extends Widget {
 
     @Override
     public @Nullable Tooltip hoverTooltip(int mouseX, int mouseY) {
+        if (CirrusUiTheme.shellContext(this) != null) {
+            return null;
+        }
         Tooltip tooltip = tooltipAt(contents, mouseX, mouseY, limit, gap);
         return tooltip == null ? super.hoverTooltip(mouseX, mouseY) : tooltip;
+    }
+
+    @Override
+    public @Nullable OreUiRichTooltip richTooltipAt(double localX, double localY) {
+        int index = slotIndexAt(localX, localY, contents.size(), limit, gap);
+        if (index < 0 || index >= contents.size()) {
+            return null;
+        }
+        return RecipeContentSlotWidget.richTooltipFor(contents.get(index), null);
     }
 
     public static int visibleSlotCount(int count, int limit) {
@@ -123,13 +140,48 @@ public class RecipeContentSlotsWidget extends Widget {
         int gap,
         boolean slotBackground
     ) {
+        renderBackgrounds(canvas, CirrusTextures.Background.Slot.base, contents, x, y, limit, gap, slotBackground);
+    }
+
+    public static void renderBackgrounds(
+        SceneCanvas canvas,
+        @Nullable Widget widget,
+        List<? extends RecipeContent> contents,
+        int x,
+        int y,
+        int limit,
+        int gap,
+        boolean slotBackground
+    ) {
+        renderBackgrounds(
+            canvas,
+            CirrusUiTheme.textures(widget).slotBase(),
+            contents,
+            x,
+            y,
+            limit,
+            gap,
+            slotBackground
+        );
+    }
+
+    private static void renderBackgrounds(
+        SceneCanvas canvas,
+        VisualTexture slotTexture,
+        List<? extends RecipeContent> contents,
+        int x,
+        int y,
+        int limit,
+        int gap,
+        boolean slotBackground
+    ) {
         if (!slotBackground) {
             return;
         }
         int visible = visibleSlotCount(contents.size(), limit);
         int stride = slotSize + Math.max(0, gap);
         for (int i = 0; i < visible; i++) {
-            canvas.texture(CirrusTextures.Background.Slot.dark, x + i * stride, y, slotSize, slotSize);
+            canvas.texture(slotTexture, x + i * stride, y, slotSize, slotSize);
         }
     }
 
@@ -306,9 +358,9 @@ public class RecipeContentSlotsWidget extends Widget {
         }
         int slotX = (visible - 1) * (slotSize + Math.max(0, gap));
         return localX >= slotX + slotSize - overflowHitSize
-            && localX < slotX + slotSize
-            && localY >= slotSize - overflowHitSize
-            && localY < slotSize;
+                && localX < slotX + slotSize
+                && localY >= slotSize - overflowHitSize
+                && localY < slotSize;
     }
 
     private static @Nullable Tooltip contentTooltip(RecipeContent content, int visualIndex) {

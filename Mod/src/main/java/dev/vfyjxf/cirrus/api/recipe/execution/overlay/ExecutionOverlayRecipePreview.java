@@ -1,8 +1,8 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.overlay;
 
-import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
-import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;

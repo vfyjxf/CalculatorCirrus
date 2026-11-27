@@ -3,10 +3,10 @@ package dev.vfyjxf.cirrus.api.recipe.content.complex;
 import dev.vfyjxf.cirrus.api.content.value.ContentKind;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
-import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.common.crafting.ICustomIngredient;
@@ -78,7 +78,6 @@ public class FallbackComplexContent implements ComplexContent {
             default -> false;
         };
     }
-
 
     @Override
     public RecipeContentType<? extends RecipeContent> recipeType() {

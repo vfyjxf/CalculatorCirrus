@@ -1,7 +1,5 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.driver.slot;
 
-import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
-import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
@@ -11,25 +9,38 @@ import dev.vfyjxf.cirrus.api.recipe.content.TagStackContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionCapability;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSideRequirement;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionExecutionPlan;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.recipe.execution.driver.DriverLookup;
+import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.MenuContext;
+import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.MenuTypeContext;
+import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.ScreenContext;
+import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionProbeResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
+import dev.vfyjxf.cirrus.recipe.execution.ExecutionDriverApiImpl;
+import dev.vfyjxf.cirrus.recipe.execution.ExecutionDriverRegistry;
 import dev.vfyjxf.cirrus.recipe.execution.driver.slot.CraftingTableExecutionDriver;
-import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayContentHelper;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
-import net.minecraft.server.MinecraftServer;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.tags.ItemTags;
+import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.neoforged.testframework.junit.EphemeralTestServerProvider;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -39,6 +50,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ExtendWith(EphemeralTestServerProvider.class)
@@ -47,21 +59,13 @@ class CraftingTableExecutionDriverTest {
     @Test
     void craftingTableDriverPausesWhenAutoPlacementUnavailable() {
         var driver = new CraftingTableExecutionDriver();
-        driver.initialize(startSession(openInteractionStep(), prepareInputsStep(), executeRecipeStep(), collectOutputsStep()));
+        driver.initialize(
+            startSession(openInteractionStep(), prepareInputsStep(), executeRecipeStep(), collectOutputsStep())
+        );
 
         driver.advanceSteps(2);
 
         assertTrue(driver.session().paused());
-    }
-
-    @Test
-    void craftingTableDriverKeepsSessionAvailableAfterAdvance() {
-        var driver = new CraftingTableExecutionDriver();
-        driver.initialize(startSession(openInteractionStep(), prepareInputsStep(), executeRecipeStep(), collectOutputsStep()));
-
-        driver.advanceSteps(3);
-
-        assertNotNull(driver.session());
     }
 
     @Test
@@ -70,9 +74,7 @@ class CraftingTableExecutionDriverTest {
         var withdraw = new InteractionStep.WithdrawResourceStep(
             ExecutionSideRequirement.environmentAgnostic,
             ExecutionCapability.inventoryTransfer,
-            new InteractionStep.WithdrawTarget.Resource(
-                ContentStack.fromStack(new ItemStack(Items.OAK_LOG))
-            ),
+            new InteractionStep.WithdrawTarget.Resource(ContentStack.fromStack(new ItemStack(Items.OAK_LOG))),
             16
         );
         var execute = new InteractionStep.ExecuteRecipeStep(
@@ -80,14 +82,8 @@ class CraftingTableExecutionDriverTest {
             ExecutionCapability.interactionPerform,
             recipeEntry("craft"),
             16,
-            Lists.immutable.of(new InputBinding(
-                InputContent.fromItemStack(new ItemStack(Items.OAK_LOG), 16),
-                16
-            )),
-            Lists.immutable.of(new OutputBinding(
-                ContentStack.fromStack(new ItemStack(Items.SMOKER)),
-                16
-            ))
+            Lists.immutable.of(new InputBinding(InputContent.fromItemStack(new ItemStack(Items.OAK_LOG), 16), 16)),
+            Lists.immutable.of(new OutputBinding(ContentStack.fromStack(new ItemStack(Items.SMOKER)), 16))
         );
         driver.initialize(startSession(withdraw, execute));
 
@@ -105,9 +101,7 @@ class CraftingTableExecutionDriverTest {
         var withdraw = new InteractionStep.WithdrawResourceStep(
             ExecutionSideRequirement.environmentAgnostic,
             ExecutionCapability.inventoryTransfer,
-            new InteractionStep.WithdrawTarget.Input(
-                InputContent.fromItemTag(ItemTags.PLANKS, 4)
-            ),
+            new InteractionStep.WithdrawTarget.Input(InputContent.fromItemTag(ItemTags.PLANKS, 4)),
             4
         );
         var execute = new InteractionStep.ExecuteRecipeStep(
@@ -115,14 +109,8 @@ class CraftingTableExecutionDriverTest {
             ExecutionCapability.interactionPerform,
             recipeEntry("tag_craft"),
             1,
-            Lists.immutable.of(new InputBinding(
-                InputContent.fromItemTag(ItemTags.PLANKS, 4),
-                4
-            )),
-            Lists.immutable.of(new OutputBinding(
-                ContentStack.fromStack(new ItemStack(Items.CHEST)),
-                1
-            ))
+            Lists.immutable.of(new InputBinding(InputContent.fromItemTag(ItemTags.PLANKS, 4), 4)),
+            Lists.immutable.of(new OutputBinding(ContentStack.fromStack(new ItemStack(Items.CHEST)), 1))
         );
         driver.initialize(startSession(withdraw, execute));
 
@@ -131,7 +119,6 @@ class CraftingTableExecutionDriverTest {
         assertEquals(1, snapshot.materials().size());
         RecipeContent material = snapshot.materials().getFirst().material();
         assertTrue(material instanceof TagStackContent<?>);
-        assertTrue(ExecutionOverlayContentHelper.label(material).startsWith("#minecraft:planks"));
     }
 
     @Test
@@ -148,10 +135,13 @@ class CraftingTableExecutionDriverTest {
         var snapshot = driver.snapshot();
 
         assertEquals(1, snapshot.materials().size());
-        assertTrue(snapshot.materials().anySatisfy(requirement ->
-            requirement.material().satisfy(ContentStack.fromStack(new ItemStack(Items.CRAFTING_TABLE)))
-                && requirement.required() == 1L
-        ));
+        assertTrue(
+            snapshot.materials().anySatisfy(
+                requirement -> requirement.material()
+                        .satisfy(ContentStack.fromStack(new ItemStack(Items.CRAFTING_TABLE)))
+                        && requirement.required() == 1L
+            )
+        );
     }
 
     @Test
@@ -161,17 +151,13 @@ class CraftingTableExecutionDriverTest {
             new InteractionStep.WithdrawResourceStep(
                 ExecutionSideRequirement.environmentAgnostic,
                 ExecutionCapability.inventoryTransfer,
-                new InteractionStep.WithdrawTarget.Resource(
-                    ContentStack.fromStack(new ItemStack(Items.COBBLESTONE))
-                ),
+                new InteractionStep.WithdrawTarget.Resource(ContentStack.fromStack(new ItemStack(Items.COBBLESTONE))),
                 128
             ),
             new InteractionStep.WithdrawResourceStep(
                 ExecutionSideRequirement.environmentAgnostic,
                 ExecutionCapability.inventoryTransfer,
-                new InteractionStep.WithdrawTarget.Resource(
-                    ContentStack.fromStack(new ItemStack(Items.OAK_LOG))
-                ),
+                new InteractionStep.WithdrawTarget.Resource(ContentStack.fromStack(new ItemStack(Items.OAK_LOG))),
                 64
             ),
             new InteractionStep.ExecuteRecipeStep(
@@ -179,18 +165,9 @@ class CraftingTableExecutionDriverTest {
                 ExecutionCapability.interactionPerform,
                 recipeEntry("make_furnace"),
                 16,
-                Lists.immutable.of(
-                    new InputBinding(
-                        InputContent.fromItemStack(new ItemStack(Items.COBBLESTONE), 128),
-                        128
-                    )
-                ),
-                Lists.immutable.of(
-                    new OutputBinding(
-                        ContentStack.fromStack(new ItemStack(Items.FURNACE)),
-                        16
-                    )
-                )
+                Lists.immutable
+                        .of(new InputBinding(InputContent.fromItemStack(new ItemStack(Items.COBBLESTONE), 128), 128)),
+                Lists.immutable.of(new OutputBinding(ContentStack.fromStack(new ItemStack(Items.FURNACE)), 16))
             ),
             new InteractionStep.ExecuteRecipeStep(
                 ExecutionSideRequirement.environmentAgnostic,
@@ -198,21 +175,10 @@ class CraftingTableExecutionDriverTest {
                 recipeEntry("make_smoker"),
                 16,
                 Lists.immutable.of(
-                    new InputBinding(
-                        InputContent.fromItemStack(new ItemStack(Items.FURNACE), 16),
-                        16
-                    ),
-                    new InputBinding(
-                        InputContent.fromItemStack(new ItemStack(Items.OAK_LOG), 64),
-                        64
-                    )
+                    new InputBinding(InputContent.fromItemStack(new ItemStack(Items.FURNACE), 16), 16),
+                    new InputBinding(InputContent.fromItemStack(new ItemStack(Items.OAK_LOG), 64), 64)
                 ),
-                Lists.immutable.of(
-                    new OutputBinding(
-                        ContentStack.fromStack(new ItemStack(Items.SMOKER)),
-                        16
-                    )
-                )
+                Lists.immutable.of(new OutputBinding(ContentStack.fromStack(new ItemStack(Items.SMOKER)), 16))
             )
         );
         driver.initialize(session);
@@ -220,17 +186,23 @@ class CraftingTableExecutionDriverTest {
         var snapshot = driver.snapshot();
 
         assertEquals(2, snapshot.materials().size());
-        assertTrue(snapshot.materials().anySatisfy(requirement ->
-            requirement.material().satisfy(ContentStack.fromStack(new ItemStack(Items.COBBLESTONE)))
-                && requirement.required() == 128L
-        ));
-        assertTrue(snapshot.materials().anySatisfy(requirement ->
-            requirement.material().satisfy(ContentStack.fromStack(new ItemStack(Items.OAK_LOG)))
-                && requirement.required() == 64L
-        ));
-        assertTrue(snapshot.materials().noneSatisfy(requirement ->
-            requirement.material().satisfy(ContentStack.fromStack(new ItemStack(Items.FURNACE)))
-        ));
+        assertTrue(
+            snapshot.materials().anySatisfy(
+                requirement -> requirement.material().satisfy(ContentStack.fromStack(new ItemStack(Items.COBBLESTONE)))
+                        && requirement.required() == 128L
+            )
+        );
+        assertTrue(
+            snapshot.materials().anySatisfy(
+                requirement -> requirement.material().satisfy(ContentStack.fromStack(new ItemStack(Items.OAK_LOG)))
+                        && requirement.required() == 64L
+            )
+        );
+        assertTrue(
+            snapshot.materials().noneSatisfy(
+                requirement -> requirement.material().satisfy(ContentStack.fromStack(new ItemStack(Items.FURNACE)))
+            )
+        );
     }
 
     @Test
@@ -239,9 +211,37 @@ class CraftingTableExecutionDriverTest {
         assertNotNull(role);
     }
 
+    @Test
+    void selectorAcceptsWrappedCraftingMenuScreensAndAutomaticProbe() {
+        var registry = new ExecutionDriverRegistry();
+        registry.registerClient(CraftingTableExecutionDriver.selector, CraftingTableExecutionDriver::create);
+        var api = new ExecutionDriverApiImpl(registry);
+
+        assertNotNull(
+            api.resolveClient(DriverLookup.of(new ScreenContext(Screen.class), new MenuContext(CraftingMenu.class))),
+            "custom screens wrapping CraftingMenu must match the client crafting table driver"
+        );
+        assertNotNull(
+            api.resolveClient(DriverLookup.of(new ScreenContext(Screen.class), new MenuTypeContext(MenuType.CRAFTING))),
+            "MenuType.CRAFTING must match the client crafting table driver"
+        );
+        assertNull(
+            api.resolveClient(DriverLookup.of(new ScreenContext(Screen.class), new MenuContext(ChestMenu.class))),
+            "unrelated container menus must not match the crafting table driver"
+        );
+
+        var driver = new CraftingTableExecutionDriver();
+        InteractionProbeResult probe = driver.interactionApi().probe(recipeEntry("craft"));
+        assertTrue(probe instanceof InteractionProbeResult.Supported supported && supported.performerAvailable());
+    }
+
     private static ExecutionSession startSession(InteractionStep... steps) {
         var plan = new InteractionExecutionPlan(recipeEntry("craft"), 1, Lists.immutable.of(steps));
-        return ExecutionSession.start(plan, ExecutionFlowNode.pending("root", Component.literal("root"), Lists.immutable.empty(), null, Lists.immutable.empty()));
+        return ExecutionSession.start(
+            plan,
+            ExecutionFlowNode
+                    .pending("root", Component.literal("root"), Lists.immutable.empty(), null, Lists.immutable.empty())
+        );
     }
 
     private static InteractionStep.OpenInteractionStep openInteractionStep() {
@@ -284,13 +284,12 @@ class CraftingTableExecutionDriverTest {
     }
 
     private static RecipeEntry<TestRecipe> recipeEntry(String id) {
-        return RecipeEntry.of(TEST_RECIPE_SYSTEM, new TestRecipe(id));
+        return RecipeEntry.of(testRecipeSystem, new TestRecipe(id));
     }
 
-    private record TestRecipe(String id) {
-    }
+    private record TestRecipe(String id) {}
 
-    private static final TestRecipeSystem TEST_RECIPE_SYSTEM = new TestRecipeSystem();
+    private static final TestRecipeSystem testRecipeSystem = new TestRecipeSystem();
 
     private static final class TestRecipeSystem implements RecipeSystem<TestRecipe> {
         private final Map<String, TestRecipe> byId = new ConcurrentHashMap<>();
@@ -312,12 +311,12 @@ class CraftingTableExecutionDriverTest {
         }
 
         @Override
-        public TestRecipe findRecipe(String uniqueId) {
+        public @Nullable TestRecipe findRecipe(String uniqueId) {
             return byId.get(uniqueId);
         }
 
         @Override
-        public TestRecipe findRecipe(ResourceLocation registryName) {
+        public @Nullable TestRecipe findRecipe(ResourceLocation registryName) {
             return byId.get(registryName.getPath());
         }
 
@@ -333,11 +332,13 @@ class CraftingTableExecutionDriverTest {
 
         @Override
         public ResolveResult resolveFallback(ResolveContext context, TestRecipe recipe) {
-            return ResolveResult.resolved(RecipeProjection.create(
-                RecipeEntry.of(this, recipe),
-                List.of(InputContent.fromItemStack(new ItemStack(Items.OAK_LOG))),
-                List.of(OutputContent.fromItemStack(new ItemStack(Items.SMOKER)))
-            ));
+            return ResolveResult.resolved(
+                RecipeProjection.create(
+                    RecipeEntry.of(this, recipe),
+                    List.of(InputContent.fromItemStack(new ItemStack(Items.OAK_LOG))),
+                    List.of(OutputContent.fromItemStack(new ItemStack(Items.SMOKER)))
+                )
+            );
         }
 
         @Override

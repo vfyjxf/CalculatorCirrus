@@ -1,15 +1,17 @@
 package dev.vfyjxf.cirrus.api.recipe.projection.effect;
 
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public sealed interface InputEffect extends ProjectionEffect permits InputInjected, InputRejected, InputReplaced {
 
     int index();
 
-    @Nullable InputContent before();
+    @Nullable
+    InputContent before();
 
-    @Nullable InputContent after();
+    @Nullable
+    InputContent after();
 
     default long beforeAmount() {
         InputContent before = before();

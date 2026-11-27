@@ -8,7 +8,6 @@ import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionApi;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayTraceSnapshot;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
-import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -18,6 +17,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -41,7 +41,8 @@ class ExecutionDriverSnapshotTest {
         private static final TestRecipeSystem recipeSystem = new TestRecipeSystem();
         private final ExecutionSession session = ExecutionSession.start(
             new InteractionExecutionPlan(recipeEntry("test"), 1, Lists.immutable.empty()),
-            ExecutionFlowNode.pending("root", Component.literal("root"), Lists.immutable.empty(), null, Lists.immutable.empty())
+            ExecutionFlowNode
+                    .pending("root", Component.literal("root"), Lists.immutable.empty(), null, Lists.immutable.empty())
         );
 
         @Override
@@ -56,11 +57,8 @@ class ExecutionDriverSnapshotTest {
 
         @Override
         public InteractionApi interactionApi() {
-            return SlotExecutionDriver.simpleInteraction(
-                interactionId(),
-                false,
-                ExecutionGuidance.simple(Component.literal("snapshot"))
-            );
+            return SlotExecutionDriver
+                    .simpleInteraction(interactionId(), false, ExecutionGuidance.simple(Component.literal("snapshot")));
         }
 
         @Override
@@ -79,48 +77,38 @@ class ExecutionDriverSnapshotTest {
         }
 
         @Override
-        public void advanceSteps(int steps) {
-        }
+        public void advanceSteps(int steps) {}
 
         @Override
-        public void pause() {
-        }
+        public void pause() {}
 
         @Override
-        public void resume() {
-        }
+        public void resume() {}
 
         @Override
-        public void toggleAutoAdvance() {
-        }
+        public void toggleAutoAdvance() {}
 
         @Override
-        public void stopAutoAdvance() {
-        }
+        public void stopAutoAdvance() {}
 
         @Override
-        public void setRatePerSecond(double rate) {
-        }
+        public void setRatePerSecond(double rate) {}
 
         @Override
-        public void reset() {
-        }
+        public void reset() {}
 
         @Override
-        public void jumpToStep(int index) {
-        }
+        public void jumpToStep(int index) {}
 
         @Override
-        public void tick() {
-        }
+        public void tick() {}
 
         private static RecipeEntry<TestRecipe> recipeEntry(String id) {
             return RecipeEntry.of(recipeSystem, new TestRecipe(id));
         }
     }
 
-    private record TestRecipe(String id) {
-    }
+    private record TestRecipe(String id) {}
 
     private static final class TestRecipeSystem implements RecipeSystem<TestRecipe> {
         private final Map<String, TestRecipe> byId = new ConcurrentHashMap<>();
@@ -142,12 +130,12 @@ class ExecutionDriverSnapshotTest {
         }
 
         @Override
-        public TestRecipe findRecipe(String uniqueId) {
+        public @Nullable TestRecipe findRecipe(String uniqueId) {
             return byId.get(uniqueId);
         }
 
         @Override
-        public TestRecipe findRecipe(ResourceLocation registryName) {
+        public @Nullable TestRecipe findRecipe(ResourceLocation registryName) {
             return byId.get(registryName.getPath());
         }
 
@@ -172,4 +160,3 @@ class ExecutionDriverSnapshotTest {
         }
     }
 }
-

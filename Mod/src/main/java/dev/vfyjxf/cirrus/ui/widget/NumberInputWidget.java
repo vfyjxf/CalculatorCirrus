@@ -1,15 +1,20 @@
 package dev.vfyjxf.cirrus.ui.widget;
 
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
-import dev.vfyjxf.cirrus.ui.CirrusTextures.Background;
+import dev.vfyjxf.cirrus.ui.CirrusPalette;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
+import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
 import dev.vfyjxf.cirrus.ui.widget.calculator.CalculatorInputKeyMappings;
+import dev.vfyjxf.cirrus.ui.widget.common.CirrusControlChrome;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
+import dev.vfyjxf.cloudlib.api.math.Rect;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
+import dev.vfyjxf.cloudlib.api.ui.style.UIStyle;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.function.LongConsumer;
@@ -44,6 +49,7 @@ public class NumberInputWidget extends Widget {
     @Nullable
     private Supplier<Tooltip> tooltipSupplier;
     private boolean defaultCalculatorPopupEnabled;
+    private @Nullable WorkbenchThemeMode appliedTheme;
 
     @FunctionalInterface
     public interface CalculatorOpenCallback {
@@ -52,10 +58,22 @@ public class NumberInputWidget extends Widget {
 
     public NumberInputWidget() {
         setFocusable(true);
-        useStyle(
-                background(Background.Outlined.inset)
+        addStyleClass("cirrus-input");
+        syncDefaultBackground(true);
+        onMount(
+            (scene, context, handle) -> CirrusUiTheme
+                    .bindThemeListener(this, handle, () -> syncDefaultBackground(false))
         );
         setupEvents();
+    }
+
+    private void syncDefaultBackground(boolean force) {
+        WorkbenchThemeMode mode = CirrusUiTheme.mode(this);
+        if (!force && mode == appliedTheme) {
+            return;
+        }
+        appliedTheme = mode;
+        defaultStyle(UIStyle.of(background(CirrusUiTheme.textures(this).recessed())));
     }
 
     public static NumberInputWidget create() {
@@ -71,14 +89,14 @@ public class NumberInputWidget extends Widget {
     private void setupEvents() {
         onMouseClick((input, clickCount, context) -> {
             if (onCalculatorOpen != null
-                && (input.key().getValue() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE
-                || CalculatorInputKeyMappings.openAmountCalculatorPopupPressed(input.key()))) {
+                    && (input.key().getValue() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE
+                            || CalculatorInputKeyMappings.openAmountCalculatorPopupPressed(input.key()))) {
                 openCalculator((int) input.mouseX(), (int) input.mouseY());
                 return EventDispatch.consumed;
             }
             // Position cursor at click location
             var font = Minecraft.getInstance().font;
-            int clickX = (int) input.mouseX() - 4 + scrollOffset;
+            int clickX = (int) input.mouseRelative(this).x() - 4 + scrollOffset;
             int bestPos = displayText.length();
             for (int i = 0; i <= displayText.length(); i++) {
                 int charX = font.width(displayText.substring(0, i));
@@ -234,7 +252,9 @@ public class NumberInputWidget extends Widget {
                 displayText = String.valueOf(codePoint);
                 cursorPosition = 1;
             } else {
-                displayText = displayText.substring(0, cursorPosition) + codePoint + displayText.substring(cursorPosition);
+                displayText = displayText.substring(0, cursorPosition)
+                        + codePoint
+                        + displayText.substring(cursorPosition);
                 cursorPosition++;
             }
             stripLeadingZeros();
@@ -492,7 +512,10 @@ public class NumberInputWidget extends Widget {
             if (tooltip.notEmpty()) {
                 tooltip.add(Component.empty());
             }
-            tooltip.add(CalculatorInputKeyMappings.openAmountCalculatorPopupUsage(CirrusLangs.Calc.amountMiddleClick.component()));
+            tooltip.add(
+                CalculatorInputKeyMappings
+                        .openAmountCalculatorPopupUsage(CirrusLangs.Calc.amountMiddleClick.component())
+            );
             return tooltip;
         };
         return this;
@@ -506,15 +529,25 @@ public class NumberInputWidget extends Widget {
         return NumberInputCalculatorPopup.isOpen(this);
     }
 
+    public Rect localTextClipRect() {
+        int padding = 4;
+        int visibleWidth = Math.max(0, width() - padding * 2);
+        return new Rect(padding, 0, visibleWidth, height());
+    }
+
     @Override
     protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
-        super.renderInternal(canvas, mouseX, mouseY, partialTicks);
-
+        CirrusPalette palette = CirrusUiTheme.palette(this);
+        canvas.texture(CirrusUiTheme.textures(this).recessed(), 0, 0, width(), height());
+        if (focused()) {
+            canvas.strokeRect(0, 0, width(), height(), palette.focusRing(), 1);
+        }
         var font = context().font();
-        int textColor = rangeWarning ? 0xFFF36D6D : focused() ? 0xFFFFFFFF : 0xFFE0E0E0;
-        int padding = 4;
-        int textY = (height() - font.lineHeight) / 2 + 1;
-        int visibleWidth = width() - padding * 2;
+        int textColor = rangeWarning ? palette.ruleHardBan() : palette.textPrimary();
+        Rect clip = localTextClipRect();
+        int padding = clip.x();
+        int textY = CirrusControlChrome.centeredTextY(0, height(), font);
+        int visibleWidth = clip.width();
 
         String text = displayText.isEmpty() ? "0" : displayText;
 
@@ -530,28 +563,31 @@ public class NumberInputWidget extends Widget {
             scrollOffset = Math.max(0, textWidth - visibleWidth);
         }
 
-        int absX = absolutePos().x();
-        int absY = absolutePos().y();
         if (rangeWarning) {
-            canvas.fill(1, 1, Math.max(0, width() - 2), Math.max(0, height() - 2), 0x26F36D6D);
+            canvas.fill(
+                1,
+                1,
+                Math.max(0, width() - 2),
+                Math.max(0, height() - 2),
+                (palette.ruleHardBan() & 0x00FFFFFF) | 0x26000000
+            );
         }
-        canvas.pushClip(absX + padding, absY, visibleWidth, height());
+        canvas.pushClip(clip.x(), clip.y(), clip.width(), clip.height());
 
         canvas.text(text, padding - scrollOffset, textY, textColor, false);
 
         if (focused() && ((System.currentTimeMillis() - cursorBlinkEpoch) / 500) % 2 == 0) {
             int cx = padding + cursorX - scrollOffset;
-            canvas.fill(cx, textY - 1, 1, font.lineHeight + 2, 0xFFFFFFFF);
+            canvas.fill(cx, textY - 1, 1, font.lineHeight + 2, palette.focusRing());
         }
 
         if (focused() && hasSelection()) {
             int x1 = padding + font.width(displayText.substring(0, selStart())) - scrollOffset;
             int x2 = padding + font.width(displayText.substring(0, selEnd())) - scrollOffset;
-            canvas.fill(x1, textY - 1, x2 - x1, font.lineHeight + 2, 0x600000FF);
+            canvas.fill(x1, textY - 1, x2 - x1, font.lineHeight + 2, (palette.focusRing() & 0x00FFFFFF) | 0x55000000);
         }
 
         canvas.popClip();
     }
-
 
 }

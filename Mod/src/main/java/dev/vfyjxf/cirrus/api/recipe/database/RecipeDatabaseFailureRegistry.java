@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.database;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -77,7 +79,7 @@ public final class RecipeDatabaseFailureRegistry {
         String recipeClass,
         String exception,
         String message,
-        Throwable cause
+        @Nullable Throwable cause
     ) {
         public Failure {
             if (ref == null) {
@@ -93,36 +95,30 @@ public final class RecipeDatabaseFailureRegistry {
             if (throwable == null) {
                 throw new NullPointerException("throwable");
             }
+            String message = throwable.getMessage();
             return new Failure(
                 ref,
                 database,
                 recipeClass,
                 throwable.getClass().getName(),
-                throwable.getMessage(),
+                message == null ? "" : message,
                 throwable
             );
         }
 
         private boolean sameFailure(Failure other) {
             return database.equals(other.database())
-                && recipeClass.equals(other.recipeClass())
-                && exception.equals(other.exception())
-                && message.equals(other.message());
+                    && recipeClass.equals(other.recipeClass())
+                    && exception.equals(other.exception())
+                    && message.equals(other.message());
         }
 
         private Failure withoutCause() {
-            return cause == null
-                ? this
-                : new Failure(ref, database, recipeClass, exception, message, null);
+            return cause == null ? this : new Failure(ref, database, recipeClass, exception, message, null);
         }
     }
 
-    public record Unsupported(
-        DatabaseRecipeRef ref,
-        String database,
-        String recipeClass,
-        String error
-    ) {
+    public record Unsupported(DatabaseRecipeRef ref, String database, String recipeClass, String error) {
         public Unsupported {
             if (ref == null) {
                 throw new NullPointerException("ref");
@@ -134,8 +130,8 @@ public final class RecipeDatabaseFailureRegistry {
 
         private boolean sameUnsupported(Unsupported other) {
             return database.equals(other.database())
-                && recipeClass.equals(other.recipeClass())
-                && error.equals(other.error());
+                    && recipeClass.equals(other.recipeClass())
+                    && error.equals(other.error());
         }
     }
 }

@@ -47,9 +47,6 @@ public final class ProjectionSchemaKey<T> {
 
     @Override
     public String toString() {
-        return "ProjectionSchemaKey{" +
-               "id=" + id +
-               ", valueType=" + valueType +
-               '}';
+        return "ProjectionSchemaKey{" + "id=" + id + ", valueType=" + valueType + '}';
     }
 }

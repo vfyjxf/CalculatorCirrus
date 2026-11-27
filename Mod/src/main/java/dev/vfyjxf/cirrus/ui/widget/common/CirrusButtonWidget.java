@@ -1,6 +1,10 @@
 package dev.vfyjxf.cirrus.ui.widget.common;
 
+import dev.vfyjxf.cirrus.ui.CirrusPalette;
+import dev.vfyjxf.cirrus.ui.CirrusThemeIcons;
 import dev.vfyjxf.cirrus.ui.CirrusUiSound;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
+import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiPaint;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.ui.InputContext;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
@@ -10,13 +14,12 @@ import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.textPrimary;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minWidth;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeOf;
 
@@ -32,7 +35,7 @@ public class CirrusButtonWidget extends Widget {
     private @Nullable Supplier<Tooltip> tooltipSupplier;
     private BooleanSupplier selectedSupplier = () -> false;
     private final int baseWidth;
-    private int textColor = textPrimary;
+    private @Nullable Integer explicitTextColor;
     private int preferredMinWidth;
     private boolean enabled = true;
     private boolean pressed;
@@ -42,6 +45,7 @@ public class CirrusButtonWidget extends Widget {
     public CirrusButtonWidget(int width, int height) {
         this.baseWidth = width;
         this.preferredMinWidth = width;
+        addStyleClass("cirrus-button");
         useStyle(sizeOf(width, height));
         onMouseClicked((input, context) -> {
             if (!enabled || !input.isLeftClick()) {
@@ -100,13 +104,20 @@ public class CirrusButtonWidget extends Widget {
     }
 
     public CirrusButtonWidget label(@Nullable LangEntry label, Object... args) {
-        this.label = label == null ? null : label.component(args);
-        return this;
+        return label(label == null ? null : label.component(args));
     }
 
     public CirrusButtonWidget textColor(int textColor) {
-        this.textColor = textColor;
+        this.explicitTextColor = textColor;
         return this;
+    }
+
+    public int resolvedTextColor() {
+        CirrusPalette palette = CirrusUiTheme.palette(this);
+        if (!enabled) {
+            return palette.textDisabled();
+        }
+        return explicitTextColor != null ? explicitTextColor : palette.textPrimary();
     }
 
     public CirrusButtonWidget selected(BooleanSupplier selectedSupplier) {
@@ -164,9 +175,10 @@ public class CirrusButtonWidget extends Widget {
         super.renderInternal(canvas, mouseX, mouseY, partialTicks);
         boolean selected = selectedSupplier.getAsBoolean();
         boolean down = pressed || selected;
-        CirrusControlChrome.renderButtonBackground(canvas, 0, 0, width(), height(), down, hovered(), enabled);
+        CirrusControlChrome.renderButtonBackground(canvas, this, 0, 0, width(), height(), down, hovered(), enabled);
 
-        SizedTexture icon = currentIcon();
+        SizedTexture rawIcon = currentIcon();
+        SizedTexture icon = rawIcon == null ? null : CirrusThemeIcons.resolveSized(rawIcon, this);
         int iconOffset = 0;
         if (icon != null) {
             int iconX;
@@ -177,11 +189,20 @@ public class CirrusButtonWidget extends Widget {
                 iconX = 4;
                 iconOffset = icon.width() + iconLabelGap;
             }
+            CirrusPalette palette = CirrusUiTheme.palette(this);
+            boolean light = !OreUiPaint.isDark(palette);
             if (enabled) {
-                canvas.texture(icon, iconX, iconY, icon.width(), icon.height());
+                if (light) {
+                    canvas.color(OreUiPaint.lighten(palette.textSecondary(), 0.08f))
+                            .texture(icon, iconX, iconY, icon.width(), icon.height());
+                    canvas.resetColor();
+                } else {
+                    canvas.texture(icon, iconX, iconY, icon.width(), icon.height());
+                }
             } else {
-                canvas.color(0xAA_FFFFFF).texture(icon, iconX, iconY, icon.width(), icon.height());
-                canvas.color(0xFFFFFFFF);
+                int disabledTint = light ? OreUiPaint.withAlpha(palette.textMuted(), 0.58f) : 0xAA_FFFFFF;
+                canvas.color(disabledTint).texture(icon, iconX, iconY, icon.width(), icon.height());
+                canvas.resetColor();
             }
         }
 
@@ -190,9 +211,11 @@ public class CirrusButtonWidget extends Widget {
             int availableTextWidth = Math.max(0, width() - iconOffset - 4);
             Component renderedLabel = fitLabel(font, label, availableTextWidth);
             int textWidth = font.width(renderedLabel);
-            int textX = iconOffset == 0 ? (width() - textWidth) / 2 : iconOffset + (width() - iconOffset - textWidth) / 2;
-            int textY = (height() - font.lineHeight) / 2 + (down ? 1 : 0);
-            canvas.text(renderedLabel, Math.max(1, textX), textY, enabled ? textColor : 0xFF808080, false);
+            int textX = iconOffset == 0
+                    ? (width() - textWidth) / 2
+                    : iconOffset + (width() - iconOffset - textWidth) / 2;
+            int textY = CirrusControlChrome.centeredTextY(0, height(), font) + (down ? 1 : 0);
+            canvas.text(renderedLabel, Math.max(1, textX), textY, resolvedTextColor(), false);
         }
     }
 
@@ -210,7 +233,8 @@ public class CirrusButtonWidget extends Widget {
     }
 
     private static int preferredLabelButtonWidth(Component label, @Nullable SizedTexture icon) {
-        int width = Math.max(minLabelButtonWidth, estimatedTextWidth(label == null ? "" : label.getString()) + labelPadding);
+        int width = Math
+                .max(minLabelButtonWidth, estimatedTextWidth(label == null ? "" : label.getString()) + labelPadding);
         if (icon != null) {
             width += icon.width() + iconLabelGap;
         }
@@ -219,7 +243,7 @@ public class CirrusButtonWidget extends Widget {
 
     private static int estimatedTextWidth(String text) {
         int width = 0;
-        for (int i = 0; i < text.length(); ) {
+        for (int i = 0; i < text.length();) {
             int codePoint = text.codePointAt(i);
             width += estimatedGlyphWidth(codePoint);
             i += Character.charCount(codePoint);
@@ -233,9 +257,9 @@ public class CirrusButtonWidget extends Widget {
         }
         Character.UnicodeScript script = Character.UnicodeScript.of(codePoint);
         if (script == Character.UnicodeScript.HAN
-            || script == Character.UnicodeScript.HIRAGANA
-            || script == Character.UnicodeScript.KATAKANA
-            || script == Character.UnicodeScript.HANGUL) {
+                || script == Character.UnicodeScript.HIRAGANA
+                || script == Character.UnicodeScript.KATAKANA
+                || script == Character.UnicodeScript.HANGUL) {
             return 9;
         }
         return 6;

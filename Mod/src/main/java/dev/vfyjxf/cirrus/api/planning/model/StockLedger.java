@@ -7,7 +7,7 @@ import java.util.TreeMap;
 
 public record StockLedger(Map<ResourceKey, Long> entries) {
 
-    public static final StockLedger EMPTY = new StockLedger(Map.of());
+    public static final StockLedger empty = new StockLedger(Map.of());
 
     public StockLedger {
         Objects.requireNonNull(entries, "entries");

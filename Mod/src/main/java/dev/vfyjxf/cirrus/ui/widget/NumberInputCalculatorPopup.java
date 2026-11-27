@@ -5,14 +5,14 @@ import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
 import dev.vfyjxf.cloudlib.api.ui.floating.FloatingEffect;
 import dev.vfyjxf.cloudlib.api.ui.floating.FloatingPlacement;
-import org.jetbrains.annotations.Nullable;
+import dev.vfyjxf.cloudlib.api.ui.style.UIStyles;
+import org.jspecify.annotations.Nullable;
 
 import java.util.WeakHashMap;
 
 import static dev.vfyjxf.cloudlib.api.ui.floating.FloatingMiddlewares.flip;
 import static dev.vfyjxf.cloudlib.api.ui.floating.FloatingMiddlewares.offset;
 import static dev.vfyjxf.cloudlib.api.ui.floating.FloatingMiddlewares.shift;
-import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.zIndexOf;
 
 /**
  * Reusable popup binding between {@link NumberInputWidget} and {@link SimpleMathCalculatorWidget}.
@@ -21,8 +21,7 @@ public final class NumberInputCalculatorPopup {
     private static final int popupZIndex = 2600;
     private static final WeakHashMap<NumberInputWidget, PopupBinding> activePopups = new WeakHashMap<>();
 
-    private NumberInputCalculatorPopup() {
-    }
+    private NumberInputCalculatorPopup() {}
 
     public static void open(NumberInputWidget source, int mouseX, int mouseY) {
         if (source == null || !source.lifecycle().mounted()) {
@@ -38,8 +37,7 @@ public final class NumberInputCalculatorPopup {
             activePopups.remove(source);
         }
 
-        SimpleMathCalculatorWidget popup = SimpleMathCalculatorWidget.create()
-            .setInitialValue(source.getValue());
+        SimpleMathCalculatorWidget popup = SimpleMathCalculatorWidget.create().setInitialValue(source.getValue());
         PopupBinding binding = new PopupBinding(source, popup, source.clickGroup());
         popup.onResultConfirmed(result -> {
             source.setValue(result);
@@ -49,7 +47,7 @@ public final class NumberInputCalculatorPopup {
         popup.onUnmount(binding::onPopupUnmounted);
         source.setClickGroup(binding);
         popup.setClickGroup(binding);
-        popup.useStyle(zIndexOf(popupZIndex));
+        popup.useStyle(UIStyles.zIndex(popupZIndex));
         popup.useEffect(FloatingEffect.create(source, FloatingPlacement.bottomStart, offset(2), flip(3), shift(3)));
 
         addRootWidget(source.scene().root(), popup);

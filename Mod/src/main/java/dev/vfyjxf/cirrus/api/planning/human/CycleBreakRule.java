@@ -6,11 +6,11 @@ import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import java.util.Objects;
 
 public record CycleBreakRule(
-        String ruleId,
-        GuidanceScope scope,
-        RuleStrength strength,
-        ResourceKey targetResource,
-        CompiledRecipeKey bannedSourceRecipe
+    String ruleId,
+    GuidanceScope scope,
+    RuleStrength strength,
+    ResourceKey targetResource,
+    CompiledRecipeKey bannedSourceRecipe
 ) implements GuidanceRule {
 
     public CycleBreakRule {

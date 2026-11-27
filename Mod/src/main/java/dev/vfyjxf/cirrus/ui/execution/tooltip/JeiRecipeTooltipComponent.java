@@ -3,16 +3,22 @@ package dev.vfyjxf.cirrus.ui.execution.tooltip;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
+import dev.vfyjxf.cirrus.recipe.system.VanillaBrewingRecipe;
 import dev.vfyjxf.cirrus.recipe.system.jei.JeiCategoryRecipeSystem;
 import dev.vfyjxf.cirrus.recipe.system.jei.JeiRecipeLayoutResolver;
-import dev.vfyjxf.cirrus.ui.CirrusTextures;
+import dev.vfyjxf.cirrus.ui.CirrusPalette;
+import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
+import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiPaint;
+import mezz.jei.api.constants.RecipeTypes;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
 import mezz.jei.api.gui.drawable.IScalableDrawable;
 import mezz.jei.api.recipe.IFocusFactory;
 import mezz.jei.api.recipe.IRecipeManager;
 import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.recipe.category.IRecipeCategory;
+import mezz.jei.api.recipe.vanilla.IJeiBrewingRecipe;
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -20,7 +26,8 @@ import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
-import org.jetbrains.annotations.Nullable;
+import net.minecraft.world.item.ItemStack;
+import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -28,16 +35,20 @@ import java.util.WeakHashMap;
 import java.util.function.Supplier;
 
 public record JeiRecipeTooltipComponent(
-        IRecipeLayoutDrawable<?> layout,
-        int width,
-        int height,
-        int borderOffsetX,
-        int borderOffsetY,
-        int leftPadding
+    IRecipeLayoutDrawable<?> layout,
+    int width,
+    int height,
+    int borderOffsetX,
+    int borderOffsetY,
+    int leftPadding
 ) implements TooltipComponent {
     private static final int layoutCacheMaxSize = 128;
     private static final int recipePreviewBorderSize = 4;
-    private static final Map<LayoutCacheKey, IRecipeLayoutDrawable<?>> layoutCache = new LinkedHashMap<>(16, 0.75f, true) {
+    private static final Map<LayoutCacheKey, IRecipeLayoutDrawable<?>> layoutCache = new LinkedHashMap<>(
+        16,
+        0.75f,
+        true
+    ) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<LayoutCacheKey, IRecipeLayoutDrawable<?>> eldest) {
             return size() > layoutCacheMaxSize;
@@ -58,12 +69,12 @@ public record JeiRecipeTooltipComponent(
         layout.setPosition(0, 0);
         Rect2i rect = layout.getRectWithBorder();
         return new JeiRecipeTooltipComponent(
-                layout,
-                Math.max(1, rect.getWidth()),
-                Math.max(1, rect.getHeight()),
-                rect.getX(),
-                rect.getY(),
-                Math.max(0, leftPadding)
+            layout,
+            Math.max(1, rect.getWidth()),
+            Math.max(1, rect.getHeight()),
+            rect.getX(),
+            rect.getY(),
+            Math.max(0, leftPadding)
         );
     }
 
@@ -88,7 +99,10 @@ public record JeiRecipeTooltipComponent(
         return createLayoutDrawable(entry, false);
     }
 
-    private static @Nullable IRecipeLayoutDrawable<?> createLayoutDrawable(@Nullable RecipeEntry<?> entry, boolean cache) {
+    private static @Nullable IRecipeLayoutDrawable<?> createLayoutDrawable(
+        @Nullable RecipeEntry<?> entry,
+        boolean cache
+    ) {
         if (entry == null) {
             return null;
         }
@@ -99,13 +113,27 @@ public record JeiRecipeTooltipComponent(
             }
             RecipeSystem<?> system = entry.system();
             if (system instanceof JeiCategoryRecipeSystem<?> jeiSystem) {
-                IRecipeLayoutDrawable<?> layout = createLayout(context, entry, jeiSystem.recipeType(), entry.recipe(), entry.id(), cache);
+                IRecipeLayoutDrawable<?> layout = createLayout(
+                    context,
+                    entry,
+                    jeiSystem.recipeType(),
+                    entry.recipe(),
+                    entry.id(),
+                    cache
+                );
                 if (layout != null) {
                     return layout;
                 }
             }
             for (RecipeType<?> recipeType : RecipeApi.instance().getJeiRecipeTypeForSystem(entry.systemId())) {
-                IRecipeLayoutDrawable<?> layout = createLayout(context, entry, recipeType, entry.recipe(), entry.id(), cache);
+                IRecipeLayoutDrawable<?> layout = createLayout(
+                    context,
+                    entry,
+                    recipeType,
+                    entry.recipe(),
+                    entry.id(),
+                    cache
+                );
                 if (layout != null) {
                     return layout;
                 }
@@ -113,9 +141,15 @@ public record JeiRecipeTooltipComponent(
                 if (layout != null) {
                     return layout;
                 }
+                if (entry.recipe() instanceof VanillaBrewingRecipe nativeBrewing
+                        && RecipeTypes.BREWING.equals(recipeType)) {
+                    layout = createBrewingLayout(context, entry, nativeBrewing, cache);
+                    if (layout != null) {
+                        return layout;
+                    }
+                }
             }
-        } catch (RuntimeException ignored) {
-        }
+        } catch (RuntimeException ignored) {}
         return null;
     }
 
@@ -132,17 +166,19 @@ public record JeiRecipeTooltipComponent(
         }
         var category = context.manager().getRecipeCategory(recipeType);
         T typedRecipe = recipeType.getRecipeClass().cast(recipe);
-        @Nullable ResourceLocation recipeId = preferredId == null ? category.getRegistryName(typedRecipe) : preferredId;
+        @Nullable
+        ResourceLocation recipeId = preferredId == null ? category.getRegistryName(typedRecipe) : preferredId;
         if (JeiRecipeLayoutResolver.shouldSkipLayout(recipeType, category, typedRecipe, recipeId)) {
             return null;
         }
-        Supplier<@Nullable IRecipeLayoutDrawable<?>> factory = () -> context.manager().createRecipeLayoutDrawable(
-                category,
-                typedRecipe,
-                context.focusFactory().getEmptyFocusGroup(),
-                context.recipePreviewBackground(),
-                recipePreviewBorderSize
-        ).orElse(null);
+        Supplier<@Nullable IRecipeLayoutDrawable<?>> factory = () -> context.manager()
+                .createRecipeLayoutDrawable(
+                    category,
+                    typedRecipe,
+                    context.focusFactory().getEmptyFocusGroup(),
+                    context.recipePreviewBackground(),
+                    recipePreviewBorderSize
+                ).orElse(null);
         if (!cache) {
             try {
                 @SuppressWarnings("unchecked")
@@ -177,12 +213,32 @@ public record JeiRecipeTooltipComponent(
             return null;
         }
         IRecipeCategory<T> category = context.manager().getRecipeCategory(recipeType);
-        return context.manager().createRecipeLookup(recipeType)
-            .get()
-            .filter(candidate -> id.equals(category.getRegistryName(candidate)))
-            .findFirst()
-            .map(candidate -> createLayout(context, entry, recipeType, candidate, id, cache))
-            .orElse(null);
+        return context.manager().createRecipeLookup(recipeType).get()
+                .filter(candidate -> id.equals(category.getRegistryName(candidate))).findFirst()
+                .map(candidate -> createLayout(context, entry, recipeType, candidate, id, cache)).orElse(null);
+    }
+
+    private static @Nullable IRecipeLayoutDrawable<IJeiBrewingRecipe> createBrewingLayout(
+        LayoutContext context,
+        RecipeEntry<?> entry,
+        VanillaBrewingRecipe nativeBrewing,
+        boolean cache
+    ) {
+        ItemStack expectedOutput = nativeBrewing.output();
+        ItemStack expectedInput = nativeBrewing.primaryInput();
+        return context.manager().createRecipeLookup(RecipeTypes.BREWING).get()
+                .filter(candidate -> ItemStack.isSameItemSameComponents(candidate.getPotionOutput(), expectedOutput))
+                .filter(
+                    candidate -> expectedInput.isEmpty() || candidate.getPotionInputs().stream()
+                            .anyMatch(in -> ItemStack.isSameItemSameComponents(in, expectedInput))
+                )
+                .filter(
+                    candidate -> candidate.getIngredients().isEmpty()
+                            || candidate.getIngredients().stream().anyMatch(nativeBrewing.reagent()::test)
+                )
+                .findFirst()
+                .map(candidate -> createLayout(context, entry, RecipeTypes.BREWING, candidate, entry.id(), cache))
+                .orElse(null);
     }
 
     private static @Nullable IRecipeLayoutDrawable<?> cachedLayout(
@@ -230,10 +286,7 @@ public record JeiRecipeTooltipComponent(
         layout.tick();
     }
 
-    private record LayoutContext(
-            IRecipeManager manager,
-            IFocusFactory focusFactory
-    ) {
+    private record LayoutContext(IRecipeManager manager, IFocusFactory focusFactory) {
         private IScalableDrawable recipePreviewBackground() {
             return recipePreviewBackground;
         }
@@ -242,7 +295,27 @@ public record JeiRecipeTooltipComponent(
     private static final class CirrusRecipePreviewBackground implements IScalableDrawable {
         @Override
         public void draw(GuiGraphics guiGraphics, int xOffset, int yOffset, int width, int height) {
-            CirrusTextures.Background.Outlined.flat.render(guiGraphics, xOffset, yOffset, width, height);
+            if (width <= 0 || height <= 0) {
+                return;
+            }
+            WorkbenchThemeMode mode = WorkbenchThemeMode.defaultMode();
+            try {
+                WorkbenchThemeMode configured = ExecutionOverlayClientConfig.workbenchTheme();
+                if (configured != null) {
+                    mode = configured;
+                }
+            } catch (RuntimeException | LinkageError ignored) {}
+            CirrusPalette p = CirrusPalette.of(mode);
+            int outer = OreUiPaint.outerInk(p);
+            int fill = p.recessedSurface();
+            int border = OreUiPaint.cardDivider(p);
+            guiGraphics.fill(xOffset, yOffset, xOffset + width, yOffset + height, outer);
+            if (width > 2 && height > 2) {
+                guiGraphics.fill(xOffset + 1, yOffset + 1, xOffset + width - 1, yOffset + height - 1, border);
+            }
+            if (width > 4 && height > 4) {
+                guiGraphics.fill(xOffset + 2, yOffset + 2, xOffset + width - 2, yOffset + height - 2, fill);
+            }
         }
     }
 
@@ -256,8 +329,9 @@ public record JeiRecipeTooltipComponent(
         }
     }
 
-    private record RecipeIdLayoutCacheKey(RecipeType<?> recipeType, ResourceLocation recipeId) implements LayoutCacheKey {
-    }
+    private record RecipeIdLayoutCacheKey(RecipeType<?> recipeType, ResourceLocation recipeId)
+            implements
+                LayoutCacheKey {}
 
     private static final class RecipeEntryLayoutCacheKey implements LayoutCacheKey {
         private final RecipeSystem<?> system;
@@ -276,8 +350,8 @@ public record JeiRecipeTooltipComponent(
                 return true;
             }
             return object instanceof RecipeEntryLayoutCacheKey other
-                && system == other.system
-                && sameRecipe(system, recipe, other.recipe);
+                    && system == other.system
+                    && sameRecipe(system, recipe, other.recipe);
         }
 
         @Override

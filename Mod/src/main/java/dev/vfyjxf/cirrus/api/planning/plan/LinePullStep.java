@@ -7,12 +7,12 @@ import java.util.List;
 import java.util.Objects;
 
 public record LinePullStep(
-        String stepId,
-        List<String> dependsOnStepIds,
-        String lineId,
-        ResourceKey resource,
-        long amount,
-        CostVector stepCost
+    String stepId,
+    List<String> dependsOnStepIds,
+    String lineId,
+    ResourceKey resource,
+    long amount,
+    CostVector stepCost
 ) implements PlanStep {
 
     public LinePullStep {

@@ -9,9 +9,9 @@ import java.util.Set;
 import java.util.TreeSet;
 
 public record RawRecipeCatalogSnapshot(
-        long version,
-        List<RawRecipeRecord> recipes,
-        Set<ResourceKey> unresolvedOutputs
+    long version,
+    List<RawRecipeRecord> recipes,
+    Set<ResourceKey> unresolvedOutputs
 ) {
 
     public RawRecipeCatalogSnapshot(long version, List<RawRecipeRecord> recipes) {

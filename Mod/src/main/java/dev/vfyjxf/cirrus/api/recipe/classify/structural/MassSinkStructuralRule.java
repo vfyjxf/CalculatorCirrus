@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationContext;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationRule;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationSink;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationTags;
+import dev.vfyjxf.cirrus.api.recipe.classify.ClassifyContent;
 import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifyView;
 
 import java.util.ArrayList;
@@ -24,12 +25,11 @@ import java.util.Set;
  */
 public final class MassSinkStructuralRule implements ClassificationRule {
 
-    public static final String ID = "cirrus:structural/mass_sink";
+    public static final String id = "cirrus:structural/mass_sink";
 
     private static final int minGroupSize = 64;
 
-    private MassSinkStructuralRule() {
-    }
+    private MassSinkStructuralRule() {}
 
     public static MassSinkStructuralRule create() {
         return new MassSinkStructuralRule();
@@ -37,7 +37,7 @@ public final class MassSinkStructuralRule implements ClassificationRule {
 
     @Override
     public String id() {
-        return ID;
+        return id;
     }
 
     @Override
@@ -80,7 +80,7 @@ public final class MassSinkStructuralRule implements ClassificationRule {
             int tagInputRecipes = 0;
             for (RecipeClassifyView view : group) {
                 for (var input : view.inputs()) {
-                    if (input.kind() == dev.vfyjxf.cirrus.api.recipe.classify.ClassifyContent.Kind.tag) {
+                    if (input.kind() == ClassifyContent.Kind.tag) {
                         tagInputRecipes++;
                         break;
                     }
@@ -99,7 +99,7 @@ public final class MassSinkStructuralRule implements ClassificationRule {
                 continue;
             }
             for (RecipeClassifyView view : group) {
-                sink.tag(view.index(), ClassificationTags.RECYCLING);
+                sink.tag(view.index(), ClassificationTags.recycling);
             }
         }
     }

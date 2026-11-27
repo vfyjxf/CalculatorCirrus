@@ -4,14 +4,17 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
+import dev.vfyjxf.cloudlib.api.util.Codecs;
 import dev.vfyjxf.cloudlib.util.Checks;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * The unified rule condition tree. One tree shape serves both evaluation
@@ -40,25 +43,13 @@ import java.util.Set;
  * matches the slot's declared tag id. Matching is registry-free: it compares
  * declared content, not registry tag membership.
  */
-public sealed interface RuleCondition permits
-    RuleCondition.AllOf,
-    RuleCondition.AnyOf,
-    RuleCondition.Not,
-    RuleCondition.SystemId,
-    RuleCondition.RecipeId,
-    RuleCondition.RecipeMod,
-    RuleCondition.Machine,
-    RuleCondition.Material,
-    RuleCondition.SlotCount,
-    RuleCondition.IdOverlap,
-    RuleCondition.Chance,
-    RuleCondition.HasConcreteInput,
-    RuleCondition.ClassificationTag,
-    RuleCondition.FlagCondition,
-    RuleCondition.ScalarCondition,
-    RuleCondition.HintCondition {
+public sealed interface RuleCondition permits RuleCondition.AllOf, RuleCondition.AnyOf, RuleCondition.Not,
+        RuleCondition.SystemId, RuleCondition.RecipeId, RuleCondition.RecipeMod, RuleCondition.Machine,
+        RuleCondition.Material, RuleCondition.SlotCount, RuleCondition.IdOverlap, RuleCondition.Chance,
+        RuleCondition.HasConcreteInput, RuleCondition.ClassificationTag, RuleCondition.FlagCondition,
+        RuleCondition.ScalarCondition, RuleCondition.HintCondition {
 
-    Codec<RuleCondition> CODEC = Codec.recursive(
+    Codec<RuleCondition> codec = Codec.recursive(
         "cirrus_rule_condition",
         self -> Codec.STRING.dispatch("kind", RuleCondition::codecKind, type -> codecForType(type, self))
     );
@@ -105,28 +96,34 @@ public sealed interface RuleCondition permits
             case "recipe_id" -> textMatcherCodec(RecipeId::new, RecipeId::matcher);
             case "recipe_mod" -> textMatcherCodec(RecipeMod::new, RecipeMod::matcher);
             case "machine" -> textMatcherCodec(Machine::new, Machine::matcher);
-            case "material" -> Material.CODEC;
-            case "slot_count" -> SlotCount.CODEC;
-            case "id_overlap" -> Codec.BOOL.optionalFieldOf("match", true).xmap(ignored -> new IdOverlap(), ignored -> true);
-            case "chance" -> Chance.CODEC;
-            case "has_concrete_input" -> Codec.BOOL.fieldOf("value").xmap(HasConcreteInput::new, HasConcreteInput::expected);
-            case "classification_tag" -> Codec.STRING.fieldOf("tag").xmap(ClassificationTag::new, ClassificationTag::tag);
-            case "flag" -> RuleFlag.CODEC.fieldOf("flag").xmap(FlagCondition::new, FlagCondition::flag);
-            case "scalar" -> ScalarCondition.CODEC;
-            case "hint" -> dev.vfyjxf.cloudlib.api.util.Codecs.lowerCaseEnum(RecipeUsePolicy.class).fieldOf("policy").xmap(HintCondition::new, HintCondition::policy);
+            case "material" -> Material.codec;
+            case "slot_count" -> SlotCount.codec;
+            case "id_overlap" ->
+                Codec.BOOL.optionalFieldOf("match", true).xmap(ignored -> new IdOverlap(), ignored -> true);
+            case "chance" -> Chance.codec;
+            case "has_concrete_input" ->
+                Codec.BOOL.fieldOf("value").xmap(HasConcreteInput::new, HasConcreteInput::expected);
+            case "classification_tag" ->
+                Codec.STRING.fieldOf("tag").xmap(ClassificationTag::new, ClassificationTag::tag);
+            case "flag" -> RuleFlag.codec.fieldOf("flag").xmap(FlagCondition::new, FlagCondition::flag);
+            case "scalar" -> ScalarCondition.codec;
+            case "hint" -> Codecs.lowerCaseEnum(RecipeUsePolicy.class).fieldOf("policy")
+                    .xmap(HintCondition::new, HintCondition::policy);
             default -> throw new IllegalArgumentException("Unknown rule condition kind: " + type);
         };
     }
 
     /** Shared {@code op + values} shape for the id-matching leaves. */
     private static <T extends RuleCondition> MapCodec<T> textMatcherCodec(
-        java.util.function.BiFunction<TextMatchOp, List<String>, T> factory,
-        java.util.function.Function<T, TextMatcher> getter
+        BiFunction<TextMatchOp, List<String>, T> factory,
+        Function<T, TextMatcher> getter
     ) {
-        return RecordCodecBuilder.mapCodec(instance -> instance.group(
-            TextMatchOp.CODEC.fieldOf("op").forGetter(condition -> getter.apply(condition).op()),
-            Codec.STRING.listOf().fieldOf("values").forGetter(condition -> getter.apply(condition).values())
-        ).apply(instance, factory));
+        return RecordCodecBuilder.mapCodec(
+            instance -> instance.group(
+                TextMatchOp.codec.fieldOf("op").forGetter(condition -> getter.apply(condition).op()),
+                Codec.STRING.listOf().fieldOf("values").forGetter(condition -> getter.apply(condition).values())
+            ).apply(instance, factory)
+        );
     }
 
     /** Matches when every sub-condition matches. */
@@ -204,6 +201,7 @@ public sealed interface RuleCondition permits
         public SystemId(TextMatcher matcher) {
             this.matcher = Checks.checkNotNull(matcher, "matcher");
         }
+
         public TextMatcher matcher() {
             return matcher;
         }
@@ -353,10 +351,12 @@ public sealed interface RuleCondition permits
     ) implements RuleCondition {
 
         public record AmountSpec(NumOp op, double value) {
-            public static final Codec<AmountSpec> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-                NumOp.CODEC.fieldOf("op").forGetter(AmountSpec::op),
-                Codec.DOUBLE.fieldOf("value").forGetter(AmountSpec::value)
-            ).apply(instance, AmountSpec::new));
+            public static final Codec<AmountSpec> codec = RecordCodecBuilder.create(
+                instance -> instance.group(
+                    NumOp.codec.fieldOf("op").forGetter(AmountSpec::op),
+                    Codec.DOUBLE.fieldOf("value").forGetter(AmountSpec::value)
+                ).apply(instance, AmountSpec::new)
+            );
 
             public AmountSpec {
                 Checks.checkNotNull(op, "op");
@@ -367,13 +367,17 @@ public sealed interface RuleCondition permits
             }
         }
 
-        public static final MapCodec<Material> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            RuleChannel.CODEC.fieldOf("channel").forGetter(Material::channel),
-            Codec.STRING.listOf().optionalFieldOf("match", List.of()).forGetter(Material::serializedTokens),
-            AmountSpec.CODEC.optionalFieldOf("amount").forGetter(Material::amount),
-            Codec.BOOL.optionalFieldOf("all_slots", false).forGetter(Material::allSlots)
-        ).apply(instance, (channel, tokens, amount, allSlots) ->
-            Material.ofTokens(channel, tokens, amount.orElse(null), allSlots)));
+        public static final MapCodec<Material> codec = RecordCodecBuilder.mapCodec(
+            instance -> instance.group(
+                RuleChannel.codec.fieldOf("channel").forGetter(Material::channel),
+                Codec.STRING.listOf().optionalFieldOf("match", List.of()).forGetter(Material::serializedTokens),
+                AmountSpec.codec.optionalFieldOf("amount").forGetter(Material::amount),
+                Codec.BOOL.optionalFieldOf("all_slots", false).forGetter(Material::allSlots)
+            ).apply(
+                instance,
+                (channel, tokens, amount, allSlots) -> ofTokens(channel, tokens, amount.orElse(null), allSlots)
+            )
+        );
         public Material {
             Checks.checkNotNull(channel, "channel");
             ids = Set.copyOf(ids);
@@ -382,7 +386,12 @@ public sealed interface RuleCondition permits
         }
 
         /** Factory from raw tokens ({@code "item:x"}, {@code "fluid:x"}, {@code "#t"}, {@code "tag:t"}). */
-        public static Material ofTokens(RuleChannel channel, List<String> tokens, @Nullable AmountSpec amount, boolean allSlots) {
+        public static Material ofTokens(
+            RuleChannel channel,
+            List<String> tokens,
+            @Nullable AmountSpec amount,
+            boolean allSlots
+        ) {
             return new Material(channel, parseIds(tokens), parseTags(tokens), Optional.ofNullable(amount), allSlots);
         }
 
@@ -498,11 +507,13 @@ public sealed interface RuleCondition permits
 
     /** Compares the slot count of a channel ({@code any} = inputs + outputs). */
     record SlotCount(RuleChannel channel, NumOp op, int value) implements RuleCondition {
-        public static final MapCodec<SlotCount> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            RuleChannel.CODEC.fieldOf("channel").forGetter(SlotCount::channel),
-            NumOp.CODEC.fieldOf("op").forGetter(SlotCount::op),
-            Codec.INT.fieldOf("value").forGetter(SlotCount::value)
-        ).apply(instance, SlotCount::new));
+        public static final MapCodec<SlotCount> codec = RecordCodecBuilder.mapCodec(
+            instance -> instance.group(
+                RuleChannel.codec.fieldOf("channel").forGetter(SlotCount::channel),
+                NumOp.codec.fieldOf("op").forGetter(SlotCount::op),
+                Codec.INT.fieldOf("value").forGetter(SlotCount::value)
+            ).apply(instance, SlotCount::new)
+        );
 
         public SlotCount {
             Checks.checkNotNull(channel, "channel");
@@ -549,11 +560,13 @@ public sealed interface RuleCondition permits
 
     /** Compares slot chance values ({@code any} slot satisfying the comparison matches). */
     record Chance(RuleChannel channel, NumOp op, double value) implements RuleCondition {
-        public static final MapCodec<Chance> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            RuleChannel.CODEC.fieldOf("channel").forGetter(Chance::channel),
-            NumOp.CODEC.fieldOf("op").forGetter(Chance::op),
-            Codec.DOUBLE.fieldOf("value").forGetter(Chance::value)
-        ).apply(instance, Chance::new));
+        public static final MapCodec<Chance> codec = RecordCodecBuilder.mapCodec(
+            instance -> instance.group(
+                RuleChannel.codec.fieldOf("channel").forGetter(Chance::channel),
+                NumOp.codec.fieldOf("op").forGetter(Chance::op),
+                Codec.DOUBLE.fieldOf("value").forGetter(Chance::value)
+            ).apply(instance, Chance::new)
+        );
 
         public Chance {
             Checks.checkNotNull(channel, "channel");
@@ -625,11 +638,13 @@ public sealed interface RuleCondition permits
 
     /** Candidate-domain scalar comparison. */
     record ScalarCondition(RuleScalar field, NumOp op, double value) implements RuleCondition {
-        public static final MapCodec<ScalarCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            RuleScalar.CODEC.fieldOf("field").forGetter(ScalarCondition::field),
-            NumOp.CODEC.fieldOf("op").forGetter(ScalarCondition::op),
-            Codec.DOUBLE.fieldOf("value").forGetter(ScalarCondition::value)
-        ).apply(instance, ScalarCondition::new));
+        public static final MapCodec<ScalarCondition> codec = RecordCodecBuilder.mapCodec(
+            instance -> instance.group(
+                RuleScalar.codec.fieldOf("field").forGetter(ScalarCondition::field),
+                NumOp.codec.fieldOf("op").forGetter(ScalarCondition::op),
+                Codec.DOUBLE.fieldOf("value").forGetter(ScalarCondition::value)
+            ).apply(instance, ScalarCondition::new)
+        );
 
         public ScalarCondition {
             Checks.checkNotNull(field, "field");
@@ -694,22 +709,14 @@ public sealed interface RuleCondition permits
                     problems.add("material condition has no match tokens and no amount filter");
                 }
             }
-            case SlotCount ignored -> {
-            }
-            case IdOverlap ignored -> {
-            }
-            case Chance ignored -> {
-            }
-            case HasConcreteInput ignored -> {
-            }
-            case ClassificationTag ignored -> {
-            }
-            case FlagCondition ignored -> {
-            }
-            case ScalarCondition ignored -> {
-            }
-            case HintCondition ignored -> {
-            }
+            case SlotCount ignored -> {}
+            case IdOverlap ignored -> {}
+            case Chance ignored -> {}
+            case HasConcreteInput ignored -> {}
+            case ClassificationTag ignored -> {}
+            case FlagCondition ignored -> {}
+            case ScalarCondition ignored -> {}
+            case HintCondition ignored -> {}
         }
     }
 }

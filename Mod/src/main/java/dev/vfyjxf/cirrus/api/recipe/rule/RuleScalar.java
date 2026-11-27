@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.rule;
 
 import com.mojang.serialization.Codec;
+import dev.vfyjxf.cloudlib.api.util.Codecs;
 
 /**
  * Named candidate-stage scalars a condition can compare against. Available
@@ -19,5 +20,5 @@ public enum RuleScalar {
     /** Request-scoped contextual penalty total (target family, missing machine). */
     contextualPenalty;
 
-    public static final Codec<RuleScalar> CODEC = dev.vfyjxf.cloudlib.api.util.Codecs.lowerCaseEnum(RuleScalar.class);
+    public static final Codec<RuleScalar> codec = Codecs.lowerCaseEnum(RuleScalar.class);
 }

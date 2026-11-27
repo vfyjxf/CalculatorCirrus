@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContextKey;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
+import org.jspecify.annotations.Nullable;
 
 public record LongProjectionContextOption(
     Namespace id,
@@ -26,7 +27,7 @@ public record LongProjectionContextOption(
     }
 
     @Override
-    public Long normalize(Object value) {
+    public Long normalize(@Nullable Object value) {
         long raw = value instanceof Number number ? number.longValue() : defaultValue();
         return Math.max(min, Math.min(max, raw));
     }

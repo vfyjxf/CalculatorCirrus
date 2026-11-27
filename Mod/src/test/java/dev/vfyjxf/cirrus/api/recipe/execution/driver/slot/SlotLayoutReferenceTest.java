@@ -10,9 +10,16 @@ class SlotLayoutReferenceTest {
     @Test
     void layoutReferenceUsesSealedTypes() {
         SlotLayout layout = SlotLayout.builder()
-            .add(SlotLayout.Role.input, new SlotLayout.Key(Namespace.of("cirrus", "slot_index"), 0), new SlotLayout.Reference.Index(3))
-            .add(SlotLayout.Role.input, new SlotLayout.Key(Namespace.of("cirrus", "slot_key"), 1), new SlotLayout.Reference.Key("custom"))
-            .build();
+                .add(
+                    SlotLayout.Role.input,
+                    new SlotLayout.Key(Namespace.of("cirrus", "slot_index"), 0),
+                    new SlotLayout.Reference.Index(3)
+                )
+                .add(
+                    SlotLayout.Role.input,
+                    new SlotLayout.Key(Namespace.of("cirrus", "slot_key"), 1),
+                    new SlotLayout.Reference.Key("custom")
+                ).build();
         SlotLayout.Index index = layout.slots(SlotLayout.Role.input);
         SlotLayout.Reference indexRef = index.get(new SlotLayout.Key(Namespace.of("cirrus", "slot_index"), 0));
         SlotLayout.Reference keyRef = index.get(new SlotLayout.Key(Namespace.of("cirrus", "slot_key"), 1));

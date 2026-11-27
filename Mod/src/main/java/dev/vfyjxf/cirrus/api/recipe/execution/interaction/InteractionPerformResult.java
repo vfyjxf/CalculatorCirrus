@@ -6,11 +6,9 @@ import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 /**
  * Result of attempting to perform a recipe interaction automatically.
  */
-public sealed interface InteractionPerformResult permits
-    InteractionPerformResult.Performed,
-    InteractionPerformResult.ReTranslationRequired,
-    InteractionPerformResult.ManualRequired,
-    InteractionPerformResult.Failed {
+public sealed interface InteractionPerformResult
+        permits InteractionPerformResult.Performed, InteractionPerformResult.ReTranslationRequired,
+        InteractionPerformResult.ManualRequired, InteractionPerformResult.Failed {
 
     //region variants
 

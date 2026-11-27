@@ -1,7 +1,11 @@
 package dev.vfyjxf.cirrus.ui.widget.common;
 
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
+import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
+import dev.vfyjxf.cloudlib.api.ui.texture.VisualTexture;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -15,14 +19,11 @@ public final class CirrusSlotGroupRenderer {
     public static final int defaultBorderColor = 0xFFFFFFFF;
     public static final int borderWidth = 1;
 
-    private CirrusSlotGroupRenderer() {
-    }
+    private CirrusSlotGroupRenderer() {}
 
-    public record Cell(int column, int row) {
-    }
+    public record Cell(int column, int row) {}
 
-    public record BorderSegment(int x, int y, int width, int height) {
-    }
+    public record BorderSegment(int x, int y, int width, int height) {}
 
     public record Bounds(int minColumn, int minRow, int maxColumn, int maxRow) {
         public int width(int slotSize) {
@@ -42,6 +43,10 @@ public final class CirrusSlotGroupRenderer {
         renderRect(canvas, x, y, 1, 1, slotSize, defaultBorderColor);
     }
 
+    public static void renderSingle(SceneCanvas canvas, @Nullable Widget widget, int x, int y, int slotSize) {
+        renderRect(canvas, widget, x, y, 1, 1, slotSize);
+    }
+
     public static void renderSingle(SceneCanvas canvas, int x, int y, int slotSize, int borderColor) {
         renderRect(canvas, x, y, 1, 1, slotSize, borderColor);
     }
@@ -52,6 +57,40 @@ public final class CirrusSlotGroupRenderer {
 
     public static void renderRect(
         SceneCanvas canvas,
+        @Nullable Widget widget,
+        int x,
+        int y,
+        int columns,
+        int rows,
+        int slotSize
+    ) {
+        renderRect(
+            canvas,
+            CirrusUiTheme.textures(widget).slotBase(),
+            x,
+            y,
+            columns,
+            rows,
+            slotSize,
+            borderColorFor(widget)
+        );
+    }
+
+    public static void renderRect(
+        SceneCanvas canvas,
+        int x,
+        int y,
+        int columns,
+        int rows,
+        int slotSize,
+        int borderColor
+    ) {
+        renderRect(canvas, CirrusTextures.Background.Slot.base, x, y, columns, rows, slotSize, borderColor);
+    }
+
+    private static void renderRect(
+        SceneCanvas canvas,
+        VisualTexture slotTexture,
         int x,
         int y,
         int columns,
@@ -64,13 +103,7 @@ public final class CirrusSlotGroupRenderer {
         }
         for (int row = 0; row < rows; row++) {
             for (int column = 0; column < columns; column++) {
-                canvas.texture(
-                    CirrusTextures.Background.Slot.base,
-                    x + column * slotSize,
-                    y + row * slotSize,
-                    slotSize,
-                    slotSize
-                );
+                canvas.texture(slotTexture, x + column * slotSize, y + row * slotSize, slotSize, slotSize);
             }
         }
         int width = columns * slotSize;
@@ -82,12 +115,57 @@ public final class CirrusSlotGroupRenderer {
         renderCells(canvas, x, y, slotSize, cells, defaultBorderColor);
     }
 
+    public static void renderCells(
+        SceneCanvas canvas,
+        @Nullable Widget widget,
+        int x,
+        int y,
+        int slotSize,
+        Collection<Cell> cells
+    ) {
+        renderCells(canvas, CirrusUiTheme.textures(widget).slotBase(), x, y, slotSize, cells, borderColorFor(widget));
+    }
+
     public static void renderRowMajorCells(SceneCanvas canvas, int x, int y, int slotSize, int count, int columns) {
         renderRowMajorCells(canvas, x, y, slotSize, count, columns, defaultBorderColor);
     }
 
     public static void renderRowMajorCells(
         SceneCanvas canvas,
+        @Nullable Widget widget,
+        int x,
+        int y,
+        int slotSize,
+        int count,
+        int columns
+    ) {
+        renderRowMajorCells(
+            canvas,
+            CirrusUiTheme.textures(widget).slotBase(),
+            x,
+            y,
+            slotSize,
+            count,
+            columns,
+            borderColorFor(widget)
+        );
+    }
+
+    public static void renderRowMajorCells(
+        SceneCanvas canvas,
+        int x,
+        int y,
+        int slotSize,
+        int count,
+        int columns,
+        int borderColor
+    ) {
+        renderRowMajorCells(canvas, CirrusTextures.Background.Slot.base, x, y, slotSize, count, columns, borderColor);
+    }
+
+    private static void renderRowMajorCells(
+        SceneCanvas canvas,
+        VisualTexture slotTexture,
         int x,
         int y,
         int slotSize,
@@ -102,50 +180,62 @@ public final class CirrusSlotGroupRenderer {
         int fullRows = count / columns;
         int remainder = count % columns;
         if (remainder == 0) {
-            renderRect(canvas, x, y, cappedColumns, fullRows, slotSize, borderColor);
+            renderRect(canvas, slotTexture, x, y, cappedColumns, fullRows, slotSize, borderColor);
             return;
         }
         if (fullRows == 0) {
-            renderRect(canvas, x, y, remainder, 1, slotSize, borderColor);
+            renderRect(canvas, slotTexture, x, y, remainder, 1, slotSize, borderColor);
             return;
         }
 
         for (int row = 0; row < fullRows; row++) {
             for (int column = 0; column < columns; column++) {
-                canvas.texture(
-                    CirrusTextures.Background.Slot.base,
-                    x + column * slotSize,
-                    y + row * slotSize,
-                    slotSize,
-                    slotSize
-                );
+                canvas.texture(slotTexture, x + column * slotSize, y + row * slotSize, slotSize, slotSize);
             }
         }
         int lastRowY = y + fullRows * slotSize;
         for (int column = 0; column < remainder; column++) {
-            canvas.texture(
-                CirrusTextures.Background.Slot.base,
-                x + column * slotSize,
-                lastRowY,
-                slotSize,
-                slotSize
-            );
+            canvas.texture(slotTexture, x + column * slotSize, lastRowY, slotSize, slotSize);
         }
 
         int fullWidth = columns * slotSize;
         int partialWidth = remainder * slotSize;
         int fullHeight = fullRows * slotSize;
         int totalHeight = fullHeight + slotSize;
-        canvas.fill(x - borderWidth, y - borderWidth, fullWidth + borderWidth * 2, borderWidth, borderColor);
+        canvas.fill(x - borderWidth, y - borderWidth, fullWidth + borderWidth, borderWidth, borderColor);
         canvas.fill(x - borderWidth, y, borderWidth, totalHeight, borderColor);
-        canvas.fill(x + fullWidth, y, borderWidth, fullHeight, borderColor);
-        canvas.fill(x + partialWidth, lastRowY, borderWidth, slotSize, borderColor);
-        canvas.fill(x + partialWidth, lastRowY, fullWidth - partialWidth + borderWidth, borderWidth, borderColor);
-        canvas.fill(x - borderWidth, y + totalHeight, partialWidth + borderWidth * 2, borderWidth, borderColor);
+        canvas.fill(x + fullWidth - borderWidth, y, borderWidth, fullHeight, borderColor);
+        canvas.fill(x + partialWidth - borderWidth, lastRowY, borderWidth, slotSize, borderColor);
+        canvas.fill(
+            x + partialWidth - borderWidth,
+            lastRowY - borderWidth,
+            fullWidth - partialWidth + borderWidth,
+            borderWidth,
+            borderColor
+        );
+        canvas.fill(
+            x - borderWidth,
+            y + totalHeight - borderWidth,
+            partialWidth + borderWidth,
+            borderWidth,
+            borderColor
+        );
     }
 
     public static void renderCells(
         SceneCanvas canvas,
+        int x,
+        int y,
+        int slotSize,
+        Collection<Cell> cells,
+        int borderColor
+    ) {
+        renderCells(canvas, CirrusTextures.Background.Slot.base, x, y, slotSize, cells, borderColor);
+    }
+
+    private static void renderCells(
+        SceneCanvas canvas,
+        VisualTexture slotTexture,
         int x,
         int y,
         int slotSize,
@@ -157,17 +247,57 @@ public final class CirrusSlotGroupRenderer {
         }
         Set<Cell> uniqueCells = new LinkedHashSet<>(cells);
         for (Cell cell : uniqueCells) {
-            canvas.texture(
-                CirrusTextures.Background.Slot.base,
-                x + cell.column() * slotSize,
-                y + cell.row() * slotSize,
-                slotSize,
-                slotSize
-            );
+            canvas.texture(slotTexture, x + cell.column() * slotSize, y + cell.row() * slotSize, slotSize, slotSize);
         }
-        for (BorderSegment segment : outerBorderSegments(uniqueCells, slotSize)) {
-            canvas.fill(x + segment.x(), y + segment.y(), segment.width(), segment.height(), borderColor);
+        renderInsetOuterBorders(canvas, x, y, slotSize, uniqueCells, borderColor);
+    }
+
+    private static void renderInsetOuterBorders(
+        SceneCanvas canvas,
+        int originX,
+        int originY,
+        int slotSize,
+        Set<Cell> uniqueCells,
+        int borderColor
+    ) {
+        for (Cell cell : uniqueCells) {
+            int col = cell.column();
+            int row = cell.row();
+            int cx = originX + col * slotSize;
+            int cy = originY + row * slotSize;
+            boolean north = !uniqueCells.contains(new Cell(col, row - 1));
+            boolean east = !uniqueCells.contains(new Cell(col + 1, row));
+            boolean south = !uniqueCells.contains(new Cell(col, row + 1));
+            boolean west = !uniqueCells.contains(new Cell(col - 1, row));
+            if (north) {
+                canvas.fill(
+                    cx - (west ? borderWidth : 0),
+                    cy - borderWidth,
+                    slotSize + (west ? borderWidth : 0),
+                    borderWidth,
+                    borderColor
+                );
+            }
+            if (west) {
+                canvas.fill(cx - borderWidth, cy, borderWidth, slotSize, borderColor);
+            }
+            if (east) {
+                canvas.fill(cx + slotSize - borderWidth, cy, borderWidth, slotSize, borderColor);
+            }
+            if (south) {
+                canvas.fill(
+                    cx - (west ? borderWidth : 0),
+                    cy + slotSize - borderWidth,
+                    slotSize + (west ? borderWidth : 0),
+                    borderWidth,
+                    borderColor
+                );
+            }
         }
+    }
+
+    private static int borderColorFor(@Nullable Widget widget) {
+        return CirrusUiTheme.isDark(widget) ? CirrusUiTheme.palette(widget).hairlineBorder() : defaultBorderColor;
     }
 
     public static List<Cell> rowMajorCells(int count, int columns) {
@@ -266,11 +396,18 @@ public final class CirrusSlotGroupRenderer {
         return new Bounds(minColumn, minRow, maxColumn, maxRow);
     }
 
-    private static void renderOuterRectBorder(SceneCanvas canvas, int x, int y, int width, int height, int borderColor) {
-        canvas.fill(x - borderWidth, y - borderWidth, width + borderWidth * 2, borderWidth, borderColor);
-        canvas.fill(x - borderWidth, y + height, width + borderWidth * 2, borderWidth, borderColor);
+    private static void renderOuterRectBorder(
+        SceneCanvas canvas,
+        int x,
+        int y,
+        int width,
+        int height,
+        int borderColor
+    ) {
+        canvas.fill(x - borderWidth, y - borderWidth, width + borderWidth, borderWidth, borderColor);
+        canvas.fill(x - borderWidth, y + height - borderWidth, width + borderWidth, borderWidth, borderColor);
         canvas.fill(x - borderWidth, y, borderWidth, height, borderColor);
-        canvas.fill(x + width, y, borderWidth, height, borderColor);
+        canvas.fill(x + width - borderWidth, y, borderWidth, height, borderColor);
     }
 
     private static void addCornerSegments(List<BorderSegment> segments, Set<Cell> uniqueCells, int slotSize) {
@@ -316,14 +453,14 @@ public final class CirrusSlotGroupRenderer {
                 other.add(segment);
             }
         }
-        horizontal.sort(Comparator
-            .comparingInt(BorderSegment::y)
-            .thenComparingInt(BorderSegment::x)
-            .thenComparingInt(BorderSegment::width));
-        vertical.sort(Comparator
-            .comparingInt(BorderSegment::x)
-            .thenComparingInt(BorderSegment::y)
-            .thenComparingInt(BorderSegment::height));
+        horizontal.sort(
+            Comparator.comparingInt(BorderSegment::y).thenComparingInt(BorderSegment::x)
+                    .thenComparingInt(BorderSegment::width)
+        );
+        vertical.sort(
+            Comparator.comparingInt(BorderSegment::x).thenComparingInt(BorderSegment::y)
+                    .thenComparingInt(BorderSegment::height)
+        );
 
         ArrayList<BorderSegment> result = new ArrayList<>(segments.size());
         appendMergedHorizontal(result, horizontal);
@@ -340,9 +477,14 @@ public final class CirrusSlotGroupRenderer {
                 continue;
             }
             if (current.y() == segment.y()
-                && current.height() == segment.height()
-                && current.x() + current.width() == segment.x()) {
-                current = new BorderSegment(current.x(), current.y(), current.width() + segment.width(), current.height());
+                    && current.height() == segment.height()
+                    && current.x() + current.width() == segment.x()) {
+                current = new BorderSegment(
+                    current.x(),
+                    current.y(),
+                    current.width() + segment.width(),
+                    current.height()
+                );
             } else {
                 result.add(current);
                 current = segment;
@@ -361,9 +503,14 @@ public final class CirrusSlotGroupRenderer {
                 continue;
             }
             if (current.x() == segment.x()
-                && current.width() == segment.width()
-                && current.y() + current.height() == segment.y()) {
-                current = new BorderSegment(current.x(), current.y(), current.width(), current.height() + segment.height());
+                    && current.width() == segment.width()
+                    && current.y() + current.height() == segment.y()) {
+                current = new BorderSegment(
+                    current.x(),
+                    current.y(),
+                    current.width(),
+                    current.height() + segment.height()
+                );
             } else {
                 result.add(current);
                 current = segment;

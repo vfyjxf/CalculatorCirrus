@@ -11,7 +11,8 @@ public final class ExecutionContextKey<T> {
 
     @SuppressWarnings("unchecked")
     public static <T> ExecutionContextKey<T> create(ResourceLocation id, Class<T> valueType, T defaultValue) {
-        ExecutionContextKey<T> contextKey = (ExecutionContextKey<T>) contextKeys.computeIfAbsent(id, (key) -> new ExecutionContextKey<>(key, valueType, defaultValue));
+        ExecutionContextKey<T> contextKey = (ExecutionContextKey<T>) contextKeys
+                .computeIfAbsent(id, (key) -> new ExecutionContextKey<>(key, valueType, defaultValue));
         if (contextKey.valueType != valueType) {
             throw new IllegalArgumentException("ExecutionContextKey with id " + id + " already exists");
         }
@@ -57,10 +58,6 @@ public final class ExecutionContextKey<T> {
 
     @Override
     public String toString() {
-        return "ExecutionContextKey{" +
-               "id=" + id +
-               ", valueType=" + valueType +
-               '}';
+        return "ExecutionContextKey{" + "id=" + id + ", valueType=" + valueType + '}';
     }
 }
-

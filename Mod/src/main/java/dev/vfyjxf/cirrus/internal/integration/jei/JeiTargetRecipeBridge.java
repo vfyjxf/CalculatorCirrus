@@ -4,17 +4,19 @@ import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.VanillaRecipeSystem;
+import dev.vfyjxf.cirrus.recipe.system.BrewingRecipeSystem;
+import dev.vfyjxf.cirrus.recipe.system.VanillaBrewingRecipe;
 import dev.vfyjxf.cirrus.recipe.system.jei.JeiCategoryRecipeSystem;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
 import mezz.jei.api.recipe.RecipeType;
-import net.minecraft.world.item.crafting.CraftingRecipe;
+import mezz.jei.api.recipe.vanilla.IJeiBrewingRecipe;
+import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public final class JeiTargetRecipeBridge {
 
-    private JeiTargetRecipeBridge() {
-    }
+    private JeiTargetRecipeBridge() {}
 
     public static @Nullable RecipeEntry<?> resolve(IRecipeLayoutDrawable<?> layout) {
         return resolve(layout.getRecipeCategory().getRecipeType(), layout.getRecipe());
@@ -35,24 +37,36 @@ public final class JeiTargetRecipeBridge {
         return entry != null && entry.supportsExecution() ? entry : null;
     }
 
+    @SuppressWarnings({"rawtypes", "unchecked"})
     public static @Nullable RecipeEntry<?> resolve(RecipeType<?> jeiType, Object recipe) {
         if (JeiRecipeCategoryFilter.excluded(jeiType)) {
             return null;
         }
 
-        if (isCraftingType(jeiType)
-            && recipe instanceof RecipeHolder<?> holder
-            && holder.value() instanceof CraftingRecipe) {
-            VanillaRecipeSystem<CraftingRecipe> system =
-                RecipeApi.instance().findVanillaSystem(net.minecraft.world.item.crafting.RecipeType.CRAFTING);
-            if (system != null) {
-                @SuppressWarnings("unchecked")
-                RecipeEntry<?> entry = RecipeEntry.of((RecipeSystem) system, holder);
-                return entry;
+        RecipeApi recipeApi = RecipeApi.instance();
+
+        // 1. Generic O(1) resolution for any RecipeHolder<?> backed by a registered VanillaRecipeSystem
+        if (recipe instanceof RecipeHolder<?> holder) {
+            Recipe<?> value = holder.value();
+            VanillaRecipeSystem<?> vanillaSystem = recipeApi.findVanillaSystem(value.getType());
+            if (vanillaSystem != null) {
+                RecipeEntry<?> entry = wrap(vanillaSystem, holder);
+                if (entry != null) {
+                    return entry;
+                }
             }
         }
 
-        RecipeApi recipeApi = RecipeApi.instance();
+        // 2. Native Brewing bridge for JEI IJeiBrewingRecipe
+        if (recipe instanceof IJeiBrewingRecipe jeiBrewing
+                && recipeApi.findSystem(BrewingRecipeSystem.systemId) instanceof BrewingRecipeSystem brewingSystem) {
+            VanillaBrewingRecipe matched = brewingSystem.matchJeiRecipe(jeiBrewing);
+            if (matched != null) {
+                return RecipeEntry.of(brewingSystem, matched);
+            }
+        }
+
+        // 3. Any other native (non-JEI-fallback) system bridged to this JEI RecipeType
         for (RecipeSystem<?> system : recipeApi.allSystems()) {
             if (system instanceof JeiCategoryRecipeSystem<?>) {
                 continue;
@@ -65,6 +79,8 @@ public final class JeiTargetRecipeBridge {
                 return entry;
             }
         }
+
+        // 4. JEI fallback category system
         RecipeSystem<?> jeiSystem = recipeApi.findSystem(JeiCategoryRecipeSystem.systemId(jeiType));
         if (jeiSystem == null) {
             jeiSystem = CirrusJeiPlugin.findRecipeSystem(jeiType);
@@ -73,15 +89,6 @@ public final class JeiTargetRecipeBridge {
             return wrap(jeiSystem, recipe);
         }
         return null;
-    }
-
-    private static boolean isCraftingType(RecipeType<?> jeiType) {
-        var uid = jeiType.getUid();
-        var recipeClass = jeiType.getRecipeClass();
-        return uid != null
-            && "minecraft".equals(uid.getNamespace())
-            && "crafting".equals(uid.getPath())
-            && RecipeHolder.class.isAssignableFrom(recipeClass);
     }
 
     private static boolean matchesJeiType(RecipeApi recipeApi, RecipeSystem<?> system, RecipeType<?> jeiType) {

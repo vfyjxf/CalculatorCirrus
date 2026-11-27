@@ -1,0 +1,193 @@
+/* Shared workbench, common widget, and CloudLib control rules driven by theme tokens. */
+
+.workbench-shell {
+    color: var(--cirrus-text-primary);
+}
+
+.workbench-dock {
+    background: var(--cirrus-tex-dock);
+    color: var(--cirrus-text-primary);
+}
+
+.workbench-card {
+    background: var(--cirrus-tex-card);
+    color: var(--cirrus-text-primary);
+}
+.workbench-card:hover    { background: var(--cirrus-tex-card-hover); }
+.workbench-card:selected { background: var(--cirrus-tex-card-selected); }
+
+.workbench-topbar {
+    background: var(--cirrus-tex-card);
+    color: var(--cirrus-text-primary);
+}
+
+.workbench-tabbar {
+    background: var(--cirrus-tex-dock);
+    color: var(--cirrus-text-primary);
+}
+
+.workbench-rail {
+    background: var(--cirrus-tex-dock);
+    color: var(--cirrus-text-primary);
+}
+
+.workbench-timeline {
+    background: var(--cirrus-tex-dock);
+    color: var(--cirrus-text-primary);
+}
+
+.workbench-popover {
+    background: var(--cirrus-tex-card);
+    color: var(--cirrus-text-primary);
+}
+
+.workbench-palette {
+    background: var(--cirrus-tex-dock);
+    color: var(--cirrus-text-primary);
+}
+
+.workbench-toast {
+    background: var(--cirrus-tex-card);
+    color: var(--cirrus-text-primary);
+}
+
+.workbench-workspace {
+    color: var(--cirrus-text-primary);
+}
+
+.cirrus-page {
+    background: var(--cirrus-tex-inset);
+    color: var(--cirrus-text-primary);
+}
+
+.cirrus-card {
+    background: var(--cirrus-tex-card);
+    color: var(--cirrus-text-primary);
+}
+.cirrus-card:hover    { background: var(--cirrus-tex-card-hover); }
+.cirrus-card:selected { background: var(--cirrus-tex-card-selected); }
+
+.cirrus-section {
+    background: var(--cirrus-tex-card);
+    color: var(--cirrus-text-primary);
+}
+
+.cirrus-section-flat {
+    background: var(--cirrus-tex-flat);
+    color: var(--cirrus-text-primary);
+}
+
+.cirrus-section-inset {
+    background: var(--cirrus-tex-recessed);
+    color: var(--cirrus-text-primary);
+}
+
+.cirrus-choice {
+    background: var(--cirrus-tex-btn-up);
+    color: var(--cirrus-text-primary);
+}
+
+.cirrus-segmented {
+    color: var(--cirrus-text-primary);
+}
+
+.cirrus-row {
+    background: var(--cirrus-tex-card);
+    color: var(--cirrus-text-primary);
+}
+.cirrus-row:hover { background: var(--cirrus-tex-card-hover); }
+
+.cirrus-input {
+    background: var(--cirrus-tex-recessed);
+    color: var(--cirrus-text-primary);
+    cursor-color: var(--cirrus-focus-ring);
+}
+
+.cirrus-button {
+    background: var(--cirrus-tex-btn-up);
+    color: var(--cirrus-text-primary);
+}
+.cirrus-button:hover    { background: var(--cirrus-tex-btn-hover); }
+.cirrus-button:pressed  { background: var(--cirrus-tex-btn-down); }
+.cirrus-button:disabled { background: var(--cirrus-tex-btn-up); color: var(--cirrus-text-disabled); }
+.cirrus-button.primary  { background: var(--cirrus-tex-cta-primary); color: var(--cirrus-text-on-accent); }
+.cirrus-button.danger   { background: var(--cirrus-tex-cta-danger); color: var(--cirrus-text-on-accent); }
+
+.cirrus-slot {
+    background: var(--cirrus-tex-slot);
+}
+
+.cirrus-slot-dark {
+    background: var(--cirrus-tex-slot-dark);
+}
+
+label, text {
+    color: var(--cirrus-text-primary);
+}
+
+text-field {
+    background: var(--cirrus-tex-recessed);
+    color: var(--cirrus-text-primary);
+    cursor-color: var(--cirrus-focus-ring);
+}
+
+info-bar {
+    height: var(--bar-height);
+    margin: var(--bar-row-gap) 0;
+}
+info-bar.cirrus-meter {
+    margin: 0;
+    --frame-thickness: 1;
+    --fill-edge: square;
+    --edge-cut: 0;
+}
+info-bar.cirrus-meter-thin {
+    margin: 0;
+    --frame-thickness: 1;
+    --fill-edge: square;
+    --edge-cut: 0;
+}
+info-bar::part(track)        { background: var(--bar-track); }
+info-bar::part(frame)        { background: var(--bar-frame); }
+info-bar::part(fill)         { background: var(--bar-fill); }
+info-bar::part(mark)         { background: var(--bar-mark); }
+info-bar .ok::part(fill)     { background: var(--bar-ok); }
+info-bar .warn::part(fill)   { background: var(--bar-warn); }
+info-bar .danger::part(fill) { background: var(--bar-danger); }
+info-bar .info::part(fill)   { background: var(--bar-info); }
+info-bar .cost-h::part(fill) { background: color(var(--cirrus-cost-h)); }
+info-bar .cost-p::part(fill) { background: color(var(--cirrus-cost-p)); }
+info-bar .cost-k::part(fill) { background: color(var(--cirrus-cost-k)); }
+info-bar .cost-s::part(fill) { background: color(var(--cirrus-cost-s)); }
+info-bar .cost-c::part(fill) { background: color(var(--cirrus-cost-c)); }
+
+cell-row {
+    --cell-gap: 2;
+    --cell-chamfer: 0;
+}
+cell-row .dim::part(cell)        { background: var(--bar-track); }
+cell-row .lit::part(cell)        { background: var(--bar-fill); }
+cell-row .lit.ok::part(cell)     { background: var(--bar-ok); }
+cell-row .lit.warn::part(cell)   { background: var(--bar-warn); }
+cell-row .lit.danger::part(cell) { background: var(--bar-danger); }
+cell-row .lit.info::part(cell)   { background: var(--bar-info); }
+cell-row.ok .lit::part(cell)     { background: var(--bar-ok); }
+cell-row.warn .lit::part(cell)   { background: var(--bar-warn); }
+cell-row.danger .lit::part(cell) { background: var(--bar-danger); }
+cell-row.info .lit::part(cell)   { background: var(--bar-info); }
+
+ring-widget.ok     { --ring-fill: var(--cirrus-cost-s); }
+ring-widget.warn   { --ring-fill: var(--cirrus-cost-h); }
+ring-widget.danger { --ring-fill: var(--cirrus-rule-hard-ban); }
+ring-widget.info   { --ring-fill: var(--cirrus-focus-ring); }
+ring-widget.cost-h { --ring-fill: var(--cirrus-cost-h); }
+ring-widget.cost-p { --ring-fill: var(--cirrus-cost-p); }
+ring-widget.cost-k { --ring-fill: var(--cirrus-cost-k); }
+ring-widget.cost-s { --ring-fill: var(--cirrus-cost-s); }
+ring-widget.cost-c { --ring-fill: var(--cirrus-cost-c); }
+
+section-header::part(title) { color: var(--cirrus-text-primary); }
+section-header::part(rule)  { background: var(--cirrus-hairline-border); height: 1px; }
+
+kv-row::part(label) { color: var(--cirrus-text-secondary); }
+kv-row::part(value) { color: var(--cirrus-text-primary); }

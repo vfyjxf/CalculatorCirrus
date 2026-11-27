@@ -8,9 +8,7 @@ import org.slf4j.LoggerFactory;
 
 public final class CirrusPayloads {
 
-
     public static final Logger log = LoggerFactory.getLogger("CirrusPayloads");
-
 
     public static void register(RegisterPayloadHandlersEvent event) {
         //TODO:provide a meaningful version.
@@ -24,7 +22,8 @@ public final class CirrusPayloads {
         //endregion
     }
 
-
-    private CirrusPayloads() {throw new AssertionError();}
+    private CirrusPayloads() {
+        throw new AssertionError();
+    }
 
 }

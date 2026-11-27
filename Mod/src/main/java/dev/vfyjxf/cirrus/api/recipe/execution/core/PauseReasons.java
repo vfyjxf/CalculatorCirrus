@@ -27,5 +27,7 @@ public final class PauseReasons {
 
     //endregion
 
-    private PauseReasons() {throw new AssertionError("No " + PauseReasons.class.getSimpleName() + " instances for you!");}
+    private PauseReasons() {
+        throw new AssertionError("No " + PauseReasons.class.getSimpleName() + " instances for you!");
+    }
 }

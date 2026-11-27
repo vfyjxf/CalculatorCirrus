@@ -1,13 +1,12 @@
 package dev.vfyjxf.cirrus.api.recipe.storage;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
-import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.recipe.storage.StorageApiImpl;
 import net.minecraft.tags.TagKey;
 import org.eclipse.collections.api.RichIterable;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnmodifiableView;
+import org.jspecify.annotations.Nullable;
 
 @ApiStatus.NonExtendable
 public interface StorageApi {
@@ -30,7 +29,8 @@ public interface StorageApi {
     @UnmodifiableView
     RichIterable<? extends StorageSource> getTaggedStorage(TagKey<StorageSource> tagKey);
 
-    @Nullable StorageSource findStorage(Object identifier);
+    @Nullable
+    StorageSource findStorage(Object identifier);
 
     <T extends StorageSource> @Nullable StorageSourceRenderer<T> findRenderer(StorageSourceType<T> type);
 
@@ -91,9 +91,7 @@ public interface StorageApi {
                 guidedFallback = result;
             }
         }
-        return guidedFallback != null
-            ? guidedFallback
-            : StorageTransferResult.none(null, request, null);
+        return guidedFallback != null ? guidedFallback : StorageTransferResult.none(null, request, null);
     }
 
     default long countAvailable(StorageTransferRequest request) {
@@ -136,9 +134,7 @@ public interface StorageApi {
                 guidedFallback = extracted;
             }
         }
-        return guidedFallback != null
-            ? guidedFallback
-            : StorageTransferResult.none(null, request, null);
+        return guidedFallback != null ? guidedFallback : StorageTransferResult.none(null, request, null);
     }
 
     default StorageTransferResult simulateInsertFirstAvailable(StorageTransferRequest request) {
@@ -152,9 +148,7 @@ public interface StorageApi {
                 guidedFallback = result;
             }
         }
-        return guidedFallback != null
-            ? guidedFallback
-            : StorageTransferResult.none(null, request, null);
+        return guidedFallback != null ? guidedFallback : StorageTransferResult.none(null, request, null);
     }
 
     default StorageTransferResult insertFirstAvailable(StorageTransferRequest request) {
@@ -175,9 +169,7 @@ public interface StorageApi {
                 guidedFallback = inserted;
             }
         }
-        return guidedFallback != null
-            ? guidedFallback
-            : StorageTransferResult.none(null, request, null);
+        return guidedFallback != null ? guidedFallback : StorageTransferResult.none(null, request, null);
     }
     //endregion
 

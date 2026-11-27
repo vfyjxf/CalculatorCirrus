@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.rule;
 
 import com.mojang.serialization.Codec;
+import dev.vfyjxf.cloudlib.api.util.Codecs;
 
 /**
  * Boolean candidate-stage facts a condition can test. Available only when
@@ -17,5 +18,5 @@ public enum RuleFlag {
     /** The candidate closes an equal-amount round trip with the active path. */
     roundTrip;
 
-    public static final Codec<RuleFlag> CODEC = dev.vfyjxf.cloudlib.api.util.Codecs.lowerCaseEnum(RuleFlag.class);
+    public static final Codec<RuleFlag> codec = Codecs.lowerCaseEnum(RuleFlag.class);
 }

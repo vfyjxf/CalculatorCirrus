@@ -7,12 +7,7 @@ import net.minecraft.world.item.ItemStack;
 /**
  * Snapshot of required materials for execution overlays.
  */
-public record OverlayMaterialRequirement(
-    RecipeContent material,
-    long required,
-    long available,
-    long missing
-) {
+public record OverlayMaterialRequirement(RecipeContent material, long required, long available, long missing) {
     public OverlayMaterialRequirement(ItemStack stack, long required, long available, long missing) {
         this(
             stack.isEmpty() ? RecipeContent.empty() : InputContent.fromItemStack(stack, Math.max(1, stack.getCount())),

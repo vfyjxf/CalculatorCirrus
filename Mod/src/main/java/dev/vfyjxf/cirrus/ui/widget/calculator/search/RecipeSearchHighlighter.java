@@ -1,19 +1,19 @@
 package dev.vfyjxf.cirrus.ui.widget.calculator.search;
 
 import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
-import dev.vfyjxf.cloudlib.api.search.SearchParseException;
-import dev.vfyjxf.cloudlib.api.search.SearchField;
-import dev.vfyjxf.cloudlib.api.search.SearchParser;
-import dev.vfyjxf.cloudlib.api.search.SearchSyntaxKind;
-import dev.vfyjxf.cloudlib.api.search.SearchSyntaxSpan;
+import dev.vfyjxf.cirrus.api.search.SearchField;
+import dev.vfyjxf.cirrus.api.search.SearchParseException;
+import dev.vfyjxf.cirrus.api.search.SearchParser;
+import dev.vfyjxf.cirrus.api.search.SearchSyntaxKind;
+import dev.vfyjxf.cirrus.api.search.SearchSyntaxSpan;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 public final class RecipeSearchHighlighter {
-    private RecipeSearchHighlighter() {
-    }
+    private RecipeSearchHighlighter() {}
 
     public static List<SearchHighlightSegment> highlight(String query) {
         String input = query == null ? "" : query;
@@ -119,8 +119,8 @@ public final class RecipeSearchHighlighter {
                 }
                 case '>', '<', '=', '~', ':' -> {
                     int operatorEnd = (c == '>' || c == '<') && index + 1 < end && input.charAt(index + 1) == '='
-                        ? index + 2
-                        : index + 1;
+                            ? index + 2
+                            : index + 1;
                     out.add(new SearchSyntaxSpan(index, operatorEnd, SearchSyntaxKind.operator));
                     index = operatorEnd;
                 }
@@ -166,7 +166,12 @@ public final class RecipeSearchHighlighter {
         int index = start;
         while (index < end) {
             char c = input.charAt(index);
-            if (Character.isWhitespace(c) || c == '(' || c == ')' || c == '|' || c == '"' || isStandaloneOperator(input, start, index)) {
+            if (Character.isWhitespace(c)
+                    || c == '('
+                    || c == ')'
+                    || c == '|'
+                    || c == '"'
+                    || isStandaloneOperator(input, start, index)) {
                 break;
             }
             index++;
@@ -186,7 +191,7 @@ public final class RecipeSearchHighlighter {
             return index;
         }
 
-        SearchField prefixField = word.length() > 1 ? CirrusSearchFields.SET.byJeiPrefix(word.charAt(0)) : null;
+        SearchField prefixField = word.length() > 1 ? CirrusSearchFields.set.byJeiPrefix(word.charAt(0)) : null;
         if (prefixField != null) {
             out.add(new SearchSyntaxSpan(start, start + 1, SearchSyntaxKind.prefix));
             addLexicalValueSpans(out, start + 1, word.substring(1), prefixField);
@@ -196,8 +201,8 @@ public final class RecipeSearchHighlighter {
         int colon = word.indexOf(':');
         if (colon > 0) {
             String alias = word.substring(0, colon);
-            if (CirrusSearchFields.SET.isKnownAlias(alias)) {
-                SearchField field = CirrusSearchFields.SET.byAlias(alias);
+            if (CirrusSearchFields.set.isKnownAlias(alias)) {
+                SearchField field = Objects.requireNonNull(CirrusSearchFields.set.byAlias(alias));
                 out.add(new SearchSyntaxSpan(start, start + colon, SearchSyntaxKind.field));
                 out.add(new SearchSyntaxSpan(start + colon, start + colon + 1, SearchSyntaxKind.operator));
                 addLexicalValueSpans(out, start + colon + 1, word.substring(colon + 1), field);
@@ -205,7 +210,13 @@ public final class RecipeSearchHighlighter {
             }
         }
 
-        out.add(new SearchSyntaxSpan(start, index, CirrusSearchFields.SET.isKnownAlias(word) ? SearchSyntaxKind.field : SearchSyntaxKind.text));
+        out.add(
+            new SearchSyntaxSpan(
+                start,
+                index,
+                CirrusSearchFields.set.isKnownAlias(word) ? SearchSyntaxKind.field : SearchSyntaxKind.text
+            )
+        );
         return index;
     }
 
@@ -220,7 +231,12 @@ public final class RecipeSearchHighlighter {
         return c == ':' && index == wordStart;
     }
 
-    private static void addLexicalValueSpans(ArrayList<SearchSyntaxSpan> out, int start, String value, SearchField field) {
+    private static void addLexicalValueSpans(
+        ArrayList<SearchSyntaxSpan> out,
+        int start,
+        String value,
+        SearchField field
+    ) {
         if (value.isEmpty()) {
             return;
         }
@@ -257,12 +273,15 @@ public final class RecipeSearchHighlighter {
         for (int i = 0; i < segments.size(); i++) {
             SearchHighlightSegment segment = segments.get(i);
             if (errorPosition >= segment.start() && errorPosition < segment.end()) {
-                segments.set(i, new SearchHighlightSegment(
-                    segment.text(),
-                    SearchHighlightKind.error,
-                    segment.start(),
-                    segment.end()
-                ));
+                segments.set(
+                    i,
+                    new SearchHighlightSegment(
+                        segment.text(),
+                        SearchHighlightKind.error,
+                        segment.start(),
+                        segment.end()
+                    )
+                );
                 return;
             }
         }
@@ -276,21 +295,30 @@ public final class RecipeSearchHighlighter {
             if (segment.start() <= start && segment.end() >= end) {
                 segments.remove(i);
                 if (segment.start() < start) {
-                    segments.add(i++, new SearchHighlightSegment(
-                        input.substring(segment.start(), start),
-                        segment.kind(),
-                        segment.start(),
-                        start
-                    ));
+                    segments.add(
+                        i++,
+                        new SearchHighlightSegment(
+                            input.substring(segment.start(), start),
+                            segment.kind(),
+                            segment.start(),
+                            start
+                        )
+                    );
                 }
-                segments.add(i++, new SearchHighlightSegment(input.substring(start, end), SearchHighlightKind.error, start, end));
+                segments.add(
+                    i++,
+                    new SearchHighlightSegment(input.substring(start, end), SearchHighlightKind.error, start, end)
+                );
                 if (end < segment.end()) {
-                    segments.add(i, new SearchHighlightSegment(
-                        input.substring(end, segment.end()),
-                        segment.kind(),
-                        end,
-                        segment.end()
-                    ));
+                    segments.add(
+                        i,
+                        new SearchHighlightSegment(
+                            input.substring(end, segment.end()),
+                            segment.kind(),
+                            end,
+                            segment.end()
+                        )
+                    );
                 }
                 return;
             }

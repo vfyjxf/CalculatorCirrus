@@ -7,12 +7,12 @@ import java.util.List;
 import java.util.Objects;
 
 public record SetupLineStep(
-        String stepId,
-        List<String> dependsOnStepIds,
-        String systemId,
-        String primaryMachineId,
-        ResourceKey targetOutput,
-        CostVector stepCost
+    String stepId,
+    List<String> dependsOnStepIds,
+    String systemId,
+    String primaryMachineId,
+    ResourceKey targetOutput,
+    CostVector stepCost
 ) implements PlanStep {
 
     public SetupLineStep {

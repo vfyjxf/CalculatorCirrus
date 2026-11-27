@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.api.recipe.rule;
 
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -18,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ScoreModelTest {
 
-    private static ScoreModel.Component component(String name, String feature, double weight) {
+    private static ScoreModel.Component component(String name, @Nullable String feature, double weight) {
         return new ScoreModel.Component(name, feature == null ? Optional.empty() : Optional.of(feature), weight);
     }
 
@@ -28,27 +29,42 @@ class ScoreModelTest {
 
     /** The default-shaped model mirroring the historical five-axis scoring. */
     private static ScoreModel defaultShapedModel() {
-        return new ScoreModel(List.of(
-            tier("safety",
-                component("cycle", "activeDemandCycle", 1.0),
-                component("roundTrip", "roundTrip", 1.0),
-                component("intraLoop", "intraLoopConversion", 1.0)),
-            tier("cost",
-                component("subtreeCost", "subtreeCost", 1.0),
-                component("advisoryExtra", "advisoryCostExcess", 1.0),
-                component("contextual", "contextualPenalty", 1.0)),
-            tier("quality",
-                component("craft", "craftTimes", 1.0),
-                component("hintDiscouraged", "hintDiscouraged", 1000.0),
-                component("hintLastResort", "hintLastResort", 50000.0),
-                component("shortage", "inventoryShortage", 1.0),
-                component("depth", "depth", 1.0),
-                component("amplification", "amplificationRisk", 1.0))
-        ));
+        return new ScoreModel(
+            List.of(
+                tier(
+                    "safety",
+                    component("cycle", "activeDemandCycle", 1.0),
+                    component("roundTrip", "roundTrip", 1.0),
+                    component("intraLoop", "intraLoopConversion", 1.0)
+                ),
+                tier(
+                    "cost",
+                    component("subtreeCost", "subtreeCost", 1.0),
+                    component("advisoryExtra", "advisoryCostExcess", 1.0),
+                    component("contextual", "contextualPenalty", 1.0)
+                ),
+                tier(
+                    "quality",
+                    component("craft", "craftTimes", 1.0),
+                    component("hintDiscouraged", "hintDiscouraged", 1000.0),
+                    component("hintLastResort", "hintLastResort", 50000.0),
+                    component("shortage", "inventoryShortage", 1.0),
+                    component("depth", "depth", 1.0),
+                    component("amplification", "amplificationRisk", 1.0)
+                )
+            )
+        );
     }
 
-    private static FeatureVector features(double subtreeCost, double advisoryExcess, double contextual,
-                                          double craftTimes, double shortage, double depth, double amp) {
+    private static FeatureVector features(
+        double subtreeCost,
+        double advisoryExcess,
+        double contextual,
+        double craftTimes,
+        double shortage,
+        double depth,
+        double amp
+    ) {
         FeatureVector vector = new FeatureVector();
         vector.set(FeatureType.subtreeCost, subtreeCost);
         vector.set(FeatureType.advisoryCostExcess, advisoryExcess);
@@ -76,12 +92,16 @@ class ScoreModelTest {
 
     @Test
     void weightsScaleComponents() {
-        ScoreModel model = new ScoreModel(List.of(
-            tier("quality",
-                component("craft", "craftTimes", 1.0),
-                component("depth", "depth", 0.8),
-                component("amplification", "amplificationRisk", 1.2))
-        ));
+        ScoreModel model = new ScoreModel(
+            List.of(
+                tier(
+                    "quality",
+                    component("craft", "craftTimes", 1.0),
+                    component("depth", "depth", 0.8),
+                    component("amplification", "amplificationRisk", 1.2)
+                )
+            )
+        );
         ScoreModel.Compiled compiled = model.compile();
         FeatureVector vector = new FeatureVector();
         vector.set(FeatureType.craftTimes, 5);
@@ -95,11 +115,9 @@ class ScoreModelTest {
 
     @Test
     void ruleFedComponentsStartAtZeroAndAcceptWeightedAdjustments() {
-        ScoreModel model = new ScoreModel(List.of(
-            tier("cost",
-                component("subtreeCost", "subtreeCost", 1.0),
-                component("lava", null, 10.0))
-        ));
+        ScoreModel model = new ScoreModel(
+            List.of(tier("cost", component("subtreeCost", "subtreeCost", 1.0), component("lava", null, 10.0)))
+        );
         ScoreModel.Compiled compiled = model.compile();
         FeatureVector vector = new FeatureVector();
         vector.set(FeatureType.subtreeCost, 7);
@@ -174,17 +192,21 @@ class ScoreModelTest {
     @Test
     void validationCatchesStructuralProblems() {
         assertTrue(new ScoreModel(List.of()).validate().stream().anyMatch(p -> p.contains("no tiers")));
-        assertTrue(new ScoreModel(List.of(tier("empty"))).validate()
-            .stream().anyMatch(p -> p.contains("no components")));
-        assertTrue(new ScoreModel(List.of(
-            tier("a", component("x", "subtreeCost", 1)),
-            tier("b", component("x", "depth", 1))
-        )).validate().stream().anyMatch(p -> p.contains("duplicate")));
-        assertTrue(new ScoreModel(List.of(
-            tier("a", component("x", "notAFeature", 1))
-        )).validate().stream().anyMatch(p -> p.contains("unknown feature")));
-        assertThrows(IllegalArgumentException.class, () ->
-            new ScoreModel(List.of(tier("a", component("x", "notAFeature", 1)))).compile());
+        assertTrue(
+            new ScoreModel(List.of(tier("empty"))).validate().stream().anyMatch(p -> p.contains("no components"))
+        );
+        assertTrue(
+            new ScoreModel(List.of(tier("a", component("x", "subtreeCost", 1)), tier("b", component("x", "depth", 1))))
+                    .validate().stream().anyMatch(p -> p.contains("duplicate"))
+        );
+        assertTrue(
+            new ScoreModel(List.of(tier("a", component("x", "notAFeature", 1)))).validate().stream()
+                    .anyMatch(p -> p.contains("unknown feature"))
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> new ScoreModel(List.of(tier("a", component("x", "notAFeature", 1)))).compile()
+        );
         assertDoesNotThrow(() -> defaultShapedModel().compile());
     }
 

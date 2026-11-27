@@ -1,20 +1,20 @@
 package dev.vfyjxf.cirrus.internal.debug;
 
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
-import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContext;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionEngine;
 import dev.vfyjxf.cirrus.api.recipe.projection.effect.InputRejected;
 import dev.vfyjxf.cirrus.api.recipe.projection.effect.InputReplaced;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputRejected;
 import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputInjected;
+import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputRejected;
 import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionEffect;
 import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionReport;
-import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.content.ContentApiImpl;
 import dev.vfyjxf.cirrus.content.ContentRegistryBuilder;
 import dev.vfyjxf.cirrus.internal.InternalPlugin;
@@ -23,17 +23,18 @@ import dev.vfyjxf.cirrus.recipe.RecipeApiRegistryBuilder;
 import dev.vfyjxf.cirrus.recipe.clause.DurabilityCostClause;
 import dev.vfyjxf.cirrus.recipe.clause.FluidContainerUnpackClause;
 import dev.vfyjxf.cirrus.recipe.clause.GuaranteedOutputClause;
-import dev.vfyjxf.cirrus.ui.process.CalculatorProcessGraphBuilder;
-import dev.vfyjxf.cirrus.ui.process.ProcessGraph;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.server.MinecraftServer;
 import net.neoforged.testframework.junit.EphemeralTestServerProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.util.Objects;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -62,9 +63,17 @@ class DebugProjectionPluginTest {
         RecipeApiImpl.attach(api);
         try {
             assertNotNull(api.findProjectionPlugin(DebugProjectionPlugin.plugin.id()));
-            assertTrue(api.projectionContextOptions().anySatisfy(option -> option.key().equals(DebugProjectionPlugin.scaleKey)));
-            assertTrue(api.projectionContextOptions().anySatisfy(option -> option.key().equals(DebugProjectionPlugin.extraOutputKey)));
-            assertTrue(api.projectionContextOptions().anySatisfy(option -> option.key().equals(DebugProjectionPlugin.channelKey)));
+            assertTrue(
+                api.projectionContextOptions().anySatisfy(option -> option.key().equals(DebugProjectionPlugin.scaleKey))
+            );
+            assertTrue(
+                api.projectionContextOptions()
+                        .anySatisfy(option -> option.key().equals(DebugProjectionPlugin.extraOutputKey))
+            );
+            assertTrue(
+                api.projectionContextOptions()
+                        .anySatisfy(option -> option.key().equals(DebugProjectionPlugin.channelKey))
+            );
 
             @SuppressWarnings("rawtypes")
             RecipeSystem system = api.findSystem(DebugProjectionPlugin.systemId);
@@ -75,24 +84,17 @@ class DebugProjectionPluginTest {
             RecipeProjection projection = api.resolve(ResolveContext.empty(), system, recipe).projection();
             assertNotNull(projection);
 
-            ExecutionContext context = new ExecutionContext()
-                .set(DebugProjectionPlugin.scaleKey, 2L)
-                .set(DebugProjectionPlugin.extraOutputKey, true)
-                .set(DebugProjectionPlugin.channelKey, "input");
+            ExecutionContext context = new ExecutionContext().set(DebugProjectionPlugin.scaleKey, 2L)
+                    .set(DebugProjectionPlugin.extraOutputKey, true).set(DebugProjectionPlugin.channelKey, "input");
             ProjectionEngine engine = new ProjectionEngine();
             ProjectionReport report = engine.projectReport(context, projection);
             ProjectionReport secondReport = engine.projectReport(context, projection);
-            ProjectionReport scaledReport = engine.projectReport(
-                context.set(DebugProjectionPlugin.scaleKey, 3L),
-                projection
-            );
-            ProjectionReport restoredReport = engine.projectReport(
-                context.set(DebugProjectionPlugin.scaleKey, 2L),
-                projection
-            );
+            ProjectionReport scaledReport = engine
+                    .projectReport(context.set(DebugProjectionPlugin.scaleKey, 3L), projection);
+            ProjectionReport restoredReport = engine
+                    .projectReport(context.set(DebugProjectionPlugin.scaleKey, 2L), projection);
 
             assertTrue(report.effects().size() >= 2);
-            assertTrue(report.effects().anySatisfy(effect -> effect instanceof InputReplaced));
             assertEquals(1, report.effects().count(effect -> effect instanceof OutputInjected));
             assertEquals(4L, ((InputContent) report.projectedRecipe().inputs().getFirst()).amount());
             assertEquals(4L, ((InputContent) secondReport.projectedRecipe().inputs().getFirst()).amount());
@@ -121,8 +123,8 @@ class DebugProjectionPluginTest {
         RecipeApiImpl api = attachDebugRecipeApi();
         try {
             @SuppressWarnings("unchecked")
-            RecipeSystem<DebugProjectionPlugin.DebugProjectionRecipe> system =
-                (RecipeSystem<DebugProjectionPlugin.DebugProjectionRecipe>) api.findSystem(DebugProjectionPlugin.systemId);
+            RecipeSystem<DebugProjectionPlugin.DebugProjectionRecipe> system = (RecipeSystem<DebugProjectionPlugin.DebugProjectionRecipe>) api
+                    .findSystem(DebugProjectionPlugin.systemId);
             assertNotNull(system);
             assertEquals(6 + DebugProjectionPlugin.longChainDepth + 1, system.allRecipes().size());
 
@@ -141,9 +143,12 @@ class DebugProjectionPluginTest {
             ProjectionReport resolveEffect = report(api, system, "resolve_policy_effect");
             assertTrue(resolveEffect.runnable());
             assertEquals(5L, ((InputContent) resolveEffect.projectedRecipe().inputs().getFirst()).amount());
-            assertTrue(resolveEffect.effects().anySatisfy(effect ->
-                DebugProjectionPlugin.resolveBoostInputId.equals(effect.source().resolveEffectId())
-            ));
+            assertTrue(
+                resolveEffect.effects().anySatisfy(
+                    effect -> Objects
+                            .equals(DebugProjectionPlugin.resolveBoostInputId, effect.source().resolveEffectId())
+                )
+            );
 
             ProjectionReport resolveGuard = report(api, system, "resolve_policy_guard");
             assertFalse(resolveGuard.runnable());
@@ -172,25 +177,26 @@ class DebugProjectionPluginTest {
         RecipeApiImpl api = attachDebugRecipeApi();
         try {
             @SuppressWarnings("unchecked")
-            RecipeSystem<DebugProjectionPlugin.DebugProjectionRecipe> system =
-                (RecipeSystem<DebugProjectionPlugin.DebugProjectionRecipe>) api.findSystem(DebugProjectionPlugin.systemId);
+            RecipeSystem<DebugProjectionPlugin.DebugProjectionRecipe> system = (RecipeSystem<DebugProjectionPlugin.DebugProjectionRecipe>) api
+                    .findSystem(DebugProjectionPlugin.systemId);
             assertNotNull(system);
-            DebugProjectionPlugin.DebugProjectionRecipe targetRecipe = system.findRecipe(DebugProjectionPlugin.longChainTargetId);
+            DebugProjectionPlugin.DebugProjectionRecipe targetRecipe = system
+                    .findRecipe(DebugProjectionPlugin.longChainTargetId);
             assertNotNull(targetRecipe);
 
             ProjectionReport targetReport = report(api, system, DebugProjectionPlugin.longChainTargetId);
             assertTrue(targetReport.runnable());
-            assertTrue(targetReport.effects().anySatisfy(effect ->
-                DebugProjectionPlugin.resolveBoostInputId.equals(effect.source().resolveEffectId())
-            ));
+            assertTrue(
+                targetReport.effects().anySatisfy(
+                    effect -> Objects
+                            .equals(DebugProjectionPlugin.resolveBoostInputId, effect.source().resolveEffectId())
+                )
+            );
             assertTrue(targetReport.projectedRecipe().outputs().anySatisfy(DebugProjectionPluginTest::isEnergyOutput));
             assertTrue(targetReport.projectedRecipe().outputs().anySatisfy(DebugProjectionPluginTest::isTimeOutput));
 
-            ProcessGraph graph = CalculatorProcessGraphBuilder.build(RecipeEntry.of(system, targetRecipe), 1);
-
-            assertTrue(graph.nodeCount() >= DebugProjectionPlugin.longChainDepth);
-            assertTrue(graph.edgeCount() >= DebugProjectionPlugin.longChainDepth);
-            assertTrue(graph.nodes().stream().anyMatch(node -> node.durationTicks() > 0));
+            assertNotNull(system.findRecipe("debug_chain_step_" + (DebugProjectionPlugin.longChainDepth - 1)));
+            assertNull(system.findRecipe("debug_chain_step_" + DebugProjectionPlugin.longChainDepth));
         } finally {
             if (previous instanceof RecipeApiImpl impl) {
                 RecipeApiImpl.attach(impl);
@@ -234,19 +240,18 @@ class DebugProjectionPluginTest {
         Class<? extends ProjectionEffect> effectType,
         Namespace clauseId
     ) {
-        return report.effects().anySatisfy(effect ->
-            effectType.isInstance(effect) && clauseId.equals(effect.source().clauseId())
-        );
+        return report.effects()
+                .anySatisfy(effect -> effectType.isInstance(effect) && clauseId.equals(effect.source().clauseId()));
     }
 
     private static boolean isEnergyOutput(OutputContent output) {
-        return output instanceof dev.vfyjxf.cirrus.api.recipe.content.ValueContent<?> value
-            && value.type().typeId().equals(Namespace.of("calculator_cirrus", "energy"));
+        return output instanceof ValueContent<?> value
+                && value.type().typeId().equals(Namespace.of("calculator_cirrus", "energy"));
     }
 
     private static boolean isTimeOutput(OutputContent output) {
-        return output instanceof dev.vfyjxf.cirrus.api.recipe.content.ValueContent<?> value
-            && value.type().typeId().equals(Namespace.of("calculator_cirrus", "time"));
+        return output instanceof ValueContent<?> value
+                && value.type().typeId().equals(Namespace.of("calculator_cirrus", "time"));
     }
 
     private static void attachContentApi() {

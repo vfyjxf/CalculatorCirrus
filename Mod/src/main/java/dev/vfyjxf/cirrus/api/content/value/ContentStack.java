@@ -18,18 +18,15 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.UnknownNullability;
+import org.jspecify.annotations.Nullable;
 
-public sealed interface ContentStack<T, S>
-        extends ContentVariant, ContentResource
+public sealed interface ContentStack<T, S> extends ContentVariant, ContentResource
         permits EmptyContentStack, TypedContentStack {
 
     @SuppressWarnings("unchecked")
     static <C, R> ContentStack<C, R> empty() {
         return EmptyContentStack.instance;
     }
-
 
     //region factory
 
@@ -42,7 +39,12 @@ public sealed interface ContentStack<T, S>
      * @param <S>            the type of Stack
      * @return the created ContentStack,it may be {@link ContentStack#empty()}.
      */
-    static <T, S> ContentStack<T, S> fromStack(StackType<T, S> type, S stack, long amount, DataComponentPatch componentPatch) {
+    static <T, S> ContentStack<T, S> fromStack(
+        StackType<T, S> type,
+        S stack,
+        long amount,
+        DataComponentPatch componentPatch
+    ) {
         stack = type.fromStack(stack, type.quantity(), componentPatch);
         if (type.isEmpty(stack)) return empty();
         return new TypedContentStack<>(type, amount, stack);
@@ -61,7 +63,12 @@ public sealed interface ContentStack<T, S>
         return fromStack(stackType, stack);
     }
 
-    static <T, S> ContentStack<T, S> fromContent(StackType<T, S> type, T content, long amount, DataComponentPatch componentPatch) {
+    static <T, S> ContentStack<T, S> fromContent(
+        StackType<T, S> type,
+        T content,
+        long amount,
+        DataComponentPatch componentPatch
+    ) {
         S stack = type.fromContent(content, type.quantity(), componentPatch);
         return fromStack(type, stack, amount);
     }
@@ -79,26 +86,26 @@ public sealed interface ContentStack<T, S>
 
     static ContentStack<Item, ItemStack> fromStack(@Nullable ItemStack stack) {
         if (stack == null || stack.isEmpty()) return empty();
-        var type = CirrusTypes.Contents.ITEM_STACK;
+        var type = CirrusTypes.Contents.itemStack;
         return fromStack(type, type.copy(stack), type.getAmount(stack));
     }
 
     static ContentStack<Item, ItemStack> fromStack(@Nullable ItemStack stack, long amount) {
         if (stack == null || stack.isEmpty()) return empty();
-        var type = CirrusTypes.Contents.ITEM_STACK;
+        var type = CirrusTypes.Contents.itemStack;
         return fromStack(type, type.copy(stack), amount);
     }
 
     static ContentStack<Item, ItemStack> fromContent(Item item, long amount, DataComponentPatch componentPatch) {
-        return fromContent(CirrusTypes.Contents.ITEM_STACK, item, amount, componentPatch);
+        return fromContent(CirrusTypes.Contents.itemStack, item, amount, componentPatch);
     }
 
     static ContentStack<Item, ItemStack> fromContent(Item item, long amount) {
-        return fromContent(CirrusTypes.Contents.ITEM_STACK, item, amount);
+        return fromContent(CirrusTypes.Contents.itemStack, item, amount);
     }
 
     static ContentStack<Item, ItemStack> fromContent(Item item) {
-        return fromContent(CirrusTypes.Contents.ITEM_STACK, item, CirrusTypes.Contents.ITEM_STACK.quantity());
+        return fromContent(CirrusTypes.Contents.itemStack, item, CirrusTypes.Contents.itemStack.quantity());
     }
 
     //endregion
@@ -107,26 +114,26 @@ public sealed interface ContentStack<T, S>
 
     static ContentStack<Fluid, FluidStack> fromStack(@Nullable FluidStack stack) {
         if (stack == null || stack.isEmpty()) return empty();
-        var type = CirrusTypes.Contents.FLUID_STACK;
+        var type = CirrusTypes.Contents.fluidStack;
         return fromStack(type, type.copy(stack), type.getAmount(stack));
     }
 
     static ContentStack<Fluid, FluidStack> fromStack(@Nullable FluidStack stack, long amount) {
         if (stack == null || stack.isEmpty()) return empty();
-        var type = CirrusTypes.Contents.FLUID_STACK;
+        var type = CirrusTypes.Contents.fluidStack;
         return fromStack(type, type.copy(stack), amount);
     }
 
     static ContentStack<Fluid, FluidStack> fromContent(Fluid fluid, long amount, DataComponentPatch componentPatch) {
-        return fromContent(CirrusTypes.Contents.FLUID_STACK, fluid, amount, componentPatch);
+        return fromContent(CirrusTypes.Contents.fluidStack, fluid, amount, componentPatch);
     }
 
     static ContentStack<Fluid, FluidStack> fromContent(Fluid fluid, long amount) {
-        return fromContent(CirrusTypes.Contents.FLUID_STACK, fluid, amount);
+        return fromContent(CirrusTypes.Contents.fluidStack, fluid, amount);
     }
 
     static ContentStack<Fluid, FluidStack> fromContent(Fluid fluid) {
-        return fromContent(CirrusTypes.Contents.FLUID_STACK, fluid, CirrusTypes.Contents.FLUID_STACK.quantity());
+        return fromContent(CirrusTypes.Contents.fluidStack, fluid, CirrusTypes.Contents.fluidStack.quantity());
     }
 
     //endregion
@@ -168,6 +175,7 @@ public sealed interface ContentStack<T, S>
         return !isValueEmpty();
     }
 
+    @Override
     long amount();
 
     @Contract("_ -> this")
@@ -222,7 +230,7 @@ public sealed interface ContentStack<T, S>
         return type().hasComponent(value(), componentType);
     }
 
-    default <C> @UnknownNullability C getComponent(DataComponentType<? extends C> componentType) throws IllegalArgumentException {
+    default <C> @Nullable C getComponent(DataComponentType<? extends C> componentType) throws IllegalArgumentException {
         if (!hasComponent(componentType)) {
             ResourceLocation key = BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(componentType);
             throw new IllegalArgumentException("Component: " + key + " not found");
@@ -272,8 +280,7 @@ public sealed interface ContentStack<T, S>
         if (this == empty() || content == ContentKind.empty()) {
             return this == empty() && content == ContentKind.empty();
         }
-        return contentType() == content.type() &&
-                contentType().matches(content(), content.<T>cast().value());
+        return contentType() == content.type() && contentType().matches(content(), content.<T>cast().value());
     }
 
     @Override
@@ -297,6 +304,7 @@ public sealed interface ContentStack<T, S>
         return fromStack(type(), value(), amount, componentsPatch());
     }
 
+    @Override
     @Contract(" -> new")
     default ContentStack<T, S> normalize() {
         if (isEmpty()) return empty();
@@ -313,11 +321,11 @@ public sealed interface ContentStack<T, S>
     //region type util
 
     default boolean isItem() {
-        return type() == CirrusTypes.Contents.ITEM_STACK;
+        return type() == CirrusTypes.Contents.itemStack;
     }
 
     default boolean isFluid() {
-        return type() == CirrusTypes.Contents.FLUID_STACK;
+        return type() == CirrusTypes.Contents.fluidStack;
     }
 
     default boolean is(StackType<?, ?> type) {

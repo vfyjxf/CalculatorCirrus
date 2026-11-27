@@ -44,6 +44,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * Dummy content mod for watching the calculator's screening in a live game. Two kinds of content:
@@ -62,53 +63,55 @@ import java.util.Set;
  * tags, real systems — without shipping any real mod content. Mimics are
  * browsed through JEI; the creative tab shows the showcase items only.
  */
-@Mod(TestMod.MOD_ID)
+@Mod(TestMod.modId)
 public final class TestMod {
 
-    public static final String MOD_ID = "cirrus_test";
-    private static final Logger LOG = LoggerFactory.getLogger("CirrusTestMod");
+    public static final String modId = "cirrus_test";
+    private static final Logger log = LoggerFactory.getLogger("CirrusTestMod");
 
-    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MOD_ID);
-    public static final DeferredRegister<FluidType> FLUID_TYPES = DeferredRegister.create(NeoForgeRegistries.FLUID_TYPES, MOD_ID);
-    public static final DeferredRegister<Fluid> FLUIDS = DeferredRegister.create(BuiltInRegistries.FLUID, MOD_ID);
-    public static final DeferredRegister<CreativeModeTab> TABS = DeferredRegister.create(BuiltInRegistries.CREATIVE_MODE_TAB, MOD_ID);
+    public static final DeferredRegister.Items items = DeferredRegister.createItems(modId);
+    public static final DeferredRegister<FluidType> fluidTypes = DeferredRegister
+            .create(NeoForgeRegistries.FLUID_TYPES, modId);
+    public static final DeferredRegister<Fluid> fluids = DeferredRegister.create(BuiltInRegistries.FLUID, modId);
+    public static final DeferredRegister<CreativeModeTab> tabs = DeferredRegister
+            .create(BuiltInRegistries.CREATIVE_MODE_TAB, modId);
 
-    private static final Set<String> SHOWCASE_ITEMS = new HashSet<>();
+    private static final Set<String> showcaseItems = new HashSet<>();
 
     // recolor loop family: white/red/blue/green convert into each other
-    public static final DeferredItem<Item> DUMMY_BLOCK_WHITE = item("dummy_block_white");
-    public static final DeferredItem<Item> DUMMY_BLOCK_RED = item("dummy_block_red");
-    public static final DeferredItem<Item> DUMMY_BLOCK_BLUE = item("dummy_block_blue");
-    public static final DeferredItem<Item> DUMMY_BLOCK_GREEN = item("dummy_block_green");
+    public static final DeferredItem<Item> dummyBlockWhite = item("dummy_block_white");
+    public static final DeferredItem<Item> dummyBlockRed = item("dummy_block_red");
+    public static final DeferredItem<Item> dummyBlockBlue = item("dummy_block_blue");
+    public static final DeferredItem<Item> dummyBlockGreen = item("dummy_block_green");
 
     // recycling pair: ingot <-> plate
-    public static final DeferredItem<Item> DUMMY_INGOT = item("dummy_ingot");
-    public static final DeferredItem<Item> DUMMY_PLATE = item("dummy_plate");
+    public static final DeferredItem<Item> dummyIngot = item("dummy_ingot");
+    public static final DeferredItem<Item> dummyPlate = item("dummy_plate");
 
     // exchange pair: tag-based 1:1 swaps
-    public static final DeferredItem<Item> DUMMY_CHARM_A = item("dummy_charm_a");
-    public static final DeferredItem<Item> DUMMY_CHARM_B = item("dummy_charm_b");
+    public static final DeferredItem<Item> dummyCharmA = item("dummy_charm_a");
+    public static final DeferredItem<Item> dummyCharmB = item("dummy_charm_b");
 
     // chain for the greedy-vs-exact comparison: final <- mid <- raw_a (good)
     // and final <- x3 <- x2 <- x1 <- raw_b (bad, alphabetically first)
-    public static final DeferredItem<Item> DUMMY_FINAL = item("dummy_final");
-    public static final DeferredItem<Item> CHAIN_MID = item("chain_mid");
-    public static final DeferredItem<Item> CHAIN_RAW_A = item("chain_raw_a");
-    public static final DeferredItem<Item> CHAIN_X1 = item("chain_x1");
-    public static final DeferredItem<Item> CHAIN_X2 = item("chain_x2");
-    public static final DeferredItem<Item> CHAIN_X3 = item("chain_x3");
-    public static final DeferredItem<Item> CHAIN_RAW_B = item("chain_raw_b");
+    public static final DeferredItem<Item> dummyFinal = item("dummy_final");
+    public static final DeferredItem<Item> chainMid = item("chain_mid");
+    public static final DeferredItem<Item> chainRawA = item("chain_raw_a");
+    public static final DeferredItem<Item> chainX1 = item("chain_x1");
+    public static final DeferredItem<Item> chainX2 = item("chain_x2");
+    public static final DeferredItem<Item> chainX3 = item("chain_x3");
+    public static final DeferredItem<Item> chainRawB = item("chain_raw_b");
 
     // fluid-crafted product, plus the fake-archaeology junk target
-    public static final DeferredItem<Item> DUMMY_CRYSTAL = item("dummy_crystal");
-    public static final DeferredItem<Item> DUMMY_RELIC = item("dummy_relic");
+    public static final DeferredItem<Item> dummyCrystal = item("dummy_crystal");
+    public static final DeferredItem<Item> dummyRelic = item("dummy_relic");
 
-    public static final DeferredHolder<FluidType, FluidType> DUMMY_FLUID_TYPE =
-        FLUID_TYPES.register("dummy_fluid", () -> fluidType(null));
-    public static final DeferredHolder<Fluid, BaseFlowingFluid.Source> DUMMY_FLUID =
-        FLUIDS.register("dummy_fluid", () -> new BaseFlowingFluid.Source(dummyFluidProperties()));
-    public static final DeferredHolder<Fluid, BaseFlowingFluid.Flowing> DUMMY_FLUID_FLOWING =
-        FLUIDS.register("dummy_fluid_flowing", () -> new BaseFlowingFluid.Flowing(dummyFluidProperties()));
+    public static final DeferredHolder<FluidType, FluidType> dummyFluidType = fluidTypes
+            .register("dummy_fluid", () -> fluidType(null));
+    public static final DeferredHolder<Fluid, BaseFlowingFluid.Source> dummyFluid = fluids
+            .register("dummy_fluid", () -> new BaseFlowingFluid.Source(dummyFluidProperties()));
+    public static final DeferredHolder<Fluid, BaseFlowingFluid.Flowing> dummyFluidFlowing = fluids
+            .register("dummy_fluid_flowing", () -> new BaseFlowingFluid.Flowing(dummyFluidProperties()));
 
     // mimic content: one own entry per id referenced by the replayed export pack.
     // Skipped entirely on a clean runClient (-Dcirrus.test.enabled=false): no
@@ -117,15 +120,17 @@ public final class TestMod {
         if (testEnabled()) {
             MimicManifest manifest = MimicManifest.load();
             for (String rawId : manifest.itemIds()) {
-                ITEMS.registerItem(mimicName(rawId), Item::new, new Item.Properties());
+                items.registerItem(mimicName(rawId), Item::new, new Item.Properties());
             }
             for (String rawId : manifest.fluidIds()) {
                 mimicFluidRegistration(rawId);
             }
             if (manifest.pack() != null) {
-                LOG.info(
+                log.info(
                     "registered {} mimic items and {} mimic fluids replaying pack {}",
-                    manifest.itemIds().size(), manifest.fluidIds().size(), manifest.pack()
+                    manifest.itemIds().size(),
+                    manifest.fluidIds().size(),
+                    manifest.pack()
                 );
             }
         }
@@ -136,28 +141,29 @@ public final class TestMod {
         return Boolean.getBoolean("cirrus.test.enabled");
     }
 
-    public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = TABS.register(
+    public static final DeferredHolder<CreativeModeTab, CreativeModeTab> tab = tabs.register(
         "main",
-        () -> CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)
-            .title(Component.translatable("itemGroup.cirrus_test"))
-            .icon(() -> new ItemStack(DUMMY_INGOT.get()))
-            // hand-crafted showcase items only; the thousands of mimics are
-            // browsed through JEI, not a creative tab
-            .displayItems((parameters, output) -> ITEMS.getEntries().stream()
-                .filter(entry -> SHOWCASE_ITEMS.contains(entry.getId().getPath()))
-                .forEach(entry -> output.accept(entry.get())))
-            .build()
+        () -> CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0).title(Component.translatable("itemGroup.cirrus_test"))
+                .icon(() -> new ItemStack(dummyIngot.get()))
+                // hand-crafted showcase items only; the thousands of mimics are
+                // browsed through JEI, not a creative tab
+                .displayItems(
+                    (parameters, output) -> items.getEntries().stream()
+                            .filter(entry -> showcaseItems.contains(entry.getId().getPath()))
+                            .forEach(entry -> output.accept(entry.get()))
+                ).build()
     );
 
     public TestMod(ModContainer container, IEventBus modBus) {
+        MegaDagShowcase.registerItems();
+        items.register(modBus);
+        fluidTypes.register(modBus);
+        fluids.register(modBus);
+        tabs.register(modBus);
         if (!testEnabled()) {
-            LOG.info("cirrus_test disabled (clean client); pass -Dcirrus.test.enabled=true or use runTestClient");
+            log.info("cirrus_test mimic replay disabled (clean client); MegaDagShowcase items & recipes active");
             return;
         }
-        ITEMS.register(modBus);
-        FLUID_TYPES.register(modBus);
-        FLUIDS.register(modBus);
-        TABS.register(modBus);
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent event) -> diagnoseCatalog());
         // on the integrated server RecipeApi initializes after ServerStartedEvent,
         // so the diagnosis retries each tick until the api becomes available
@@ -168,6 +174,10 @@ public final class TestMod {
         if (FMLEnvironment.dist == Dist.CLIENT) {
             TestModClientUi.register();
         }
+    }
+
+    static DeferredItem<Item> registerShowcaseItem(String name) {
+        return item(name);
     }
 
     private volatile boolean catalogDiagnosed;
@@ -188,7 +198,7 @@ public final class TestMod {
                 return; // retried on the next tick
             }
             catalogDiagnosed = true;
-            LOG.error("cirrus_test catalog diagnosis failed", notReady);
+            log.error("cirrus_test catalog diagnosis failed", notReady);
             return;
         }
         catalogDiagnosed = true;
@@ -196,7 +206,7 @@ public final class TestMod {
             int mimicSystems = 0;
             long mimicRecipes = 0;
             for (RecipeSystem<?> system : api.allSystems()) {
-                if (!system.systemId().root().equals(MOD_ID)) {
+                if (!system.systemId().root().equals(modId)) {
                     continue;
                 }
                 mimicSystems++;
@@ -204,18 +214,18 @@ public final class TestMod {
                     int size = system.allRecipes().size();
                     mimicRecipes += size;
                 } catch (RuntimeException exception) {
-                    LOG.error("mimic system {} failed to load recipes", system.systemId(), exception);
+                    log.error("mimic system {} failed to load recipes", system.systemId(), exception);
                 }
             }
-            LOG.info("cirrus_test registered systems={} recipes={}", mimicSystems, mimicRecipes);
+            log.info("cirrus_test registered systems={} recipes={}", mimicSystems, mimicRecipes);
         } catch (RuntimeException exception) {
-            LOG.error("cirrus_test catalog diagnosis failed", exception);
+            log.error("cirrus_test catalog diagnosis failed", exception);
         }
     }
 
     //region auto-dbindex benchmark hook
 
-    private static final String AUTODBINDEX_PROPERTY = "cirrus.test.autodbindex";
+    private static final String autodbindexProperty = "cirrus.test.autodbindex";
 
     private volatile boolean autoDbIndexStarted;
 
@@ -230,7 +240,7 @@ public final class TestMod {
         if (autoDbIndexStarted) {
             return;
         }
-        String flag = System.getProperty(AUTODBINDEX_PROPERTY);
+        String flag = System.getProperty(autodbindexProperty);
         if (flag == null || flag.isBlank() || flag.equals("0") || flag.equals("false")) {
             autoDbIndexStarted = true;
             return;
@@ -243,7 +253,7 @@ public final class TestMod {
                 return; // retried on the next tick
             }
             autoDbIndexStarted = true;
-            LOG.error("cirrus_test autodbindex failed", notReady);
+            log.error("cirrus_test autodbindex failed", notReady);
             return;
         }
         autoDbIndexStarted = true;
@@ -273,10 +283,10 @@ public final class TestMod {
                     RecipeDatabaseFailureRegistry.shared()
                 );
                 long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
-                LOG.info("autodbindex run={} elapsed={} ms records={}", run, elapsedMs, index.records().size());
+                log.info("autodbindex run={} elapsed={} ms records={}", run, elapsedMs, index.records().size());
             }
         } catch (RuntimeException exception) {
-            LOG.error("autodbindex failed", exception);
+            log.error("autodbindex failed", exception);
         }
     }
 
@@ -286,7 +296,7 @@ public final class TestMod {
         for (OutputContent output : recipe.outputs()) {
             if (output instanceof StackContent<?, ?> stack && stack.isItem()) {
                 ResourceLocation key = BuiltInRegistries.ITEM.getKey((Item) stack.content().content());
-                if (MOD_ID.equals(key.getNamespace()) && key.getPath().equals(mimicPath)) {
+                if (modId.equals(key.getNamespace()) && key.getPath().equals(mimicPath)) {
                     return true;
                 }
             }
@@ -318,15 +328,19 @@ public final class TestMod {
         StringBuilder out = new StringBuilder(value.length());
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
-            boolean valid = c == '_' || c == '-' || c == '.' || c == '/'
-                || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+            boolean valid = c == '_'
+                    || c == '-'
+                    || c == '.'
+                    || c == '/'
+                    || (c >= 'a' && c <= 'z')
+                    || (c >= '0' && c <= '9');
             out.append(valid ? c : '_');
         }
         return out.toString();
     }
 
     public static ResourceLocation mimicId(String rawId) {
-        return ResourceLocation.fromNamespaceAndPath(MOD_ID, mimicName(rawId));
+        return ResourceLocation.fromNamespaceAndPath(modId, mimicName(rawId));
     }
 
     /** The registered mimic item for a raw id; fails fast when the generator and runtime drift apart. */
@@ -356,13 +370,12 @@ public final class TestMod {
 
     private static void mimicFluidRegistration(String rawId) {
         String name = mimicName(rawId);
-        DeferredHolder<FluidType, FluidType> type =
-            FLUID_TYPES.register(name, () -> fluidType(rawId));
+        DeferredHolder<FluidType, FluidType> type = fluidTypes.register(name, () -> fluidType(rawId));
         BaseFlowingFluid.Properties[] properties = new BaseFlowingFluid.Properties[1];
-        DeferredHolder<Fluid, BaseFlowingFluid.Source> source =
-            FLUIDS.register(name, () -> new BaseFlowingFluid.Source(properties[0]));
-        DeferredHolder<Fluid, BaseFlowingFluid.Flowing> flowing =
-            FLUIDS.register(name + "_flowing", () -> new BaseFlowingFluid.Flowing(properties[0]));
+        DeferredHolder<Fluid, BaseFlowingFluid.Source> source = fluids
+                .register(name, () -> new BaseFlowingFluid.Source(properties[0]));
+        DeferredHolder<Fluid, BaseFlowingFluid.Flowing> flowing = fluids
+                .register(name + "_flowing", () -> new BaseFlowingFluid.Flowing(properties[0]));
         properties[0] = new BaseFlowingFluid.Properties(type, source, flowing);
     }
 
@@ -370,35 +383,31 @@ public final class TestMod {
 
     // vanilla water sprites, guaranteed on the block atlas; without a real
     // texture the fluid renderer asks the atlas for `null` and crashes
-    private static final ResourceLocation FLUID_STILL = ResourceLocation.withDefaultNamespace("block/water_still");
-    private static final ResourceLocation FLUID_FLOWING = ResourceLocation.withDefaultNamespace("block/water_flow");
+    private static final ResourceLocation fluidStill = ResourceLocation.withDefaultNamespace("block/water_still");
+    private static final ResourceLocation fluidFlowing = ResourceLocation.withDefaultNamespace("block/water_flow");
 
     /** stable per-fluid colors so different mimic fluids read differently in the UI */
-    private static final int[] FLUID_TINTS = {
-        0xFF3F76E4, 0xFFE08A3C, 0xFF50C878, 0xFFB048B0,
-        0xFFD4D45C, 0xFF4FD8D8, 0xFFE05A5A, 0xFF8CE06A
-    };
+    private static final int[] fluidTints = {0xFF3F76E4, 0xFFE08A3C, 0xFF50C878, 0xFFB048B0, 0xFFD4D45C, 0xFF4FD8D8,
+            0xFFE05A5A, 0xFF8CE06A};
 
     /**
      * A fluid type with real textures. {@code tintKey} (the raw id) picks a
      * stable tint; {@code null} uses the showcase dummy fluid's fixed color.
      */
     private static FluidType fluidType(@Nullable String tintKey) {
-        int tint = tintKey == null
-            ? 0xFFB048B0
-            : FLUID_TINTS[Math.floorMod(tintKey.hashCode(), FLUID_TINTS.length)];
+        int tint = tintKey == null ? 0xFFB048B0 : fluidTints[Math.floorMod(tintKey.hashCode(), fluidTints.length)];
         return new FluidType(FluidType.Properties.create()) {
             @Override
-            public void initializeClient(java.util.function.Consumer<IClientFluidTypeExtensions> consumer) {
+            public void initializeClient(Consumer<IClientFluidTypeExtensions> consumer) {
                 consumer.accept(new IClientFluidTypeExtensions() {
                     @Override
                     public ResourceLocation getStillTexture() {
-                        return FLUID_STILL;
+                        return fluidStill;
                     }
 
                     @Override
                     public ResourceLocation getFlowingTexture() {
-                        return FLUID_FLOWING;
+                        return fluidFlowing;
                     }
 
                     @Override
@@ -415,11 +424,11 @@ public final class TestMod {
     //endregion
 
     private static DeferredItem<Item> item(String name) {
-        SHOWCASE_ITEMS.add(name);
-        return ITEMS.registerItem(name, Item::new, new Item.Properties());
+        showcaseItems.add(name);
+        return items.registerItem(name, Item::new, new Item.Properties());
     }
 
     private static BaseFlowingFluid.Properties dummyFluidProperties() {
-        return new BaseFlowingFluid.Properties(DUMMY_FLUID_TYPE, DUMMY_FLUID, DUMMY_FLUID_FLOWING);
+        return new BaseFlowingFluid.Properties(dummyFluidType, dummyFluid, dummyFluidFlowing);
     }
 }

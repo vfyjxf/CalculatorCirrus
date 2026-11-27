@@ -3,7 +3,6 @@ package dev.vfyjxf.cirrus.api.recipe.rule;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.vfyjxf.cloudlib.util.Checks;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -63,25 +62,25 @@ import java.util.Set;
  * purely additive while the historical {@code ×1000}/{@code ×4} semantics are
  * preserved exactly.
  */
-public record ScoreModel(
-    List<Tier> tiers,
-    double generationCostMultiplier,
-    double softAdvisoryMultiplier
-) {
+public record ScoreModel(List<Tier> tiers, double generationCostMultiplier, double softAdvisoryMultiplier) {
 
-    public static final double DEFAULT_GENERATION_COST_MULTIPLIER = 1_000.0d;
-    public static final double DEFAULT_SOFT_ADVISORY_MULTIPLIER = 4.0d;
+    public static final double defaultGenerationCostMultiplier = 1_000.0d;
+    public static final double defaultSoftAdvisoryMultiplier = 4.0d;
 
     /** Convenience constructor with the default advisory multipliers. */
     public ScoreModel(List<Tier> tiers) {
-        this(tiers, DEFAULT_GENERATION_COST_MULTIPLIER, DEFAULT_SOFT_ADVISORY_MULTIPLIER);
+        this(tiers, defaultGenerationCostMultiplier, defaultSoftAdvisoryMultiplier);
     }
 
-    public static final Codec<ScoreModel> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-        Codec.list(Tier.CODEC).fieldOf("tiers").forGetter(ScoreModel::tiers),
-        Codec.DOUBLE.optionalFieldOf("generation_cost_multiplier", DEFAULT_GENERATION_COST_MULTIPLIER).forGetter(ScoreModel::generationCostMultiplier),
-        Codec.DOUBLE.optionalFieldOf("soft_advisory_multiplier", DEFAULT_SOFT_ADVISORY_MULTIPLIER).forGetter(ScoreModel::softAdvisoryMultiplier)
-    ).apply(instance, ScoreModel::new));
+    public static final Codec<ScoreModel> codec = RecordCodecBuilder.create(
+        instance -> instance.group(
+            Codec.list(Tier.codec).fieldOf("tiers").forGetter(ScoreModel::tiers),
+            Codec.DOUBLE.optionalFieldOf("generation_cost_multiplier", defaultGenerationCostMultiplier)
+                    .forGetter(ScoreModel::generationCostMultiplier),
+            Codec.DOUBLE.optionalFieldOf("soft_advisory_multiplier", defaultSoftAdvisoryMultiplier)
+                    .forGetter(ScoreModel::softAdvisoryMultiplier)
+        ).apply(instance, ScoreModel::new)
+    );
 
     /**
      * One tier: a named, ordered comparison slot.
@@ -91,10 +90,12 @@ public record ScoreModel(
      */
     public record Tier(String name, List<Component> components) {
 
-        public static final Codec<Tier> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-            Codec.STRING.fieldOf("name").forGetter(Tier::name),
-            Codec.list(Component.CODEC).fieldOf("components").forGetter(Tier::components)
-        ).apply(instance, Tier::new));
+        public static final Codec<Tier> codec = RecordCodecBuilder.create(
+            instance -> instance.group(
+                Codec.STRING.fieldOf("name").forGetter(Tier::name),
+                Codec.list(Component.codec).fieldOf("components").forGetter(Tier::components)
+            ).apply(instance, Tier::new)
+        );
 
         public Tier {
             name = name == null ? "" : name;
@@ -113,11 +114,13 @@ public record ScoreModel(
      */
     public record Component(String name, Optional<String> feature, double weight) {
 
-        public static final Codec<Component> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-            Codec.STRING.fieldOf("name").forGetter(Component::name),
-            Codec.STRING.optionalFieldOf("feature").forGetter(Component::feature),
-            Codec.DOUBLE.optionalFieldOf("weight", 1.0d).forGetter(Component::weight)
-        ).apply(instance, Component::new));
+        public static final Codec<Component> codec = RecordCodecBuilder.create(
+            instance -> instance.group(
+                Codec.STRING.fieldOf("name").forGetter(Component::name),
+                Codec.STRING.optionalFieldOf("feature").forGetter(Component::feature),
+                Codec.DOUBLE.optionalFieldOf("weight", 1.0d).forGetter(Component::weight)
+            ).apply(instance, Component::new)
+        );
 
         public Component {
             Checks.checkNotNull(name, "name");
@@ -155,7 +158,10 @@ public record ScoreModel(
                     try {
                         FeatureType.valueOf(component.feature().get());
                     } catch (IllegalArgumentException ignored) {
-                        problems.add("component '" + component.name() + "' references unknown feature '" + component.feature().get() + "'");
+                        problems.add(
+                            "component '" + component.name() + "' references unknown feature '"
+                                    + component.feature().get() + "'"
+                        );
                     }
                 }
             }
@@ -215,9 +221,8 @@ public record ScoreModel(
                 for (Component component : model.tiers().get(tierIndex).components()) {
                     componentTier[slot] = tierIndex;
                     componentWeight[slot] = component.weight();
-                    componentFeature[slot] = component.feature()
-                        .map(feature -> FeatureType.valueOf(feature).ordinal())
-                        .orElse(-1);
+                    componentFeature[slot] = component.feature().map(feature -> FeatureType.valueOf(feature).ordinal())
+                            .orElse(-1);
                     componentIndex.put(component.name(), slot);
                     slot++;
                 }
@@ -245,7 +250,7 @@ public record ScoreModel(
             for (int slot = 0; slot < componentTier.length; slot++) {
                 int featureOrdinal = componentFeature[slot];
                 if (featureOrdinal >= 0) {
-                    tierSums[componentTier[slot]] += componentWeight[slot] * features.values()[featureOrdinal];
+                    tierSums[componentTier[slot]] += componentWeight[slot] * features.valueAt(featureOrdinal);
                 }
             }
         }
@@ -258,7 +263,9 @@ public record ScoreModel(
         public void applyAdjustment(double[] tierSums, String component, double signedAmount) {
             Integer slot = componentIndex.get(component);
             if (slot == null) {
-                throw new IllegalArgumentException("score component '" + component + "' is not declared in the score model");
+                throw new IllegalArgumentException(
+                    "score component '" + component + "' is not declared in the score model"
+                );
             }
             tierSums[componentTier[slot]] += componentWeight[slot] * signedAmount;
         }
@@ -273,13 +280,12 @@ public record ScoreModel(
                 out.append(model.tiers().get(tierIndex).name()).append('=').append(tierSums[tierIndex]);
                 for (int slot = tierStart[tierIndex]; slot < tierEnd[tierIndex]; slot++) {
                     int featureOrdinal = componentFeature[slot];
-                    double value = featureOrdinal >= 0 ? features.values()[featureOrdinal] : Double.NaN;
+                    double value = featureOrdinal >= 0 ? features.valueAt(featureOrdinal) : Double.NaN;
                     out.append(' ')
-                        .append(model.tiers().get(tierIndex).components().get(slot - tierStart[tierIndex]).name())
-                        .append('=')
-                        .append(Double.isNaN(value) ? "rule" : value)
-                        .append("×")
-                        .append(componentWeight[slot]);                }
+                            .append(model.tiers().get(tierIndex).components().get(slot - tierStart[tierIndex]).name())
+                            .append('=').append(Double.isNaN(value) ? "rule" : value).append("×")
+                            .append(componentWeight[slot]);
+                }
             }
             return out.toString();
         }

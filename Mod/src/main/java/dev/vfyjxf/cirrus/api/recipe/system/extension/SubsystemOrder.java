@@ -3,14 +3,10 @@ package dev.vfyjxf.cirrus.api.recipe.system.extension;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 
-import java.util.Set;
 import java.util.LinkedHashSet;
+import java.util.Set;
 
-public record SubsystemOrder(
-    int order,
-    Set<Namespace> after,
-    Set<Namespace> before
-) {
+public record SubsystemOrder(int order, Set<Namespace> after, Set<Namespace> before) {
 
     public SubsystemOrder {
         Checks.checkNotNull(after, "after");

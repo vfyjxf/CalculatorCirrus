@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContextKey;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Objects;
@@ -28,7 +29,7 @@ public record ChoiceProjectionContextOption<T>(
     }
 
     @Override
-    public T normalize(Object value) {
+    public T normalize(@Nullable Object value) {
         for (ProjectionContextChoice<T> choice : choices) {
             if (Objects.equals(choice.value(), value)) {
                 return choice.value();

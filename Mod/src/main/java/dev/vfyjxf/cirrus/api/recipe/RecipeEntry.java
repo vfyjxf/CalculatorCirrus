@@ -8,12 +8,9 @@ import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
-public record RecipeEntry<R>(
-    RecipeSystem<R> system,
-    R recipe
-) {
+public record RecipeEntry<R>(RecipeSystem<R> system, R recipe) {
 
     public static <R> RecipeEntry<R> of(RecipeSystem<R> system, R recipe) {
         Checks.checkNotNull(system, "system");
@@ -76,9 +73,6 @@ public record RecipeEntry<R>(
 
     @Override
     public String toString() {
-        return "RecipeEntry{" +
-               "system=" + system +
-               ", recipe=" + system.getId(recipe) +
-               '}';
+        return "RecipeEntry{" + "system=" + system + ", recipe=" + system.getId(recipe) + '}';
     }
 }

@@ -12,8 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class FileRecipeDatabaseRepository {
-    private static final Codec<List<CustomRecipeDatabase>> DATABASES_CODEC = CustomRecipeDatabase.CODEC.listOf();
-    private static final Codec<String> ACTIVE_CODEC = Codec.STRING;
+    private static final Codec<List<CustomRecipeDatabase>> databasesCodec = CustomRecipeDatabase.codec.listOf();
+    private static final Codec<String> activeCodec = Codec.STRING;
 
     private final Path root;
 
@@ -26,7 +26,7 @@ public final class FileRecipeDatabaseRepository {
     }
 
     public void saveActiveDatabase(String id) throws IOException {
-        CodecJsonIO.write(activeFile(), ACTIVE_CODEC, id);
+        CodecJsonIO.write(activeFile(), activeCodec, id);
     }
 
     public RecipeDatabaseWorkspace createDatabase(String name) throws IOException {
@@ -66,12 +66,7 @@ public final class FileRecipeDatabaseRepository {
         try {
             RecipeDatabaseWorkspace next = workspace.withDatabase(active.withRecipe(ref));
             saveWorkspace(next);
-            return new RecipeDatabaseAddResult(
-                RecipeDatabaseAddResult.Status.added,
-                active.id(),
-                active.name(),
-                entry
-            );
+            return new RecipeDatabaseAddResult(RecipeDatabaseAddResult.Status.added, active.id(), active.name(), entry);
         } catch (IOException ignored) {
             return new RecipeDatabaseAddResult(
                 RecipeDatabaseAddResult.Status.failed,
@@ -98,7 +93,7 @@ public final class FileRecipeDatabaseRepository {
             return List.of(CustomRecipeDatabase.builtinDatabase());
         }
         try {
-            List<CustomRecipeDatabase> decoded = CodecJsonIO.read(file, DATABASES_CODEC);
+            List<CustomRecipeDatabase> decoded = CodecJsonIO.read(file, databasesCodec);
             return decoded.isEmpty() ? List.of(CustomRecipeDatabase.builtinDatabase()) : decoded;
         } catch (IOException ignored) {
             return List.of(CustomRecipeDatabase.builtinDatabase());
@@ -111,7 +106,7 @@ public final class FileRecipeDatabaseRepository {
             return CustomRecipeDatabase.builtinId;
         }
         try {
-            return CodecJsonIO.read(file, ACTIVE_CODEC);
+            return CodecJsonIO.read(file, activeCodec);
         } catch (IOException ignored) {
             return CustomRecipeDatabase.builtinId;
         }
@@ -124,7 +119,7 @@ public final class FileRecipeDatabaseRepository {
                 saved.add(database);
             }
         }
-        CodecJsonIO.write(databasesFile(), DATABASES_CODEC, saved);
+        CodecJsonIO.write(databasesFile(), databasesCodec, saved);
     }
 
     public void saveWorkspace(RecipeDatabaseWorkspace workspace) throws IOException {

@@ -57,13 +57,13 @@ import java.util.TreeSet;
 
 public final class DefaultPlanVerifier implements PlanVerifier {
 
-    private static final double COST_TOLERANCE = 1e-5;
+    private static final double costTolerance = 1e-5;
 
     private final CompiledRecipeGraph graph;
     private final CostMetadataProvider costMetadata;
 
     public DefaultPlanVerifier(CompiledRecipeGraph graph) {
-        this(graph, DefaultCostMetadataProvider.INSTANCE);
+        this(graph, DefaultCostMetadataProvider.instance);
     }
 
     public DefaultPlanVerifier(CompiledRecipeGraph graph, CostMetadataProvider costMetadata) {
@@ -75,16 +75,26 @@ public final class DefaultPlanVerifier implements PlanVerifier {
     public VerificationCertificate verify(ProductionPlan plan, PlanningRequest request) {
         if (plan == null || request == null) {
             return new VerificationCertificate(
-                    false, false, false, false, false, false,
-                    List.of(ErrorCodes.ERR_MALFORMED_PLAN + ":null_input")
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                List.of(ErrorCodes.errMalformedPlan + ":null_input")
             );
         }
         try {
             return verifyInternal(plan, request);
         } catch (RuntimeException ex) {
             return new VerificationCertificate(
-                    false, false, false, false, false, false,
-                    List.of(ErrorCodes.ERR_MALFORMED_PLAN + ":" + ex.getClass().getSimpleName())
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                List.of(ErrorCodes.errMalformedPlan + ":" + ex.getClass().getSimpleName())
             );
         }
     }
@@ -98,12 +108,12 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         Map<String, PlanStep> byId = new LinkedHashMap<>();
         for (PlanStep s : plan.steps()) {
             if (s == null || s.stepId().isEmpty()) {
-                violations.add(ErrorCodes.ERR_MALFORMED_PLAN + ":empty_step");
+                violations.add(ErrorCodes.errMalformedPlan + ":empty_step");
                 flags[0] = false;
                 continue;
             }
             if (byId.put(s.stepId(), s) != null) {
-                violations.add(ErrorCodes.ERR_DUPLICATE_STEP_ID + ":" + s.stepId());
+                violations.add(ErrorCodes.errDuplicateStepId + ":" + s.stepId());
                 flags[0] = false;
             }
         }
@@ -112,10 +122,10 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             if (s == null) continue;
             for (String dep : s.dependsOnStepIds()) {
                 if (!byId.containsKey(dep)) {
-                    violations.add(ErrorCodes.ERR_MISSING_DEPENDENCY + ":" + s.stepId() + "->" + dep);
+                    violations.add(ErrorCodes.errMissingDependency + ":" + s.stepId() + "->" + dep);
                     flags[0] = false;
                 } else if (!seen.contains(dep)) {
-                    violations.add(ErrorCodes.ERR_TOPOLOGICAL_ORDER_VIOLATION + ":" + s.stepId() + "->" + dep);
+                    violations.add(ErrorCodes.errTopologicalOrderViolation + ":" + s.stepId() + "->" + dep);
                     flags[0] = false;
                 }
             }
@@ -158,23 +168,23 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             switch (step) {
                 case AcquireStep a -> {
                     if (a.amount() <= 0L) {
-                        violations.add(ErrorCodes.ERR_NON_POSITIVE_ACQUIRE + ":" + a.stepId());
+                        violations.add(ErrorCodes.errNonPositiveAcquire + ":" + a.stepId());
                         flags[3] = false;
                         break;
                     }
                     if (guidance.isResourceBanned(a.resource())) {
-                        violations.add(ErrorCodes.ERR_BANNED_RESOURCE + ":" + a.resource().shortString());
+                        violations.add(ErrorCodes.errBannedResource + ":" + a.resource().shortString());
                         flags[1] = false;
                     }
                     boolean acquirable = guidance.isResourceTreatedAsBase(a.resource())
                             || guidance.overriddenUnitCost(a.resource()).isPresent()
                             || oracle.assess(a.resource(), a.amount(), ctx.progression()).isPresent();
                     if (!acquirable) {
-                        violations.add(ErrorCodes.ERR_UNACQUIRABLE_RESOURCE + ":" + a.resource().shortString());
+                        violations.add(ErrorCodes.errUnacquirableResource + ":" + a.resource().shortString());
                         flags[1] = false;
                     }
                     if (SafeMath.willOverflowAdd(ledger.totalOf(a.resource()), a.amount())) {
-                        violations.add(ErrorCodes.ERR_STOCK_OVERFLOW + ":" + a.stepId());
+                        violations.add(ErrorCodes.errStockOverflow + ":" + a.stepId());
                         flags[1] = false;
                     }
                     ledger.produce(a.resource(), a.amount(), a.stepId());
@@ -182,7 +192,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                 }
                 case LinePullStep lp -> {
                     if (lp.amount() <= 0L) {
-                        violations.add(ErrorCodes.ERR_NON_POSITIVE_PULL + ":" + lp.stepId());
+                        violations.add(ErrorCodes.errNonPositivePull + ":" + lp.stepId());
                         flags[3] = false;
                         break;
                     }
@@ -196,11 +206,11 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                     Set<String> dyn = dynamicLinesByOutput.get(lp.resource());
                     boolean existsDynamic = dyn != null && dyn.contains(lp.lineId());
                     if (!existsInFacilities && !existsDynamic) {
-                        violations.add(ErrorCodes.ERR_UNKNOWN_LINE + ":" + lp.lineId());
+                        violations.add(ErrorCodes.errUnknownLine + ":" + lp.lineId());
                         flags[2] = false;
                     }
                     if (SafeMath.willOverflowAdd(ledger.totalOf(lp.resource()), lp.amount())) {
-                        violations.add(ErrorCodes.ERR_STOCK_OVERFLOW + ":" + lp.stepId());
+                        violations.add(ErrorCodes.errStockOverflow + ":" + lp.stepId());
                         flags[1] = false;
                     }
                     ledger.produce(lp.resource(), lp.amount(), lp.stepId());
@@ -208,18 +218,18 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                 }
                 case ProvisionMachineStep pm -> {
                     if (pm.countToBuild() <= 0) {
-                        violations.add(ErrorCodes.ERR_NON_POSITIVE_MACHINE_COUNT + ":" + pm.stepId());
+                        violations.add(ErrorCodes.errNonPositiveMachineCount + ":" + pm.stepId());
                         flags[3] = false;
                         break;
                     }
                     if (!guidance.isWillingToBuild(pm.machineId())) {
-                        violations.add(ErrorCodes.ERR_BANNED_MACHINE_BUILD + ":" + pm.machineId());
+                        violations.add(ErrorCodes.errBannedMachineBuild + ":" + pm.machineId());
                         flags[2] = false;
                     }
                     if (pm.craftedByPredecessorSteps()) {
                         ResourceKey mk = ResourceKey.item(pm.machineId());
                         if (!ledger.consume(mk, pm.countToBuild())) {
-                            violations.add(ErrorCodes.ERR_INSUFFICIENT_MACHINE_ITEM + ":" + pm.machineId());
+                            violations.add(ErrorCodes.errInsufficientMachineItem + ":" + pm.machineId());
                             flags[1] = false;
                         }
                     }
@@ -229,7 +239,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                 }
                 case SetupLineStep sl -> {
                     if (!guidance.isWillingToBuild(sl.primaryMachineId())) {
-                        violations.add(ErrorCodes.ERR_BANNED_MACHINE_BUILD + ":" + sl.primaryMachineId());
+                        violations.add(ErrorCodes.errBannedMachineBuild + ":" + sl.primaryMachineId());
                         flags[2] = false;
                     }
                     ownedMachines.add(sl.primaryMachineId());
@@ -239,15 +249,39 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                             .add("setup:" + sl.stepId());
                 }
                 case CraftStep cs -> {
-                    verifyCraft(cs, ledger, ownedMachines, ownedCaps, automatedSystems,
-                            facilities, guidance, violations, flags, actualCatalysts, provenance, conversions, true);
+                    verifyCraft(
+                        cs,
+                        ledger,
+                        ownedMachines,
+                        ownedCaps,
+                        automatedSystems,
+                        facilities,
+                        guidance,
+                        violations,
+                        flags,
+                        actualCatalysts,
+                        provenance,
+                        conversions,
+                        true
+                    );
                 }
                 case ConvertStep conv -> {
                     verifyConvert(conv, ledger, facilities, guidance, violations, flags, provenance, conversions);
                 }
                 case CycleLoopStep loop -> {
-                    verifyCycleLoop(loop, ledger, ownedMachines, ownedCaps, automatedSystems,
-                            facilities, guidance, violations, flags, actualCatalysts, provenance);
+                    verifyCycleLoop(
+                        loop,
+                        ledger,
+                        ownedMachines,
+                        ownedCaps,
+                        automatedSystems,
+                        facilities,
+                        guidance,
+                        violations,
+                        flags,
+                        actualCatalysts,
+                        provenance
+                    );
                 }
             }
         }
@@ -255,7 +289,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         // 4. Plan-level round-trip check.
         for (ConversionPair pair : conversions) {
             if (conversions.contains(new ConversionPair(pair.to, pair.from))) {
-                violations.add(ErrorCodes.ERR_ROUND_TRIP + ":" + pair.from.shortString() + "<->" + pair.to.shortString());
+                violations.add(ErrorCodes.errRoundTrip + ":" + pair.from.shortString() + "<->" + pair.to.shortString());
                 flags[1] = false;
                 break;
             }
@@ -273,14 +307,18 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             if (contributors != null) {
                 for (CompiledRecipeKey rk : contributors) {
                     if (guidance.isRecipeBannedForTarget(targetRes, rk)) {
-                        violations.add(ErrorCodes.ERR_BANNED_RECIPE_FOR_TARGET + ":" + targetRes.shortString() + ":" + rk.shortString());
+                        violations.add(
+                            ErrorCodes.errBannedRecipeForTarget + ":" + targetRes.shortString() + ":" + rk.shortString()
+                        );
                         flags[1] = false;
                     }
                 }
             }
             if (!ledger.consume(targetRes, need)) {
-                violations.add(ErrorCodes.ERR_GOAL_NOT_MET + ":" + targetRes.shortString()
-                        + " have=" + ledger.totalOf(targetRes) + " need=" + need);
+                violations.add(
+                    ErrorCodes.errGoalNotMet + ":" + targetRes.shortString() + " have=" + ledger.totalOf(targetRes)
+                            + " need=" + need
+                );
                 flags[1] = false;
             }
         }
@@ -290,7 +328,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         Map<ResourceKey, Long> declaredSurplus = new TreeMap<>();
         for (ByproductEntry bp : plan.surplusByproducts()) {
             if (!byId.containsKey(bp.producedByStepId())) {
-                violations.add(ErrorCodes.ERR_SURPLUS_MISMATCH + ":unknown_producer:" + bp.producedByStepId());
+                violations.add(ErrorCodes.errSurplusMismatch + ":unknown_producer:" + bp.producedByStepId());
                 flags[4] = false;
             }
             declaredSurplus.merge(bp.resource(), bp.amount(), SafeMath::addSaturating);
@@ -302,8 +340,9 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                 long act = actualSurplus.getOrDefault(rk, 0L);
                 long dec = declaredSurplus.getOrDefault(rk, 0L);
                 if (act != dec) {
-                    violations.add(ErrorCodes.ERR_SURPLUS_MISMATCH + ":" + rk.shortString()
-                            + " declared=" + dec + " actual=" + act);
+                    violations.add(
+                        ErrorCodes.errSurplusMismatch + ":" + rk.shortString() + " declared=" + dec + " actual=" + act
+                    );
                     flags[4] = false;
                 }
             }
@@ -315,14 +354,14 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         if (!actualConsumedInv.equals(prep.consumedFromInventory().entries())
                 || !actualAcquired.equals(prep.toAcquireFromWorld().entries())
                 || !actualProvisioned.equals(prep.machinesToProvision())) {
-            violations.add(ErrorCodes.ERR_PREPARATION_MISMATCH);
+            violations.add(ErrorCodes.errPreparationMismatch);
             flags[4] = false;
         }
 
         // 8. Total cost aggregation consistency check.
         CostVector recomputedTotal = PlanCosts.aggregate(plan.steps());
         if (!costsClose(recomputedTotal, plan.totalCost())) {
-            violations.add(ErrorCodes.ERR_COST_MISMATCH + ":total");
+            violations.add(ErrorCodes.errCostMismatch + ":total");
             flags[4] = false;
         }
 
@@ -331,41 +370,41 @@ public final class DefaultPlanVerifier implements PlanVerifier {
     }
 
     private boolean verifyCraft(
-            CraftStep cs,
-            TwoPoolLedger ledger,
-            Set<String> ownedMachines,
-            Set<MachineCapabilityId> ownedCaps,
-            Set<String> automatedSystems,
-            FacilitySnapshot facilities,
-            HumanGuidanceView guidance,
-            List<String> violations,
-            boolean[] flags,
-            Set<ResourceKey> actualCatalysts,
-            Map<ResourceKey, Set<CompiledRecipeKey>> provenance,
-            Set<ConversionPair> conversions,
-            boolean recordConversion
+        CraftStep cs,
+        TwoPoolLedger ledger,
+        Set<String> ownedMachines,
+        Set<MachineCapabilityId> ownedCaps,
+        Set<String> automatedSystems,
+        FacilitySnapshot facilities,
+        HumanGuidanceView guidance,
+        List<String> violations,
+        boolean[] flags,
+        Set<ResourceKey> actualCatalysts,
+        Map<ResourceKey, Set<CompiledRecipeKey>> provenance,
+        Set<ConversionPair> conversions,
+        boolean recordConversion
     ) {
         if (cs.batches() <= 0L) {
-            violations.add(ErrorCodes.ERR_NON_POSITIVE_BATCH + ":" + cs.stepId());
+            violations.add(ErrorCodes.errNonPositiveBatch + ":" + cs.stepId());
             flags[3] = false;
             return false;
         }
         Optional<CompiledRecipe> recOpt = graph.recipeByKey(cs.recipeKey());
         if (recOpt.isEmpty()) {
-            violations.add(ErrorCodes.ERR_UNKNOWN_RECIPE + ":" + cs.recipeKey().shortString());
+            violations.add(ErrorCodes.errUnknownRecipe + ":" + cs.recipeKey().shortString());
             flags[1] = false;
             return false;
         }
         CompiledRecipe rec = recOpt.get();
         if (guidance.isRecipeBanned(cs.recipeKey())) {
-            violations.add(ErrorCodes.ERR_BANNED_RECIPE + ":" + cs.recipeKey().shortString());
+            violations.add(ErrorCodes.errBannedRecipe + ":" + cs.recipeKey().shortString());
             flags[1] = false;
         }
         String sysId = rec.key().systemId();
         SystemAdmission adm = graph.admissionOf(sysId);
         boolean unlocked = facilities.unlockedSystems().contains(sysId);
         if (!guidance.isSystemEnabled(sysId, adm, unlocked)) {
-            violations.add(ErrorCodes.ERR_BANNED_SYSTEM + ":" + sysId);
+            violations.add(ErrorCodes.errBannedSystem + ":" + sysId);
             flags[2] = false;
         }
 
@@ -374,7 +413,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             boolean hasM = cs.chosenMachineId().map(ownedMachines::contains).orElse(false);
             boolean hasC = req.capabilityId().map(ownedCaps::contains).orElse(false);
             if (!hasM && !hasC) {
-                violations.add(ErrorCodes.ERR_MACHINE_NOT_AVAILABLE + ":" + cs.stepId());
+                violations.add(ErrorCodes.errMachineNotAvailable + ":" + cs.stepId());
                 flags[2] = false;
             }
         }
@@ -382,7 +421,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             boolean hasAuto = facilities.automatedRecipe(cs.recipeKey()).isPresent()
                     || automatedSystems.contains(sysId);
             if (!hasAuto) {
-                violations.add(ErrorCodes.ERR_AUTOMATION_UNAVAILABLE + ":" + cs.stepId());
+                violations.add(ErrorCodes.errAutomationUnavailable + ":" + cs.stepId());
                 flags[2] = false;
             }
         }
@@ -390,71 +429,96 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         for (CatalystSlot cat : rec.catalysts()) {
             ResourceKey bound = cs.catalystBindings().get(cat.slotIndex());
             long minNeeded = (cat.durabilityCostPerBatch() > 0 && cat.maxDurability() > 0)
-                    ? SafeMath.ceilDiv(SafeMath.mulSaturating(cs.batches(), cat.durabilityCostPerBatch()), cat.maxDurability())
+                    ? SafeMath.ceilDiv(
+                        SafeMath.mulSaturating(cs.batches(), cat.durabilityCostPerBatch()),
+                        cat.maxDurability()
+                    )
                     : 1L;
             if (bound == null || !cat.candidates().contains(bound) || ledger.totalOf(bound) < minNeeded) {
-                violations.add(ErrorCodes.ERR_MISSING_CATALYST + ":" + cs.stepId() + ":" + cat.slotIndex());
+                violations.add(ErrorCodes.errMissingCatalyst + ":" + cs.stepId() + ":" + cat.slotIndex());
                 flags[2] = false;
             } else {
                 actualCatalysts.add(bound);
             }
         }
 
-        return applyRecipeIO(cs.stepId(), rec, cs.batches(), cs.slotBindings(),
-                ledger, guidance, violations, flags, provenance, conversions, recordConversion);
+        return applyRecipeIO(
+            cs.stepId(),
+            rec,
+            cs.batches(),
+            cs.slotBindings(),
+            ledger,
+            guidance,
+            violations,
+            flags,
+            provenance,
+            conversions,
+            recordConversion
+        );
     }
 
     private void verifyConvert(
-            ConvertStep conv,
-            TwoPoolLedger ledger,
-            FacilitySnapshot facilities,
-            HumanGuidanceView guidance,
-            List<String> violations,
-            boolean[] flags,
-            Map<ResourceKey, Set<CompiledRecipeKey>> provenance,
-            Set<ConversionPair> conversions
+        ConvertStep conv,
+        TwoPoolLedger ledger,
+        FacilitySnapshot facilities,
+        HumanGuidanceView guidance,
+        List<String> violations,
+        boolean[] flags,
+        Map<ResourceKey, Set<CompiledRecipeKey>> provenance,
+        Set<ConversionPair> conversions
     ) {
         if (conv.batches() <= 0L) {
-            violations.add(ErrorCodes.ERR_NON_POSITIVE_BATCH + ":" + conv.stepId());
+            violations.add(ErrorCodes.errNonPositiveBatch + ":" + conv.stepId());
             flags[3] = false;
             return;
         }
         Optional<CompiledRecipe> recOpt = graph.recipeByKey(conv.conversionRecipeKey());
         if (recOpt.isEmpty()) {
-            violations.add(ErrorCodes.ERR_UNKNOWN_RECIPE + ":" + conv.conversionRecipeKey().shortString());
+            violations.add(ErrorCodes.errUnknownRecipe + ":" + conv.conversionRecipeKey().shortString());
             flags[1] = false;
             return;
         }
         CompiledRecipe rec = recOpt.get();
         if (!rec.isReversibleConversion()) {
-            violations.add(ErrorCodes.ERR_NOT_REVERSIBLE_CONVERSION + ":" + conv.conversionRecipeKey().shortString());
+            violations.add(ErrorCodes.errNotReversibleConversion + ":" + conv.conversionRecipeKey().shortString());
             flags[1] = false;
         }
         if (guidance.isRecipeBanned(conv.conversionRecipeKey())) {
-            violations.add(ErrorCodes.ERR_BANNED_RECIPE + ":" + conv.conversionRecipeKey().shortString());
+            violations.add(ErrorCodes.errBannedRecipe + ":" + conv.conversionRecipeKey().shortString());
             flags[1] = false;
         }
         String sysId = rec.key().systemId();
         if (!guidance.isSystemEnabled(sysId, graph.admissionOf(sysId), facilities.unlockedSystems().contains(sysId))) {
-            violations.add(ErrorCodes.ERR_BANNED_SYSTEM + ":" + sysId);
+            violations.add(ErrorCodes.errBannedSystem + ":" + sysId);
             flags[2] = false;
         }
-        applyRecipeIO(conv.stepId(), rec, conv.batches(), conv.slotBindings(),
-                ledger, guidance, violations, flags, provenance, conversions, true);
+        applyRecipeIO(
+            conv.stepId(),
+            rec,
+            conv.batches(),
+            conv.slotBindings(),
+            ledger,
+            guidance,
+            violations,
+            flags,
+            provenance,
+            conversions,
+            true
+        );
     }
 
     private boolean applyRecipeIO(
-            String stepId,
-            CompiledRecipe rec,
-            long batches,
-            Map<Integer, SlotBinding> bindings,
-            TwoPoolLedger ledger,
-            HumanGuidanceView guidance,
-            List<String> violations,
-            boolean[] flags,
-            Map<ResourceKey, Set<CompiledRecipeKey>> provenance,
-            Set<ConversionPair> conversions,
-            boolean recordConversion
+        String stepId,
+        CompiledRecipe rec,
+        long batches,
+        Map<Integer, SlotBinding> bindings,
+        TwoPoolLedger ledger,
+        HumanGuidanceView guidance,
+        List<String> violations,
+        boolean[] flags,
+        Map<ResourceKey, Set<CompiledRecipeKey>> provenance,
+        Set<ConversionPair> conversions,
+        boolean recordConversion
     ) {
         boolean ok = true;
         Set<CompiledRecipeKey> inheritedProv = new HashSet<>();
@@ -464,25 +528,25 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         for (InputSlot slot : rec.inputs()) {
             SlotBinding b = bindings.get(slot.slotIndex());
             if (b == null || !matchesSlot(slot, b.chosenResource())) {
-                violations.add(ErrorCodes.ERR_INVALID_SLOT_BINDING + ":" + stepId + ":" + slot.slotIndex());
+                violations.add(ErrorCodes.errInvalidSlotBinding + ":" + stepId + ":" + slot.slotIndex());
                 flags[1] = false;
                 ok = false;
                 continue;
             }
             if (guidance.isResourceBanned(b.chosenResource())) {
-                violations.add(ErrorCodes.ERR_BANNED_RESOURCE + ":" + b.chosenResource().shortString());
+                violations.add(ErrorCodes.errBannedResource + ":" + b.chosenResource().shortString());
                 flags[1] = false;
                 ok = false;
             }
             if (SafeMath.willOverflowMul(batches, slot.amountPerBatch())) {
-                violations.add(ErrorCodes.ERR_STOCK_OVERFLOW + ":" + stepId);
+                violations.add(ErrorCodes.errStockOverflow + ":" + stepId);
                 flags[1] = false;
                 ok = false;
                 continue;
             }
             long need = batches * slot.amountPerBatch();
             if (!ledger.consume(b.chosenResource(), need)) {
-                violations.add(ErrorCodes.ERR_NEGATIVE_STOCK + ":" + stepId + ":" + b.chosenResource().shortString());
+                violations.add(ErrorCodes.errNegativeStock + ":" + stepId + ":" + b.chosenResource().shortString());
                 flags[1] = false;
                 ok = false;
             }
@@ -498,7 +562,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         for (OutputSlot out : rec.outputs()) {
             if (SafeMath.willOverflowMul(batches, out.amountPerBatch())
                     || SafeMath.willOverflowAdd(ledger.totalOf(out.resource()), batches * out.amountPerBatch())) {
-                violations.add(ErrorCodes.ERR_STOCK_OVERFLOW + ":" + stepId);
+                violations.add(ErrorCodes.errStockOverflow + ":" + stepId);
                 flags[1] = false;
                 ok = false;
                 continue;
@@ -506,7 +570,9 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             long produced = batches * out.amountPerBatch();
             ledger.produce(out.resource(), produced, stepId);
             provenance.computeIfAbsent(out.resource(), ignored -> new HashSet<>()).addAll(inheritedProv);
-            if (recordConversion && singleInputChosen != null && rec.outputs().size() == 1
+            if (recordConversion
+                    && singleInputChosen != null
+                    && rec.outputs().size() == 1
                     && !singleInputChosen.equals(out.resource())) {
                 conversions.add(new ConversionPair(singleInputChosen, out.resource()));
             }
@@ -516,39 +582,41 @@ public final class DefaultPlanVerifier implements PlanVerifier {
 
     /** O(|singleIterationTemplate|) mathematical induction check with per-slot peakDraw sampling. */
     private void verifyCycleLoop(
-            CycleLoopStep loop,
-            TwoPoolLedger ledger,
-            Set<String> ownedMachines,
-            Set<MachineCapabilityId> ownedCaps,
-            Set<String> automatedSystems,
-            FacilitySnapshot facilities,
-            HumanGuidanceView guidance,
-            List<String> violations,
-            boolean[] flags,
-            Set<ResourceKey> actualCatalysts,
-            Map<ResourceKey, Set<CompiledRecipeKey>> provenance
+        CycleLoopStep loop,
+        TwoPoolLedger ledger,
+        Set<String> ownedMachines,
+        Set<MachineCapabilityId> ownedCaps,
+        Set<String> automatedSystems,
+        FacilitySnapshot facilities,
+        HumanGuidanceView guidance,
+        List<String> violations,
+        boolean[] flags,
+        Set<ResourceKey> actualCatalysts,
+        Map<ResourceKey, Set<CompiledRecipeKey>> provenance
     ) {
         if (loop.iterations() <= 0L || loop.singleIterationTemplate().isEmpty()) {
-            violations.add(ErrorCodes.ERR_INVALID_CYCLE_ITER + ":" + loop.stepId());
+            violations.add(ErrorCodes.errInvalidCycleIter + ":" + loop.stepId());
             flags[3] = false;
             return;
         }
         if (!graph.allCycleMacros().isEmpty()) {
             Optional<CompiledCycleMacro> macroOpt = graph.cycleMacroByKey(loop.macroKey());
             if (macroOpt.isEmpty()) {
-                violations.add(ErrorCodes.ERR_UNKNOWN_CYCLE_MACRO + ":" + loop.macroKey().macroId());
+                violations.add(ErrorCodes.errUnknownCycleMacro + ":" + loop.macroKey().macroId());
                 flags[1] = false;
             } else {
                 CompiledCycleMacro macro = macroOpt.get();
                 if (macro.innerRecipes().size() != loop.singleIterationTemplate().size()) {
-                    violations.add(ErrorCodes.ERR_UNKNOWN_CYCLE_MACRO + ":template_size:" + loop.macroKey().macroId());
+                    violations.add(ErrorCodes.errUnknownCycleMacro + ":template_size:" + loop.macroKey().macroId());
                     flags[1] = false;
                 } else {
                     for (int i = 0; i < macro.innerRecipes().size(); i++) {
                         CraftStep inner = loop.singleIterationTemplate().get(i);
                         if (!inner.recipeKey().equals(macro.innerRecipes().get(i).key())
                                 || inner.batches() != macro.innerMultipliers().get(i)) {
-                            violations.add(ErrorCodes.ERR_UNKNOWN_CYCLE_MACRO + ":template_mismatch:" + loop.macroKey().macroId());
+                            violations.add(
+                                ErrorCodes.errUnknownCycleMacro + ":template_mismatch:" + loop.macroKey().macroId()
+                            );
                             flags[1] = false;
                             break;
                         }
@@ -559,7 +627,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
 
         for (var e : loop.workingSeedAmounts().entrySet()) {
             if (e.getValue() <= 0L || ledger.totalOf(e.getKey()) < e.getValue()) {
-                violations.add(ErrorCodes.ERR_MISSING_CYCLE_SEED + ":" + loop.stepId() + ":" + e.getKey().shortString());
+                violations.add(ErrorCodes.errMissingCycleSeed + ":" + loop.stepId() + ":" + e.getKey().shortString());
                 flags[1] = false;
             }
         }
@@ -574,24 +642,25 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         for (CraftStep inner : loop.singleIterationTemplate()) {
             loopProv.add(inner.recipeKey());
             if (inner.batches() <= 0L) {
-                violations.add(ErrorCodes.ERR_NON_POSITIVE_BATCH + ":" + inner.stepId());
+                violations.add(ErrorCodes.errNonPositiveBatch + ":" + inner.stepId());
                 flags[3] = false;
                 continue;
             }
             Optional<CompiledRecipe> recOpt = graph.recipeByKey(inner.recipeKey());
             if (recOpt.isEmpty()) {
-                violations.add(ErrorCodes.ERR_UNKNOWN_RECIPE + ":" + inner.recipeKey().shortString());
+                violations.add(ErrorCodes.errUnknownRecipe + ":" + inner.recipeKey().shortString());
                 flags[1] = false;
                 continue;
             }
             CompiledRecipe rec = recOpt.get();
             if (guidance.isRecipeBanned(inner.recipeKey())) {
-                violations.add(ErrorCodes.ERR_BANNED_RECIPE + ":" + inner.recipeKey().shortString());
+                violations.add(ErrorCodes.errBannedRecipe + ":" + inner.recipeKey().shortString());
                 flags[1] = false;
             }
             String sysId = rec.key().systemId();
-            if (!guidance.isSystemEnabled(sysId, graph.admissionOf(sysId), facilities.unlockedSystems().contains(sysId))) {
-                violations.add(ErrorCodes.ERR_BANNED_SYSTEM + ":" + sysId);
+            if (!guidance
+                    .isSystemEnabled(sysId, graph.admissionOf(sysId), facilities.unlockedSystems().contains(sysId))) {
+                violations.add(ErrorCodes.errBannedSystem + ":" + sysId);
                 flags[2] = false;
             }
             MachineRequirement req = rec.machineRequirement();
@@ -599,17 +668,20 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                 boolean hasM = inner.chosenMachineId().map(ownedMachines::contains).orElse(false);
                 boolean hasC = req.capabilityId().map(ownedCaps::contains).orElse(false);
                 if (!hasM && !hasC) {
-                    violations.add(ErrorCodes.ERR_MACHINE_NOT_AVAILABLE + ":" + inner.stepId());
+                    violations.add(ErrorCodes.errMachineNotAvailable + ":" + inner.stepId());
                     flags[2] = false;
                 }
             }
             for (CatalystSlot cat : rec.catalysts()) {
                 ResourceKey bound = inner.catalystBindings().get(cat.slotIndex());
                 long minNeeded = (cat.durabilityCostPerBatch() > 0 && cat.maxDurability() > 0)
-                        ? SafeMath.ceilDiv(SafeMath.mulSaturating(inner.batches(), cat.durabilityCostPerBatch()), cat.maxDurability())
+                        ? SafeMath.ceilDiv(
+                            SafeMath.mulSaturating(inner.batches(), cat.durabilityCostPerBatch()),
+                            cat.maxDurability()
+                        )
                         : 1L;
                 if (bound == null || !cat.candidates().contains(bound) || sim.getOrDefault(bound, 0L) < minNeeded) {
-                    violations.add(ErrorCodes.ERR_MISSING_CATALYST + ":" + inner.stepId() + ":" + cat.slotIndex());
+                    violations.add(ErrorCodes.errMissingCatalyst + ":" + inner.stepId() + ":" + cat.slotIndex());
                     flags[2] = false;
                 } else {
                     actualCatalysts.add(bound);
@@ -618,12 +690,12 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             for (InputSlot slot : rec.inputs()) {
                 SlotBinding b = inner.slotBindings().get(slot.slotIndex());
                 if (b == null || !matchesSlot(slot, b.chosenResource())) {
-                    violations.add(ErrorCodes.ERR_INVALID_SLOT_BINDING + ":" + inner.stepId() + ":" + slot.slotIndex());
+                    violations.add(ErrorCodes.errInvalidSlotBinding + ":" + inner.stepId() + ":" + slot.slotIndex());
                     flags[1] = false;
                     continue;
                 }
                 if (guidance.isResourceBanned(b.chosenResource())) {
-                    violations.add(ErrorCodes.ERR_BANNED_RESOURCE + ":" + b.chosenResource().shortString());
+                    violations.add(ErrorCodes.errBannedResource + ":" + b.chosenResource().shortString());
                     flags[1] = false;
                 }
                 long need = SafeMath.mulSaturating(inner.batches(), slot.amountPerBatch());
@@ -631,7 +703,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                 touched.add(rk);
                 long cur = sim.getOrDefault(rk, 0L);
                 if (cur < need) {
-                    violations.add(ErrorCodes.ERR_NEGATIVE_STOCK + ":" + inner.stepId() + ":" + rk.shortString());
+                    violations.add(ErrorCodes.errNegativeStock + ":" + inner.stepId() + ":" + rk.shortString());
                     flags[1] = false;
                 }
                 long after = cur - need;
@@ -656,19 +728,22 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             long actualDelta = sim.getOrDefault(rk, 0L) - before;
             long declaredDelta = loop.netDeltaPerIteration().getOrDefault(rk, 0L);
             if (actualDelta != declaredDelta) {
-                violations.add(ErrorCodes.ERR_CYCLE_DELTA_MISMATCH + ":" + loop.stepId() + ":" + rk.shortString()
-                        + " actual=" + actualDelta + " declared=" + declaredDelta);
+                violations.add(
+                    ErrorCodes.errCycleDeltaMismatch + ":" + loop.stepId() + ":" + rk.shortString() + " actual="
+                            + actualDelta + " declared=" + declaredDelta
+                );
                 flags[1] = false;
             }
             long peak = peakDraw.getOrDefault(rk, 0L);
             if (actualDelta >= 0L) {
                 if (before < peak) {
-                    violations.add(ErrorCodes.ERR_CYCLE_INSUFFICIENT_REAGENT + ":" + loop.stepId() + ":" + rk.shortString());
+                    violations
+                            .add(ErrorCodes.errCycleInsufficientReagent + ":" + loop.stepId() + ":" + rk.shortString());
                     flags[1] = false;
                 }
                 if (actualDelta > 0L) {
                     if (SafeMath.willOverflowMul(iters, actualDelta)) {
-                        violations.add(ErrorCodes.ERR_STOCK_OVERFLOW + ":" + loop.stepId());
+                        violations.add(ErrorCodes.errStockOverflow + ":" + loop.stepId());
                         flags[1] = false;
                     } else {
                         ledger.produce(rk, iters * actualDelta, loop.stepId());
@@ -679,7 +754,8 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                 long negDelta = -actualDelta;
                 long neededTotal = SafeMath.addSaturating(SafeMath.mulSaturating(iters - 1L, negDelta), peak);
                 if (before < neededTotal) {
-                    violations.add(ErrorCodes.ERR_CYCLE_INSUFFICIENT_REAGENT + ":" + loop.stepId() + ":" + rk.shortString());
+                    violations
+                            .add(ErrorCodes.errCycleInsufficientReagent + ":" + loop.stepId() + ":" + rk.shortString());
                     flags[1] = false;
                 }
                 long totalConsume = SafeMath.mulSaturating(iters, negDelta);
@@ -689,7 +765,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
     }
 
     private static boolean matchesSlot(InputSlot slot, ResourceKey chosen) {
-        if (slot.matchMode() == SlotMatchMode.IDENTITY_AND_COMPONENT) {
+        if (slot.matchMode() == SlotMatchMode.identityAndComponent) {
             return slot.candidates().contains(chosen);
         }
         for (ResourceKey c : slot.candidates()) {
@@ -701,15 +777,14 @@ public final class DefaultPlanVerifier implements PlanVerifier {
     }
 
     private static boolean costsClose(CostVector a, CostVector b) {
-        return Math.abs(a.humanActiveSeconds() - b.humanActiveSeconds()) <= COST_TOLERANCE
-                && Math.abs(a.passiveWaitSeconds() - b.passiveWaitSeconds()) <= COST_TOLERANCE
-                && Math.abs(a.machineSetupCapital() - b.machineSetupCapital()) <= COST_TOLERANCE
-                && Math.abs(a.materialScarcity() - b.materialScarcity()) <= COST_TOLERANCE
-                && Math.abs(a.cognitiveFriction() - b.cognitiveFriction()) <= COST_TOLERANCE;
+        return Math.abs(a.humanActiveSeconds() - b.humanActiveSeconds()) <= costTolerance
+                && Math.abs(a.passiveWaitSeconds() - b.passiveWaitSeconds()) <= costTolerance
+                && Math.abs(a.machineSetupCapital() - b.machineSetupCapital()) <= costTolerance
+                && Math.abs(a.materialScarcity() - b.materialScarcity()) <= costTolerance
+                && Math.abs(a.cognitiveFriction() - b.cognitiveFriction()) <= costTolerance;
     }
 
-    private record ConversionPair(ResourceKey from, ResourceKey to) {
-    }
+    private record ConversionPair(ResourceKey from, ResourceKey to) {}
 
     private static final class ProducedBatch {
         final String stepId;

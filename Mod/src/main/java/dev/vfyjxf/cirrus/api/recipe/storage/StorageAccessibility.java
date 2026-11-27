@@ -1,14 +1,13 @@
 package dev.vfyjxf.cirrus.api.recipe.storage;
 
 import dev.vfyjxf.cloudlib.util.Checks;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Describes whether a storage source is currently reachable for execution.
  */
-public sealed interface StorageAccessibility permits
-    StorageAccessibility.Accessible,
-    StorageAccessibility.Inaccessible {
+public sealed interface StorageAccessibility
+        permits StorageAccessibility.Accessible, StorageAccessibility.Inaccessible {
 
     //region shared instances
 
@@ -18,7 +17,8 @@ public sealed interface StorageAccessibility permits
 
     boolean accessible();
 
-    @Nullable StorageGuidance guidance();
+    @Nullable
+    StorageGuidance guidance();
 
     //region factories
 
@@ -37,7 +37,7 @@ public sealed interface StorageAccessibility permits
         }
 
         @Override
-        public StorageGuidance guidance() {
+        public @Nullable StorageGuidance guidance() {
             return null;
         }
     }

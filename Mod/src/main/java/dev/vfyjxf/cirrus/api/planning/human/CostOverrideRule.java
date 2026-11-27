@@ -6,11 +6,11 @@ import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import java.util.Objects;
 
 public record CostOverrideRule(
-        String ruleId,
-        GuidanceScope scope,
-        RuleStrength strength,
-        ResourceKey resource,
-        CostVector overrideUnitCost
+    String ruleId,
+    GuidanceScope scope,
+    RuleStrength strength,
+    ResourceKey resource,
+    CostVector overrideUnitCost
 ) implements GuidanceRule {
 
     public CostOverrideRule {

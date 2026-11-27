@@ -75,7 +75,10 @@ public final class ClientContentApiImpl extends ContentApiImpl {
     @SuppressWarnings("unchecked")
     public <T extends MachineEntry> MachineEntryRenderer<T> getHandlerEntryRenderer(Class<T> type) {
         Checks.checkNotNull(type, "type");
-        Checks.checkArgument(FMLEnvironment.dist.isClient(), "HandlerEntryRenderer should only be used on client side!");
+        Checks.checkArgument(
+            FMLEnvironment.dist.isClient(),
+            "HandlerEntryRenderer should only be used on client side!"
+        );
         MachineEntryRenderer<T> handlerEntryRenderer = (MachineEntryRenderer<T>) handlerEntryRenderers.get(type);
         if (handlerEntryRenderer == null) {
             throw new IllegalStateException("No renderer found for handler entry type: " + type);

@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.api.recipe.classify;
 
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Set;
 
@@ -22,22 +22,10 @@ import java.util.Set;
  * @param amount demanded/produced amount (best effort)
  * @param chance chance in [0,1]; 1 means guaranteed
  */
-public record ClassifyContent(
-    Kind kind,
-    Set<String> ids,
-    @Nullable String tagId,
-    double amount,
-    double chance
-) {
+public record ClassifyContent(Kind kind, Set<String> ids, @Nullable String tagId, double amount, double chance) {
 
     public enum Kind {
-        stack,
-        tag,
-        any,
-        typedAny,
-        value,
-        complex,
-        empty
+        stack, tag, any, typedAny, value, complex, empty
     }
 
     public ClassifyContent {

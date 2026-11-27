@@ -18,6 +18,7 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -67,12 +68,10 @@ public class BootstrapSmoke {
     private static ItemStack container() {
         ItemStack stack = new ItemStack(Items.BUNDLE);
         stack.set(
-                DataComponents.CONTAINER,
-                ItemContainerContents.fromItems(java.util.List.of(
-                        new ItemStack(Items.DIAMOND_SWORD),
-                        new ItemStack(Items.DIAMOND),
-                        new ItemStack(Items.EMERALD)
-                ))
+            DataComponents.CONTAINER,
+            ItemContainerContents.fromItems(
+                List.of(new ItemStack(Items.DIAMOND_SWORD), new ItemStack(Items.DIAMOND), new ItemStack(Items.EMERALD))
+            )
         );
         return stack;
     }

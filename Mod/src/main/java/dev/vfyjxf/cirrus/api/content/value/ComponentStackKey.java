@@ -3,7 +3,7 @@ package dev.vfyjxf.cirrus.api.content.value;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import net.minecraft.core.component.DataComponentMap;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 
@@ -32,12 +32,12 @@ public final class ComponentStackKey {
     private final int hash;
 
     private ComponentStackKey(
-            StackType<?, ?> type,
-            Object content,
-            @Nullable DataComponentMap components,
-            @Nullable DataComponentMap canonicalComponents,
-            ContentStack<?, ?> stack,
-            int hash
+        StackType<?, ?> type,
+        Object content,
+        @Nullable DataComponentMap components,
+        @Nullable DataComponentMap canonicalComponents,
+        ContentStack<?, ?> stack,
+        int hash
     ) {
         this.type = type;
         this.content = content;

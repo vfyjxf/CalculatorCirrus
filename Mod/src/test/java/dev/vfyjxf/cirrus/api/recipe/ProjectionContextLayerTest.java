@@ -25,14 +25,10 @@ class ProjectionContextLayerTest {
     @Test
     void calculatorProjectionContextReadsCalculatorDatabaseAndGlobalLayers() {
         ExecutionContext global = ProjectionContexts.global().set(valueKey, "global");
-        ExecutionContext database = ProjectionContexts.database(
-            global,
-            new DatabaseProjectionContext("workspace", "Workspace", false)
-        );
-        ExecutionContext calculator = ProjectionContexts.calculator(
-            database,
-            new CalculatorProjectionContext(null, 16, 42L)
-        );
+        ExecutionContext database = ProjectionContexts
+                .database(global, new DatabaseProjectionContext("workspace", "Workspace", false));
+        ExecutionContext calculator = ProjectionContexts
+                .calculator(database, new CalculatorProjectionContext(null, 16, 42L));
 
         assertEquals(ProjectionContextScope.calculator, calculator.get(ProjectionContextKeys.scope));
         assertEquals("workspace", calculator.get(ProjectionContextKeys.database).databaseId());
@@ -45,14 +41,10 @@ class ProjectionContextLayerTest {
     @Test
     void localContextValuesOverrideParentWithoutMutatingParentLayers() {
         ExecutionContext global = ProjectionContexts.global().set(valueKey, "global");
-        ExecutionContext database = ProjectionContexts.database(
-            global,
-            new DatabaseProjectionContext("db", "Database", false)
-        ).set(valueKey, "database");
-        ExecutionContext calculator = ProjectionContexts.calculator(
-            database,
-            new CalculatorProjectionContext(null, 1, 0L)
-        ).set(valueKey, "calculator");
+        ExecutionContext database = ProjectionContexts
+                .database(global, new DatabaseProjectionContext("db", "Database", false)).set(valueKey, "database");
+        ExecutionContext calculator = ProjectionContexts
+                .calculator(database, new CalculatorProjectionContext(null, 1, 0L)).set(valueKey, "calculator");
 
         assertEquals("calculator", calculator.get(valueKey));
         calculator.remove(valueKey);

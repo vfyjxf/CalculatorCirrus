@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.execution.driver;
 
-import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSideRequirement;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
+import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSideRequirement;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.DriverSelector.MatchResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.DriverContext;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.InteractionContext;
@@ -61,10 +61,7 @@ class ExecutionDriverRegistryTest {
         registry.registerClient(context -> MatchResult.accept, clientFactory);
         var api = new ExecutionDriverApiImpl(registry);
 
-        var lookup = DriverLookup.of(
-            new MenuTypeContext(MenuType.CRAFTING),
-            new MenuContext(CraftingMenu.class)
-        );
+        var lookup = DriverLookup.of(new MenuTypeContext(MenuType.CRAFTING), new MenuContext(CraftingMenu.class));
         assertNull(api.findServer(lookup));
     }
 
@@ -102,8 +99,7 @@ class ExecutionDriverRegistryTest {
         }, factory);
         var api = new ExecutionDriverApiImpl(registry);
 
-        record CustomMenuContext(Class<?> menuClass) implements DriverContext {
-        }
+        record CustomMenuContext(Class<?> menuClass) implements DriverContext {}
 
         var lookupNoMenu = DriverLookup.of(new ScreenContext(Screen.class), new CustomMenuContext(CraftingMenu.class));
         assertNull(api.findClient(lookupNoMenu));
@@ -122,16 +118,11 @@ class ExecutionDriverRegistryTest {
         }, factory);
         var api = new ExecutionDriverApiImpl(registry);
 
-        var matchLookup = DriverLookup.of(
-            new InteractionContext(interactionId),
-            new MenuContext(CraftingMenu.class)
-        );
+        var matchLookup = DriverLookup.of(new InteractionContext(interactionId), new MenuContext(CraftingMenu.class));
         assertSame(factory, api.findServer(matchLookup));
 
-        var noMatchLookup = DriverLookup.of(
-            new InteractionContext(Namespace.of("mod", "other")),
-            new MenuContext(CraftingMenu.class)
-        );
+        var noMatchLookup = DriverLookup
+                .of(new InteractionContext(Namespace.of("mod", "other")), new MenuContext(CraftingMenu.class));
         assertNull(api.findServer(noMatchLookup));
     }
 
@@ -197,11 +188,8 @@ class ExecutionDriverRegistryTest {
 
         @Override
         public InteractionApi interactionApi() {
-            return SlotExecutionDriver.simpleInteraction(
-                testInteractionId,
-                false,
-                ExecutionGuidance.simple(Component.literal("dummy"))
-            );
+            return SlotExecutionDriver
+                    .simpleInteraction(testInteractionId, false, ExecutionGuidance.simple(Component.literal("dummy")));
         }
 
         @Override
@@ -210,40 +198,31 @@ class ExecutionDriverRegistryTest {
         }
 
         @Override
-        public void advanceSteps(int steps) {
-        }
+        public void advanceSteps(int steps) {}
 
         @Override
-        public void pause() {
-        }
+        public void pause() {}
 
         @Override
-        public void resume() {
-        }
+        public void resume() {}
 
         @Override
-        public void toggleAutoAdvance() {
-        }
+        public void toggleAutoAdvance() {}
 
         @Override
-        public void stopAutoAdvance() {
-        }
+        public void stopAutoAdvance() {}
 
         @Override
-        public void setRatePerSecond(double rate) {
-        }
+        public void setRatePerSecond(double rate) {}
 
         @Override
-        public void reset() {
-        }
+        public void reset() {}
 
         @Override
-        public void jumpToStep(int index) {
-        }
+        public void jumpToStep(int index) {}
 
         @Override
-        public void tick() {
-        }
+        public void tick() {}
     }
 
     private static final class CustomCraftingMenu extends CraftingMenu {

@@ -1,30 +1,32 @@
 package dev.vfyjxf.cirrus.recipe.execution.driver.slot;
 
-import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.content.ContentApi;
+import dev.vfyjxf.cirrus.api.content.stock.Stock;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
-import dev.vfyjxf.cirrus.recipe.execution.ExecutionRuntime;
+import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionTelemetrySnapshot;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
+import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.PauseReason;
 import dev.vfyjxf.cirrus.api.recipe.execution.ReTranslationHint;
 import dev.vfyjxf.cirrus.api.recipe.execution.core.PauseReasons;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.ExecutionDriver;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.ExecutionDriverSnapshot;
-import dev.vfyjxf.cirrus.api.recipe.execution.interaction.ExecutionInteraction;
-import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionApi;
-import dev.vfyjxf.cirrus.api.recipe.execution.interaction.ExecutionPlanningSnapshot;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.slot.SlotAccess;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.slot.SlotLayout;
-import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionGuideResult;
+import dev.vfyjxf.cirrus.api.recipe.execution.interaction.ExecutionInteraction;
+import dev.vfyjxf.cirrus.api.recipe.execution.interaction.ExecutionPlanningSnapshot;
+import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionApi;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionContext;
+import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionGuideResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionPerformResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionPlanningApi;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionProbeResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.util.PauseReasonKey;
-import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.cirrus.api.content.stock.Stock;
+import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowViewModel;
+import dev.vfyjxf.cirrus.recipe.execution.ExecutionRuntime;
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayContentHelper;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
@@ -32,16 +34,18 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import org.eclipse.collections.api.set.ImmutableSet;
-import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.list.ImmutableList;
+import org.eclipse.collections.api.list.MutableList;
+import org.eclipse.collections.api.set.ImmutableSet;
+import org.eclipse.collections.api.set.MutableSet;
 import org.eclipse.collections.impl.factory.Lists;
 import org.eclipse.collections.impl.factory.Sets;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 
 public class SlotExecutionDriver implements ExecutionDriver {
 
@@ -56,7 +60,7 @@ public class SlotExecutionDriver implements ExecutionDriver {
     private final Namespace interactionId;
     private final InteractionApi interactionApi;
     private final @Nullable SlotFlow flow;
-    private final @Nullable SlotFlow.Context flowContext;
+    private final SlotFlow.@Nullable Context flowContext;
     private final @Nullable ExecutionRuntime runtime;
     private @Nullable ExecutionSession session;
     private double ratePerSecond;
@@ -73,21 +77,23 @@ public class SlotExecutionDriver implements ExecutionDriver {
         InteractionApi interactionApi,
         SlotLayout layout,
         SlotAccess access,
-        @Nullable SlotAccess.Interaction interaction,
-        @Nullable SlotFlow.PlacementResolver placementResolver,
+        SlotAccess.@Nullable Interaction interaction,
+        SlotFlow.@Nullable PlacementResolver placementResolver,
         @Nullable SlotFlow flow
     ) {
         public Profile(
             Namespace interactionId,
             SlotLayout layout,
             SlotAccess access,
-            @Nullable SlotAccess.Interaction interaction,
-            @Nullable SlotFlow.PlacementResolver placementResolver,
+            SlotAccess.@Nullable Interaction interaction,
+            SlotFlow.@Nullable PlacementResolver placementResolver,
             @Nullable SlotFlow flow
         ) {
             this(
                 interactionId,
-                interaction != null && placementResolver != null ? automaticInteraction(interactionId) : guidedInteraction(interactionId),
+                interaction != null && placementResolver != null
+                        ? automaticInteraction(interactionId)
+                        : guidedInteraction(interactionId),
                 layout,
                 access,
                 interaction,
@@ -106,7 +112,13 @@ public class SlotExecutionDriver implements ExecutionDriver {
     }
 
     protected SlotExecutionDriver(Profile profile) {
-        this(profile.interactionId(), profile.interactionApi(), resolveProfileFlow(profile), createProfileContext(profile), null);
+        this(
+            profile.interactionId(),
+            profile.interactionApi(),
+            resolveProfileFlow(profile),
+            createProfileContext(profile),
+            null
+        );
     }
 
     private static SlotFlow resolveProfileFlow(Profile profile) {
@@ -130,7 +142,11 @@ public class SlotExecutionDriver implements ExecutionDriver {
         );
     }
 
-    public SlotExecutionDriver(Namespace interactionId, InteractionApi interactionApi, ExecutionRuntime runtime) {
+    public SlotExecutionDriver(
+        Namespace interactionId,
+        InteractionApi interactionApi,
+        @Nullable ExecutionRuntime runtime
+    ) {
         this(interactionId, interactionApi, null, null, runtime);
     }
 
@@ -138,7 +154,7 @@ public class SlotExecutionDriver implements ExecutionDriver {
         Namespace interactionId,
         InteractionApi interactionApi,
         @Nullable SlotFlow flow,
-        @Nullable SlotFlow.Context flowContext,
+        SlotFlow.@Nullable Context flowContext,
         @Nullable ExecutionRuntime runtime
     ) {
         this.interactionId = interactionId;
@@ -204,7 +220,9 @@ public class SlotExecutionDriver implements ExecutionDriver {
     public ExecutionInteraction interaction() {
         InteractionApi planningAwareApi = new InteractionPlanningView(
             interactionApi,
-            flowContext == null ? ExecutionPlanningSnapshot.empty() : planningSnapshot(flowContext.layout(), flowContext.access())
+            flowContext == null
+                    ? ExecutionPlanningSnapshot.empty()
+                    : planningSnapshot(flowContext.layout(), flowContext.access())
         );
         return new ExecutionInteraction(interactionId, planningAwareApi);
     }
@@ -213,7 +231,7 @@ public class SlotExecutionDriver implements ExecutionDriver {
         return session;
     }
 
-    protected @Nullable SlotFlow.Context currentFlowContext() {
+    protected SlotFlow.@Nullable Context currentFlowContext() {
         return flowContext;
     }
 
@@ -252,23 +270,24 @@ public class SlotExecutionDriver implements ExecutionDriver {
     @Override
     public ExecutionDriverSnapshot snapshot() {
         ExecutionTelemetrySnapshot telemetry = session == null
-            ? new ExecutionTelemetrySnapshot(
-                "pending",
-                false,
-                false,
-                0,
-                0,
-                0.0d,
-                null,
-                null,
-                null,
-                Lists.immutable.empty(),
-                Lists.immutable.empty(),
-                null,
-                null,
-                ratePerSecond,
-                autoAdvanceEnabled
-            ) : ExecutionTelemetrySnapshot.from(session, ratePerSecond, autoAdvanceEnabled);
+                ? new ExecutionTelemetrySnapshot(
+                    "pending",
+                    false,
+                    false,
+                    0,
+                    0,
+                    0.0d,
+                    null,
+                    null,
+                    null,
+                    Lists.immutable.empty(),
+                    Lists.immutable.empty(),
+                    null,
+                    null,
+                    ratePerSecond,
+                    autoAdvanceEnabled
+                )
+                : ExecutionTelemetrySnapshot.from(session, ratePerSecond, autoAdvanceEnabled);
         SlotFlow.Tracking tracking = buildTracking(session);
         return new ExecutionDriverSnapshot(
             session,
@@ -320,7 +339,7 @@ public class SlotExecutionDriver implements ExecutionDriver {
     }
 
     protected static record TrackingInput(
-        @Nullable SlotFlow.Context context,
+        SlotFlow.@Nullable Context context,
         long fingerprint,
         @Nullable Object extra
     ) {}
@@ -370,7 +389,14 @@ public class SlotExecutionDriver implements ExecutionDriver {
         if (session == null || session.paused()) {
             return;
         }
-        session = pause(session, session.currentStep(), new PauseReason(PauseReasons.awaitingPlayerAction, ExecutionGuidance.simple(Component.translatable(manualPauseSummaryKey))));
+        session = pause(
+            session,
+            Objects.requireNonNull(session.currentStep()),
+            new PauseReason(
+                PauseReasons.awaitingPlayerAction,
+                ExecutionGuidance.simple(Component.translatable(manualPauseSummaryKey))
+            )
+        );
         clearPausedAutoRetryFingerprint();
     }
 
@@ -444,20 +470,33 @@ public class SlotExecutionDriver implements ExecutionDriver {
         }
         autoAdvanceProgress = 0.0d;
         clearPausedAutoRetryFingerprint();
-        int clamped = Math.max(0, Math.min(index, session.plan().steps().size()));
+        int total = session.plan().steps().size();
+        int clamped = Math.max(0, Math.min(index, total));
+        MutableSet<InteractionStep> completed = Sets.mutable.empty();
+        for (int i = 0; i < clamped; i++) {
+            completed.add(session.plan().steps().get(i));
+        }
+        ImmutableSet<InteractionStep> immutableCompleted = completed.toImmutable();
+        var runtimeState = new ExecutionFlowViewModel.RuntimeState(
+            immutableCompleted,
+            Sets.immutable.empty(),
+            null,
+            null
+        );
         session = new ExecutionSession(
             session.plan(),
             session.flowRoot(),
             clamped,
-            session.completedSteps(),
-            session.pausedSteps(),
-            session.currentStep(),
-            session.pauseReason(),
-            session.reTranslationHint(),
-            session.flowViewModel(),
+            immutableCompleted,
+            Sets.immutable.empty(),
+            null,
+            null,
+            null,
+            ExecutionFlowViewModel.derive(session.flowRoot(), runtimeState),
             session.baselinePlanningSnapshot(),
             session.observedStockPolicy()
         );
+        stopAutoAdvanceIfSessionCompleted();
         refreshPlanningBaseline();
     }
 
@@ -533,12 +572,17 @@ public class SlotExecutionDriver implements ExecutionDriver {
             if (safety++ > 256) {
                 return;
             }
-            if (session.currentStep() == null) {
+            InteractionStep beforeStep = session.currentStep();
+            if (beforeStep == null) {
                 return;
             }
             session = advanceOne(session);
             stopAutoAdvanceIfSessionCompleted();
             if (session == null || session.paused() || session.completed()) {
+                return;
+            }
+            // Yield a tick after placing grid inputs so the server can populate output slot 0.
+            if (beforeStep instanceof InteractionStep.PrepareInputsStep) {
                 return;
             }
             if (hasVisibleAutoTrace(session)) {
@@ -551,7 +595,10 @@ public class SlotExecutionDriver implements ExecutionDriver {
         return context.access().isOpen() ? SlotFlow.StepResult.success() : SlotFlow.StepResult.blocked();
     }
 
-    protected SlotFlow.StepResult pollPrepareProgress(SlotFlow.Context context, InteractionStep.PrepareInputsStep step) {
+    protected SlotFlow.StepResult pollPrepareProgress(
+        SlotFlow.Context context,
+        InteractionStep.PrepareInputsStep step
+    ) {
         if (!context.access().isOpen()) {
             return SlotFlow.StepResult.blocked();
         }
@@ -563,10 +610,15 @@ public class SlotExecutionDriver implements ExecutionDriver {
         if (placements == null || placements.isEmpty()) {
             return SlotFlow.StepResult.blocked();
         }
-        return SlotTrace.placementsSatisfied(context, placements) ? SlotFlow.StepResult.success() : SlotFlow.StepResult.blocked();
+        return SlotTrace.placementsSatisfied(context, placements)
+                ? SlotFlow.StepResult.success()
+                : SlotFlow.StepResult.blocked();
     }
 
-    protected SlotFlow.StepResult pollExecuteProgress(SlotFlow.Context context, InteractionStep.ExecuteRecipeStep step) {
+    protected SlotFlow.StepResult pollExecuteProgress(
+        SlotFlow.Context context,
+        InteractionStep.ExecuteRecipeStep step
+    ) {
         if (!context.access().isOpen()) {
             return SlotFlow.StepResult.blocked();
         }
@@ -592,7 +644,10 @@ public class SlotExecutionDriver implements ExecutionDriver {
         return SlotFlow.StepResult.blocked();
     }
 
-    protected SlotFlow.StepResult pollCollectProgress(SlotFlow.Context context, InteractionStep.CollectOutputsStep step) {
+    protected SlotFlow.StepResult pollCollectProgress(
+        SlotFlow.Context context,
+        InteractionStep.CollectOutputsStep step
+    ) {
         if (!context.access().isOpen()) {
             return SlotFlow.StepResult.blocked();
         }
@@ -608,8 +663,11 @@ public class SlotExecutionDriver implements ExecutionDriver {
         return SlotFlow.StepResult.success();
     }
 
-    protected static ImmutableList<SlotLayout.Reference> orderedSlotReferences(SlotFlow.Context context, SlotLayout.Role role) {
-		SlotLayout.Index index = context.layout().slots(role);
+    protected static ImmutableList<SlotLayout.Reference> orderedSlotReferences(
+        SlotFlow.Context context,
+        SlotLayout.Role role
+    ) {
+        SlotLayout.Index index = context.layout().slots(role);
         if (index.keys().isEmpty()) {
             return Lists.immutable.empty();
         }
@@ -643,13 +701,21 @@ public class SlotExecutionDriver implements ExecutionDriver {
     }
 
     protected ExecutionSession requestReTranslation(ExecutionSession current, Component summary) {
-		return requestReTranslation(current, new ReTranslationHint(summary));
+        return requestReTranslation(current, new ReTranslationHint(summary));
     }
 
     protected ExecutionSession requestReTranslation(ExecutionSession current, ReTranslationHint hint) {
         return runtime == null
-            ? rebuildSession(current, current.nextStepIndex(), current.completedSteps(), current.pausedSteps(), current.runningStep(), current.pauseReason(), hint)
-            : runtime.requestReTranslation(current, hint);
+                ? rebuildSession(
+                    current,
+                    current.nextStepIndex(),
+                    current.completedSteps(),
+                    current.pausedSteps(),
+                    current.runningStep(),
+                    current.pauseReason(),
+                    hint
+                )
+                : runtime.requestReTranslation(current, hint);
     }
 
     private boolean retryAutoProgressIfStateChanged() {
@@ -669,10 +735,10 @@ public class SlotExecutionDriver implements ExecutionDriver {
         session = clearPause(session);
         advanceSteps(1);
         if (session != null
-            && session.paused()
-            && session.reTranslationHint() == null
-            && isFlowManagedStep(session.currentStep())
-            && planningStateDrifted()) {
+                && session.paused()
+                && session.reTranslationHint() == null
+                && isFlowManagedStep(session.currentStep())
+                && planningStateDrifted()) {
             session = requestReTranslation(session, planningDriftHint());
             clearPausedAutoRetryFingerprint();
             return true;
@@ -720,32 +786,71 @@ public class SlotExecutionDriver implements ExecutionDriver {
         int fingerprint = 1;
         fingerprint = 31 * fingerprint + (context.access().isOpen() ? 1 : 0);
         fingerprint = appendSlotFingerprint(fingerprint, context.access().state());
-        fingerprint = appendStackFingerprint(fingerprint, context.interaction() == null ? ItemStack.EMPTY : context.interaction().carried());
+        fingerprint = appendStackFingerprint(
+            fingerprint,
+            context.interaction() == null ? ItemStack.EMPTY : context.interaction().carried()
+        );
         if (step instanceof InteractionStep.OpenInteractionStep) {
             return fingerprint;
         }
         if (step instanceof InteractionStep.PrepareInputsStep) {
-            fingerprint = appendSlotFingerprint(fingerprint, orderedSlotReferences(context, SlotLayout.Role.input), context);
-            fingerprint = appendSlotFingerprint(fingerprint, orderedSlotReferences(context, SlotLayout.Role.inventory), context);
+            fingerprint = appendSlotFingerprint(
+                fingerprint,
+                orderedSlotReferences(context, SlotLayout.Role.input),
+                context
+            );
+            fingerprint = appendSlotFingerprint(
+                fingerprint,
+                orderedSlotReferences(context, SlotLayout.Role.inventory),
+                context
+            );
             return fingerprint;
         }
         if (step instanceof InteractionStep.ExecuteRecipeStep) {
-            fingerprint = appendSlotFingerprint(fingerprint, orderedSlotReferences(context, SlotLayout.Role.input), context);
-            fingerprint = appendSlotFingerprint(fingerprint, orderedSlotReferences(context, SlotLayout.Role.output), context);
-            fingerprint = appendSlotFingerprint(fingerprint, orderedSlotReferences(context, SlotLayout.Role.inventory), context);
+            fingerprint = appendSlotFingerprint(
+                fingerprint,
+                orderedSlotReferences(context, SlotLayout.Role.input),
+                context
+            );
+            fingerprint = appendSlotFingerprint(
+                fingerprint,
+                orderedSlotReferences(context, SlotLayout.Role.output),
+                context
+            );
+            fingerprint = appendSlotFingerprint(
+                fingerprint,
+                orderedSlotReferences(context, SlotLayout.Role.inventory),
+                context
+            );
             return fingerprint;
         }
         if (step instanceof InteractionStep.CollectOutputsStep) {
-            fingerprint = appendSlotFingerprint(fingerprint, orderedSlotReferences(context, SlotLayout.Role.output), context);
+            fingerprint = appendSlotFingerprint(
+                fingerprint,
+                orderedSlotReferences(context, SlotLayout.Role.output),
+                context
+            );
             return fingerprint;
         }
-        fingerprint = appendSlotFingerprint(fingerprint, orderedSlotReferences(context, SlotLayout.Role.input), context);
-        fingerprint = appendSlotFingerprint(fingerprint, orderedSlotReferences(context, SlotLayout.Role.output), context);
-        fingerprint = appendSlotFingerprint(fingerprint, orderedSlotReferences(context, SlotLayout.Role.inventory), context);
+        fingerprint = appendSlotFingerprint(
+            fingerprint,
+            orderedSlotReferences(context, SlotLayout.Role.input),
+            context
+        );
+        fingerprint = appendSlotFingerprint(
+            fingerprint,
+            orderedSlotReferences(context, SlotLayout.Role.output),
+            context
+        );
+        fingerprint = appendSlotFingerprint(
+            fingerprint,
+            orderedSlotReferences(context, SlotLayout.Role.inventory),
+            context
+        );
         return fingerprint;
     }
 
-    private int appendSlotFingerprint(int fingerprint, @Nullable SlotAccess.State state) {
+    private int appendSlotFingerprint(int fingerprint, SlotAccess.@Nullable State state) {
         if (state == null) {
             return fingerprint;
         }
@@ -811,7 +916,10 @@ public class SlotExecutionDriver implements ExecutionDriver {
         if (!validation.valid()) {
             PauseReason reason = validation.pauseReason();
             if (reason == null) {
-                reason = flow.pauseReason(context, new SlotFlow.Failure(step, SlotFlow.Failure.FailureKind.validation, null));
+                reason = flow.pauseReason(
+                    context,
+                    new SlotFlow.Failure(step, SlotFlow.Failure.FailureKind.validation, null)
+                );
             }
             return pause(current, step, reason);
         }
@@ -821,14 +929,22 @@ public class SlotExecutionDriver implements ExecutionDriver {
                 if (result.completed()) {
                     return completeStep(current, step);
                 }
-                return pause(current, step, resolvePauseReason(result, flow, context, step, SlotFlow.Failure.FailureKind.openBlocked));
+                return pause(
+                    current,
+                    step,
+                    resolvePauseReason(result, flow, context, step, SlotFlow.Failure.FailureKind.openBlocked)
+                );
             }
             case InteractionStep.PrepareInputsStep prepareInputsStep -> {
                 SlotFlow.StepResult result = flow.prepare(context, prepareInputsStep);
                 if (result.completed()) {
                     return completeStep(current, step);
                 }
-                return pause(current, step, resolvePauseReason(result, flow, context, step, SlotFlow.Failure.FailureKind.prepareBlocked));
+                return pause(
+                    current,
+                    step,
+                    resolvePauseReason(result, flow, context, step, SlotFlow.Failure.FailureKind.prepareBlocked)
+                );
             }
             case InteractionStep.ExecuteRecipeStep executeRecipeStep -> {
                 InteractionPerformResult result = flow.execute(context, executeRecipeStep);
@@ -836,8 +952,11 @@ public class SlotExecutionDriver implements ExecutionDriver {
                     case InteractionPerformResult.Performed performed -> completeStep(current, step);
                     case InteractionPerformResult.ReTranslationRequired reTranslationRequired ->
                         requestReTranslation(current, reTranslationRequired.hint());
-                    case InteractionPerformResult.ManualRequired manualRequired ->
-                        pause(current, step, new PauseReason(PauseReasons.awaitingPlayerAction, manualRequired.guidance()));
+                    case InteractionPerformResult.ManualRequired manualRequired -> pause(
+                        current,
+                        step,
+                        new PauseReason(PauseReasons.awaitingPlayerAction, manualRequired.guidance())
+                    );
                     case InteractionPerformResult.Failed failed ->
                         pause(current, step, new PauseReason(PauseReasons.noAccessibleProcessor, failed.guidance()));
                 };
@@ -847,10 +966,13 @@ public class SlotExecutionDriver implements ExecutionDriver {
                 if (result.completed()) {
                     return completeStep(current, step);
                 }
-                return pause(current, step, resolvePauseReason(result, flow, context, step, SlotFlow.Failure.FailureKind.collectBlocked));
+                return pause(
+                    current,
+                    step,
+                    resolvePauseReason(result, flow, context, step, SlotFlow.Failure.FailureKind.collectBlocked)
+                );
             }
-            default -> {
-            }
+            default -> {}
         }
         return runtime == null ? completeStep(current, step) : runtime.advance(current);
     }
@@ -865,8 +987,8 @@ public class SlotExecutionDriver implements ExecutionDriver {
         if (result.pauseReason() != null) {
             return result.pauseReason();
         }
-		return flow.pauseReason(context, new SlotFlow.Failure(step, kind, null));
-	}
+        return flow.pauseReason(context, new SlotFlow.Failure(step, kind, null));
+    }
 
     private ExecutionSession completeStep(ExecutionSession current, InteractionStep step) {
         clearPausedAutoRetryFingerprint();
@@ -887,13 +1009,13 @@ public class SlotExecutionDriver implements ExecutionDriver {
         return completed;
     }
 
-    private ExecutionSession pause(ExecutionSession current, InteractionStep step, PauseReason pauseReason) {
-		ExecutionSession paused = rebuildSession(
+    private ExecutionSession pause(ExecutionSession current, @Nullable InteractionStep step, PauseReason pauseReason) {
+        ExecutionSession paused = rebuildSession(
             current,
             current.nextStepIndex(),
             current.completedSteps(),
-				Sets.immutable.of(step),
-				step,
+            step == null ? Sets.immutable.<InteractionStep>empty() : Sets.immutable.of(step),
+            step,
             pauseReason,
             current.reTranslationHint()
         );
@@ -935,9 +1057,10 @@ public class SlotExecutionDriver implements ExecutionDriver {
 
     private static boolean isFlowManagedStep(@Nullable InteractionStep step) {
         return step instanceof InteractionStep.OpenInteractionStep
-            || step instanceof InteractionStep.PrepareInputsStep
-            || step instanceof InteractionStep.ExecuteRecipeStep
-            || step instanceof InteractionStep.CollectOutputsStep;
+                || step instanceof InteractionStep.PrepareInputsStep
+                || step instanceof InteractionStep.ExecuteRecipeStep
+                || step instanceof InteractionStep.CollectOutputsStep
+                || step instanceof InteractionStep.StoreOutputsStep;
     }
 
     private boolean planningStateDrifted() {
@@ -1026,11 +1149,7 @@ public class SlotExecutionDriver implements ExecutionDriver {
         return ExecutionOverlayContentHelper.normalizeStack(template);
     }
 
-    protected static long countMatchingStacks(
-        SlotFlow.Context context,
-        SlotLayout.Role role,
-        ItemStack template
-    ) {
+    protected static long countMatchingStacks(SlotFlow.Context context, SlotLayout.Role role, ItemStack template) {
         if (template == null || template.isEmpty()) {
             return 0L;
         }
@@ -1112,9 +1231,13 @@ public class SlotExecutionDriver implements ExecutionDriver {
         @Override
         public InteractionPerformResult execute(Context context, InteractionStep.ExecuteRecipeStep step) {
             if (!context.access().isOpen()) {
-                return new InteractionPerformResult.ManualRequired(awaitingInteraction().guidance());
+                return new InteractionPerformResult.ManualRequired(
+                    Objects.requireNonNull(awaitingInteraction().guidance())
+                );
             }
-            return new InteractionPerformResult.ManualRequired(manualExecuteRequired().guidance());
+            return new InteractionPerformResult.ManualRequired(
+                Objects.requireNonNull(manualExecuteRequired().guidance())
+            );
         }
 
         @Override
@@ -1140,15 +1263,18 @@ public class SlotExecutionDriver implements ExecutionDriver {
         }
 
         private static PauseReason manualPrepareRequired() {
-            return SlotExecutionDriver.pauseReason(PauseReasons.awaitingPlayerAction, manualPrepareSummaryKey, manualPrepareDetailKey);
+            return SlotExecutionDriver
+                    .pauseReason(PauseReasons.awaitingPlayerAction, manualPrepareSummaryKey, manualPrepareDetailKey);
         }
 
         private static PauseReason manualExecuteRequired() {
-            return SlotExecutionDriver.pauseReason(PauseReasons.awaitingPlayerAction, manualExecuteSummaryKey, manualExecuteDetailKey);
+            return SlotExecutionDriver
+                    .pauseReason(PauseReasons.awaitingPlayerAction, manualExecuteSummaryKey, manualExecuteDetailKey);
         }
 
         private static PauseReason manualCollectRequired() {
-            return SlotExecutionDriver.pauseReason(PauseReasons.awaitingPlayerAction, manualCollectSummaryKey, manualCollectDetailKey);
+            return SlotExecutionDriver
+                    .pauseReason(PauseReasons.awaitingPlayerAction, manualCollectSummaryKey, manualCollectDetailKey);
         }
     }
 
@@ -1225,7 +1351,13 @@ public class SlotExecutionDriver implements ExecutionDriver {
             SlotAccess.Interaction interaction = context.interaction();
             SlotFlow.PlacementResolver resolver = context.placementResolver();
             if (interaction == null) {
-                return StepResult.paused(SlotExecutionDriver.pauseReason(PauseReasons.awaitingPlayerAction, prepareNoInteractionSummaryKey, prepareNoInteractionDetailKey));
+                return StepResult.paused(
+                    SlotExecutionDriver.pauseReason(
+                        PauseReasons.awaitingPlayerAction,
+                        prepareNoInteractionSummaryKey,
+                        prepareNoInteractionDetailKey
+                    )
+                );
             }
             if (resolver == null) {
                 return StepResult.paused(processorPause(prepareNoResolverSummaryKey, prepareNoResolverDetailKey));
@@ -1246,36 +1378,54 @@ public class SlotExecutionDriver implements ExecutionDriver {
         @Override
         public InteractionPerformResult execute(Context context, InteractionStep.ExecuteRecipeStep step) {
             if (!context.access().isOpen()) {
-                return new InteractionPerformResult.ManualRequired(guidance(executeClosedSummaryKey, executeClosedDetailKey));
+                return new InteractionPerformResult.ManualRequired(
+                    guidance(executeClosedSummaryKey, executeClosedDetailKey)
+                );
             }
             SlotAccess.Interaction interaction = context.interaction();
             SlotFlow.PlacementResolver resolver = context.placementResolver();
             if (interaction == null) {
-                return new InteractionPerformResult.ManualRequired(guidance(executeNoInteractionSummaryKey, executeNoInteractionDetailKey));
+                return new InteractionPerformResult.ManualRequired(
+                    guidance(executeNoInteractionSummaryKey, executeNoInteractionDetailKey)
+                );
             }
             if (resolver == null) {
-                return new InteractionPerformResult.Failed(guidance(executeNoResolverSummaryKey, executeNoResolverDetailKey));
+                return new InteractionPerformResult.Failed(
+                    guidance(executeNoResolverSummaryKey, executeNoResolverDetailKey)
+                );
             }
             ImmutableList<SlotFlow.Placement> placements = resolver.resolve(context, step.recipe(), step.inputs());
             if (placements.isEmpty()) {
-                return new InteractionPerformResult.Failed(guidance(executeNoPlacementsSummaryKey, executeNoPlacementsDetailKey));
+                return new InteractionPerformResult.Failed(
+                    guidance(executeNoPlacementsSummaryKey, executeNoPlacementsDetailKey)
+                );
             }
             ImmutableList<SlotLayout.Reference> outputSlots = orderedSlotReferences(context, SlotLayout.Role.output);
             if (outputSlots.isEmpty()) {
-                return new InteractionPerformResult.Failed(guidance(executeMissingOutputSummaryKey, executeMissingOutputDetailKey));
+                return new InteractionPerformResult.Failed(
+                    guidance(executeMissingOutputSummaryKey, executeMissingOutputDetailKey)
+                );
             }
             if (!clearConflictingInputSlots(context, interaction, placements)) {
-                return new InteractionPerformResult.Failed(guidance(executeClickFailedSummaryKey, executeClickFailedDetailKey));
+                return new InteractionPerformResult.Failed(
+                    guidance(executeClickFailedSummaryKey, executeClickFailedDetailKey)
+                );
             }
             if (!placePlacements(context, interaction, placements)) {
-                return new InteractionPerformResult.Failed(guidance(executeClickFailedSummaryKey, executeClickFailedDetailKey));
+                return new InteractionPerformResult.Failed(
+                    guidance(executeClickFailedSummaryKey, executeClickFailedDetailKey)
+                );
             }
             SlotLayout.Reference outputSlot = findFirstOutputSlot(context, outputSlots);
             if (outputSlot == null) {
-                return new InteractionPerformResult.Failed(guidance(executeMissingOutputSummaryKey, executeMissingOutputDetailKey));
+                return new InteractionPerformResult.Failed(
+                    guidance(executeMissingOutputSummaryKey, executeMissingOutputDetailKey)
+                );
             }
             if (!interaction.click(new SlotAccess.Click(outputSlot, ClickType.QUICK_MOVE, 0))) {
-                return new InteractionPerformResult.Failed(guidance(executeClickFailedSummaryKey, executeClickFailedDetailKey));
+                return new InteractionPerformResult.Failed(
+                    guidance(executeClickFailedSummaryKey, executeClickFailedDetailKey)
+                );
             }
             return new InteractionPerformResult.Performed();
         }
@@ -1287,7 +1437,13 @@ public class SlotExecutionDriver implements ExecutionDriver {
             }
             SlotAccess.Interaction interaction = context.interaction();
             if (interaction == null) {
-                return StepResult.paused(SlotExecutionDriver.pauseReason(PauseReasons.awaitingPlayerAction, collectNoInteractionSummaryKey, collectNoInteractionDetailKey));
+                return StepResult.paused(
+                    SlotExecutionDriver.pauseReason(
+                        PauseReasons.awaitingPlayerAction,
+                        collectNoInteractionSummaryKey,
+                        collectNoInteractionDetailKey
+                    )
+                );
             }
             ImmutableList<SlotLayout.Reference> outputSlots = orderedSlotReferences(context, SlotLayout.Role.output);
             for (SlotLayout.Reference outputSlot : outputSlots) {
@@ -1298,17 +1454,20 @@ public class SlotExecutionDriver implements ExecutionDriver {
                         break;
                     }
                     if (safety++ > 256) {
-                        return StepResult.paused(processorPause(collectClickFailedSummaryKey, collectClickFailedDetailKey));
+                        return StepResult
+                                .paused(processorPause(collectClickFailedSummaryKey, collectClickFailedDetailKey));
                     }
                     if (!interaction.click(new SlotAccess.Click(outputSlot, ClickType.QUICK_MOVE, 0))) {
-                        return StepResult.paused(processorPause(collectClickFailedSummaryKey, collectClickFailedDetailKey));
+                        return StepResult
+                                .paused(processorPause(collectClickFailedSummaryKey, collectClickFailedDetailKey));
                     }
                     ItemStack after = context.access().stack(outputSlot);
                     if (after.isEmpty()) {
                         break;
                     }
                     if (!sameItem(before, after) || after.getCount() >= before.getCount()) {
-                        return StepResult.paused(processorPause(collectClickFailedSummaryKey, collectClickFailedDetailKey));
+                        return StepResult
+                                .paused(processorPause(collectClickFailedSummaryKey, collectClickFailedDetailKey));
                     }
                 }
             }
@@ -1341,7 +1500,13 @@ public class SlotExecutionDriver implements ExecutionDriver {
             ImmutableList<SlotFlow.Placement> placements
         ) {
             ImmutableList<SlotLayout.Reference> inputSlots = orderedSlotReferences(context, SlotLayout.Role.input);
-            ImmutableList<SlotLayout.Reference> inventorySlots = orderedSlotReferences(context, SlotLayout.Role.inventory);
+            ImmutableList<SlotLayout.Reference> inventorySlots = orderedSlotReferences(
+                context,
+                SlotLayout.Role.inventory
+            );
+            if (!returnCarriedToInventory(context, interaction, inventorySlots, null)) {
+                return false;
+            }
             LinkedHashMap<SlotLayout.Reference, SlotFlow.Placement> targetPlacements = new LinkedHashMap<>();
             for (SlotFlow.Placement placement : placements) {
                 targetPlacements.put(placement.slot(), placement);
@@ -1377,7 +1542,13 @@ public class SlotExecutionDriver implements ExecutionDriver {
             if (placements.isEmpty()) {
                 return false;
             }
-            ImmutableList<SlotLayout.Reference> inventorySlots = orderedSlotReferences(context, SlotLayout.Role.inventory);
+            ImmutableList<SlotLayout.Reference> inventorySlots = orderedSlotReferences(
+                context,
+                SlotLayout.Role.inventory
+            );
+            if (!returnCarriedToInventory(context, interaction, inventorySlots, null)) {
+                return false;
+            }
             for (SlotFlow.Placement placement : placements) {
                 if (!placePlacement(context, interaction, inventorySlots, placement)) {
                     return false;
@@ -1392,7 +1563,7 @@ public class SlotExecutionDriver implements ExecutionDriver {
             ImmutableList<SlotLayout.Reference> inventorySlots,
             SlotFlow.Placement placement
         ) {
-			ItemStack template = resolvePlacementTemplate(context, inventorySlots, placement);
+            ItemStack template = resolvePlacementTemplate(context, inventorySlots, placement);
             long targetAmount = Math.max(0L, placement.amount());
             if (template.isEmpty() || targetAmount == 0L) {
                 return false;
@@ -1441,7 +1612,7 @@ public class SlotExecutionDriver implements ExecutionDriver {
             return returnCarriedToInventory(context, interaction, inventorySlots, lastSource);
         }
 
-        private static @Nullable SlotLayout.Reference findInventorySlot(
+        private static SlotLayout.@Nullable Reference findInventorySlot(
             Context context,
             ImmutableList<SlotLayout.Reference> inventorySlots,
             SlotFlow.Placement placement,
@@ -1481,7 +1652,8 @@ public class SlotExecutionDriver implements ExecutionDriver {
             if (!current.isEmpty() && placement.matches(current)) {
                 ItemStack currentTemplate = normalizedTemplate(current);
                 if (!currentTemplate.isEmpty()
-                    && availableExactAmount(context, inventorySlots, placement.slot(), currentTemplate) >= placement.amount()) {
+                        && availableExactAmount(context, inventorySlots, placement.slot(), currentTemplate)
+                                >= placement.amount()) {
                     return currentTemplate;
                 }
             }
@@ -1511,7 +1683,7 @@ public class SlotExecutionDriver implements ExecutionDriver {
             return total;
         }
 
-        private static @Nullable SlotLayout.Reference findFirstOutputSlot(
+        private static SlotLayout.@Nullable Reference findFirstOutputSlot(
             Context context,
             ImmutableList<SlotLayout.Reference> outputSlots
         ) {
@@ -1528,7 +1700,7 @@ public class SlotExecutionDriver implements ExecutionDriver {
             Context context,
             SlotAccess.Interaction interaction,
             ImmutableList<SlotLayout.Reference> inventorySlots,
-            @Nullable SlotLayout.Reference preferred
+            SlotLayout.@Nullable Reference preferred
         ) {
             returnCarriedToInventory(context, interaction, inventorySlots, preferred);
             return false;
@@ -1538,7 +1710,7 @@ public class SlotExecutionDriver implements ExecutionDriver {
             Context context,
             SlotAccess.Interaction interaction,
             ImmutableList<SlotLayout.Reference> inventorySlots,
-            @Nullable SlotLayout.Reference preferred
+            SlotLayout.@Nullable Reference preferred
         ) {
             ItemStack carried = interaction.carried();
             if (carried.isEmpty()) {
@@ -1633,10 +1805,9 @@ public class SlotExecutionDriver implements ExecutionDriver {
         return out;
     }
 
-    private record InteractionPlanningView(
-        InteractionApi delegate,
-        ExecutionPlanningSnapshot planningSnapshot
-    ) implements InteractionPlanningApi {
+    private record InteractionPlanningView(InteractionApi delegate, ExecutionPlanningSnapshot planningSnapshot)
+            implements
+                InteractionPlanningApi {
 
         @Override
         public InteractionProbeResult probe(RecipeEntry<?> recipe) {
@@ -1664,50 +1835,44 @@ public class SlotExecutionDriver implements ExecutionDriver {
         }
     }
 
-	private record SimpleInteractionApi(
-			Namespace interactionId, boolean performerAvailable,
-			ExecutionGuidance guidance, ExecutionPlanningSnapshot planningSnapshot
-	) implements InteractionPlanningApi {
+    private record SimpleInteractionApi(
+        Namespace interactionId,
+        boolean performerAvailable,
+        ExecutionGuidance guidance,
+        ExecutionPlanningSnapshot planningSnapshot
+    ) implements InteractionPlanningApi {
 
-		private SimpleInteractionApi(
-				Namespace interactionId,
-				boolean performerAvailable,
-				ExecutionGuidance guidance
-		) {
-			this(interactionId, performerAvailable, guidance, ExecutionPlanningSnapshot.empty());
-		}
+        private SimpleInteractionApi(Namespace interactionId, boolean performerAvailable, ExecutionGuidance guidance) {
+            this(interactionId, performerAvailable, guidance, ExecutionPlanningSnapshot.empty());
+        }
 
-		@Override
-		public InteractionProbeResult probe(RecipeEntry<?> recipe) {
-			return new InteractionProbeResult.Supported(
-					interactionId,
-					performerAvailable,
-					false
-			);
-		}
+        @Override
+        public InteractionProbeResult probe(RecipeEntry<?> recipe) {
+            return new InteractionProbeResult.Supported(interactionId, performerAvailable, false);
+        }
 
-		@Override
-		public InteractionGuideResult guide(RecipeEntry<?> recipe) {
-			return new InteractionGuideResult(guidance);
-		}
+        @Override
+        public InteractionGuideResult guide(RecipeEntry<?> recipe) {
+            return new InteractionGuideResult(guidance);
+        }
 
-		@Override
-		public InteractionPerformResult perform(InteractionContext context) {
-			return performerAvailable
-					? new InteractionPerformResult.Performed()
-					: new InteractionPerformResult.ManualRequired(guidance);
-		}
+        @Override
+        public InteractionPerformResult perform(InteractionContext context) {
+            return performerAvailable
+                    ? new InteractionPerformResult.Performed()
+                    : new InteractionPerformResult.ManualRequired(guidance);
+        }
 
         @Override
         public ExecutionPlanningSnapshot planningSnapshot() {
             return planningSnapshot;
         }
-	}
+    }
 
     private static final class ContentApiHolder {
         private static boolean unavailable() {
             try {
-                dev.vfyjxf.cirrus.api.content.ContentApi.instance();
+                ContentApi.instance();
                 return false;
             } catch (IllegalStateException ignored) {
                 return true;
@@ -1715,5 +1880,3 @@ public class SlotExecutionDriver implements ExecutionDriver {
         }
     }
 }
-
-

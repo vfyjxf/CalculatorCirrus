@@ -42,14 +42,17 @@ public interface StorageSource {
         if (!canProvide() || !accessibility().accessible()) {
             return false;
         }
-        return contents().anySatisfy(content -> content instanceof ContentResource candidate && candidate.matchesResource(resource));
+        return contents().anySatisfy(
+            content -> content instanceof ContentResource candidate && candidate.matchesResource(resource)
+        );
     }
 
     default boolean canProvide(StorageTransferRequest request) {
         if (!canProvide() || !accessibility().accessible()) {
             return false;
         }
-        return contents().anySatisfy(content -> content instanceof ContentResource candidate && request.matches(candidate));
+        return contents()
+                .anySatisfy(content -> content instanceof ContentResource candidate && request.matches(candidate));
     }
 
     default boolean canReceive(ContentResource resource) {

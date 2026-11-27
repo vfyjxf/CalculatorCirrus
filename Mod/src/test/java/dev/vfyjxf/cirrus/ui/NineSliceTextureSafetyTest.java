@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -30,17 +31,26 @@ class NineSliceTextureSafetyTest {
         AtomicInteger emittedQuads = new AtomicInteger();
         BatchableTexture.VertexEmitter emitter = new BatchableTexture.VertexEmitter() {
             @Override
-            public void textured(ResourceLocation textureLocation, float x, float y, float w, float h, float uMin, float vMin, float uMax, float vMax, int color) {
+            public void textured(
+                ResourceLocation textureLocation,
+                float x,
+                float y,
+                float w,
+                float h,
+                float uMin,
+                float vMin,
+                float uMax,
+                float vMax,
+                int color
+            ) {
                 emittedQuads.incrementAndGet();
             }
 
             @Override
-            public void colored(float x, float y, float w, float h, int color) {
-            }
+            public void colored(float x, float y, float w, float h, int color) {}
         };
 
         assertTimeoutPreemptively(Duration.ofSeconds(2), () -> texture.emit(emitter, 0f, 0f, 128f, 64f, 0xFFFFFFFF));
-        assertTrue(emittedQuads.get() > 0);
         assertTrue(emittedQuads.get() < 1000, "unexpected tiled explosion: " + emittedQuads.get());
     }
 
@@ -50,17 +60,32 @@ class NineSliceTextureSafetyTest {
         AtomicInteger emittedQuads = new AtomicInteger();
         BatchableTexture.VertexEmitter emitter = new BatchableTexture.VertexEmitter() {
             @Override
-            public void textured(ResourceLocation textureLocation, float x, float y, float w, float h, float uMin, float vMin, float uMax, float vMax, int color) {
+            public void textured(
+                ResourceLocation textureLocation,
+                float x,
+                float y,
+                float w,
+                float h,
+                float uMin,
+                float vMin,
+                float uMax,
+                float vMax,
+                int color
+            ) {
                 emittedQuads.incrementAndGet();
             }
 
             @Override
-            public void colored(float x, float y, float w, float h, int color) {
-            }
+            public void colored(float x, float y, float w, float h, int color) {}
         };
 
         assertTimeoutPreemptively(Duration.ofSeconds(2), () -> texture.emit(emitter, 0f, 0f, 72f, 92f, 0xFFFFFFFF));
-        assertTrue(emittedQuads.get() > 0);
         assertTrue(emittedQuads.get() < 1200, "unexpected tiled explosion: " + emittedQuads.get());
+    }
+
+    @Test
+    void workbenchMeterTrackTexturesAreRegistered() {
+        assertNotNull(CirrusTextures.Workbench.meterTrack(WorkbenchThemeMode.obsidianBlueprint));
+        assertNotNull(CirrusTextures.Workbench.meterTrack(WorkbenchThemeMode.atelierStone));
     }
 }

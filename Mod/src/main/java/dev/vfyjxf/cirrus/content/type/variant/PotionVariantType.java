@@ -15,14 +15,14 @@ public class PotionVariantType extends BasicVariantType<Item, ItemStack> {
     public static final PotionVariantType instance = new PotionVariantType();
 
     private PotionVariantType() {
-        super(Namespace.ofMc("potion"), CirrusTypes.Contents.ITEM_STACK);
+        super(Namespace.ofMc("potion"), CirrusTypes.Contents.itemStack);
     }
 
     @Override
     public ItemStack copyWithIdentity(ItemStack stack) {
         if (stack.getItem() == Items.AIR) return ItemStack.EMPTY;
         var potion = stack.getOrDefault(DataComponents.POTION_CONTENTS, PotionContents.EMPTY);
-        var ret = new ItemStack(Items.POTION, stack.getCount());
+        var ret = new ItemStack(stack.getItem(), stack.getCount());
         ret.set(DataComponents.POTION_CONTENTS, potion);
         return ret;
     }
@@ -30,7 +30,7 @@ public class PotionVariantType extends BasicVariantType<Item, ItemStack> {
     @Override
     public boolean matchesVariantIdentity(ItemStack stack1, ItemStack stack2) {
         return stack1.getOrDefault(DataComponents.POTION_CONTENTS, PotionContents.EMPTY)
-                     .equals(stack2.getOrDefault(DataComponents.POTION_CONTENTS, PotionContents.EMPTY));
+                .equals(stack2.getOrDefault(DataComponents.POTION_CONTENTS, PotionContents.EMPTY));
     }
 
     @Override

@@ -13,7 +13,7 @@ import net.minecraft.core.component.DataComponentType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import org.jetbrains.annotations.UnknownNullability;
+import org.jspecify.annotations.Nullable;
 
 public final class ItemStackType extends BasicStackType<Item, ItemStack> {
 
@@ -61,7 +61,7 @@ public final class ItemStackType extends BasicStackType<Item, ItemStack> {
     }
 
     @Override
-    public DataComponentMap canonicalComponents(ItemStack stack) {
+    public @Nullable DataComponentMap canonicalComponents(ItemStack stack) {
         if (stack.getComponentsPatch().isEmpty()) {
             // Patch-empty stacks all share the per-Item prototype singleton: same reference for
             // free, no hashing and no pooling.
@@ -76,7 +76,7 @@ public final class ItemStackType extends BasicStackType<Item, ItemStack> {
     }
 
     @Override
-    public <C> @UnknownNullability C getComponent(ItemStack stack, DataComponentType<? extends C> componentType) {
+    public <C> @Nullable C getComponent(ItemStack stack, DataComponentType<? extends C> componentType) {
         return stack.get(componentType);
     }
 
@@ -154,12 +154,18 @@ public final class ItemStackType extends BasicStackType<Item, ItemStack> {
     public long mergeDiff(ItemStack stack1, ItemStack stack2, MatchStrategy strategy) {
         if (stack1 == stack2) return 0;
         if (!matchesIdentity(stack1, stack2)) return 0;
-        if (strategy.withComponent() && !strategy.testComponents(stack1.getComponents(), stack2.getComponents())) return 0;
+        if (strategy.withComponent() && !strategy.testComponents(stack1.getComponents(), stack2.getComponents()))
+            return 0;
         return stack1.getCount() - stack2.getCount();
     }
 
     @Override
-    public boolean matches(ItemStack stack1, ItemStack stack2, VariantType<Item, ItemStack> variantType, MatchStrategy strategy) {
+    public boolean matches(
+        ItemStack stack1,
+        ItemStack stack2,
+        VariantType<Item, ItemStack> variantType,
+        MatchStrategy strategy
+    ) {
         if (stack1 == stack2) return true;
         if (strategy.withIdentity() && !matchesIdentity(stack1, stack2, variantType)) return false;
         if (strategy.withAmount() && stack1.getCount() != stack2.getCount()) return false;

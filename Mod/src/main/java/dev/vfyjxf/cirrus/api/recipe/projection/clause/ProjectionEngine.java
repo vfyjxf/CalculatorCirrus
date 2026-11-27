@@ -37,7 +37,7 @@ import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -68,14 +68,20 @@ public final class ProjectionEngine {
     public void addProjectionTransformer(ClauseType type, ProjectionTransformer<?> transformer) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(transformer, "transformer");
-        Checks.checkArgument(type.plugin().equals(transformer.plugin()), "Projection transformer plugin must match clause type plugin");
+        Checks.checkArgument(
+            type.plugin().equals(transformer.plugin()),
+            "Projection transformer plugin must match clause type plugin"
+        );
         projectionTransformers.put(type.id(), transformer);
     }
 
     public void addContentTransformer(ClauseType type, ContentTransformer<?, ?> transformer) {
         Checks.checkNotNull(type, "type");
         Checks.checkNotNull(transformer, "transformer");
-        Checks.checkArgument(type.plugin().equals(transformer.plugin()), "Content transformer plugin must match clause type plugin");
+        Checks.checkArgument(
+            type.plugin().equals(transformer.plugin()),
+            "Content transformer plugin must match clause type plugin"
+        );
         contentTransformers.put(type.id(), transformer);
     }
 
@@ -119,18 +125,16 @@ public final class ProjectionEngine {
         EngineDecrementOps decrement = new EngineDecrementOps(actions);
 
         for (var clause : workingProjection.clauses().allClauses()) {
-            ProjectionTransformer<RecipeClause> projectionTransformer = (ProjectionTransformer<RecipeClause>) projectionTransformers.get(clause.id());
+            ProjectionTransformer<RecipeClause> projectionTransformer = (ProjectionTransformer<RecipeClause>) projectionTransformers
+                    .get(clause.id());
             if (projectionTransformer == null) continue;
             ProjectionPlugin plugin = clause.plugin();
             if (!plugin.equals(projectionTransformer.plugin())) continue;
             if (!plugin.enabled(context)) continue;
             if (!projectionTransformer.selectProjection(context, workingProjection)) continue;
 
-            ProjectionEffectSource source = ProjectionEffectSource.clause(
-                plugin,
-                clause.id(),
-                ProjectionEffectPhase.projectionTransformer
-            );
+            ProjectionEffectSource source = ProjectionEffectSource
+                    .clause(plugin, clause.id(), ProjectionEffectPhase.projectionTransformer);
             increment.bindSource(source);
             decrement.bindSource(source);
             projectionTransformer.project(context, workingProjection, clause, increment, decrement);
@@ -151,20 +155,26 @@ public final class ProjectionEngine {
                 if (!plugin.enabled(context)) continue;
                 if (!contentTransformer.select(context, workingProjection, input.content(), true)) continue;
 
-                ProjectionEffectSource source = ProjectionEffectSource.clause(
-                    plugin,
-                    clause.id(),
-                    ProjectionEffectPhase.contentTransformer
-                );
+                ProjectionEffectSource source = ProjectionEffectSource
+                        .clause(plugin, clause.id(), ProjectionEffectPhase.contentTransformer);
                 increment.bindSource(source);
                 decrement.bindSource(source);
                 InputContent before = snapshotInput(input.content());
 
-                ActionResult action = applyTransformer(contentTransformer, context, workingProjection.recipe(), input.content(), clause, true, increment, decrement);
+                ActionResult action = applyTransformer(
+                    contentTransformer,
+                    context,
+                    workingProjection.recipe(),
+                    input.content(),
+                    clause,
+                    true,
+                    increment,
+                    decrement
+                );
                 if (actions.matchInputReplacement(input.content()) != null) {
                     continue;
                 }
-                if (action == ActionResult.REMOVE) {
+                if (action == ActionResult.remove) {
                     decrement.rejectInput(input.content());
                 } else {
                     appendInputMutationEffect(effects, source, inputIndex, before, input.content());
@@ -183,20 +193,26 @@ public final class ProjectionEngine {
                 if (!plugin.enabled(context)) continue;
                 if (!contentTransformer.select(context, workingProjection, output.content(), false)) continue;
 
-                ProjectionEffectSource source = ProjectionEffectSource.clause(
-                    plugin,
-                    clause.id(),
-                    ProjectionEffectPhase.contentTransformer
-                );
+                ProjectionEffectSource source = ProjectionEffectSource
+                        .clause(plugin, clause.id(), ProjectionEffectPhase.contentTransformer);
                 increment.bindSource(source);
                 decrement.bindSource(source);
                 OutputContent before = snapshotOutput(output.content());
 
-                ActionResult action = applyTransformer(contentTransformer, context, workingProjection.recipe(), output.content(), clause, false, increment, decrement);
+                ActionResult action = applyTransformer(
+                    contentTransformer,
+                    context,
+                    workingProjection.recipe(),
+                    output.content(),
+                    clause,
+                    false,
+                    increment,
+                    decrement
+                );
                 if (actions.matchOutputReplacement(output.content()) != null) {
                     continue;
                 }
-                if (action == ActionResult.REMOVE) {
+                if (action == ActionResult.remove) {
                     decrement.rejectOutput(output.content());
                 } else {
                     appendOutputMutationEffect(effects, source, outputIndex, before, output.content());
@@ -255,10 +271,26 @@ public final class ProjectionEngine {
             effect.apply(context, resolvedInputs, resolvedOutputs);
 
             if (effect.scope().allowInput()) {
-                appendResolveInputDiff(effects, policyClause, effect, effectOrder, declaredIndex, beforeInputs, resolvedInputs);
+                appendResolveInputDiff(
+                    effects,
+                    policyClause,
+                    effect,
+                    effectOrder,
+                    declaredIndex,
+                    beforeInputs,
+                    resolvedInputs
+                );
             }
             if (effect.scope().allowOutput()) {
-                appendResolveOutputDiff(effects, policyClause, effect, effectOrder, declaredIndex, beforeOutputs, resolvedOutputs);
+                appendResolveOutputDiff(
+                    effects,
+                    policyClause,
+                    effect,
+                    effectOrder,
+                    declaredIndex,
+                    beforeOutputs,
+                    resolvedOutputs
+                );
             }
         }
 
@@ -285,7 +317,8 @@ public final class ProjectionEngine {
     private static <T extends RecipeContent> MutableList<T> copyContents(Iterable<T> contents) {
         MutableList<T> copied = MutableLists.empty();
         for (T content : contents) {
-            @SuppressWarnings("unchecked") T snapshot = (T) snapshotContent(content);
+            @SuppressWarnings("unchecked")
+            T snapshot = (T) snapshotContent(content);
             copied.add(snapshot);
         }
         return copied;
@@ -300,20 +333,17 @@ public final class ProjectionEngine {
         MutableList<InputContent> before,
         MutableList<InputContent> after
     ) {
-        ProjectionEffectSource source = ProjectionEffectSource.resolveEffect(
-            policyClause.plugin(),
-            policyClause.id(),
-            effect.id(),
-            effectOrder,
-            declaredIndex
-        );
+        ProjectionEffectSource source = ProjectionEffectSource
+                .resolveEffect(policyClause.plugin(), policyClause.id(), effect.id(), effectOrder, declaredIndex);
         int sameCount = Math.min(before.size(), after.size());
 
         for (int index = 0; index < sameCount; index++) {
             InputContent beforeContent = before.get(index);
             InputContent afterContent = after.get(index);
             if (sameContent(beforeContent, afterContent)) continue;
-            effects.add(new InputReplaced(source, index, beforeContent, snapshotInput(afterContent), ReplaceMode.adjusted));
+            effects.add(
+                new InputReplaced(source, index, beforeContent, snapshotInput(afterContent), ReplaceMode.adjusted)
+            );
         }
 
         if (before.size() > after.size()) {
@@ -336,20 +366,17 @@ public final class ProjectionEngine {
         MutableList<OutputContent> before,
         MutableList<OutputContent> after
     ) {
-        ProjectionEffectSource source = ProjectionEffectSource.resolveEffect(
-            policyClause.plugin(),
-            policyClause.id(),
-            effect.id(),
-            effectOrder,
-            declaredIndex
-        );
+        ProjectionEffectSource source = ProjectionEffectSource
+                .resolveEffect(policyClause.plugin(), policyClause.id(), effect.id(), effectOrder, declaredIndex);
         int sameCount = Math.min(before.size(), after.size());
 
         for (int index = 0; index < sameCount; index++) {
             OutputContent beforeContent = before.get(index);
             OutputContent afterContent = after.get(index);
             if (sameContent(beforeContent, afterContent)) continue;
-            effects.add(new OutputReplaced(source, index, beforeContent, snapshotOutput(afterContent), ReplaceMode.adjusted));
+            effects.add(
+                new OutputReplaced(source, index, beforeContent, snapshotOutput(afterContent), ReplaceMode.adjusted)
+            );
         }
 
         if (before.size() > after.size()) {
@@ -400,15 +427,24 @@ public final class ProjectionEngine {
             InputReplacement replacement = actions.matchInputReplacement(before);
             if (replacement != null) {
                 InputContent after = snapshotInput(replacement.after());
-                ProjectionSchema schema = applyInputSchemaWrites(input.schema(), before, replacement.after(), originalIndex, actions, effects);
-                transformed.add(new ClausedContent<>(after, schema, input.clauses().merge()));
-                effects.add(new InputReplaced(
-                    replacement.source(),
+                ProjectionSchema schema = applyInputSchemaWrites(
+                    input.schema(),
+                    before,
+                    replacement.after(),
                     originalIndex,
-                    snapshotInput(before),
-                    after,
-                    replacement.mode()
-                ));
+                    actions,
+                    effects
+                );
+                transformed.add(new ClausedContent<>(after, schema, input.clauses().merge()));
+                effects.add(
+                    new InputReplaced(
+                        replacement.source(),
+                        originalIndex,
+                        snapshotInput(before),
+                        after,
+                        replacement.mode()
+                    )
+                );
                 continue;
             }
 
@@ -418,14 +454,28 @@ public final class ProjectionEngine {
                 continue;
             }
 
-            ProjectionSchema schema = applyInputSchemaWrites(input.schema(), before, before, originalIndex, actions, effects);
+            ProjectionSchema schema = applyInputSchemaWrites(
+                input.schema(),
+                before,
+                before,
+                originalIndex,
+                actions,
+                effects
+            );
             transformed.add(new ClausedContent<>(snapshotInput(before), schema, input.clauses().merge()));
         }
 
         for (InputInjection injection : actions.inputInjections) {
             int index = transformed.size();
             InputContent after = snapshotInput(injection.content());
-            ProjectionSchema schema = applyInputSchemaWrites(ProjectionSchema.empty(), injection.content(), injection.content(), index, actions, effects);
+            ProjectionSchema schema = applyInputSchemaWrites(
+                ProjectionSchema.empty(),
+                injection.content(),
+                injection.content(),
+                index,
+                actions,
+                effects
+            );
             transformed.add(new ClausedContent<>(after, schema, ClauseSet.create()));
             effects.add(new InputInjected(injection.source(), index, after));
         }
@@ -445,15 +495,24 @@ public final class ProjectionEngine {
             OutputReplacement replacement = actions.matchOutputReplacement(before);
             if (replacement != null) {
                 OutputContent after = snapshotOutput(replacement.after());
-                ProjectionSchema schema = applyOutputSchemaWrites(output.schema(), before, replacement.after(), originalIndex, actions, effects);
-                transformed.add(new ClausedContent<>(after, schema, output.clauses().merge()));
-                effects.add(new OutputReplaced(
-                    replacement.source(),
+                ProjectionSchema schema = applyOutputSchemaWrites(
+                    output.schema(),
+                    before,
+                    replacement.after(),
                     originalIndex,
-                    snapshotOutput(before),
-                    after,
-                    replacement.mode()
-                ));
+                    actions,
+                    effects
+                );
+                transformed.add(new ClausedContent<>(after, schema, output.clauses().merge()));
+                effects.add(
+                    new OutputReplaced(
+                        replacement.source(),
+                        originalIndex,
+                        snapshotOutput(before),
+                        after,
+                        replacement.mode()
+                    )
+                );
                 continue;
             }
 
@@ -463,14 +522,28 @@ public final class ProjectionEngine {
                 continue;
             }
 
-            ProjectionSchema schema = applyOutputSchemaWrites(output.schema(), before, before, originalIndex, actions, effects);
+            ProjectionSchema schema = applyOutputSchemaWrites(
+                output.schema(),
+                before,
+                before,
+                originalIndex,
+                actions,
+                effects
+            );
             transformed.add(new ClausedContent<>(snapshotOutput(before), schema, output.clauses().merge()));
         }
 
         for (OutputInjection injection : actions.outputInjections) {
             int index = transformed.size();
             OutputContent after = snapshotOutput(injection.content());
-            ProjectionSchema schema = applyOutputSchemaWrites(ProjectionSchema.empty(), injection.content(), injection.content(), index, actions, effects);
+            ProjectionSchema schema = applyOutputSchemaWrites(
+                ProjectionSchema.empty(),
+                injection.content(),
+                injection.content(),
+                index,
+                actions,
+                effects
+            );
             transformed.add(new ClausedContent<>(after, schema, ClauseSet.create()));
             effects.add(new OutputInjected(injection.source(), index, after));
         }
@@ -574,11 +647,11 @@ public final class ProjectionEngine {
     }
 
     private static boolean sameContent(RecipeContent before, RecipeContent after) {
-        return before == after ||
-               before.getClass() == after.getClass() &&
-               before.amount() == after.amount() &&
-               Float.compare(before.chance(), after.chance()) == 0 &&
-               before.toString().equals(after.toString());
+        return before == after
+                || before.getClass() == after.getClass()
+                        && before.amount() == after.amount()
+                        && Float.compare(before.chance(), after.chance()) == 0
+                        && before.toString().equals(after.toString());
     }
 
     private static InputContent snapshotInput(InputContent content) {
@@ -612,19 +685,11 @@ public final class ProjectionEngine {
     }
 
     private static ClausedContent<InputContent> copyInput(ClausedContent<InputContent> input) {
-        return new ClausedContent<>(
-            snapshotInput(input.content()),
-            input.schema(),
-            input.clauses().merge()
-        );
+        return new ClausedContent<>(snapshotInput(input.content()), input.schema(), input.clauses().merge());
     }
 
     private static ClausedContent<OutputContent> copyOutput(ClausedContent<OutputContent> output) {
-        return new ClausedContent<>(
-            snapshotOutput(output.content()),
-            output.schema(),
-            output.clauses().merge()
-        );
+        return new ClausedContent<>(snapshotOutput(output.content()), output.schema(), output.clauses().merge());
     }
 
     private static ProjectedRecipe projectedRecipe(RecipeProjection projection) {
@@ -664,7 +729,13 @@ public final class ProjectionEngine {
             outputs.add(new ClausedContent<>(snapshotOutput(output), schema, clauses));
         }
 
-        return new RecipeProjection(base.recipe(), inputs.toImmutable(), outputs.toImmutable(), base.schema(), base.clauses().merge());
+        return new RecipeProjection(
+            base.recipe(),
+            inputs.toImmutable(),
+            outputs.toImmutable(),
+            base.schema(),
+            base.clauses().merge()
+        );
     }
 
     private void detectRegisteredClauses(RecipeApi api, Iterable<? extends RecipeClause> clauses) {
@@ -774,7 +845,11 @@ public final class ProjectionEngine {
         }
 
         @Override
-        public ContentTransformer.IncrementOps replaceOutput(OutputContent before, OutputContent after, ReplaceMode mode) {
+        public ContentTransformer.IncrementOps replaceOutput(
+            OutputContent before,
+            OutputContent after,
+            ReplaceMode mode
+        ) {
             Checks.checkNotNull(before, "before");
             Checks.checkNotNull(after, "after");
             Checks.checkNotNull(mode, "mode");
@@ -789,14 +864,22 @@ public final class ProjectionEngine {
         }
 
         @Override
-        public <T> ContentTransformer.IncrementOps putInputSchema(InputContent owner, ProjectionSchemaKey<T> key, T value) {
+        public <T> ContentTransformer.IncrementOps putInputSchema(
+            InputContent owner,
+            ProjectionSchemaKey<T> key,
+            T value
+        ) {
             Checks.checkNotNull(owner, "owner");
             actions.inputSchemaWrites.add(new InputSchemaWrite<>(owner, key, value, currentSource));
             return this;
         }
 
         @Override
-        public <T> ContentTransformer.IncrementOps putOutputSchema(OutputContent owner, ProjectionSchemaKey<T> key, T value) {
+        public <T> ContentTransformer.IncrementOps putOutputSchema(
+            OutputContent owner,
+            ProjectionSchemaKey<T> key,
+            T value
+        ) {
             Checks.checkNotNull(owner, "owner");
             actions.outputSchemaWrites.add(new OutputSchemaWrite<>(owner, key, value, currentSource));
             return this;
@@ -854,7 +937,11 @@ public final class ProjectionEngine {
         }
 
         @Override
-        public ContentTransformer.DecrementOps replaceOutput(OutputContent before, OutputContent after, ReplaceMode mode) {
+        public ContentTransformer.DecrementOps replaceOutput(
+            OutputContent before,
+            OutputContent after,
+            ReplaceMode mode
+        ) {
             Checks.checkNotNull(before, "before");
             Checks.checkNotNull(after, "after");
             Checks.checkNotNull(mode, "mode");
@@ -869,37 +956,49 @@ public final class ProjectionEngine {
         }
 
         @Override
-        public <T> ContentTransformer.DecrementOps putInputSchema(InputContent owner, ProjectionSchemaKey<T> key, T value) {
+        public <T> ContentTransformer.DecrementOps putInputSchema(
+            InputContent owner,
+            ProjectionSchemaKey<T> key,
+            T value
+        ) {
             Checks.checkNotNull(owner, "owner");
             actions.inputSchemaWrites.add(new InputSchemaWrite<>(owner, key, value, currentSource));
             return this;
         }
 
         @Override
-        public <T> ContentTransformer.DecrementOps putOutputSchema(OutputContent owner, ProjectionSchemaKey<T> key, T value) {
+        public <T> ContentTransformer.DecrementOps putOutputSchema(
+            OutputContent owner,
+            ProjectionSchemaKey<T> key,
+            T value
+        ) {
             Checks.checkNotNull(owner, "owner");
             actions.outputSchemaWrites.add(new OutputSchemaWrite<>(owner, key, value, currentSource));
             return this;
         }
     }
 
-    private record InputInjection(InputContent content, ProjectionEffectSource source) {
-    }
+    private record InputInjection(InputContent content, ProjectionEffectSource source) {}
 
-    private record OutputInjection(OutputContent content, ProjectionEffectSource source) {
-    }
+    private record OutputInjection(OutputContent content, ProjectionEffectSource source) {}
 
-    private record InputReplacement(InputContent before, InputContent after, ReplaceMode mode, ProjectionEffectSource source) {
-    }
+    private record InputReplacement(
+        InputContent before,
+        InputContent after,
+        ReplaceMode mode,
+        ProjectionEffectSource source
+    ) {}
 
-    private record OutputReplacement(OutputContent before, OutputContent after, ReplaceMode mode, ProjectionEffectSource source) {
-    }
+    private record OutputReplacement(
+        OutputContent before,
+        OutputContent after,
+        ReplaceMode mode,
+        ProjectionEffectSource source
+    ) {}
 
-    private record InputRule(Predicate<InputContent> predicate, ProjectionEffectSource source) {
-    }
+    private record InputRule(Predicate<InputContent> predicate, ProjectionEffectSource source) {}
 
-    private record OutputRule(Predicate<OutputContent> predicate, ProjectionEffectSource source) {
-    }
+    private record OutputRule(Predicate<OutputContent> predicate, ProjectionEffectSource source) {}
 
     private record ProjectionSchemaWrite<T>(ProjectionSchemaKey<T> key, T value, ProjectionEffectSource source) {
         private ProjectionSchemaWrite {
@@ -910,7 +1009,12 @@ public final class ProjectionEngine {
         }
     }
 
-    private record InputSchemaWrite<T>(InputContent owner, ProjectionSchemaKey<T> key, T value, ProjectionEffectSource source) {
+    private record InputSchemaWrite<T>(
+        InputContent owner,
+        ProjectionSchemaKey<T> key,
+        T value,
+        ProjectionEffectSource source
+    ) {
         private InputSchemaWrite {
             Checks.checkNotNull(owner, "owner");
             Checks.checkNotNull(key, "key");
@@ -920,7 +1024,12 @@ public final class ProjectionEngine {
         }
     }
 
-    private record OutputSchemaWrite<T>(OutputContent owner, ProjectionSchemaKey<T> key, T value, ProjectionEffectSource source) {
+    private record OutputSchemaWrite<T>(
+        OutputContent owner,
+        ProjectionSchemaKey<T> key,
+        T value,
+        ProjectionEffectSource source
+    ) {
         private OutputSchemaWrite {
             Checks.checkNotNull(owner, "owner");
             Checks.checkNotNull(key, "key");

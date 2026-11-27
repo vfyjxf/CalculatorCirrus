@@ -4,15 +4,12 @@ import dev.vfyjxf.cirrus.planning.core.lang.Fnv1a64;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
 public final class ChoiceTable {
 
-    public record BatchSplit(int localRecipe, long batches) {
-    }
+    public record BatchSplit(int localRecipe, long batches) {}
 
     public final Potentials.SourceChoice[] sourceByRes;
     public final int[] slotRepOverride;
@@ -29,11 +26,11 @@ public final class ChoiceTable {
     }
 
     private ChoiceTable(
-            Potentials.SourceChoice[] sourceByRes,
-            int[] slotRepOverride,
-            TreeMap<Integer, List<BatchSplit>> batchMix,
-            TreeMap<Integer, String> machineOverride,
-            TreeSet<Integer> automatedRecipes
+        Potentials.SourceChoice[] sourceByRes,
+        int[] slotRepOverride,
+        TreeMap<Integer, List<BatchSplit>> batchMix,
+        TreeMap<Integer, String> machineOverride,
+        TreeSet<Integer> automatedRecipes
     ) {
         this.sourceByRes = sourceByRes;
         this.slotRepOverride = slotRepOverride;
@@ -47,9 +44,11 @@ public final class ChoiceTable {
         TreeMap<Integer, String> machCopy = new TreeMap<>(machineOverride);
         TreeSet<Integer> autoCopy = new TreeSet<>(automatedRecipes);
         return new ChoiceTable(
-                Arrays.copyOf(sourceByRes, sourceByRes.length),
-                Arrays.copyOf(slotRepOverride, slotRepOverride.length),
-                mixCopy, machCopy, autoCopy
+            Arrays.copyOf(sourceByRes, sourceByRes.length),
+            Arrays.copyOf(slotRepOverride, slotRepOverride.length),
+            mixCopy,
+            machCopy,
+            autoCopy
         );
     }
 
@@ -57,7 +56,7 @@ public final class ChoiceTable {
         long h = Fnv1a64.initial();
         for (int i = 0; i < sourceByRes.length; i++) {
             Potentials.SourceChoice sc = sourceByRes[i];
-            if (sc == null || sc.kind() == Potentials.SourceKind.NONE) continue;
+            if (sc == null || sc.kind() == Potentials.SourceKind.none) continue;
             h = Fnv1a64.mixLong(h, i);
             h = Fnv1a64.mixByte(h, sc.kind().ordinal());
             if (sc.localRecipe() >= 0) h = Fnv1a64.mixLong(h, sc.localRecipe());

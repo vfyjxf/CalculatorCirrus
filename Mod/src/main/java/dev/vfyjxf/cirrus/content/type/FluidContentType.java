@@ -21,9 +21,8 @@ public final class FluidContentType extends BasicContentType<Fluid> {
 
     @Override
     public ResourceLocation getLocation(Fluid fluid) {
-        return BuiltInRegistries.FLUID.getResourceKey(fluid)
-                                      .map(ResourceKey::location)
-                                      .orElseThrow(() -> new IllegalArgumentException("Unknown fluid: " + fluid));
+        return BuiltInRegistries.FLUID.getResourceKey(fluid).map(ResourceKey::location)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown fluid: " + fluid));
     }
 
     @Override

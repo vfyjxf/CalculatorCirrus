@@ -1,12 +1,11 @@
 package dev.vfyjxf.cirrus.api.recipe.database;
 
-import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cloudlib.api.search.SearchField;
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -69,9 +68,11 @@ class RecipeDatabaseIndexTest {
         assertEquals("primary", index.records().getFirst().database().id());
         assertEquals(1, index.search("id:craft_oak_planks").size());
         assertEquals(1, index.search("in.id:test:oak_log out.id:test:oak_planks out.id:test:oak_planks * >=4").size());
-        assertTrue(index.textCandidates(CirrusSearchFields.out_id, 8).stream()
-            .anyMatch(value -> value.contains("oak_planks")));
-        assertEquals(1, index.textCandidateMap(8).get(CirrusSearchFields.mod).size());
+        assertTrue(
+            index.textCandidates(CirrusSearchFields.outId, 8).stream().anyMatch(value -> value.contains("oak_planks"))
+        );
+        var candidateMap = index.textCandidateMap(8);
+        assertEquals(1, Objects.requireNonNull(candidateMap.get(CirrusSearchFields.mod), "mod candidates").size());
     }
 
     @Test
@@ -94,7 +95,10 @@ class RecipeDatabaseIndexTest {
         );
 
         assertEquals(1, index.records().size());
-        assertEquals("included_recipe", index.records().getFirst().recipe().id().getPath());
+        assertEquals(
+            "included_recipe",
+            Objects.requireNonNull(index.records().getFirst().recipe().id(), "recipe id").getPath()
+        );
         assertEquals(1, index.search("out.id:test:furnace").size());
         assertTrue(index.search("out.id:test:stick").isEmpty());
     }
@@ -121,7 +125,10 @@ class RecipeDatabaseIndexTest {
         var results = index.search("furnace");
 
         assertEquals(1, results.size());
-        assertEquals("craft_furnace", results.getFirst().record().recipe().id().getPath());
+        assertEquals(
+            "craft_furnace",
+            Objects.requireNonNull(results.getFirst().record().recipe().id(), "recipe id").getPath()
+        );
     }
 
     @Test
@@ -130,11 +137,12 @@ class RecipeDatabaseIndexTest {
         Namespace category = Namespace.of("test", "category/crafting");
         RecipeDatabaseIndex index = RecipeDatabaseIndex.build(
             List.of(database("primary", 0, true, source)),
-            Lists.immutable.of(new FakeRecipeSystem(source, List.of(new FakeRecipe(
-                "craft_stick",
-                List.of(input(oakPlanks, 2)),
-                List.of(output(stick, 4))
-            )))),
+            Lists.immutable.of(
+                new FakeRecipeSystem(
+                    source,
+                    List.of(new FakeRecipe("craft_stick", List.of(input(oakPlanks, 2)), List.of(output(stick, 4))))
+                )
+            ),
             Map.of(source, List.of(category))
         );
 
@@ -189,11 +197,7 @@ class RecipeDatabaseIndexTest {
         for (int index = 0; index < 3_000; index++) {
             inputs.add(input(new DisplayValueType("bulk_" + index, "bulk_" + index), 1));
         }
-        FakeRecipe recipe = new FakeRecipe(
-            "wide_input_recipe",
-            inputs,
-            List.of(output(stick, 1))
-        );
+        FakeRecipe recipe = new FakeRecipe("wide_input_recipe", inputs, List.of(output(stick, 1)));
 
         RecipeDatabaseIndex index = RecipeDatabaseIndex.build(
             List.of(database("primary", 0, true, source)),
@@ -209,13 +213,16 @@ class RecipeDatabaseIndexTest {
     @Test
     void explicitCustomDatabaseEntriesTakePriorityOverSystemCatalogs() {
         Namespace source = Namespace.of("test", "custom_priority");
-        FakeRecipe recipe = new FakeRecipe(
-            "saved_recipe",
-            List.of(input(oakLog, 1)),
-            List.of(output(oakPlanks, 4))
-        );
+        FakeRecipe recipe = new FakeRecipe("saved_recipe", List.of(input(oakLog, 1)), List.of(output(oakPlanks, 4)));
         FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(recipe));
-        DatabaseDefinition custom = new DatabaseDefinition("custom:saved", "Saved Recipes", DatabaseKind.custom, true, 0, List.of());
+        DatabaseDefinition custom = new DatabaseDefinition(
+            "custom:saved",
+            "Saved Recipes",
+            DatabaseKind.custom,
+            true,
+            0,
+            List.of()
+        );
         DatabaseDefinition catalog = database("system", DatabaseKind.system, 1, true, source);
 
         RecipeDatabaseIndex index = RecipeDatabaseIndex.build(
@@ -252,7 +259,14 @@ class RecipeDatabaseIndexTest {
             ),
             Map.of()
         );
-        DatabaseDefinition saved = new DatabaseDefinition("custom:saved", "Saved Recipes", DatabaseKind.custom, true, 0, List.of(sourceA));
+        DatabaseDefinition saved = new DatabaseDefinition(
+            "custom:saved",
+            "Saved Recipes",
+            DatabaseKind.custom,
+            true,
+            0,
+            List.of(sourceA)
+        );
 
         RecipeDatabaseIndex derived = RecipeDatabaseIndex.derive(catalog, saved, List.of(sourceA), List.of());
 
@@ -286,9 +300,17 @@ class RecipeDatabaseIndexTest {
         );
         DatabaseRecipeRef explicitRef = DatabaseRecipeRef.fromEntry(RecipeEntry.of(systemB, recipeB));
         assertNotNull(explicitRef);
-        DatabaseDefinition saved = new DatabaseDefinition("custom:saved", "Saved Recipes", DatabaseKind.custom, true, 0, List.of(sourceA));
+        DatabaseDefinition saved = new DatabaseDefinition(
+            "custom:saved",
+            "Saved Recipes",
+            DatabaseKind.custom,
+            true,
+            0,
+            List.of(sourceA)
+        );
 
-        RecipeDatabaseIndex derived = RecipeDatabaseIndex.derive(catalog, saved, List.of(sourceA), List.of(explicitRef));
+        RecipeDatabaseIndex derived = RecipeDatabaseIndex
+                .derive(catalog, saved, List.of(sourceA), List.of(explicitRef));
 
         assertEquals(2, derived.records().size());
         assertEquals(1, derived.search("out.id:test:furnace db:saved").size());
@@ -297,18 +319,11 @@ class RecipeDatabaseIndexTest {
     @Test
     void recordsSnapshotResolvedProjectionWhenSystemReusesInstances() {
         Namespace source = Namespace.of("test", "cached_projection");
-        FakeRecipe recipe = new FakeRecipe(
-            "cached_recipe",
-            List.of(input(oakLog, 1)),
-            List.of(output(oakPlanks, 4))
-        );
+        FakeRecipe recipe = new FakeRecipe("cached_recipe", List.of(input(oakLog, 1)), List.of(output(oakPlanks, 4)));
         FakeRecipeSystem system = new FakeRecipeSystem(source, List.of(recipe), true);
 
-        RecipeDatabaseIndex index = RecipeDatabaseIndex.build(
-            List.of(database("primary", 0, true, source)),
-            Lists.immutable.of(system),
-            Map.of()
-        );
+        RecipeDatabaseIndex index = RecipeDatabaseIndex
+                .build(List.of(database("primary", 0, true, source)), Lists.immutable.of(system), Map.of());
 
         RecipeProjection cached = system.cachedProjection(recipe);
         RecipeProjection stored = index.records().getFirst().projection();
@@ -322,11 +337,7 @@ class RecipeDatabaseIndexTest {
     @Test
     void recordsFailedRecipesInMemoryAndSkipsThemOnNextBuild() {
         Namespace source = Namespace.of("test", "persistent_failures");
-        FakeRecipe broken = new FakeRecipe(
-            "broken_recipe",
-            List.of(input(oakLog, 1)),
-            List.of(output(oakPlanks, 4))
-        );
+        FakeRecipe broken = new FakeRecipe("broken_recipe", List.of(input(oakLog, 1)), List.of(output(oakPlanks, 4)));
         FakeRecipe working = new FakeRecipe(
             "working_recipe",
             List.of(input(cobblestone, 8)),
@@ -348,7 +359,10 @@ class RecipeDatabaseIndexTest {
         DatabaseRecipeRef brokenRef = DatabaseRecipeRef.fromEntry(RecipeEntry.of(system, broken));
         assertNotNull(brokenRef);
         assertEquals(1, first.records().size());
-        assertEquals("working_recipe", first.records().getFirst().recipe().id().getPath());
+        assertEquals(
+            "working_recipe",
+            Objects.requireNonNull(first.records().getFirst().recipe().id(), "recipe id").getPath()
+        );
         assertEquals(1, system.resolveAttempts(broken));
         assertTrue(failureRegistry.failedRecipeRefs().contains(brokenRef));
 
@@ -362,7 +376,10 @@ class RecipeDatabaseIndexTest {
         );
 
         assertEquals(1, second.records().size());
-        assertEquals("working_recipe", second.records().getFirst().recipe().id().getPath());
+        assertEquals(
+            "working_recipe",
+            Objects.requireNonNull(second.records().getFirst().recipe().id(), "recipe id").getPath()
+        );
         // broken recipes stay skipped on rebuild via the failure registry, while
         // working recipes reuse the memoized empty-context result from the first
         // build: both builds share one api instance and no invalidation ran in between
@@ -373,11 +390,13 @@ class RecipeDatabaseIndexTest {
     @Test
     void selectionStateNormalizesOrderAndEnabledView() {
         Namespace source = Namespace.of("test", "selection");
-        DatabaseSelectionState state = new DatabaseSelectionState(List.of(
-            database("jei", DatabaseKind.jei, 5, true, source),
-            new DatabaseDefinition("system", "System", DatabaseKind.system, false, 5, List.of(source)),
-            database("custom", 0, true, source)
-        ));
+        DatabaseSelectionState state = new DatabaseSelectionState(
+            List.of(
+                database("jei", DatabaseKind.jei, 5, true, source),
+                new DatabaseDefinition("system", "System", DatabaseKind.system, false, 5, List.of(source)),
+                database("custom", 0, true, source)
+            )
+        );
 
         assertEquals(List.of("custom", "system", "jei"), state.ordered().stream().map(DatabaseDefinition::id).toList());
         assertEquals(List.of("custom", "jei"), state.enabledOrdered().stream().map(DatabaseDefinition::id).toList());
@@ -386,7 +405,10 @@ class RecipeDatabaseIndexTest {
         state.toggleEnabled("system");
 
         assertEquals(List.of("system", "custom", "jei"), state.ordered().stream().map(DatabaseDefinition::id).toList());
-        assertEquals(List.of("system", "custom", "jei"), state.enabledOrdered().stream().map(DatabaseDefinition::id).toList());
+        assertEquals(
+            List.of("system", "custom", "jei"),
+            state.enabledOrdered().stream().map(DatabaseDefinition::id).toList()
+        );
         assertEquals(List.of(0, 1, 2), state.ordered().stream().map(DatabaseDefinition::priority).toList());
     }
 
@@ -394,7 +416,13 @@ class RecipeDatabaseIndexTest {
         return new DatabaseDefinition(id, id, DatabaseKind.custom, enabled, priority, List.of(source));
     }
 
-    private static DatabaseDefinition database(String id, DatabaseKind kind, int priority, boolean enabled, Namespace... sources) {
+    private static DatabaseDefinition database(
+        String id,
+        DatabaseKind kind,
+        int priority,
+        boolean enabled,
+        Namespace... sources
+    ) {
         return new DatabaseDefinition(id, id, kind, enabled, priority, List.of(sources));
     }
 
@@ -414,12 +442,7 @@ class RecipeDatabaseIndexTest {
         return OutputContent.fromValue(type, amount);
     }
 
-    private record FakeRecipe(
-        String id,
-        Collection<InputContent> inputs,
-        Collection<OutputContent> outputs
-    ) {
-    }
+    private record FakeRecipe(String id, Collection<InputContent> inputs, Collection<OutputContent> outputs) {}
 
     private static final class FakeRecipeSystem implements RecipeSystem<FakeRecipe> {
         private final Namespace systemId;
@@ -490,14 +513,17 @@ class RecipeDatabaseIndexTest {
         public ResolveResult resolveFallback(ResolveContext context, FakeRecipe recipe) {
             resolveAttempts.computeIfAbsent(recipe.id(), ignored -> new AtomicInteger()).incrementAndGet();
             if (failingRecipes.contains(recipe.id())) {
-                UnsupportedOperationException exception = new UnsupportedOperationException("Broken test recipe " + recipe.id());
+                UnsupportedOperationException exception = new UnsupportedOperationException(
+                    "Broken test recipe " + recipe.id()
+                );
                 RecipeDatabaseFailureCapture.record(this, recipe, exception);
                 return ResolveResult.unsupported();
             }
             if (cacheProjections) {
                 return ResolveResult.resolved(cachedProjection(recipe));
             }
-            return ResolveResult.resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
+            return ResolveResult
+                    .resolved(RecipeProjection.create(RecipeEntry.of(this, recipe), recipe.inputs(), recipe.outputs()));
         }
 
         private int resolveAttempts(FakeRecipe recipe) {

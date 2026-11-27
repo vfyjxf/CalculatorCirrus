@@ -12,8 +12,8 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record ServerDriverProbePayload() implements ServerboundPayload {
 
     public static final ServerPayloadInfo<ServerDriverProbePayload> info = ServerPayloadInfo.create(
-            StreamCodec.unit(new ServerDriverProbePayload()),
-            ResourceLocation.fromNamespaceAndPath(CirrusConstants.modId, "server_driver_probe")
+        StreamCodec.unit(new ServerDriverProbePayload()),
+        ResourceLocation.fromNamespaceAndPath(CirrusConstants.modId, "server_driver_probe")
     );
 
     @Override

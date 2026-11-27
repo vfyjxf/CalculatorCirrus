@@ -12,10 +12,10 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 public record PlanningRequest(
-        List<TargetDemand> targets,
-        PlanningContext context,
-        PlanningProfile profile,
-        PlanningBudget budget
+    List<TargetDemand> targets,
+    PlanningContext context,
+    PlanningProfile profile,
+    PlanningBudget budget
 ) {
 
     public PlanningRequest {

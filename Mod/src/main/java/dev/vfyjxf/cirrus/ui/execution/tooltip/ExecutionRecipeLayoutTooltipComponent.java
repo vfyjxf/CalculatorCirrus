@@ -6,13 +6,13 @@ import dev.vfyjxf.cirrus.ui.CirrusTextures;
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayContentHelper;
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionRecipePreviewLayout;
 import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialSlot;
-import dev.vfyjxf.cirrus.util.NumberUtils;
 import dev.vfyjxf.cirrus.ui.widget.common.CirrusSlotGroupRenderer;
+import dev.vfyjxf.cirrus.util.NumberUtils;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 
@@ -33,7 +33,10 @@ public record ExecutionRecipeLayoutTooltipComponent(
         this(ExecutionRecipePreviewLayout.build(inputs, outputs));
     }
 
-    public static ExecutionRecipeLayoutTooltipComponent leftAligned(List<@Nullable MaterialSlot> inputs, List<MaterialSlot> outputs) {
+    public static ExecutionRecipeLayoutTooltipComponent leftAligned(
+        List<@Nullable MaterialSlot> inputs,
+        List<MaterialSlot> outputs
+    ) {
         return new ExecutionRecipeLayoutTooltipComponent(
             ExecutionRecipePreviewLayout.build(inputs, outputs),
             4,
@@ -79,13 +82,7 @@ public record ExecutionRecipeLayoutTooltipComponent(
         @Override
         public void renderImage(Font font, int x, int y, GuiGraphics graphics) {
             ExecutionRecipePreviewLayout.Layout layout = data.layout();
-            CirrusTextures.Background.Outlined.flat.render(
-                graphics,
-                x,
-                y,
-                getWidth(font),
-                getHeight()
-            );
+            CirrusTextures.Background.Outlined.flat.render(graphics, x, y, getWidth(font), getHeight());
             int baseX = x + data.leftPadding();
             int baseY = y + data.topPadding();
             for (ExecutionRecipePreviewLayout.Section section : layout.inputSections()) {
@@ -114,7 +111,7 @@ public record ExecutionRecipeLayoutTooltipComponent(
             }
         }
 
-    private static void renderSection(
+        private static void renderSection(
             GuiGraphics graphics,
             ExecutionRecipePreviewLayout.Section section,
             int baseX,
@@ -155,12 +152,11 @@ public record ExecutionRecipeLayoutTooltipComponent(
         }
 
         private static void renderFallbackMarker(GuiGraphics graphics, MaterialSlot slot, int x, int y) {
-            var icon = slot.isCatalyst()
-                ? CirrusTextures.Icon.Sign.Amount.catalyst
-                : CirrusTextures.Icon.Sign.Amount.available;
-            int iconX = x + (ExecutionRecipePreviewLayout.slotSize - icon.width()) / 2;
-            int iconY = y + (ExecutionRecipePreviewLayout.slotSize - icon.height()) / 2;
-            icon.render(graphics, iconX, iconY, icon.width(), icon.height());
+            int color = slot.isCatalyst() ? 0xFFE5B567 : 0xFF7FA6C4;
+            int cx = x + ExecutionRecipePreviewLayout.slotSize / 2;
+            int cy = y + ExecutionRecipePreviewLayout.slotSize / 2;
+            graphics.fill(cx - 2, cy - 2, cx + 2, cy + 2, color);
+            graphics.fill(cx - 1, cy - 1, cx + 1, cy + 1, 0xFF1F242D);
         }
 
         private static void renderAmount(Font font, GuiGraphics graphics, int amount, int x, int y) {

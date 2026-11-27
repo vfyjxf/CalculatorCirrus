@@ -11,11 +11,7 @@ public interface RecipeSystemRegister {
 
     void registerSystem(RecipeSystem<?> system);
 
-    default <R> void registerSubsystem(
-        Namespace systemId,
-        Namespace subsystemId,
-        RecipeSubsystem<R> subsystem
-    ) {
+    default <R> void registerSubsystem(Namespace systemId, Namespace subsystemId, RecipeSubsystem<R> subsystem) {
         registerSubsystem(systemId, subsystemId, subsystem, SubsystemOrder.standard());
     }
 

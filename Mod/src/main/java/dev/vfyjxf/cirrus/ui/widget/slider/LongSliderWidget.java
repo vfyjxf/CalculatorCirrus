@@ -5,7 +5,7 @@ import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.api.ui.texture.SizedTexture;
 import dev.vfyjxf.cloudlib.api.ui.texture.VisualTexture;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.function.LongConsumer;
@@ -13,8 +13,7 @@ import java.util.function.LongConsumer;
 public class LongSliderWidget extends Widget {
 
     public enum Orientation {
-        HORIZONTAL,
-        VERTICAL
+        horizontal, vertical
     }
 
     public record Metrics(
@@ -49,7 +48,7 @@ public class LongSliderWidget extends Widget {
         }
 
         public Metrics metrics(Orientation orientation) {
-            return orientation == Orientation.HORIZONTAL ? horizontal : vertical;
+            return orientation == Orientation.horizontal ? horizontal : vertical;
         }
     }
 
@@ -57,7 +56,7 @@ public class LongSliderWidget extends Widget {
     private long minValue;
     private long maxValue = 1;
     private long step = 1;
-    private Orientation orientation = Orientation.HORIZONTAL;
+    private Orientation orientation = Orientation.horizontal;
     private Skin skin = CirrusSliderSkins.scroll();
     private boolean dragging;
     private long soundMinIntervalMs;
@@ -142,18 +141,21 @@ public class LongSliderWidget extends Widget {
         return this;
     }
 
+    @Override
     public boolean dragging() {
         return dragging;
     }
 
     private void updateFromMouse(double mouseX, double mouseY) {
         Metrics metrics = metrics();
-        int thumbSpan = orientation == Orientation.HORIZONTAL ? metrics.thumbTexture().width() : metrics.thumbTexture().height();
-        int widgetSpan = orientation == Orientation.HORIZONTAL ? width() : height();
+        int thumbSpan = orientation == Orientation.horizontal
+                ? metrics.thumbTexture().width()
+                : metrics.thumbTexture().height();
+        int widgetSpan = orientation == Orientation.horizontal ? width() : height();
         int travel = Math.max(1, widgetSpan - metrics.trackInset() * 2 - thumbSpan);
 
         double ratio;
-        if (orientation == Orientation.HORIZONTAL) {
+        if (orientation == Orientation.horizontal) {
             ratio = (mouseX - metrics.trackInset() - thumbSpan / 2.0d) / travel;
         } else {
             ratio = ((height() - mouseY) - metrics.trackInset() - thumbSpan / 2.0d) / travel;
@@ -212,7 +214,7 @@ public class LongSliderWidget extends Widget {
     @Override
     protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
         super.renderInternal(canvas, mouseX, mouseY, partialTicks);
-        if (orientation == Orientation.HORIZONTAL) {
+        if (orientation == Orientation.horizontal) {
             renderHorizontal(canvas);
             return;
         }
@@ -233,7 +235,13 @@ public class LongSliderWidget extends Widget {
 
         canvas.texture(metrics.trackTexture(), 0, trackY, width(), metrics.trackThickness());
         if (metrics.fillTexture() != null && fillWidth > 0) {
-            canvas.texture(metrics.fillTexture(), metrics.trackInset() + metrics.fillMainInset(), fillY, fillWidth, metrics.fillThickness());
+            canvas.texture(
+                metrics.fillTexture(),
+                metrics.trackInset() + metrics.fillMainInset(),
+                fillY,
+                fillWidth,
+                metrics.fillThickness()
+            );
         }
         canvas.texture(thumbTexture, thumbX, thumbY, thumbWidth, thumbHeight);
     }

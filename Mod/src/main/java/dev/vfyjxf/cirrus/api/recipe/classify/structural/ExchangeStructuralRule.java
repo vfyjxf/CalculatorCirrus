@@ -19,14 +19,13 @@ import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifyView;
 public final class ExchangeStructuralRule implements ClassificationRule {
 
     public static final ExchangeStructuralRule instance = new ExchangeStructuralRule();
-    public static final String ID = "cirrus:structural/exchange";
+    public static final String id = "cirrus:structural/exchange";
 
-    private ExchangeStructuralRule() {
-    }
+    private ExchangeStructuralRule() {}
 
     @Override
     public String id() {
-        return ID;
+        return id;
     }
 
     @Override
@@ -44,7 +43,7 @@ public final class ExchangeStructuralRule implements ClassificationRule {
             }
             for (String id : input.ids()) {
                 if (outputIds.contains(id)) {
-                    sink.tag(ClassificationTags.EXCHANGE);
+                    sink.tag(ClassificationTags.exchange);
                     return;
                 }
             }

@@ -7,8 +7,7 @@ import org.eclipse.collections.api.factory.Maps;
 import org.eclipse.collections.api.map.ImmutableMap;
 import org.eclipse.collections.api.map.MutableMap;
 import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public final class ClauseSet {
 
@@ -26,7 +25,7 @@ public final class ClauseSet {
         return new ClauseSet(reject);
     }
 
-    private final ImmutableMap<Namespace, @NotNull RecipeClause> prototype;
+    private final ImmutableMap<Namespace, RecipeClause> prototype;
     private final MutableMap<Namespace, @Nullable RecipeClause> patches = Maps.mutable.empty();
 
     private ClauseSet(ImmutableMap<Namespace, RecipeClause> prototype) {
@@ -110,9 +109,7 @@ public final class ClauseSet {
 
     @Override
     public String toString() {
-        return "[" +
-               "prototype=" + (prototype.isEmpty() ? "empty" : prototype) +
-               ", patches=" + (patches.isEmpty() ? "empty" : patches) +
-               ']';
+        return "[" + "prototype=" + (prototype.isEmpty() ? "empty" : prototype) + ", patches="
+                + (patches.isEmpty() ? "empty" : patches) + ']';
     }
 }

@@ -1,10 +1,10 @@
 package dev.vfyjxf.cirrus.api.recipe.content.complex;
 
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
-import dev.vfyjxf.cirrus.api.recipe.RecipeContentType;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.neoforged.neoforge.common.crafting.CompoundIngredient;
 import org.eclipse.collections.api.RichIterable;
@@ -19,21 +19,16 @@ public final class CompoundContent implements ComplexContent {
 
     public static InputContent fromIngredient(CompoundIngredient ingredient, long amount, float chance) {
         if (amount <= 0 || ingredient.children().isEmpty()) return empty;
-        var contents = ingredient.children()
-                                 .stream()
-                                 .map(InputContent::fromItemIngredient)
-                                 .filter(InputContent::notEmpty)
-                                 .collect(Collectors2.toImmutableList());
+        var contents = ingredient.children().stream().map(InputContent::fromItemIngredient)
+                .filter(InputContent::notEmpty).collect(Collectors2.toImmutableList());
         if (contents.isEmpty()) return empty;
         return new CompoundContent(contents, amount, chance);
     }
 
     public static InputContent fromContents(Collection<? extends InputContent> contents, long amount, float chance) {
         if (contents.isEmpty() || amount <= 0) return empty;
-        var collect = contents.stream()
-                              .filter(InputContent::notEmpty)
-                              .map(InputContent::copy)
-                              .collect(Collectors2.toImmutableList());
+        var collect = contents.stream().filter(InputContent::notEmpty).map(InputContent::copy)
+                .collect(Collectors2.toImmutableList());
         if (collect.isEmpty()) return empty;
         return new CompoundContent(collect, amount, chance);
     }

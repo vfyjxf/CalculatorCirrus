@@ -1,12 +1,15 @@
 package dev.vfyjxf.cirrus.ui.widget.common;
 
-import dev.vfyjxf.cirrus.ui.CirrusTextures;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
+import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
 import dev.vfyjxf.cloudlib.api.ui.base.CompositeWidget;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
+import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
+import dev.vfyjxf.cloudlib.api.ui.style.UIStyle;
 import net.minecraft.network.chat.Component;
+import org.jspecify.annotations.Nullable;
 
-import static dev.vfyjxf.cirrus.ui.widget.omnicalc.OmniCalcColors.textPrimary;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.background;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.boxSizingBorderBox;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.displayFlex;
@@ -22,6 +25,7 @@ public final class CirrusCardWidget extends CompositeWidget<Widget> {
     private final Component title;
     private final WidgetGroup<Widget> body;
     private final WidgetGroup<Widget> extension;
+    private @Nullable WorkbenchThemeMode appliedTheme;
 
     public CirrusCardWidget() {
         this(Component.empty());
@@ -29,18 +33,15 @@ public final class CirrusCardWidget extends CompositeWidget<Widget> {
 
     public CirrusCardWidget(Component title) {
         this.title = title == null ? Component.empty() : title;
-        useStyle(
-            flexColumn(),
-            gap(3),
-            padding(5),
-            minWidth(0),
-            flexShrink(0),
-            boxSizingBorderBox(),
-            background(CirrusTextures.Background.flat)
+        addStyleClass("cirrus-card");
+        useStyle(flexColumn(), gap(3), padding(5), minWidth(0), flexShrink(0), boxSizingBorderBox());
+        syncDefaultBackground(true);
+        onMount(
+            (scene, context, handle) -> CirrusUiTheme
+                    .bindThemeListener(this, handle, () -> syncDefaultBackground(false))
         );
         if (!this.title.getString().isBlank()) {
-            addWidget(new CirrusFittedTextWidget(this.title, textPrimary).textPadding(1, 1))
-                .useStyle(heightOf(12), minWidth(0));
+            addWidget(CirrusFittedTextWidget.primary(this.title).textPadding(1, 1)).useStyle(heightOf(12), minWidth(0));
         }
         body = addWidget(new WidgetGroup<>());
         body.useStyle(flexColumn(), gap(3), minWidth(0));
@@ -48,6 +49,15 @@ public final class CirrusCardWidget extends CompositeWidget<Widget> {
         extension = addWidget(new WidgetGroup<>());
         extension.useStyle(flexColumn(), gap(3), minWidth(0), displayNone());
         extension.setVisible(false).setActive(false).setInteractive(false);
+    }
+
+    private void syncDefaultBackground(boolean force) {
+        WorkbenchThemeMode mode = CirrusUiTheme.mode(this);
+        if (!force && mode == appliedTheme) {
+            return;
+        }
+        appliedTheme = mode;
+        defaultStyle(UIStyle.of(background(CirrusUiTheme.textures(this).flat())));
     }
 
     public Component title() {
@@ -71,5 +81,10 @@ public final class CirrusCardWidget extends CompositeWidget<Widget> {
         extension.useStyle(displayFlex());
         extension.setVisible(true).setActive(true).setInteractive(true);
         return added;
+    }
+
+    @Override
+    protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
+        canvas.texture(CirrusUiTheme.textures(this).cardSurface(), 0, 0, width(), height());
     }
 }

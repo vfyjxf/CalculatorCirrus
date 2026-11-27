@@ -13,50 +13,48 @@ import java.util.Set;
 
 @EventBusSubscriber(modid = CirrusConstants.modId)
 public class ModConfig {
-    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
+    private static final ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
 
-    private static final ModConfigSpec.BooleanValue EXECUTION_SERVER_DRIVER_ENABLED;
-    private static final ModConfigSpec.ConfigValue<List<? extends String>> EXECUTION_SERVER_DRIVER_INTERACTION_WHITELIST;
-    public static final ModConfigSpec SPEC;
-    private static final Namespace DEFAULT_INTERACTION_ID =
-        Namespace.of("minecraft", "crafting_table");
+    private static final ModConfigSpec.BooleanValue executionServerDriverEnabled;
+    private static final ModConfigSpec.ConfigValue<List<? extends String>> executionServerDriverInteractionWhitelist;
+    public static final ModConfigSpec spec;
+    private static final Namespace defaultInteractionId = Namespace.of("minecraft", "crafting_table");
 
-    private static volatile boolean executionServerDriverEnabled = false;
-    private static volatile Set<Namespace> executionServerDriverInteractionWhitelist = Set.of(DEFAULT_INTERACTION_ID);
+    private static volatile boolean executionServerDriverEnabledCache = false;
+    private static volatile Set<Namespace> executionServerDriverInteractionWhitelistCache = Set
+            .of(defaultInteractionId);
 
     static {
-        BUILDER.push("execution");
-        BUILDER.push("serverDriver");
-        EXECUTION_SERVER_DRIVER_ENABLED = BUILDER
-            .comment("Enable server-side execution driver for whitelisted interactions.")
-            .define("enabled", false);
-        EXECUTION_SERVER_DRIVER_INTERACTION_WHITELIST = BUILDER
-            .comment("Interaction ids allowed to run with server-side execution driver.")
-            .defineListAllowEmpty(
-                List.of("interactionWhitelist"),
-                List.of("minecraft:crafting_table"),
-                ModConfig::isValidInteractionId
-            );
-        BUILDER.pop();
-        BUILDER.pop();
-        SPEC = BUILDER.build();
+        builder.push("execution");
+        builder.push("serverDriver");
+        executionServerDriverEnabled = builder
+                .comment("Enable server-side execution driver for whitelisted interactions.").define("enabled", false);
+        executionServerDriverInteractionWhitelist = builder
+                .comment("Interaction ids allowed to run with server-side execution driver.").defineListAllowEmpty(
+                    List.of("interactionWhitelist"),
+                    List.of("minecraft:crafting_table"),
+                    ModConfig::isValidInteractionId
+                );
+        builder.pop();
+        builder.pop();
+        spec = builder.build();
     }
 
     @SubscribeEvent
     static void onLoad(final ModConfigEvent event) {
-        if (event.getConfig().getSpec() == SPEC) {
+        if (event.getConfig().getSpec() == spec) {
             refreshCachedValues();
         }
     }
 
     public static boolean isServerDriverEnabled() {
-        return executionServerDriverEnabled;
+        return executionServerDriverEnabledCache;
     }
 
     public static boolean isServerDriverEnabledFor(Namespace interactionId) {
         return interactionId != null
-            && executionServerDriverEnabled
-            && executionServerDriverInteractionWhitelist.contains(interactionId);
+                && executionServerDriverEnabledCache
+                && executionServerDriverInteractionWhitelistCache.contains(interactionId);
     }
 
     private static boolean isValidInteractionId(Object value) {
@@ -67,14 +65,14 @@ public class ModConfig {
     }
 
     private static void refreshCachedValues() {
-        executionServerDriverEnabled = EXECUTION_SERVER_DRIVER_ENABLED.get();
+        executionServerDriverEnabledCache = executionServerDriverEnabled.get();
         Set<Namespace> whitelist = new HashSet<>();
-        for (String id : EXECUTION_SERVER_DRIVER_INTERACTION_WHITELIST.get()) {
+        for (String id : executionServerDriverInteractionWhitelist.get()) {
             Namespace parsed = Namespace.maybe(id);
             if (parsed != null) {
                 whitelist.add(parsed);
             }
         }
-        executionServerDriverInteractionWhitelist = Set.copyOf(whitelist);
+        executionServerDriverInteractionWhitelistCache = Set.copyOf(whitelist);
     }
 }

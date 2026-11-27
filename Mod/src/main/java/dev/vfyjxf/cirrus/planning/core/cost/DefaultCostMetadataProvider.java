@@ -9,11 +9,10 @@ import java.util.Optional;
 
 public final class DefaultCostMetadataProvider implements CostMetadataProvider {
 
-    public static final DefaultCostMetadataProvider INSTANCE = new DefaultCostMetadataProvider();
-    public static final String TIME_VALUE_KEY = "calculator_cirrus:time";
+    public static final DefaultCostMetadataProvider instance = new DefaultCostMetadataProvider();
+    public static final String timeValueKey = "calculator_cirrus:time";
 
-    public DefaultCostMetadataProvider() {
-    }
+    public DefaultCostMetadataProvider() {}
 
     @Override
     public SystemCostTier tierOfSystem(String systemId) {
@@ -30,12 +29,12 @@ public final class DefaultCostMetadataProvider implements CostMetadataProvider {
 
     @Override
     public double estimatePassiveSecondsPerBatch(
-            String systemId,
-            Optional<String> machineId,
-            Map<String, Double> recipeValues
+        String systemId,
+        Optional<String> machineId,
+        Map<String, Double> recipeValues
     ) {
         if (recipeValues != null) {
-            Double ticks = recipeValues.get(TIME_VALUE_KEY);
+            Double ticks = recipeValues.get(timeValueKey);
             if (ticks != null && Double.isFinite(ticks) && ticks >= 0.0) {
                 return ticks / 20.0;
             }

@@ -10,15 +10,19 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 public record PreparationSummary(
-        StockLedger consumedFromInventory,
-        StockLedger toAcquireFromWorld,
-        Map<String, Integer> machinesToProvision,
-        List<String> existingLinesUsed,
-        List<ResourceKey> catalystsRequired
+    StockLedger consumedFromInventory,
+    StockLedger toAcquireFromWorld,
+    Map<String, Integer> machinesToProvision,
+    List<String> existingLinesUsed,
+    List<ResourceKey> catalystsRequired
 ) {
 
-    public static final PreparationSummary EMPTY = new PreparationSummary(
-            StockLedger.EMPTY, StockLedger.EMPTY, Map.of(), List.of(), List.of()
+    public static final PreparationSummary empty = new PreparationSummary(
+        StockLedger.empty,
+        StockLedger.empty,
+        Map.of(),
+        List.of(),
+        List.of()
     );
 
     public PreparationSummary {

@@ -5,11 +5,11 @@ import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import java.util.Objects;
 
 public record TagDefaultRule(
-        String ruleId,
-        GuidanceScope scope,
-        RuleStrength strength,
-        String tagId,
-        ResourceKey preferredMember
+    String ruleId,
+    GuidanceScope scope,
+    RuleStrength strength,
+    String tagId,
+    ResourceKey preferredMember
 ) implements GuidanceRule {
 
     public TagDefaultRule {

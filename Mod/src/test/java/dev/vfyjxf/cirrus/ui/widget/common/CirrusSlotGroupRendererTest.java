@@ -58,10 +58,8 @@ class CirrusSlotGroupRendererTest {
 
     @Test
     void rectangularBorderMergesToOnlyFourOuterEdges() {
-        List<CirrusSlotGroupRenderer.BorderSegment> segments = CirrusSlotGroupRenderer.borderSegments(
-            CirrusSlotGroupRenderer.rectCells(2, 2),
-            18
-        );
+        List<CirrusSlotGroupRenderer.BorderSegment> segments = CirrusSlotGroupRenderer
+                .borderSegments(CirrusSlotGroupRenderer.rectCells(2, 2), 18);
 
         assertTrue(segments.contains(new CirrusSlotGroupRenderer.BorderSegment(0, -1, 36, 1)));
         assertTrue(segments.contains(new CirrusSlotGroupRenderer.BorderSegment(0, 36, 36, 1)));
@@ -81,10 +79,7 @@ class CirrusSlotGroupRendererTest {
                 new CirrusSlotGroupRenderer.Cell(2, 0),
                 new CirrusSlotGroupRenderer.Cell(1, 1)
             ),
-            CirrusSlotGroupRenderer.matrixCells(new boolean[][]{
-                {true, false, true},
-                {false, true, false}
-            })
+            CirrusSlotGroupRenderer.matrixCells(new boolean[][]{{true, false, true}, {false, true, false}})
         );
     }
 

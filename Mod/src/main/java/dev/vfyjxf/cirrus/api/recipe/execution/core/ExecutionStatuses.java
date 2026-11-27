@@ -25,5 +25,7 @@ public final class ExecutionStatuses {
 
     //endregion
 
-    private ExecutionStatuses() {throw new AssertionError("No " + ExecutionStatuses.class.getSimpleName() + " instances for you!");}
+    private ExecutionStatuses() {
+        throw new AssertionError("No " + ExecutionStatuses.class.getSimpleName() + " instances for you!");
+    }
 }

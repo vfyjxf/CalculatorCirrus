@@ -18,6 +18,10 @@ import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
 import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
+import dev.vfyjxf.cirrus.api.planning.tag.CanonicalRecipeTag;
+import dev.vfyjxf.cirrus.api.planning.tag.RecipeEvidenceTier;
+import dev.vfyjxf.cirrus.api.planning.tag.RecipeSemanticKey;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -30,9 +34,9 @@ import java.util.TreeSet;
 
 public final class IndexedRecipeGraph implements CompiledRecipeGraph {
 
-    private static final RecipeRole[] ROLES = RecipeRole.values();
-    private static final RecipeAdvisory[] ADVISORIES = RecipeAdvisory.values();
-    private static final SlotMatchMode[] MATCH_MODES = SlotMatchMode.values();
+    private static final RecipeRole[] roleTable = RecipeRole.values();
+    private static final RecipeAdvisory[] advisoryTable = RecipeAdvisory.values();
+    private static final SlotMatchMode[] matchModes = SlotMatchMode.values();
 
     private final long catalogVersion;
     private final SystemAdmissionPolicy policy;
@@ -40,7 +44,7 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     private final ResourceDictionary dict;
     private final CandidateTable candidates;
     private final IterativeTarjanScc sccIndex;
-    private final GraphCompilationStats stats;
+    private volatile GraphCompilationStats stats;
     private final Set<ResourceKey> unresolvedOutputs;
 
     private final int recipeCount;
@@ -52,6 +56,11 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     private final MachineCapabilityId[] capabilities;
     private final List<String>[] compatMachines;
     private final Map<String, Double>[] recipeValues;
+    private final Set<String>[] systemTags;
+    private final Set<CanonicalRecipeTag>[] canonicalTags;
+    private final RecipeEvidenceTier[] evidenceTiers;
+    private final double[] structuralFidelities;
+    private final @Nullable RecipeSemanticKey[] semanticKeys;
 
     private final int[] inStart;
     private final int[] inSlotIndex;
@@ -85,41 +94,46 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     private Map<Integer, List<CompiledCycleMacro>> macrosByOutputRes = Map.of();
 
     IndexedRecipeGraph(
-            long catalogVersion,
-            SystemAdmissionPolicy policy,
-            Map<String, SystemAdmission> admissionCache,
-            ResourceDictionary dict,
-            CandidateTable candidates,
-            IterativeTarjanScc sccIndex,
-            GraphCompilationStats stats,
-            Set<ResourceKey> unresolvedOutputs,
-            CompiledRecipeKey[] recipeKeys,
-            byte[] roles,
-            byte[] advisories,
-            long[] sourceRefs,
-            boolean[] handCraftable,
-            MachineCapabilityId[] capabilities,
-            List<String>[] compatMachines,
-            Map<String, Double>[] recipeValues,
-            int[] inStart,
-            int[] inSlotIndex,
-            int[] inCandList,
-            long[] inAmount,
-            byte[] inMatchMode,
-            String[] inTagId,
-            int[] catStart,
-            int[] catSlotIndex,
-            int[] catCandList,
-            int[] catDurCost,
-            int[] catMaxDur,
-            int[] outStart,
-            int[] outRes,
-            long[] outAmount,
-            int[] prodStart,
-            int[] prodRecipe,
-            int[] consStart,
-            int[] consRecipe,
-            int[] exactConsumerCount
+        long catalogVersion,
+        SystemAdmissionPolicy policy,
+        Map<String, SystemAdmission> admissionCache,
+        ResourceDictionary dict,
+        CandidateTable candidates,
+        IterativeTarjanScc sccIndex,
+        GraphCompilationStats stats,
+        Set<ResourceKey> unresolvedOutputs,
+        CompiledRecipeKey[] recipeKeys,
+        byte[] roles,
+        byte[] advisories,
+        long[] sourceRefs,
+        boolean[] handCraftable,
+        MachineCapabilityId[] capabilities,
+        List<String>[] compatMachines,
+        Map<String, Double>[] recipeValues,
+        Set<String>[] systemTags,
+        Set<CanonicalRecipeTag>[] canonicalTags,
+        RecipeEvidenceTier[] evidenceTiers,
+        double[] structuralFidelities,
+        @Nullable RecipeSemanticKey[] semanticKeys,
+        int[] inStart,
+        int[] inSlotIndex,
+        int[] inCandList,
+        long[] inAmount,
+        byte[] inMatchMode,
+        String[] inTagId,
+        int[] catStart,
+        int[] catSlotIndex,
+        int[] catCandList,
+        int[] catDurCost,
+        int[] catMaxDur,
+        int[] outStart,
+        int[] outRes,
+        long[] outAmount,
+        int[] prodStart,
+        int[] prodRecipe,
+        int[] consStart,
+        int[] consRecipe,
+        int[] exactConsumerCount
     ) {
         this.catalogVersion = catalogVersion;
         this.policy = policy;
@@ -130,33 +144,38 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
         this.stats = stats;
         this.unresolvedOutputs = unresolvedOutputs;
         this.recipeCount = recipeKeys.length;
-        this.recipeKeys = recipeKeys;
-        this.roles = roles;
-        this.advisories = advisories;
-        this.sourceRefs = sourceRefs;
-        this.handCraftable = handCraftable;
-        this.capabilities = capabilities;
-        this.compatMachines = compatMachines;
-        this.recipeValues = recipeValues;
-        this.inStart = inStart;
-        this.inSlotIndex = inSlotIndex;
-        this.inCandList = inCandList;
-        this.inAmount = inAmount;
-        this.inMatchMode = inMatchMode;
-        this.inTagId = inTagId;
-        this.catStart = catStart;
-        this.catSlotIndex = catSlotIndex;
-        this.catCandList = catCandList;
-        this.catDurCost = catDurCost;
-        this.catMaxDur = catMaxDur;
-        this.outStart = outStart;
-        this.outRes = outRes;
-        this.outAmount = outAmount;
-        this.prodStart = prodStart;
-        this.prodRecipe = prodRecipe;
-        this.consStart = consStart;
-        this.consRecipe = consRecipe;
-        this.exactConsumerCount = exactConsumerCount;
+        this.recipeKeys = recipeKeys.clone();
+        this.roles = roles.clone();
+        this.advisories = advisories.clone();
+        this.sourceRefs = sourceRefs.clone();
+        this.handCraftable = handCraftable.clone();
+        this.capabilities = capabilities.clone();
+        this.compatMachines = compatMachines.clone();
+        this.recipeValues = recipeValues.clone();
+        this.systemTags = systemTags.clone();
+        this.canonicalTags = canonicalTags.clone();
+        this.evidenceTiers = evidenceTiers.clone();
+        this.structuralFidelities = structuralFidelities.clone();
+        this.semanticKeys = semanticKeys.clone();
+        this.inStart = inStart.clone();
+        this.inSlotIndex = inSlotIndex.clone();
+        this.inCandList = inCandList.clone();
+        this.inAmount = inAmount.clone();
+        this.inMatchMode = inMatchMode.clone();
+        this.inTagId = inTagId.clone();
+        this.catStart = catStart.clone();
+        this.catSlotIndex = catSlotIndex.clone();
+        this.catCandList = catCandList.clone();
+        this.catDurCost = catDurCost.clone();
+        this.catMaxDur = catMaxDur.clone();
+        this.outStart = outStart.clone();
+        this.outRes = outRes.clone();
+        this.outAmount = outAmount.clone();
+        this.prodStart = prodStart.clone();
+        this.prodRecipe = prodRecipe.clone();
+        this.consStart = consStart.clone();
+        this.consRecipe = consRecipe.clone();
+        this.exactConsumerCount = exactConsumerCount.clone();
         this.materializedCache = new CompiledRecipe[recipeCount];
 
         Map<CompiledRecipeKey, Integer> keyMap = new HashMap<>((int) (recipeCount / 0.7) + 16);
@@ -203,18 +222,8 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     }
 
     IndexedRecipeGraph withUpdatedStats(GraphCompilationStats updatedStats) {
-        IndexedRecipeGraph copy = new IndexedRecipeGraph(
-                catalogVersion, policy, admissionCache, dict, candidates, sccIndex, updatedStats,
-                unresolvedOutputs, recipeKeys, roles, advisories, sourceRefs, handCraftable,
-                capabilities, compatMachines, recipeValues,
-                inStart, inSlotIndex, inCandList, inAmount, inMatchMode, inTagId,
-                catStart, catSlotIndex, catCandList, catDurCost, catMaxDur,
-                outStart, outRes, outAmount, prodStart, prodRecipe, consStart, consRecipe, exactConsumerCount
-        );
-        copy.allMacros = this.allMacros;
-        copy.macroByKey = this.macroByKey;
-        copy.macrosByOutputRes = this.macrosByOutputRes;
-        return copy;
+        this.stats = updatedStats;
+        return this;
     }
 
     public ResourceDictionary resourceDict() {
@@ -242,11 +251,11 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     }
 
     public RecipeRole roleOf(int r) {
-        return ROLES[roles[r]];
+        return roleTable[roles[r]];
     }
 
     public RecipeAdvisory advisoryOf(int r) {
-        return ADVISORIES[advisories[r]];
+        return advisoryTable[advisories[r]];
     }
 
     public boolean isHandCraftable(int r) {
@@ -265,36 +274,125 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
         return recipeValues[r];
     }
 
-    public int inStart(int r) { return inStart[r]; }
-    public int inEnd(int r) { return inStart[r + 1]; }
-    public int inSlotIndex(int idx) { return inSlotIndex[idx]; }
-    public int inCandList(int idx) { return inCandList[idx]; }
-    public long inAmount(int idx) { return inAmount[idx]; }
-    public SlotMatchMode inMatchMode(int idx) { return MATCH_MODES[inMatchMode[idx]]; }
-    public String inTagId(int idx) { return inTagId[idx]; }
+    public Set<String> systemTagsOf(int r) {
+        return systemTags[r];
+    }
 
-    public int catStart(int r) { return catStart[r]; }
-    public int catEnd(int r) { return catStart[r + 1]; }
-    public int catSlotIndex(int idx) { return catSlotIndex[idx]; }
-    public int catCandList(int idx) { return catCandList[idx]; }
-    public int catDurCost(int idx) { return catDurCost[idx]; }
-    public int catMaxDur(int idx) { return catMaxDur[idx]; }
+    public Set<CanonicalRecipeTag> canonicalTagsOf(int r) {
+        return canonicalTags[r];
+    }
 
-    public int outStart(int r) { return outStart[r]; }
-    public int outEnd(int r) { return outStart[r + 1]; }
-    public int outRes(int idx) { return outRes[idx]; }
-    public long outAmount(int idx) { return outAmount[idx]; }
+    public RecipeEvidenceTier evidenceTierOf(int r) {
+        return evidenceTiers[r];
+    }
 
-    public int prodStart(int resId) { return prodStart[resId]; }
-    public int prodEnd(int resId) { return prodStart[resId + 1]; }
-    public int prodRecipe(int idx) { return prodRecipe[idx]; }
-    public int producerCount(int resId) { return prodStart[resId + 1] - prodStart[resId]; }
+    public double structuralFidelityOf(int r) {
+        return structuralFidelities[r];
+    }
 
-    public int consStart(int resId) { return consStart[resId]; }
-    public int consEnd(int resId) { return consStart[resId + 1]; }
-    public int consRecipe(int idx) { return consRecipe[idx]; }
+    public Optional<RecipeSemanticKey> semanticKeyOf(int r) {
+        return Optional.ofNullable(semanticKeys[r]);
+    }
 
-    public int exactConsumerCount(int resId) { return exactConsumerCount[resId]; }
+    public int inStart(int r) {
+        return inStart[r];
+    }
+
+    public int inEnd(int r) {
+        return inStart[r + 1];
+    }
+
+    public int inSlotIndex(int idx) {
+        return inSlotIndex[idx];
+    }
+
+    public int inCandList(int idx) {
+        return inCandList[idx];
+    }
+
+    public long inAmount(int idx) {
+        return inAmount[idx];
+    }
+
+    public SlotMatchMode inMatchMode(int idx) {
+        return matchModes[inMatchMode[idx]];
+    }
+
+    public String inTagId(int idx) {
+        return inTagId[idx];
+    }
+
+    public int catStart(int r) {
+        return catStart[r];
+    }
+
+    public int catEnd(int r) {
+        return catStart[r + 1];
+    }
+
+    public int catSlotIndex(int idx) {
+        return catSlotIndex[idx];
+    }
+
+    public int catCandList(int idx) {
+        return catCandList[idx];
+    }
+
+    public int catDurCost(int idx) {
+        return catDurCost[idx];
+    }
+
+    public int catMaxDur(int idx) {
+        return catMaxDur[idx];
+    }
+
+    public int outStart(int r) {
+        return outStart[r];
+    }
+
+    public int outEnd(int r) {
+        return outStart[r + 1];
+    }
+
+    public int outRes(int idx) {
+        return outRes[idx];
+    }
+
+    public long outAmount(int idx) {
+        return outAmount[idx];
+    }
+
+    public int prodStart(int resId) {
+        return prodStart[resId];
+    }
+
+    public int prodEnd(int resId) {
+        return prodStart[resId + 1];
+    }
+
+    public int prodRecipe(int idx) {
+        return prodRecipe[idx];
+    }
+
+    public int producerCount(int resId) {
+        return prodStart[resId + 1] - prodStart[resId];
+    }
+
+    public int consStart(int resId) {
+        return consStart[resId];
+    }
+
+    public int consEnd(int resId) {
+        return consStart[resId + 1];
+    }
+
+    public int consRecipe(int idx) {
+        return consRecipe[idx];
+    }
+
+    public int exactConsumerCount(int resId) {
+        return exactConsumerCount[resId];
+    }
 
     public List<CompiledCycleMacro> macrosProducingRes(int resId) {
         return macrosByOutputRes.getOrDefault(resId, List.of());
@@ -308,23 +406,20 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
         int is = inStart[r], ie = inStart[r + 1];
         List<InputSlot> inputs = new ArrayList<>(ie - is);
         for (int i = is; i < ie; i++) {
-            inputs.add(new InputSlot(
+            inputs.add(
+                new InputSlot(
                     inSlotIndex[i],
                     inAmount[i],
                     Optional.ofNullable(inTagId[i]),
                     candidates.viewOf(inCandList[i]),
-                    MATCH_MODES[inMatchMode[i]]
-            ));
+                    matchModes[inMatchMode[i]]
+                )
+            );
         }
         int cs = catStart[r], ce = catStart[r + 1];
         List<CatalystSlot> cats = new ArrayList<>(ce - cs);
         for (int i = cs; i < ce; i++) {
-            cats.add(new CatalystSlot(
-                    catSlotIndex[i],
-                    candidates.viewOf(catCandList[i]),
-                    catDurCost[i],
-                    catMaxDur[i]
-            ));
+            cats.add(new CatalystSlot(catSlotIndex[i], candidates.viewOf(catCandList[i]), catDurCost[i], catMaxDur[i]));
         }
         int os = outStart[r], oe = outStart[r + 1];
         List<OutputSlot> outs = new ArrayList<>(oe - os);
@@ -332,12 +427,25 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
             outs.add(new OutputSlot(dict.keyOf(outRes[i]), outAmount[i]));
         }
         MachineRequirement req = new MachineRequirement(
-                Optional.ofNullable(capabilities[r]),
-                compatMachines[r],
-                handCraftable[r]
+            Optional.ofNullable(capabilities[r]),
+            compatMachines[r],
+            handCraftable[r]
         );
         CompiledRecipe built = new CompiledRecipe(
-                r, recipeKeys[r], ROLES[roles[r]], inputs, cats, outs, req, recipeValues[r], ADVISORIES[advisories[r]]
+            r,
+            recipeKeys[r],
+            roleTable[roles[r]],
+            inputs,
+            cats,
+            outs,
+            req,
+            recipeValues[r],
+            advisoryTable[advisories[r]],
+            systemTags[r],
+            canonicalTags[r],
+            evidenceTiers[r],
+            structuralFidelities[r],
+            Optional.ofNullable(semanticKeys[r])
         );
         materializedCache[r] = built;
         return built;

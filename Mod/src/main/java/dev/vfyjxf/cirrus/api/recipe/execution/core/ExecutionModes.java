@@ -23,5 +23,7 @@ public final class ExecutionModes {
 
     //endregion
 
-    private ExecutionModes() {throw new AssertionError("No " + ExecutionModes.class.getSimpleName() + " instances for you!");}
+    private ExecutionModes() {
+        throw new AssertionError("No " + ExecutionModes.class.getSimpleName() + " instances for you!");
+    }
 }

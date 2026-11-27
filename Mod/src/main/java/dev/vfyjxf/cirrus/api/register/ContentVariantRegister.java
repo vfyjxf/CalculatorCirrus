@@ -13,7 +13,7 @@ public interface ContentVariantRegister {
     <T, S> void registerVariantType(StackType<T, S> stackType, VariantType<T, S> variantType);
 
     default void registerItemVariantType(VariantType<Item, ItemStack> variantType) {
-        registerVariantType(CirrusTypes.Contents.ITEM_STACK, variantType);
+        registerVariantType(CirrusTypes.Contents.itemStack, variantType);
     }
 
     <T, S> void registerVariantForContent(T content, VariantType<T, S> variantType);

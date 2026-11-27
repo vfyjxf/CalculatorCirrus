@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.recipe.execution;
 
+import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
@@ -20,7 +21,6 @@ import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,10 +29,10 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * 把规划产物翻译成可执行的交互步骤（§10.5.2）。
+ * Translates planning output into executable interaction steps (§10.5.2).
  *
- * <p>两条入口：{@link #translate} 消费 {@link ProductionPlan}（经 {@link ExecutionPlanBridge} 的批次绑定），
- * {@link #translateTarget} 服务无 ProductionPlan 的客户端目标配方直执行路径。</p>
+ * <p>Two entry points: {@link #translate} consumes a {@link ProductionPlan} (batches bound by {@link ExecutionPlanBridge}),
+ * and {@link #translateTarget} serves the client-side direct execution path that has no ProductionPlan.</p>
  */
 public final class ExecutionTranslator {
 
@@ -44,11 +44,11 @@ public final class ExecutionTranslator {
 
     //region plan translation
 
-    /** 规划批次 → 交互执行计划；任一配方批次无法反查 {@link RecipeEntry} 时返回空。 */
+    /** Planning batches to an interaction execution plan; empty when any recipe batch cannot be resolved back to a {@link RecipeEntry}. */
     public Optional<InteractionExecutionPlan> translate(
-            ProductionPlan plan,
-            ExecutionPlanBridge.ExecutionOutline outline,
-            Function<CompiledRecipeKey, Optional<RecipeEntry<?>>> recipeResolver
+        ProductionPlan plan,
+        ExecutionPlanBridge.ExecutionOutline outline,
+        Function<CompiledRecipeKey, Optional<RecipeEntry<?>>> recipeResolver
     ) {
         Objects.requireNonNull(plan, "plan");
         Objects.requireNonNull(outline, "outline");
@@ -65,7 +65,8 @@ public final class ExecutionTranslator {
                 return Optional.empty();
             }
             steps.addAllIterable(
-                    batchSteps(recipe.get(), batch.times(), batch.inputs(), batch.outputs(), batch.catalysts()));
+                batchSteps(recipe.get(), batch.times(), batch.inputs(), batch.outputs(), batch.catalysts())
+            );
             target = recipe.get();
             targetTimes = batch.times();
         }
@@ -79,7 +80,7 @@ public final class ExecutionTranslator {
 
     //region target translation
 
-    /** 客户端目标配方直执行：内容取自 routingView / 投影管线，概率字段不读取。 */
+    /** Client target recipe direct execution: contents come from the routing view and projection pipeline, probability fields are not read. */
     public Optional<InteractionExecutionPlan> translateTarget(RecipeEntry<?> recipe, int times) {
         Objects.requireNonNull(recipe, "recipe");
         if (times <= 0) {
@@ -109,19 +110,18 @@ public final class ExecutionTranslator {
             if (output == null || output.isEmpty()) {
                 continue;
             }
-            if (!(output instanceof dev.vfyjxf.cirrus.api.recipe.content.StackContent<?, ?> stack) || stack.amount() <= 0L) {
+            long amount = output.amount();
+            if (amount <= 0L) {
                 continue;
             }
-            outputs.add(new OutputBinding(stack.content(), stack.amount()));
+            ContentResource resource = output.asResource();
+            outputs.add(new OutputBinding(resource, amount));
         }
         if (outputs.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(new InteractionExecutionPlan(
-                recipe,
-                times,
-                batchSteps(recipe, times, inputs, outputs, catalysts)
-        ));
+        return Optional
+                .of(new InteractionExecutionPlan(recipe, times, batchSteps(recipe, times, inputs, outputs, catalysts)));
     }
 
     //endregion
@@ -129,20 +129,22 @@ public final class ExecutionTranslator {
     //region step synthesis
 
     private ImmutableList<InteractionStep> batchSteps(
-            RecipeEntry<?> recipe,
-            int times,
-            List<InputBinding> perCraftInputs,
-            List<OutputBinding> perCraftOutputs,
-            List<InputContent> catalysts
+        RecipeEntry<?> recipe,
+        int times,
+        List<InputBinding> perCraftInputs,
+        List<OutputBinding> perCraftOutputs,
+        List<InputContent> catalysts
     ) {
         MutableList<InteractionStep> steps = Lists.mutable.empty();
-        steps.add(new InteractionStep.OpenInteractionStep(
+        steps.add(
+            new InteractionStep.OpenInteractionStep(
                 ExecutionSideRequirement.clientSide,
                 ExecutionCapability.interactionAccess,
                 recipe,
                 times,
                 interactionIdOf(recipe)
-        ));
+            )
+        );
         for (InputContent catalyst : catalysts) {
             reserveCatalyst(steps, catalyst);
         }
@@ -153,33 +155,41 @@ public final class ExecutionTranslator {
             int batchTimes = batchSize(recipe, remaining, totals, totalOutputs, times);
             ImmutableList<InputBinding> batchInputs = scaleInputs(perCraftInputs, batchTimes);
             ImmutableList<OutputBinding> batchOutputs = scaleOutputs(perCraftOutputs, batchTimes);
-            steps.add(new InteractionStep.PrepareInputsStep(
+            steps.add(
+                new InteractionStep.PrepareInputsStep(
                     ExecutionSideRequirement.clientSide,
                     ExecutionCapability.inventoryTransfer,
                     recipe,
                     batchInputs
-            ));
-            steps.add(new InteractionStep.ExecuteRecipeStep(
+                )
+            );
+            steps.add(
+                new InteractionStep.ExecuteRecipeStep(
                     ExecutionSideRequirement.clientSide,
                     ExecutionCapability.interactionPerform,
                     recipe,
                     batchTimes,
                     batchInputs,
                     batchOutputs
-            ));
-            steps.add(new InteractionStep.CollectOutputsStep(
+                )
+            );
+            steps.add(
+                new InteractionStep.CollectOutputsStep(
                     ExecutionSideRequirement.clientSide,
                     ExecutionCapability.inventoryTransfer,
                     recipe,
                     batchOutputs
-            ));
+                )
+            );
             for (OutputBinding output : batchOutputs) {
-                steps.add(new InteractionStep.StoreOutputsStep(
+                steps.add(
+                    new InteractionStep.StoreOutputsStep(
                         ExecutionSideRequirement.clientSide,
                         ExecutionCapability.outputStorage,
                         output.resource(),
                         output.amount()
-                ));
+                    )
+                );
             }
             remaining -= batchTimes;
         }
@@ -187,21 +197,25 @@ public final class ExecutionTranslator {
     }
 
     /**
-     * 催化剂按"持有 1 件"预留；Known limitation：core 未提供每批周转量（04 §4.4.2 待补）。
+     * A catalyst is reserved as "one held"; known limitation: core exposes no per-batch turnover (04 §4.4.2 pending).
      */
     private static void reserveCatalyst(MutableList<InteractionStep> steps, InputContent catalyst) {
-        steps.add(new InteractionStep.EnsureAccessibleStep(
+        steps.add(
+            new InteractionStep.EnsureAccessibleStep(
                 ExecutionSideRequirement.environmentAgnostic,
                 ExecutionCapability.storageAccess,
                 new InteractionStep.AccessTarget.Input(catalyst),
                 1L
-        ));
-        steps.add(new InteractionStep.ReserveCatalystStep(
+            )
+        );
+        steps.add(
+            new InteractionStep.ReserveCatalystStep(
                 ExecutionSideRequirement.clientSide,
                 ExecutionCapability.inventoryTransfer,
                 catalyst,
                 1L
-        ));
+            )
+        );
     }
 
     private Namespace interactionIdOf(RecipeEntry<?> recipe) {
@@ -212,15 +226,15 @@ public final class ExecutionTranslator {
     }
 
     private int batchSize(
-            RecipeEntry<?> recipe,
-            int remaining,
-            ImmutableList<InputBinding> totals,
-            ImmutableList<OutputBinding> totalOutputs,
-            int totalTimes
+        RecipeEntry<?> recipe,
+        int remaining,
+        ImmutableList<InputBinding> totals,
+        ImmutableList<OutputBinding> totalOutputs,
+        int totalTimes
     ) {
         int requested = Math.max(1, remaining);
-        int limit = interactionApi.maxExecuteBatchSize(
-                new InteractionContext(recipe, totalTimes, totals, totalOutputs));
+        int limit = interactionApi
+                .maxExecuteBatchSize(new InteractionContext(recipe, totalTimes, totals, totalOutputs));
         return Math.max(1, Math.min(requested, limit));
     }
 

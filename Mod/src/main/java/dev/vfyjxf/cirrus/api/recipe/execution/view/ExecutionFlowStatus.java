@@ -3,12 +3,8 @@ package dev.vfyjxf.cirrus.api.recipe.execution.view;
 /**
  * Visual status projected onto execution flow nodes for UI consumption.
  */
-public sealed interface ExecutionFlowStatus permits
-    ExecutionFlowStatus.Pending,
-    ExecutionFlowStatus.Running,
-    ExecutionFlowStatus.Paused,
-    ExecutionFlowStatus.Completed,
-    ExecutionFlowStatus.Failed {
+public sealed interface ExecutionFlowStatus permits ExecutionFlowStatus.Pending, ExecutionFlowStatus.Running,
+        ExecutionFlowStatus.Paused, ExecutionFlowStatus.Completed, ExecutionFlowStatus.Failed {
 
     //region shared instances
 

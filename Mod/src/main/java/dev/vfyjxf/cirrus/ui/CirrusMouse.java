@@ -4,8 +4,7 @@ import net.minecraft.client.Minecraft;
 import org.lwjgl.glfw.GLFW;
 
 public final class CirrusMouse {
-    private CirrusMouse() {
-    }
+    private CirrusMouse() {}
 
     public static boolean leftButtonDown() {
         return buttonDown(GLFW.GLFW_MOUSE_BUTTON_LEFT);

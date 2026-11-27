@@ -1,11 +1,11 @@
 package dev.vfyjxf.cirrus.ui.widget.common;
 
-import dev.vfyjxf.cirrus.ui.CirrusTextures;
+import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.ui.InputContext;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -18,8 +18,7 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minWidth;
 
 public class CirrusRowWidget extends WidgetGroup<Widget> {
     public enum Chrome {
-        flat,
-        selectable
+        flat, selectable
     }
 
     private final Chrome chrome;
@@ -28,13 +27,24 @@ public class CirrusRowWidget extends WidgetGroup<Widget> {
 
     public CirrusRowWidget(int height, int rowGap, Chrome chrome) {
         this.chrome = chrome;
+        addStyleClass("cirrus-row");
         useStyle(flexRow(), alignItemsCenter(), gap(rowGap), heightOf(height), minWidth(0));
         onRender((canvas, mouseX, mouseY, partialTicks, self, context) -> {
             if (chrome == Chrome.selectable) {
                 boolean selected = selectedSupplier.getAsBoolean();
-                CirrusControlChrome.renderButtonBackground(canvas, 0, 0, self.width(), self.height(), selected, hovered(), true);
+                CirrusControlChrome.renderButtonBackground(
+                    canvas,
+                    this,
+                    0,
+                    0,
+                    self.width(),
+                    self.height(),
+                    selected,
+                    hovered(),
+                    true
+                );
             } else {
-                canvas.texture(CirrusTextures.Background.Outlined.flat, 0, 0, self.width(), self.height());
+                canvas.texture(CirrusUiTheme.textures(this).cardSurface(), 0, 0, self.width(), self.height());
             }
         });
         onMouseClick((input, clickCount, context) -> {

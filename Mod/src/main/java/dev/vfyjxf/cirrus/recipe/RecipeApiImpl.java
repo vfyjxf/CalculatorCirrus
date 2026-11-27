@@ -8,6 +8,10 @@ import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolverType;
 import dev.vfyjxf.cirrus.api.recipe.filter.RecipeFilter;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionTransformer;
+import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextOption;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
@@ -15,10 +19,6 @@ import dev.vfyjxf.cirrus.api.recipe.system.ResolveError;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.system.VanillaRecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.extension.RecipeResolverChain;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionTransformer;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import mezz.jei.api.recipe.RecipeType;
@@ -31,15 +31,15 @@ import org.eclipse.collections.api.set.ImmutableSet;
 import org.eclipse.collections.api.set.MutableSet;
 import org.eclipse.collections.impl.collector.Collectors2;
 import org.eclipse.collections.impl.map.mutable.MapAdapter;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnmodifiableView;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
@@ -48,8 +48,8 @@ import java.util.concurrent.ConcurrentMap;
 
 public class RecipeApiImpl implements RecipeApi {
 
-    private static RecipeApiImpl instance = null;
-    private static RecipeApiImpl canonicalInstance = null;
+    private static @Nullable RecipeApiImpl instance = null;
+    private static @Nullable RecipeApiImpl canonicalInstance = null;
 
     public static @Nullable RecipeApiImpl canonicalInstance() {
         return canonicalInstance;
@@ -68,6 +68,7 @@ public class RecipeApiImpl implements RecipeApi {
         Checks.checkNotNull(recipeApi, "recipeApi");
         instance = recipeApi;
         attachEpoch++;
+        dev.vfyjxf.cirrus.recipe.lookup.RecipeLookupIndex.invalidateAll();
     }
 
     /**
@@ -95,6 +96,7 @@ public class RecipeApiImpl implements RecipeApi {
         if (canonicalInstance != null && canonicalInstance != current) {
             canonicalInstance.emptyContextResolutions.clear();
         }
+        dev.vfyjxf.cirrus.recipe.lookup.RecipeLookupIndex.invalidateAll();
     }
 
     private final ImmutableMap<Namespace, RecipeSystem<?>> systems;
@@ -126,41 +128,29 @@ public class RecipeApiImpl implements RecipeApi {
         this.contentTransformers = Maps.immutable.ofMap(builder.contentTransformers);
         this.projectionTransformers = Maps.immutable.ofMap(builder.projectionTransformers);
         this.handlerEntries = builder.handlerEntries.entrySet().stream().collect(
-                Collectors2.toImmutableMap(
-                        Map.Entry::getKey,
-                        entry -> Sets.immutable.withAll(entry.getValue())
-                ));
+            Collectors2.toImmutableMap(Map.Entry::getKey, entry -> Sets.immutable.withAll(entry.getValue()))
+        );
         this.jeiRecipeTypes = builder.jeiRecipeTypes.entrySet().stream().collect(
-                Collectors2.toImmutableMap(
-                        Map.Entry::getKey,
-                        entry -> Sets.immutable.withAll(entry.getValue())
-                ));
+            Collectors2.toImmutableMap(Map.Entry::getKey, entry -> Sets.immutable.withAll(entry.getValue()))
+        );
         this.ingredientResolvers = builder.ingredientResolvers.entrySet().stream().collect(
-                Collectors2.toImmutableMap(
-                        Map.Entry::getKey,
-                        entry -> Sets.immutable.withAll(entry.getValue())
-                ));
+            Collectors2.toImmutableMap(Map.Entry::getKey, entry -> Sets.immutable.withAll(entry.getValue()))
+        );
         this.recipeFilters = builder.recipeFilters.entrySet().stream().collect(
-                Collectors2.toImmutableMap(
-                        Map.Entry::getKey,
-                        entry -> Sets.immutable.withAll(entry.getValue())
-                ));
+            Collectors2.toImmutableMap(Map.Entry::getKey, entry -> Sets.immutable.withAll(entry.getValue()))
+        );
         this.projectionPlugins = Maps.immutable.ofMap(builder.projectionPlugins);
         this.projectionContextOptions = Maps.immutable.ofMap(builder.projectionContextOptions);
         this.recipeSubsystems = sortSubsystems(builder);
-        this.recipeSystemTags = builder.recipeSystemTags.entrySet().stream().collect(
-                Collectors2.toImmutableMap(
-                        Map.Entry::getKey,
-                        entry -> {
-                            MutableSet<RecipeSystem<?>> tagValues = Sets.mutable.empty();
-                            for (Namespace namespace : entry.getValue()) {
-                                var system = findSystem(namespace);
-                                if (system != null) tagValues.add(system);
-                            }
-                            return tagValues.toImmutable();
-                        }
-                )
-        );
+        this.recipeSystemTags = builder.recipeSystemTags.entrySet().stream()
+                .collect(Collectors2.toImmutableMap(Map.Entry::getKey, entry -> {
+                    MutableSet<RecipeSystem<?>> tagValues = Sets.mutable.empty();
+                    for (Namespace namespace : entry.getValue()) {
+                        var system = findSystem(namespace);
+                        if (system != null) tagValues.add(system);
+                    }
+                    return tagValues.toImmutable();
+                }));
         Map<Namespace, MutableSet<Namespace>> reverseTags = new LinkedHashMap<>();
         builder.recipeSystemTags.forEach((tag, systemIds) -> {
             for (Namespace systemId : systemIds) {
@@ -173,20 +163,26 @@ public class RecipeApiImpl implements RecipeApi {
         this.tagsByRecipeSystem = reverseTags.entrySet().stream()
                 .collect(Collectors2.toImmutableMap(Map.Entry::getKey, entry -> entry.getValue().toImmutable()));
         this.vanillaRecipeSystemByType = MapAdapter.adapt(builder.recipeSystems)
-                                                   .select((k, v) -> v instanceof VanillaRecipeSystem)
-                                                   .toImmutableMap(v -> ((VanillaRecipeSystem<?>) v).recipeType(), v -> (VanillaRecipeSystem<?>) v);
+                .select((k, v) -> v instanceof VanillaRecipeSystem)
+                .toImmutableMap(v -> ((VanillaRecipeSystem<?>) v).recipeType(), v -> (VanillaRecipeSystem<?>) v);
     }
 
-    private static Map<Namespace, List<RecipeApiRegistryBuilder.SubsystemEntry<?>>> sortSubsystems(RecipeApiRegistryBuilder builder) {
+    private static Map<Namespace, List<RecipeApiRegistryBuilder.SubsystemEntry<?>>> sortSubsystems(
+        RecipeApiRegistryBuilder builder
+    ) {
         Map<Namespace, List<RecipeApiRegistryBuilder.SubsystemEntry<?>>> grouped = new LinkedHashMap<>();
         for (RecipeApiRegistryBuilder.SubsystemEntry<?> entry : builder.recipeSubsystems.values()) {
             if (!builder.recipeSystems.containsKey(entry.systemId())) {
-                throw new IllegalArgumentException("Recipe subsystem " + entry.subsystemId() + " targets missing system: " + entry.systemId());
+                throw new IllegalArgumentException(
+                    "Recipe subsystem " + entry.subsystemId() + " targets missing system: " + entry.systemId()
+                );
             }
             grouped.computeIfAbsent(entry.systemId(), ignored -> new ArrayList<>()).add(entry);
         }
         Map<Namespace, List<RecipeApiRegistryBuilder.SubsystemEntry<?>>> sorted = new LinkedHashMap<>();
-        grouped.forEach((systemId, entries) -> sorted.put(systemId, List.copyOf(sortSubsystemGroup(systemId, entries))));
+        grouped.forEach(
+            (systemId, entries) -> sorted.put(systemId, List.copyOf(sortSubsystemGroup(systemId, entries)))
+        );
         return Map.copyOf(sorted);
     }
 
@@ -198,7 +194,9 @@ public class RecipeApiImpl implements RecipeApi {
         for (RecipeApiRegistryBuilder.SubsystemEntry<?> entry : entries) {
             RecipeApiRegistryBuilder.SubsystemEntry<?> previous = byId.putIfAbsent(entry.subsystemId(), entry);
             if (previous != null) {
-                throw new IllegalArgumentException("Duplicate recipe subsystem id " + entry.subsystemId() + " for system " + systemId);
+                throw new IllegalArgumentException(
+                    "Duplicate recipe subsystem id " + entry.subsystemId() + " for system " + systemId
+                );
             }
         }
 
@@ -222,11 +220,11 @@ public class RecipeApiImpl implements RecipeApi {
         }
 
         Comparator<RecipeApiRegistryBuilder.SubsystemEntry<?>> comparator = Comparator
-            .comparingInt((RecipeApiRegistryBuilder.SubsystemEntry<?> entry) -> entry.order().order())
-            .thenComparing(RecipeApiRegistryBuilder.SubsystemEntry::subsystemId);
+                .comparingInt((RecipeApiRegistryBuilder.SubsystemEntry<?> entry) -> entry.order().order())
+                .thenComparing(RecipeApiRegistryBuilder.SubsystemEntry::subsystemId);
         PriorityQueue<RecipeApiRegistryBuilder.SubsystemEntry<?>> queue = new PriorityQueue<>(comparator);
         for (RecipeApiRegistryBuilder.SubsystemEntry<?> entry : entries) {
-            if (indegree.get(entry.subsystemId()) == 0) {
+            if (indegree.getOrDefault(entry.subsystemId(), 0) == 0) {
                 queue.add(entry);
             }
         }
@@ -235,7 +233,7 @@ public class RecipeApiImpl implements RecipeApi {
         while (!queue.isEmpty()) {
             RecipeApiRegistryBuilder.SubsystemEntry<?> current = queue.remove();
             out.add(current);
-            for (Namespace target : edges.get(current.subsystemId())) {
+            for (Namespace target : edges.getOrDefault(current.subsystemId(), Set.of())) {
                 int next = indegree.computeIfPresent(target, (ignored, value) -> value - 1);
                 if (next == 0) {
                     queue.add(byId.get(target));
@@ -256,7 +254,10 @@ public class RecipeApiImpl implements RecipeApi {
         Map<Namespace, RecipeApiRegistryBuilder.SubsystemEntry<?>> byId
     ) {
         if (!byId.containsKey(dependency)) {
-            throw new IllegalArgumentException("Recipe subsystem " + subsystemId + " for system " + systemId + " references missing subsystem: " + dependency);
+            throw new IllegalArgumentException(
+                "Recipe subsystem " + subsystemId + " for system " + systemId + " references missing subsystem: "
+                        + dependency
+            );
         }
     }
 
@@ -266,7 +267,7 @@ public class RecipeApiImpl implements RecipeApi {
         Map<Namespace, Set<Namespace>> edges,
         Map<Namespace, Integer> indegree
     ) {
-        if (edges.get(from).add(to)) {
+        if (edges.computeIfAbsent(from, ignored -> new HashSet<>()).add(to)) {
             indegree.computeIfPresent(to, (ignored, value) -> value + 1);
         }
     }
@@ -332,14 +333,17 @@ public class RecipeApiImpl implements RecipeApi {
             if (index >= entries.size()) {
                 return system.resolveFallback(context, recipe);
             }
-            RecipeApiRegistryBuilder.SubsystemEntry<R> entry = (RecipeApiRegistryBuilder.SubsystemEntry<R>) entries.get(index);
+            RecipeApiRegistryBuilder.SubsystemEntry<R> entry = (RecipeApiRegistryBuilder.SubsystemEntry<R>) entries
+                    .get(index);
             return entry.subsystem().resolve(context, recipe, new SubsystemChain<>(system, entries, index + 1));
         }
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public @Nullable <T extends Recipe<?>> VanillaRecipeSystem<T> findVanillaSystem(net.minecraft.world.item.crafting.RecipeType<T> recipeType) {
+    public @Nullable <T extends Recipe<?>> VanillaRecipeSystem<T> findVanillaSystem(
+        net.minecraft.world.item.crafting.RecipeType<T> recipeType
+    ) {
         return (VanillaRecipeSystem<T>) vanillaRecipeSystemByType.get(recipeType);
     }
 
@@ -377,7 +381,9 @@ public class RecipeApiImpl implements RecipeApi {
 
     @SuppressWarnings("unchecked")
     @Override
-    public @Nullable <T extends RecipeContent, F extends RecipeClause> ContentTransformer<T, F> findContentTransformer(ClauseType type) {
+    public @Nullable <T extends RecipeContent, F extends RecipeClause> ContentTransformer<T, F> findContentTransformer(
+        ClauseType type
+    ) {
         return (ContentTransformer<T, F>) contentTransformers.get(type);
     }
 
@@ -419,8 +425,8 @@ public class RecipeApiImpl implements RecipeApi {
             for (RecipeType<?> recipeType : jeiRecipeTypes) {
                 try {
                     RecipeSystem.getMachinesFromJei(recipeType)
-                                .collect(content -> MachineEntry.fromItemStack(content.value()))
-                                .forEach(machinesFromJei::add);
+                            .collect(content -> MachineEntry.fromItemStack(content.value()))
+                            .forEach(machinesFromJei::add);
                 } catch (RuntimeException ignored) {
                     // JEI is a client/runtime integration. Missing runtime data must not make
                     // server-side routing or broad recipe graph construction reject recipes.
@@ -436,7 +442,9 @@ public class RecipeApiImpl implements RecipeApi {
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     @Override
-    public @UnmodifiableView <T> RichIterable<IngredientResolver<T>> getIngredientResolver(IngredientResolverType<T> type) {
+    public @UnmodifiableView <T> RichIterable<IngredientResolver<T>> getIngredientResolver(
+        IngredientResolverType<T> type
+    ) {
         RichIterable resolvers = ingredientResolvers.get(type);
         return resolvers == null ? Sets.immutable.empty() : resolvers;
     }

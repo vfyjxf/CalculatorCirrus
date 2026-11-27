@@ -1,23 +1,23 @@
 package dev.vfyjxf.cirrus.recipe.execution.driver.slot;
 
-import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
+import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
 import dev.vfyjxf.cirrus.api.recipe.execution.PauseReason;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.slot.SlotAccess;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.slot.SlotLayout;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionPerformResult;
-import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayViewModel;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayTraceSnapshot;
+import dev.vfyjxf.cirrus.api.recipe.execution.overlay.ExecutionOverlayViewModel;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.OverlayMaterialRequirement;
 import dev.vfyjxf.cirrus.api.recipe.execution.overlay.OverlayTargetProgress;
 import net.minecraft.world.item.ItemStack;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.impl.factory.Lists;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Slot interaction flow with validation, step execution, and tracking.
@@ -45,7 +45,7 @@ public interface SlotFlow {
     record Context(
         SlotLayout layout,
         SlotAccess access,
-        @Nullable SlotAccess.Interaction interaction,
+        SlotAccess.@Nullable Interaction interaction,
         @Nullable PlacementResolver placementResolver
     ) {}
 
@@ -73,14 +73,9 @@ public interface SlotFlow {
         }
     }
 
-
     record Failure(InteractionStep step, FailureKind kind, @Nullable Throwable error) {
         public enum FailureKind {
-            validation,
-            openBlocked,
-            prepareBlocked,
-            collectBlocked,
-            executeFailed
+            validation, openBlocked, prepareBlocked, collectBlocked, executeFailed
         }
     }
 
@@ -98,12 +93,7 @@ public interface SlotFlow {
 
     //region placement
 
-    record Placement(
-        SlotLayout.Reference slot,
-        ItemStack template,
-        long amount,
-        @Nullable InputContent input
-    ) {
+    record Placement(SlotLayout.Reference slot, ItemStack template, long amount, @Nullable InputContent input) {
         public Placement(SlotLayout.Reference slot, ItemStack template, long amount) {
             this(slot, template, amount, null);
         }
@@ -134,4 +124,3 @@ public interface SlotFlow {
     }
     //endregion
 }
-

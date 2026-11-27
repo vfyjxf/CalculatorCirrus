@@ -5,8 +5,7 @@ import java.util.List;
 public class Type {
 
     void foo(List<?> list) {
-        record Ty<T>(T value) {
-        }
+        record Ty<T>(T value) {}
         var ty = new Ty<>(list.getFirst());
     }
 

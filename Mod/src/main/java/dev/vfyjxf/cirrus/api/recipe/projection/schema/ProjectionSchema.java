@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.projection.schema;
 
 import dev.vfyjxf.cloudlib.util.Checks;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -55,8 +55,6 @@ public final class ProjectionSchema {
 
     @Override
     public String toString() {
-        return "ProjectionSchema{" +
-               "values=" + values +
-               '}';
+        return "ProjectionSchema{" + "values=" + values + '}';
     }
 }

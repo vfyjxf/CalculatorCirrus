@@ -7,8 +7,10 @@ import java.util.TreeSet;
 
 public record ProgressionState(Set<String> unlockedStages, Set<String> accessibleDimensions) {
 
-    public static final ProgressionState OVERWORLD_DEFAULT =
-            new ProgressionState(Set.of(), Set.of("minecraft:overworld"));
+    public static final ProgressionState overworldDefault = new ProgressionState(
+        Set.of(),
+        Set.of("minecraft:overworld")
+    );
 
     public ProgressionState {
         Objects.requireNonNull(unlockedStages, "unlockedStages");

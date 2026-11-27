@@ -59,8 +59,12 @@ public class ComponentComparisonBenchmark {
      * Semantically identical to {@link MatchStrategy#identityAndComponent} but built from a fresh
      * lambda, so a fast path keyed on the exact {@code same} matcher instance will not apply to it.
      */
-    private static final MatchStrategy EXPLICIT_SLOW =
-            new MatchStrategy(true, false, true, (a, b) -> Objects.equals(a, b));
+    private static final MatchStrategy explicitSlow = new MatchStrategy(
+        true,
+        false,
+        true,
+        (a, b) -> Objects.equals(a, b)
+    );
 
     @Param({"PLAIN", "TOOL", "ENCHANTED", "POTION", "RENAMED", "CONTAINER"})
     public String scenario;
@@ -101,7 +105,7 @@ public class ComponentComparisonBenchmark {
 
     @Benchmark
     public boolean contentStackMatchesBaseline() {
-        return left.matches(right, EXPLICIT_SLOW);
+        return left.matches(right, explicitSlow);
     }
 
     @Benchmark
@@ -139,10 +143,10 @@ public class ComponentComparisonBenchmark {
     private static ItemStack multiComponentSword(boolean variantB, boolean unequalValue) {
         ItemStack stack = new ItemStack(Items.DIAMOND_SWORD);
         stack.set(DataComponents.CUSTOM_NAME, Component.literal("Sword of Benchmarking"));
-        stack.set(DataComponents.LORE, new ItemLore(
-                List.of(Component.literal("Forged in JMH"), Component.literal("Do not nerf")),
-                List.of()
-        ));
+        stack.set(
+            DataComponents.LORE,
+            new ItemLore(List.of(Component.literal("Forged in JMH"), Component.literal("Do not nerf")), List.of())
+        );
         stack.set(DataComponents.REPAIR_COST, 7);
         CompoundTag tag = new CompoundTag();
         tag.putInt("grind", variantB ? 2 : 1);
@@ -158,7 +162,10 @@ public class ComponentComparisonBenchmark {
 
     private static ItemStack potion(boolean variantB) {
         ItemStack stack = new ItemStack(Items.POTION);
-        stack.set(DataComponents.POTION_CONTENTS, new PotionContents(variantB ? Potions.REGENERATION : Potions.HEALING));
+        stack.set(
+            DataComponents.POTION_CONTENTS,
+            new PotionContents(variantB ? Potions.REGENERATION : Potions.HEALING)
+        );
         return stack;
     }
 
@@ -176,11 +183,10 @@ public class ComponentComparisonBenchmark {
         ItemStack nestedPickaxe = new ItemStack(Items.DIAMOND_PICKAXE);
         nestedPickaxe.set(DataComponents.DAMAGE, 12);
         ItemStack nestedGem = new ItemStack(Items.DIAMOND, unequalValue ? 3 : 2);
-        stack.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(
-                nestedSword,
-                nestedPickaxe,
-                nestedGem
-        )));
+        stack.set(
+            DataComponents.CONTAINER,
+            ItemContainerContents.fromItems(List.of(nestedSword, nestedPickaxe, nestedGem))
+        );
         return stack;
     }
 

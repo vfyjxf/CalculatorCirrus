@@ -15,6 +15,7 @@ import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -26,11 +27,11 @@ import java.util.Optional;
 
 public final class DefaultHumanGuidanceView implements HumanGuidanceView {
 
-    public static final double SOFT_PREFER_MULT = 0.7;
-    public static final double SOFT_PENALIZE_MULT = 3.0;
-    public static final double TAG_SOFT_PREFER_MULT = 0.85;
+    public static final double softPreferMult = 0.7;
+    public static final double softPenalizeMult = 3.0;
+    public static final double tagSoftPreferMult = 0.85;
 
-    private static final DefaultHumanGuidanceView EMPTY = new DefaultHumanGuidanceView(List.of());
+    private static final DefaultHumanGuidanceView empty = new DefaultHumanGuidanceView(List.of());
 
     private final List<GuidanceRule> allRules;
     private final List<GuidanceRule> hardBans;
@@ -50,9 +51,9 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
             indexed.add(new IndexedRule(r, i));
         }
         // Higher scope overrides lower scope; within same scope later write wins.
-        indexed.sort(Comparator
-                .comparingInt((IndexedRule ir) -> ir.rule.scope().ordinal())
-                .thenComparingInt(ir -> ir.order));
+        indexed.sort(
+            Comparator.comparingInt((IndexedRule ir) -> ir.rule.scope().ordinal()).thenComparingInt(ir -> ir.order)
+        );
 
         List<GuidanceRule> ordered = new ArrayList<>(indexed.size());
         for (IndexedRule ir : indexed) {
@@ -64,8 +65,8 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
                 case MachineRule mr -> machineRules.put(mr.machineId(), mr);
                 case ResourceRule rr -> resourceRules.put(rr.resource(), rr);
                 case TagDefaultRule tr -> tagRules.put(tr.tagId(), tr);
-                case CycleBreakRule cr -> cycleBreakRules.put(
-                        new TargetRecipePair(cr.targetResource(), cr.bannedSourceRecipe()), cr);
+                case CycleBreakRule cr ->
+                    cycleBreakRules.put(new TargetRecipePair(cr.targetResource(), cr.bannedSourceRecipe()), cr);
                 case CostOverrideRule cor -> costOverrideRules.put(cor.resource(), cor);
                 case ModNamespaceRule mnr -> modNamespaceRules.put(mnr.modNamespace(), mnr);
             }
@@ -74,34 +75,34 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
 
         List<GuidanceRule> bans = new ArrayList<>();
         for (RecipeRule r : recipeRules.values()) {
-            if (r.strength() == RuleStrength.HARD_BAN) bans.add(r);
+            if (r.strength() == RuleStrength.hardBan) bans.add(r);
         }
         for (SystemRule r : systemRules.values()) {
-            if (r.strength() == RuleStrength.HARD_BAN) bans.add(r);
+            if (r.strength() == RuleStrength.hardBan) bans.add(r);
         }
         for (MachineRule r : machineRules.values()) {
-            if (r.strength() == RuleStrength.HARD_BAN || !r.willingToBuildNew()) bans.add(r);
+            if (r.strength() == RuleStrength.hardBan || !r.willingToBuildNew()) bans.add(r);
         }
         for (ResourceRule r : resourceRules.values()) {
-            if (r.strength() == RuleStrength.HARD_BAN) bans.add(r);
+            if (r.strength() == RuleStrength.hardBan) bans.add(r);
         }
         for (CycleBreakRule r : cycleBreakRules.values()) {
-            if (r.strength() == RuleStrength.HARD_BAN) bans.add(r);
+            if (r.strength() == RuleStrength.hardBan) bans.add(r);
         }
         for (ModNamespaceRule r : modNamespaceRules.values()) {
-            if (r.strength() == RuleStrength.HARD_BAN) bans.add(r);
+            if (r.strength() == RuleStrength.hardBan) bans.add(r);
         }
         bans.sort(Comparator.comparing(GuidanceRule::ruleId));
         this.hardBans = List.copyOf(bans);
     }
 
     public static HumanGuidanceView empty() {
-        return EMPTY;
+        return empty;
     }
 
     public static HumanGuidanceView of(List<GuidanceRule> rules) {
         if (rules == null || rules.isEmpty()) {
-            return EMPTY;
+            return empty;
         }
         return new DefaultHumanGuidanceView(rules);
     }
@@ -115,10 +116,10 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
     public boolean isRecipeBanned(CompiledRecipeKey recipeKey) {
         RecipeRule rr = recipeRules.get(recipeKey);
         if (rr != null) {
-            return rr.strength() == RuleStrength.HARD_BAN;
+            return rr.strength() == RuleStrength.hardBan;
         }
         ModNamespaceRule modRule = modRuleForRecipe(recipeKey);
-        return modRule != null && modRule.strength() == RuleStrength.HARD_BAN;
+        return modRule != null && modRule.strength() == RuleStrength.hardBan;
     }
 
     @Override
@@ -127,26 +128,26 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
             return true;
         }
         CycleBreakRule cbr = cycleBreakRules.get(new TargetRecipePair(target, recipeKey));
-        return cbr != null && cbr.strength() == RuleStrength.HARD_BAN;
+        return cbr != null && cbr.strength() == RuleStrength.hardBan;
     }
 
     @Override
     public boolean isRecipePinned(CompiledRecipeKey recipeKey) {
         RecipeRule rr = recipeRules.get(recipeKey);
-        return rr != null && rr.strength() == RuleStrength.HARD_PIN;
+        return rr != null && rr.strength() == RuleStrength.hardPin;
     }
 
     @Override
     public boolean isSystemEnabled(String systemId, SystemAdmission admission, boolean unlocked) {
-        if (admission == SystemAdmission.EXCLUDED_DISPLAY) {
+        if (admission == SystemAdmission.excludedDisplay) {
             return false;
         }
         SystemRule sr = systemRules.get(systemId);
         if (sr != null) {
-            if (sr.strength() == RuleStrength.HARD_BAN) {
+            if (sr.strength() == RuleStrength.hardBan) {
                 return false;
             }
-            if (admission == SystemAdmission.OPT_IN_ONLY) {
+            if (admission == SystemAdmission.optInOnly) {
                 return sr.optInEnabled() || unlocked;
             }
             return true;
@@ -154,24 +155,24 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
         String sysNs = namespaceOfSystem(systemId);
         if (sysNs != null) {
             ModNamespaceRule mnr = modNamespaceRules.get(sysNs);
-            if (mnr != null && mnr.strength() == RuleStrength.HARD_BAN) {
+            if (mnr != null && mnr.strength() == RuleStrength.hardBan) {
                 return false;
             }
         }
-        return admission == SystemAdmission.ENABLED || unlocked;
+        return admission == SystemAdmission.enabled || unlocked;
     }
 
     @Override
     public boolean isResourceTreatedAsBase(ResourceKey key) {
         ResourceRule rr = resourceRules.get(key);
-        return rr != null && rr.treatAsFreeBaseSource() && rr.strength() != RuleStrength.HARD_BAN;
+        return rr != null && rr.treatAsFreeBaseSource() && rr.strength() != RuleStrength.hardBan;
     }
 
     @Override
     public boolean isResourceBanned(ResourceKey key) {
         ResourceRule rr = resourceRules.get(key);
         if (rr != null) {
-            return rr.strength() == RuleStrength.HARD_BAN;
+            return rr.strength() == RuleStrength.hardBan;
         }
         return false;
     }
@@ -180,12 +181,12 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
     public boolean isWillingToBuild(String machineId) {
         MachineRule mr = machineRules.get(machineId);
         if (mr != null) {
-            return mr.willingToBuildNew() && mr.strength() != RuleStrength.HARD_BAN;
+            return mr.willingToBuildNew() && mr.strength() != RuleStrength.hardBan;
         }
         String ns = namespaceOfId(machineId);
         if (ns != null) {
             ModNamespaceRule mnr = modNamespaceRules.get(ns);
-            if (mnr != null && mnr.strength() == RuleStrength.HARD_BAN) {
+            if (mnr != null && mnr.strength() == RuleStrength.hardBan) {
                 return false;
             }
         }
@@ -201,7 +202,7 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
     @Override
     public boolean isTagHardPinned(String tagId) {
         TagDefaultRule tr = tagRules.get(tagId);
-        return tr != null && tr.strength() == RuleStrength.HARD_PIN;
+        return tr != null && tr.strength() == RuleStrength.hardPin;
     }
 
     @Override
@@ -257,7 +258,7 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
     public double tagSoftMultiplier(String tagId) {
         TagDefaultRule tr = tagRules.get(tagId);
         if (tr == null) return 1.0;
-        return tr.strength() == RuleStrength.SOFT_PREFER ? TAG_SOFT_PREFER_MULT : 1.0;
+        return tr.strength() == RuleStrength.softPrefer ? tagSoftPreferMult : 1.0;
     }
 
     @Override
@@ -281,7 +282,7 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
         return systemRules.containsKey(systemId);
     }
 
-    private ModNamespaceRule modRuleForRecipe(CompiledRecipeKey key) {
+    private @Nullable ModNamespaceRule modRuleForRecipe(CompiledRecipeKey key) {
         if (modNamespaceRules.isEmpty()) return null;
         if (key.explicitRecipeId().isPresent()) {
             String ns = namespaceOfId(key.explicitRecipeId().get());
@@ -296,19 +297,19 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
 
     private static double strengthMultiplier(RuleStrength strength) {
         return switch (strength) {
-            case SOFT_PREFER -> SOFT_PREFER_MULT;
-            case SOFT_PENALIZE -> SOFT_PENALIZE_MULT;
+            case softPrefer -> softPreferMult;
+            case softPenalize -> softPenalizeMult;
             default -> 1.0;
         };
     }
 
-    private static String namespaceOfId(String id) {
+    private static @Nullable String namespaceOfId(String id) {
         if (id == null) return null;
         int colon = id.indexOf(':');
         return colon > 0 ? id.substring(0, colon) : null;
     }
 
-    private static String namespaceOfSystem(String systemId) {
+    private static @Nullable String namespaceOfSystem(String systemId) {
         if (systemId == null) return null;
         if (systemId.startsWith("jei:category/")) {
             String rest = systemId.substring("jei:category/".length());
@@ -318,9 +319,7 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
         return namespaceOfId(systemId);
     }
 
-    private record IndexedRule(GuidanceRule rule, int order) {
-    }
+    private record IndexedRule(GuidanceRule rule, int order) {}
 
-    private record TargetRecipePair(ResourceKey target, CompiledRecipeKey recipe) {
-    }
+    private record TargetRecipePair(ResourceKey target, CompiledRecipeKey recipe) {}
 }

@@ -1,10 +1,10 @@
 package dev.vfyjxf.cirrus.api.recipe.content;
 
 import dev.vfyjxf.cirrus.api.CirrusTypes;
+import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
-import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
@@ -13,11 +13,7 @@ import dev.vfyjxf.cirrus.api.recipe.value.TimeValue;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.fluids.FluidStack;
 
-public sealed interface OutputContent
-    extends RecipeContent
-    permits EmptyRecipeContent,
-            StackContent,
-            ValueContent {
+public sealed interface OutputContent extends RecipeContent permits EmptyRecipeContent, StackContent, ValueContent {
 
     //region factory
 
@@ -42,19 +38,19 @@ public sealed interface OutputContent
     //region time value factory
 
     static OutputContent fromTime(TimeValue timeValue) {
-        return fromValue(CirrusTypes.Contents.TIME, timeValue);
+        return fromValue(CirrusTypes.Contents.time, timeValue);
     }
 
     static OutputContent fromTimeTick(int ticks) {
-        return fromValue(CirrusTypes.Contents.TIME, TimeValue.fromTick(ticks));
+        return fromValue(CirrusTypes.Contents.time, TimeValue.fromTick(ticks));
     }
 
     static OutputContent fromTimeSeconds(int seconds) {
-        return fromValue(CirrusTypes.Contents.TIME, TimeValue.fromSecond(seconds));
+        return fromValue(CirrusTypes.Contents.time, TimeValue.fromSecond(seconds));
     }
 
     static OutputContent fromTimeMinutes(int minutes) {
-        return fromValue(CirrusTypes.Contents.TIME, TimeValue.fromMinute(minutes));
+        return fromValue(CirrusTypes.Contents.time, TimeValue.fromMinute(minutes));
     }
 
     //endregion
@@ -62,11 +58,11 @@ public sealed interface OutputContent
     //region forge energy value factory
 
     static OutputContent fromEnergy(EnergyValue energyValue) {
-        return fromValue(CirrusTypes.Contents.ENERGY, energyValue);
+        return fromValue(CirrusTypes.Contents.energy, energyValue);
     }
 
     static OutputContent fromEnergy(long energy) {
-        return fromValue(CirrusTypes.Contents.ENERGY, EnergyValue.from(energy));
+        return fromValue(CirrusTypes.Contents.energy, EnergyValue.from(energy));
     }
 
     //endregion
@@ -114,7 +110,7 @@ public sealed interface OutputContent
     }
 
     static OutputContent fromItemStack(ItemStack stack, long amount, float chance) {
-        return fromStack(CirrusTypes.Contents.ITEM_STACK, stack, amount, chance);
+        return fromStack(CirrusTypes.Contents.itemStack, stack, amount, chance);
     }
 
     static OutputContent fromItemStack(ItemStack stack, long amount) {
@@ -126,7 +122,7 @@ public sealed interface OutputContent
     }
 
     static OutputContent fromFluidStack(FluidStack stack, long amount, float chance) {
-        return fromStack(CirrusTypes.Contents.FLUID_STACK, stack, amount, chance);
+        return fromStack(CirrusTypes.Contents.fluidStack, stack, amount, chance);
     }
 
     static OutputContent fromFluidStack(FluidStack stack, long amount) {

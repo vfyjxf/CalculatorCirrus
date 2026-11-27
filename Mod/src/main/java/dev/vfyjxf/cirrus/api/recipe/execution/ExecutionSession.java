@@ -6,7 +6,7 @@ import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowViewModel;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.eclipse.collections.api.factory.Sets;
 import org.eclipse.collections.api.set.ImmutableSet;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * In-memory runtime session tracking current execution progress, pauses, and retranslation requests.
@@ -60,7 +60,12 @@ public record ExecutionSession(
     //region factories
 
     public static ExecutionSession start(InteractionExecutionPlan plan, ExecutionFlowNode flowRoot) {
-        return start(plan, flowRoot, ExecutionPlanningSnapshot.empty(), ExecutionObservedStockPolicy.consumeObservedStock);
+        return start(
+            plan,
+            flowRoot,
+            ExecutionPlanningSnapshot.empty(),
+            ExecutionObservedStockPolicy.consumeObservedStock
+        );
     }
 
     public static ExecutionSession start(

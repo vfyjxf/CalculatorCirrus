@@ -1,8 +1,9 @@
 package dev.vfyjxf.cirrus.api.recipe.rule;
 
+import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationTags;
 import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
 import dev.vfyjxf.cloudlib.util.Checks;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -59,8 +60,12 @@ public final class RuleEngine {
             }
             problems.addAll(rule.validate().stream().map(problem -> "rule " + rule.id() + ": " + problem).toList());
             for (RuleAction action : rule.actions()) {
-                if (action instanceof RuleAction.ScoreAdjust adjust && !knownScoreComponents.contains(adjust.component())) {
-                    problems.add("rule " + rule.id() + ": score action references undeclared component '" + adjust.component() + "'");
+                if (action instanceof RuleAction.ScoreAdjust adjust
+                        && !knownScoreComponents.contains(adjust.component())) {
+                    problems.add(
+                        "rule " + rule.id() + ": score action references undeclared component '" + adjust.component()
+                                + "'"
+                    );
                 }
             }
             (rule.stage() == RuleStage.catalog ? catalog : candidate).add(rule);
@@ -88,7 +93,8 @@ public final class RuleEngine {
     public CatalogVerdict evaluateCatalog(RuleInput input) {
         Set<String> tags = new LinkedHashSet<>();
         boolean excluded = false;
-        @Nullable RecipeUsePolicy hint = null;
+        @Nullable
+        RecipeUsePolicy hint = null;
         // relation rules can build on tags attached earlier in the same pass
         RuleInput accumulated = new AccumulatedTagsInput(input, tags);
         for (RuleSpec rule : catalogRules) {
@@ -197,7 +203,7 @@ public final class RuleEngine {
         if (action instanceof RuleAction.Exclude) {
             return true;
         }
-        return action instanceof RuleAction.Tag tag && dev.vfyjxf.cirrus.api.recipe.classify.ClassificationTags.isExclusionTag(tag.tag());
+        return action instanceof RuleAction.Tag tag && ClassificationTags.isExclusionTag(tag.tag());
     }
 
     private static @Nullable RecipeUsePolicy strictest(@Nullable RecipeUsePolicy current, RecipeUsePolicy next) {
@@ -219,7 +225,8 @@ public final class RuleEngine {
 
     /** Candidate-stage verdict for one planner candidate. */
     public CandidateVerdict evaluateCandidate(RuleInput input) {
-        @Nullable String rejectReason = null;
+        @Nullable
+        String rejectReason = null;
         List<RuleAction.ScoreAdjust> adjustments = List.of();
         List<RuleAction.ScoreAdjust> collected = null;
         for (RuleSpec rule : candidateRules) {
@@ -230,7 +237,9 @@ public final class RuleEngine {
                 switch (action) {
                     case RuleAction.Reject reject -> {
                         if (rejectReason == null) {
-                            rejectReason = reject.reasonOrNull() != null ? reject.reasonOrNull() : ("rejected by rule " + rule.id());
+                            rejectReason = reject.reasonOrNull() != null
+                                    ? reject.reasonOrNull()
+                                    : ("rejected by rule " + rule.id());
                         }
                     }
                     case RuleAction.ScoreAdjust adjust -> {
@@ -252,8 +261,7 @@ public final class RuleEngine {
     }
 
     /** Catalog-stage outcome for one recipe. */
-    public record CatalogVerdict(Set<String> tags, boolean excluded, @Nullable RecipeUsePolicy hint) {
-    }
+    public record CatalogVerdict(Set<String> tags, boolean excluded, @Nullable RecipeUsePolicy hint) {}
 
     /** Candidate-stage outcome for one planner candidate. */
     public record CandidateVerdict(@Nullable String rejectReason, List<RuleAction.ScoreAdjust> adjustments) {
@@ -292,13 +300,13 @@ public final class RuleEngine {
         }
 
         @Override
-        public java.util.Set<String> inputIds() {
-            return java.util.Set.of();
+        public Set<String> inputIds() {
+            return Set.of();
         }
 
         @Override
-        public java.util.Set<String> outputIds() {
-            return java.util.Set.of();
+        public Set<String> outputIds() {
+            return Set.of();
         }
     }
 }

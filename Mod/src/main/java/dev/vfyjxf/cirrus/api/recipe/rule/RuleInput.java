@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.rule;
 
 import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Set;
@@ -100,7 +100,8 @@ public interface RuleInput {
         Set<String> ids();
 
         /** The declared tag id, when this slot is a tag slot; otherwise {@code null}. */
-        @Nullable String tagId();
+        @Nullable
+        String tagId();
 
         /** Demanded/produced amount (best effort). */
         double amount();

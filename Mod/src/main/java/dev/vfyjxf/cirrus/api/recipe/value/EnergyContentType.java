@@ -8,7 +8,6 @@ public final class EnergyContentType extends BasicValueType<EnergyValue> {
 
     public static final ValueType<EnergyValue> instance = new EnergyContentType();
 
-
     private EnergyContentType() {
         super(CirrusNamespaces.ofMod("energy"));
     }

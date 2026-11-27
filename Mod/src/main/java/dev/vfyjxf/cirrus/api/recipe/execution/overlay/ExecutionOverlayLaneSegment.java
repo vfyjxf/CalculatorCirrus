@@ -2,7 +2,7 @@ package dev.vfyjxf.cirrus.api.recipe.execution.overlay;
 
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowStatus;
 import net.minecraft.network.chat.Component;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Compact read-only lane segment projected from a single interaction step.

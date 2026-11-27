@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.projection.context;
 
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 public record CalculatorProjectionContext(@Nullable RecipeEntry<?> recipe, int times, long version) {
 

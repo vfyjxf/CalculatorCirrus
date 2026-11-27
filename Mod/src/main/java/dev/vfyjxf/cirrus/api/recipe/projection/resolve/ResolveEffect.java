@@ -39,7 +39,11 @@ public interface ResolveEffect {
             }
 
             @Override
-            public void apply(ExecutionContext context, MutableList<InputContent> inputs, MutableList<OutputContent> outputs) {
+            public void apply(
+                ExecutionContext context,
+                MutableList<InputContent> inputs,
+                MutableList<OutputContent> outputs
+            ) {
                 applier.apply(context, inputs, outputs);
             }
         };

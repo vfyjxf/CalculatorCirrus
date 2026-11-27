@@ -11,17 +11,10 @@ import org.eclipse.collections.api.list.ImmutableList;
 /**
  * Immutable execution step model consumed by runtime and progress visualization.
  */
-public sealed interface InteractionStep permits
-    InteractionStep.EnsureAccessibleStep,
-    InteractionStep.WithdrawResourceStep,
-    InteractionStep.ReserveCatalystStep,
-    InteractionStep.EnsureCapacityStep,
-    InteractionStep.OpenInteractionStep,
-    InteractionStep.PrepareInputsStep,
-    InteractionStep.ExecuteRecipeStep,
-    InteractionStep.CollectOutputsStep,
-    InteractionStep.StoreOutputsStep,
-    InteractionStep.ManualCheckpointStep {
+public sealed interface InteractionStep permits InteractionStep.EnsureAccessibleStep,
+        InteractionStep.WithdrawResourceStep, InteractionStep.ReserveCatalystStep, InteractionStep.EnsureCapacityStep,
+        InteractionStep.OpenInteractionStep, InteractionStep.PrepareInputsStep, InteractionStep.ExecuteRecipeStep,
+        InteractionStep.CollectOutputsStep, InteractionStep.StoreOutputsStep, InteractionStep.ManualCheckpointStep {
 
     ExecutionSideRequirement requiredSide();
 

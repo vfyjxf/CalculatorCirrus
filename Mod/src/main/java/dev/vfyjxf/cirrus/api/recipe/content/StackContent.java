@@ -32,8 +32,6 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
         this(type, stack, chance, MatchStrategy.identityAndComponent);
     }
 
-
-
     public StackType<T, S> type() {
         return type;
     }
@@ -83,8 +81,7 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
 
     @Override
     public boolean is(ContentVariant variant) {
-        return variant instanceof ContentStack<?, ?> contentStack &&
-               contentStack.matches(this.stack, matchStrategy);
+        return variant instanceof ContentStack<?, ?> contentStack && contentStack.matches(this.stack, matchStrategy);
     }
 
     @Override
@@ -117,11 +114,17 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
 
     //region extra utils
 
-    public boolean isFluid() {return stack.isFluid();}
+    public boolean isFluid() {
+        return stack.isFluid();
+    }
 
-    public boolean isItem() {return stack.isItem();}
+    public boolean isItem() {
+        return stack.isItem();
+    }
 
-    public boolean is(StackType<?, ?> type) {return stack.is(type);}
+    public boolean is(StackType<?, ?> type) {
+        return stack.is(type);
+    }
 
     @SuppressWarnings("unchecked")
     public <C, R> StackContent<C, R> cast() {
@@ -132,11 +135,9 @@ public final class StackContent<T, S> implements InputContent, OutputContent {
 
     @Override
     public String toString() {
-        return "StackContent{" +
-               "stack=" + stack +
-               ", chance=" + chance +
-               '}';
+        return "StackContent{" + "stack=" + stack + ", chance=" + chance + '}';
     }
+
     @Override
     public RecipeContentType<? extends RecipeContent> recipeType() {
         return RecipeContentType.STACK;

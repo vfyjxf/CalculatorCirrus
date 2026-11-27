@@ -32,5 +32,4 @@ public sealed interface ContentResource extends ContentVariant permits ContentSt
         return false;
     }
 
-
 }

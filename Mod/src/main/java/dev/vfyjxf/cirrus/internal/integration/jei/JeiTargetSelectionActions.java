@@ -7,8 +7,7 @@ import net.minecraft.client.gui.screens.Screen;
 
 public final class JeiTargetSelectionActions {
 
-    private JeiTargetSelectionActions() {
-    }
+    private JeiTargetSelectionActions() {}
 
     public static void closeScreenIfNeeded(Screen recipesGui, JeiTargetSelectionResult result) {
         if (!result.success()) {

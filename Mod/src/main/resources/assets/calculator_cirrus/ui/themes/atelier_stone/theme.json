@@ -1,0 +1,11 @@
+{
+  "name": "Atelier Stone",
+  "description": "Native light stone theme with cobalt focus and untinted pixel assets.",
+  "css": [
+    "atelier_stone.css"
+  ],
+  "extends": [
+    "calculator_cirrus:base"
+  ],
+  "default": false
+}

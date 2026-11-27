@@ -17,12 +17,14 @@ import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
 import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Builds the Minecraft-free {@link RecipeClassifyView} from live mod objects
@@ -38,10 +40,9 @@ public final class ClassifyViewFactory {
      * recipe dominated classification cost, so they are computed once per tag.
      * Cleared via {@link #clearTagMemberCache()} on client unload.
      */
-    private static final java.util.concurrent.ConcurrentHashMap<String, Set<String>> tagMemberCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Set<String>> tagMemberCache = new ConcurrentHashMap<>();
 
-    private ClassifyViewFactory() {
-    }
+    private ClassifyViewFactory() {}
 
     /** Drops the memoized tag member sets (world unload / datapack reload). */
     public static void clearTagMemberCache() {
@@ -81,12 +82,17 @@ public final class ClassifyViewFactory {
         return switch (content) {
             case StackContent<?, ?> stack -> ofStack(stack.content(), content.amount(), content.chance());
             case TagStackContent<?> tag -> ofTag(tag, content.amount(), content.chance());
-            case StackListContent list -> ofList(list.stacks(), ClassifyContent.Kind.any, content.amount(), content.chance());
-            case TypedStackListContent<?, ?> list -> ofList(list.stacks(), ClassifyContent.Kind.typedAny, content.amount(), content.chance());
-            case ValueContent<?> value -> new ClassifyContent(ClassifyContent.Kind.value, Set.of(), null, content.amount(), content.chance());
-            case ComplexContent complex -> new ClassifyContent(ClassifyContent.Kind.complex, Set.of(), null, content.amount(), content.chance());
+            case StackListContent list ->
+                ofList(list.stacks(), ClassifyContent.Kind.any, content.amount(), content.chance());
+            case TypedStackListContent<?, ?> list ->
+                ofList(list.stacks(), ClassifyContent.Kind.typedAny, content.amount(), content.chance());
+            case ValueContent<?> value ->
+                new ClassifyContent(ClassifyContent.Kind.value, Set.of(), null, content.amount(), content.chance());
+            case ComplexContent complex ->
+                new ClassifyContent(ClassifyContent.Kind.complex, Set.of(), null, content.amount(), content.chance());
             case EmptyRecipeContent empty -> new ClassifyContent(ClassifyContent.Kind.empty, Set.of(), null, 0, 0);
-            default -> new ClassifyContent(ClassifyContent.Kind.complex, Set.of(), null, content.amount(), content.chance());
+            default ->
+                new ClassifyContent(ClassifyContent.Kind.complex, Set.of(), null, content.amount(), content.chance());
         };
     }
 
@@ -165,7 +171,7 @@ public final class ClassifyViewFactory {
     }
 
     private static @Nullable String listKey(Iterable<? extends ContentStack<?, ?>> stacks, String prefix) {
-        java.util.TreeSet<String> ids = new java.util.TreeSet<>();
+        TreeSet<String> ids = new TreeSet<>();
         for (ContentStack<?, ?> stack : stacks) {
             String id = contentId(stack);
             if (id != null) {
@@ -178,7 +184,12 @@ public final class ClassifyViewFactory {
         return prefix + ":" + String.join("|", ids);
     }
 
-    private static ClassifyContent ofList(Iterable<? extends ContentStack<?, ?>> stacks, ClassifyContent.Kind kind, double amount, double chance) {
+    private static ClassifyContent ofList(
+        Iterable<? extends ContentStack<?, ?>> stacks,
+        ClassifyContent.Kind kind,
+        double amount,
+        double chance
+    ) {
         Set<String> ids = new LinkedHashSet<>();
         for (ContentStack<?, ?> stack : stacks) {
             String id = contentId(stack);

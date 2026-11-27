@@ -7,7 +7,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSyntaxException;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -18,10 +18,9 @@ import java.util.Optional;
 
 public final class CanonicalJson {
 
-    private static final char[] HEX = "0123456789abcdef".toCharArray();
+    private static final char[] hex = "0123456789abcdef".toCharArray();
 
-    private CanonicalJson() {
-    }
+    private CanonicalJson() {}
 
     public static String canonicalize(@Nullable JsonElement element) {
         StringBuilder sb = new StringBuilder(64);
@@ -59,8 +58,8 @@ public final class CanonicalJson {
         char[] out = new char[16];
         for (int i = 0; i < 8; i++) {
             int b = digest[i] & 0xFF;
-            out[i * 2] = HEX[b >>> 4];
-            out[i * 2 + 1] = HEX[b & 0x0F];
+            out[i * 2] = hex[b >>> 4];
+            out[i * 2 + 1] = hex[b & 0x0F];
         }
         return new String(out);
     }
@@ -99,8 +98,8 @@ public final class CanonicalJson {
                 default -> {
                     if (c < 0x20) {
                         sb.append("\\u00");
-                        sb.append(HEX[(c >>> 4) & 0x0F]);
-                        sb.append(HEX[c & 0x0F]);
+                        sb.append(hex[(c >>> 4) & 0x0F]);
+                        sb.append(hex[c & 0x0F]);
                     } else {
                         sb.append(c);
                     }

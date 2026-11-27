@@ -10,7 +10,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.Rect2i;
 import net.neoforged.neoforge.client.event.ScreenEvent;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.Optional;
@@ -41,8 +41,7 @@ public final class JeiBookmarkOverlayButtons {
     private static boolean calculatorPressed;
     private static boolean overlayPressed;
 
-    private JeiBookmarkOverlayButtons() {
-    }
+    private JeiBookmarkOverlayButtons() {}
 
     public static void render(ScreenEvent.Render.Post event) {
         Rect2i calculator = calculatorButtonArea(event.getScreen());
@@ -57,9 +56,19 @@ public final class JeiBookmarkOverlayButtons {
         JeiBookmarkOverlayToggleButton.renderCalculator(guiGraphics, calculator, mouseX, mouseY, calculatorPressed);
         JeiBookmarkOverlayToggleButton.renderOverlayToggle(guiGraphics, overlay, mouseX, mouseY, overlayPressed);
         if (JeiBookmarkOverlayToggleButton.contains(calculator, mouseX, mouseY)) {
-            guiGraphics.renderTooltip(Minecraft.getInstance().font, JeiBookmarkOverlayToggleButton.calculatorTooltip(), mouseX, mouseY);
+            guiGraphics.renderTooltip(
+                Minecraft.getInstance().font,
+                JeiBookmarkOverlayToggleButton.calculatorTooltip(),
+                mouseX,
+                mouseY
+            );
         } else if (JeiBookmarkOverlayToggleButton.contains(overlay, mouseX, mouseY)) {
-            guiGraphics.renderTooltip(Minecraft.getInstance().font, JeiBookmarkOverlayToggleButton.overlayTooltip(), mouseX, mouseY);
+            guiGraphics.renderTooltip(
+                Minecraft.getInstance().font,
+                JeiBookmarkOverlayToggleButton.overlayTooltip(),
+                mouseX,
+                mouseY
+            );
         }
     }
 
@@ -73,7 +82,8 @@ public final class JeiBookmarkOverlayButtons {
             return;
         }
         Rect2i overlay = JeiBookmarkOverlayToggleButton.overlayButtonAreaAfterCalculator(calculator);
-        boolean calculatorHit = JeiBookmarkOverlayToggleButton.contains(calculator, event.getMouseX(), event.getMouseY());
+        boolean calculatorHit = JeiBookmarkOverlayToggleButton
+                .contains(calculator, event.getMouseX(), event.getMouseY());
         boolean overlayHit = JeiBookmarkOverlayToggleButton.contains(overlay, event.getMouseX(), event.getMouseY());
         if (!calculatorHit && !overlayHit) {
             resetPressed();
@@ -93,13 +103,13 @@ public final class JeiBookmarkOverlayButtons {
         }
         Rect2i calculator = calculatorButtonArea(event.getScreen());
         boolean calculatorHit = calculator != null
-            && JeiBookmarkOverlayToggleButton.contains(calculator, event.getMouseX(), event.getMouseY());
+                && JeiBookmarkOverlayToggleButton.contains(calculator, event.getMouseX(), event.getMouseY());
         boolean overlayHit = calculator != null
-            && JeiBookmarkOverlayToggleButton.contains(
-                JeiBookmarkOverlayToggleButton.overlayButtonAreaAfterCalculator(calculator),
-                event.getMouseX(),
-                event.getMouseY()
-            );
+                && JeiBookmarkOverlayToggleButton.contains(
+                    JeiBookmarkOverlayToggleButton.overlayButtonAreaAfterCalculator(calculator),
+                    event.getMouseX(),
+                    event.getMouseY()
+                );
         if (calculatorHit && calculatorPressed) {
             activateCalculatorButton();
         } else if (overlayHit && overlayPressed) {
@@ -160,7 +170,10 @@ public final class JeiBookmarkOverlayButtons {
     }
 
     private static int overlayToggleX() {
-        return historyButtonX + jeiButtonSize + JeiBookmarkOverlayToggleButton.buttonGap
-            + JeiBookmarkOverlayToggleButton.buttonSize + JeiBookmarkOverlayToggleButton.buttonGap;
+        return historyButtonX
+                + jeiButtonSize
+                + JeiBookmarkOverlayToggleButton.buttonGap
+                + JeiBookmarkOverlayToggleButton.buttonSize
+                + JeiBookmarkOverlayToggleButton.buttonGap;
     }
 }

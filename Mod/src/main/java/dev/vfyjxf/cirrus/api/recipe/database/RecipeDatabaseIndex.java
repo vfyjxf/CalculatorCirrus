@@ -1,6 +1,5 @@
 package dev.vfyjxf.cirrus.api.recipe.database;
 
-import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
@@ -12,45 +11,48 @@ import dev.vfyjxf.cirrus.api.recipe.content.StackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TagStackContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TypedStackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
-import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchDocument.ContentKind;
-import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchDocument;
 import dev.vfyjxf.cirrus.api.recipe.database.search.NormalizedTextDictionary;
+import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchDocument;
+import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchDocument.ContentKind;
 import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchEngine;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
-import dev.vfyjxf.cloudlib.api.search.SearchExpression;
-import dev.vfyjxf.cloudlib.api.search.SearchField;
-import dev.vfyjxf.cloudlib.api.search.SearchMatch;
-import dev.vfyjxf.cloudlib.api.search.SearchOperator;
-import dev.vfyjxf.cloudlib.api.search.SearchParser;
-import dev.vfyjxf.cloudlib.api.search.SearchSuggestionValue;
-import dev.vfyjxf.cloudlib.api.search.SearchTerm;
+import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveError;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
+import dev.vfyjxf.cirrus.api.search.SearchExpression;
+import dev.vfyjxf.cirrus.api.search.SearchField;
+import dev.vfyjxf.cirrus.api.search.SearchMatch;
+import dev.vfyjxf.cirrus.api.search.SearchOperator;
+import dev.vfyjxf.cirrus.api.search.SearchSuggestionValue;
+import dev.vfyjxf.cirrus.api.search.SearchTerm;
 import dev.vfyjxf.cirrus.recipe.classify.ClassifyViewFactory;
 import dev.vfyjxf.cirrus.recipe.classify.RecipeClassificationService;
+import dev.vfyjxf.cirrus.util.CirrusNamespaces;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -59,8 +61,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.HashMap;
 
 public final class RecipeDatabaseIndex {
     private static final Logger logger = LoggerFactory.getLogger("CalculatorCirrus Database");
@@ -70,7 +70,13 @@ public final class RecipeDatabaseIndex {
     // of thousands of distinct stacks (ATM10 ~62k) that recur across recipes
     private static final int stackSearchCacheLimit = 1 << 20;
     private static final int statsTopLimit = 8;
-    private static final RecipeDatabaseIndex empty = new RecipeDatabaseIndex(List.of(), RecipeDatabaseSearchEngine.empty(), null, new int[0], Map.of());
+    private static final RecipeDatabaseIndex empty = new RecipeDatabaseIndex(
+        List.of(),
+        RecipeDatabaseSearchEngine.empty(),
+        null,
+        new int[0],
+        Map.of()
+    );
     private final List<RecipeDatabaseRecord> records;
     private final RecipeDatabaseSearchEngine searchEngine;
     private final @Nullable RecipeDatabaseIndex baseIndex;
@@ -83,9 +89,9 @@ public final class RecipeDatabaseIndex {
 
     private RecipeDatabaseIndex(List<RecipeDatabaseRecord> records, BuildProgress progress) {
         this.records = List.copyOf(records);
-        progress.update(BuildPhase.BUILDING_SEARCH_INDEX, 0, this.records.size());
+        progress.update(BuildPhase.buildingSearchIndex, 0, this.records.size());
         this.searchEngine = RecipeDatabaseSearchEngine.build(this.records);
-        progress.update(BuildPhase.BUILDING_SEARCH_INDEX, this.records.size(), this.records.size());
+        progress.update(BuildPhase.buildingSearchIndex, this.records.size(), this.records.size());
         this.baseIndex = null;
         this.derivedBaseRecipeIds = new int[0];
         this.derivedRecordsByRef = Map.of();
@@ -198,9 +204,11 @@ public final class RecipeDatabaseIndex {
         }
 
         BuildProgress reporter = progress == null ? BuildProgress.none() : progress;
-        reporter.update(BuildPhase.COLLECTING, 0, 0);
+        reporter.update(BuildPhase.collecting, 0, 0);
         Map<Namespace, List<Namespace>> normalizedTags = normalizeSystemTags(systemTags);
-        Map<String, List<RecipeEntry<?>>> normalizedExplicitEntries = explicitEntries == null ? Map.of() : explicitEntries;
+        Map<String, List<RecipeEntry<?>>> normalizedExplicitEntries = explicitEntries == null
+                ? Map.of()
+                : explicitEntries;
         ArrayList<DatabaseDefinition> enabled = new ArrayList<>(databases.size());
         for (DatabaseDefinition database : databases) {
             if (database != null && database.enabled()) {
@@ -220,7 +228,7 @@ public final class RecipeDatabaseIndex {
         int totalSources = enabled.size() * Math.max(1, systemList.size());
         int collectedSources = 0;
         for (DatabaseDefinition database : enabled) {
-            reporter.update(BuildPhase.COLLECTING, collectedSources, totalSources);
+            reporter.update(BuildPhase.collecting, collectedSources, totalSources);
             for (RecipeEntry<?> entry : normalizedExplicitEntries.getOrDefault(database.id(), List.of())) {
                 if (entry != null) {
                     items.add(new WorkItem(database, entry, normalizedTags.getOrDefault(entry.systemId(), List.of())));
@@ -239,16 +247,20 @@ public final class RecipeDatabaseIndex {
                 }
                 collectedSources++;
                 if (shouldReportProgress(collectedSources, totalSources)) {
-                    reporter.update(BuildPhase.COLLECTING, collectedSources, totalSources);
+                    reporter.update(BuildPhase.collecting, collectedSources, totalSources);
                 }
             }
             if (systemList.isEmpty()) {
                 collectedSources++;
             }
         }
-        reporter.update(BuildPhase.COLLECTING, totalSources, totalSources);
-        Set<DatabaseRecipeRef> knownFailedRecipes = failureRegistry == null ? Set.of() : failureRegistry.failedRecipeRefs();
-        Set<DatabaseRecipeRef> knownUnsupportedRecipes = failureRegistry == null ? Set.of() : failureRegistry.unsupportedRecipeRefs();
+        reporter.update(BuildPhase.collecting, totalSources, totalSources);
+        Set<DatabaseRecipeRef> knownFailedRecipes = failureRegistry == null
+                ? Set.of()
+                : failureRegistry.failedRecipeRefs();
+        Set<DatabaseRecipeRef> knownUnsupportedRecipes = failureRegistry == null
+                ? Set.of()
+                : failureRegistry.unsupportedRecipeRefs();
         int skippedKnownFailures = 0;
         int skippedKnownUnsupported = 0;
         if ((!knownFailedRecipes.isEmpty() || !knownUnsupportedRecipes.isEmpty()) && !items.isEmpty()) {
@@ -336,15 +348,7 @@ public final class RecipeDatabaseIndex {
     }
 
     public enum BuildPhase {
-        QUEUED,
-        RESOLVING_EXPLICIT,
-        BUILDING_CATALOG,
-        BUILDING_ACTIVE,
-        COLLECTING,
-        RESOLVING_RECORDS,
-        DEDUPING_RECORDS,
-        BUILDING_SEARCH_INDEX,
-        DONE
+        queued, resolvingExplicit, buildingCatalog, buildingActive, collecting, resolvingRecords, dedupingRecords, buildingSearchIndex, done
     }
 
     @FunctionalInterface
@@ -352,8 +356,7 @@ public final class RecipeDatabaseIndex {
         void update(BuildPhase phase, int done, int total);
 
         static BuildProgress none() {
-            return (phase, done, total) -> {
-            };
+            return (phase, done, total) -> {};
         }
     }
 
@@ -372,9 +375,13 @@ public final class RecipeDatabaseIndex {
     }
 
     private RecipeDatabaseIndex filteredDerived(SearchExpression expression) {
+        RecipeDatabaseIndex base = baseIndex;
+        if (base == null) {
+            return ofRecords(searchEngine.filter(expression));
+        }
         HashMap<DatabaseRecipeRef, Integer> baseRecipeIdsByRef = new HashMap<>(derivedBaseRecipeIds.length * 2 + 1);
         for (int recipeId : derivedBaseRecipeIds) {
-            RecipeDatabaseRecord baseRecord = baseIndex.records().get(recipeId);
+            RecipeDatabaseRecord baseRecord = base.records().get(recipeId);
             DatabaseRecipeRef ref = DatabaseRecipeRef.fromEntry(baseRecord.recipe());
             if (ref != null) {
                 baseRecipeIdsByRef.putIfAbsent(ref, recipeId);
@@ -396,15 +403,23 @@ public final class RecipeDatabaseIndex {
         return new RecipeDatabaseIndex(
             List.copyOf(nextRecordsByRef.values()),
             searchEngine,
-            baseIndex,
+            base,
             nextRecipeIds.toArray(),
             nextRecordsByRef
         );
     }
 
     private static final List<SearchField> suggestionTokenFields = List.of(
-        CirrusSearchFields.text, CirrusSearchFields.out, CirrusSearchFields.out_id, CirrusSearchFields.in, CirrusSearchFields.in_id,
-        CirrusSearchFields.cat, CirrusSearchFields.cat_id, CirrusSearchFields.mod, CirrusSearchFields.system, CirrusSearchFields.db
+        CirrusSearchFields.text,
+        CirrusSearchFields.out,
+        CirrusSearchFields.outId,
+        CirrusSearchFields.in,
+        CirrusSearchFields.inId,
+        CirrusSearchFields.cat,
+        CirrusSearchFields.catId,
+        CirrusSearchFields.mod,
+        CirrusSearchFields.system,
+        CirrusSearchFields.db
     );
 
     /** Whole-word completion for one field's dictionary, ranked by postings volume. */
@@ -454,7 +469,7 @@ public final class RecipeDatabaseIndex {
 
     public Map<SearchField, List<String>> textCandidateMap(int perFieldLimit) {
         HashMap<SearchField, List<String>> out = new HashMap<>();
-        for (SearchField field : CirrusSearchFields.SET.fields()) {
+        for (SearchField field : CirrusSearchFields.set.fields()) {
             if (!hasTextCandidates(field)) {
                 continue;
             }
@@ -467,7 +482,12 @@ public final class RecipeDatabaseIndex {
     }
 
     private static final Set<SearchField> noTextCandidateFields = Set.of(
-        CirrusSearchFields.text, CirrusSearchFields.time, CirrusSearchFields.energy, CirrusSearchFields.chance, CirrusSearchFields.tier, CirrusSearchFields.level
+        CirrusSearchFields.text,
+        CirrusSearchFields.time,
+        CirrusSearchFields.energy,
+        CirrusSearchFields.chance,
+        CirrusSearchFields.tier,
+        CirrusSearchFields.level
     );
 
     private static boolean hasTextCandidates(SearchField field) {
@@ -475,16 +495,9 @@ public final class RecipeDatabaseIndex {
     }
 
     private static SearchField[] containsSourceFields() {
-        return new SearchField[] {
-            CirrusSearchFields.in,
-            CirrusSearchFields.in_id,
-            CirrusSearchFields.out,
-            CirrusSearchFields.out_id,
-            CirrusSearchFields.cat,
-            CirrusSearchFields.cat_id,
-            CirrusSearchFields.byproduct,
-            CirrusSearchFields.byproduct_id
-        };
+        return new SearchField[]{CirrusSearchFields.in, CirrusSearchFields.inId, CirrusSearchFields.out,
+                CirrusSearchFields.outId, CirrusSearchFields.cat, CirrusSearchFields.catId,
+                CirrusSearchFields.byproduct, CirrusSearchFields.byproductId};
     }
 
     public List<RecipeDatabaseResult> search(String query) {
@@ -519,7 +532,14 @@ public final class RecipeDatabaseIndex {
             if (activeRecord != null) {
                 SearchMatch match = matchDerivedExpression(expression, result.matchOrder(), activeRecord);
                 if (match.matched()) {
-                    out.add(new RecipeDatabaseResult(activeRecord, match.score(), activeRecord.database().priority(), order++));
+                    out.add(
+                        new RecipeDatabaseResult(
+                            activeRecord,
+                            match.score(),
+                            activeRecord.database().priority(),
+                            order++
+                        )
+                    );
                 }
             }
         }
@@ -527,13 +547,14 @@ public final class RecipeDatabaseIndex {
     }
 
     private List<RecipeDatabaseResult> searchDerivedLiveSet(SearchExpression expression, @Nullable Namespace system) {
-        if (derivedBaseRecipeIds.length == 0) {
+        RecipeDatabaseIndex base = baseIndex;
+        if (derivedBaseRecipeIds.length == 0 || base == null) {
             return List.of();
         }
         ArrayList<RecipeDatabaseResult> out = new ArrayList<>(records.size());
         int order = 0;
         for (int recipeId : derivedBaseRecipeIds) {
-            RecipeDatabaseRecord baseRecord = baseIndex.records().get(recipeId);
+            RecipeDatabaseRecord baseRecord = base.records().get(recipeId);
             if (system != null && !system.equals(baseRecord.recipe().systemId())) {
                 continue;
             }
@@ -542,7 +563,14 @@ public final class RecipeDatabaseIndex {
             if (activeRecord != null) {
                 SearchMatch match = matchDerivedExpression(expression, recipeId, activeRecord);
                 if (match.matched()) {
-                    out.add(new RecipeDatabaseResult(activeRecord, match.score(), activeRecord.database().priority(), order++));
+                    out.add(
+                        new RecipeDatabaseResult(
+                            activeRecord,
+                            match.score(),
+                            activeRecord.database().priority(),
+                            order++
+                        )
+                    );
                 }
             }
         }
@@ -567,8 +595,8 @@ public final class RecipeDatabaseIndex {
                     }
                 }
                 yield children.isEmpty()
-                    ? null
-                    : children.size() == 1 ? children.getFirst() : new SearchExpression.And(List.copyOf(children));
+                        ? null
+                        : children.size() == 1 ? children.getFirst() : new SearchExpression.And(List.copyOf(children));
             }
             case SearchExpression.Or or -> {
                 ArrayList<SearchExpression> children = new ArrayList<>(or.terms().size());
@@ -582,31 +610,37 @@ public final class RecipeDatabaseIndex {
                     }
                 }
                 yield droppedDerivedOnlyChild
-                    ? null
-                    : children.isEmpty()
-                    ? null
-                    : children.size() == 1 ? children.getFirst() : new SearchExpression.Or(List.copyOf(children));
+                        ? null
+                        : children.isEmpty()
+                                ? null
+                                : children.size() == 1
+                                        ? children.getFirst()
+                                        : new SearchExpression.Or(List.copyOf(children));
             }
         };
     }
 
-    private SearchMatch matchDerivedExpression(SearchExpression expression, int baseRecipeId, RecipeDatabaseRecord record) {
+    private SearchMatch matchDerivedExpression(
+        SearchExpression expression,
+        int baseRecipeId,
+        RecipeDatabaseRecord record
+    ) {
         return switch (expression) {
-            case null -> SearchMatch.YES;
-            case SearchExpression.All ignored -> SearchMatch.YES;
+            case null -> SearchMatch.yes;
+            case SearchExpression.All ignored -> SearchMatch.yes;
             case SearchExpression.And and -> {
                 int score = 0;
                 for (SearchExpression child : and.terms()) {
                     SearchMatch match = matchDerivedExpression(child, baseRecipeId, record);
                     if (!match.matched()) {
-                        yield SearchMatch.NO;
+                        yield SearchMatch.no;
                     }
                     score += match.score();
                 }
                 yield new SearchMatch(true, score);
             }
             case SearchExpression.Or or -> {
-                SearchMatch best = SearchMatch.NO;
+                SearchMatch best = SearchMatch.no;
                 for (SearchExpression child : or.terms()) {
                     SearchMatch match = matchDerivedExpression(child, baseRecipeId, record);
                     if (match.matched() && (!best.matched() || match.score() > best.score())) {
@@ -615,12 +649,11 @@ public final class RecipeDatabaseIndex {
                 }
                 yield best;
             }
-            case SearchExpression.Not not -> matchDerivedExpression(not.term(), baseRecipeId, record).matched()
-                ? SearchMatch.NO
-                : SearchMatch.YES;
+            case SearchExpression.Not not ->
+                matchDerivedExpression(not.term(), baseRecipeId, record).matched() ? SearchMatch.no : SearchMatch.yes;
             case SearchExpression.Term term -> isDerivedOnlyField(term.term().field())
-                ? matchDatabaseTerm(term.term(), record.database())
-                : searchEngine.match(expression, baseRecipeId);
+                    ? matchDatabaseTerm(term.term(), record.database())
+                    : searchEngine.match(expression, baseRecipeId);
         };
     }
 
@@ -659,7 +692,7 @@ public final class RecipeDatabaseIndex {
                 }
             }
         }
-        return best == 0 ? SearchMatch.NO : new SearchMatch(true, best);
+        return best == 0 ? SearchMatch.no : new SearchMatch(true, best);
     }
 
     private static boolean wildcardMatches(String pattern, String value, boolean strict) {
@@ -678,7 +711,8 @@ public final class RecipeDatabaseIndex {
         int starValueIndex = 0;
         while (valueIndex < value.length()) {
             if (patternIndex < pattern.length()
-                && (pattern.charAt(patternIndex) == '?' || pattern.charAt(patternIndex) == value.charAt(valueIndex))) {
+                    && (pattern.charAt(patternIndex) == '?'
+                            || pattern.charAt(patternIndex) == value.charAt(valueIndex))) {
                 patternIndex++;
                 valueIndex++;
             } else if (patternIndex < pattern.length() && pattern.charAt(patternIndex) == '*') {
@@ -698,7 +732,7 @@ public final class RecipeDatabaseIndex {
     }
 
     private static String normalize(String value) {
-        return value == null ? "" : value.toLowerCase(java.util.Locale.ROOT);
+        return value == null ? "" : value.toLowerCase(Locale.ROOT);
     }
 
     private static RecipeDatabaseRecord withDatabase(RecipeDatabaseRecord record, DatabaseDefinition database) {
@@ -724,8 +758,8 @@ public final class RecipeDatabaseIndex {
         NormalizedTextDictionary normalizedTexts
     ) {
         if (items == null || items.isEmpty()) {
-            progress.update(BuildPhase.RESOLVING_RECORDS, 0, 0);
-            progress.update(BuildPhase.DEDUPING_RECORDS, 0, 0);
+            progress.update(BuildPhase.resolvingRecords, 0, 0);
+            progress.update(BuildPhase.dedupingRecords, 0, 0);
             return List.of();
         }
 
@@ -743,9 +777,9 @@ public final class RecipeDatabaseIndex {
         AtomicInteger unsupportedCount = new AtomicInteger();
         AtomicInteger resolveDebugBucket = logger.isDebugEnabled() ? new AtomicInteger(-1) : null;
         ResolveStats resolveStats = logger.isDebugEnabled() ? new ResolveStats() : null;
-        int[] resolveOrder = interleavedResolveOrder(items);
+        int @Nullable [] resolveOrder = interleavedResolveOrder(items);
         long resolveStartNanos = System.nanoTime();
-        progress.update(BuildPhase.RESOLVING_RECORDS, 0, items.size());
+        progress.update(BuildPhase.resolvingRecords, 0, items.size());
         StackSearchCache stackSearchCache = new StackSearchCache(stackSearchCacheLimit);
         parallelChunks(items.size(), recordBuildChunk, "cirrus-database-record-", (from, to) -> {
             ArrayList<RecipeDatabaseFailureRegistry.Failure> capturedFailures = new ArrayList<>(1);
@@ -760,7 +794,7 @@ public final class RecipeDatabaseIndex {
                         int done = resolvedCount.addAndGet(pendingProgress);
                         pendingProgress = 0;
                         if (shouldReportProgress(done, items.size())) {
-                            progress.update(BuildPhase.RESOLVING_RECORDS, done, items.size());
+                            progress.update(BuildPhase.resolvingRecords, done, items.size());
                         }
                         logBuildProgress("resolve", done, items.size(), resolveStartNanos, resolveDebugBucket);
                     }
@@ -773,7 +807,13 @@ public final class RecipeDatabaseIndex {
                         ref,
                         item.recipeClass(),
                         capturedFailures::add,
-                        () -> recordForEntry(item.database(), item.entry(), item.tags(), stackSearchCache, normalizedTexts)
+                        () -> recordForEntry(
+                            item.database(),
+                            item.entry(),
+                            item.tags(),
+                            stackSearchCache,
+                            normalizedTexts
+                        )
                     );
                     if (!capturedFailures.isEmpty()) {
                         failedCount.incrementAndGet();
@@ -800,12 +840,14 @@ public final class RecipeDatabaseIndex {
                         }
                         if (cacheableUnsupported(error) && ref != null && unsupportedRecipes.add(ref)) {
                             if (unsupported != null) {
-                                unsupported.add(new RecipeDatabaseFailureRegistry.Unsupported(
-                                    ref,
-                                    item.database().id(),
-                                    item.recipeClass(),
-                                    error == null ? "" : error.name()
-                                ));
+                                unsupported.add(
+                                    new RecipeDatabaseFailureRegistry.Unsupported(
+                                        ref,
+                                        item.database().id(),
+                                        item.recipeClass(),
+                                        error == null ? "" : error.name()
+                                    )
+                                );
                             }
                         }
                     }
@@ -815,12 +857,10 @@ public final class RecipeDatabaseIndex {
                         resolveStats.failed.increment();
                     }
                     if (ref != null && failedRecipes.add(ref) && failures != null) {
-                        failures.add(RecipeDatabaseFailureRegistry.Failure.from(
-                            ref,
-                            item.database().id(),
-                            item.recipeClass(),
-                            exception
-                        ));
+                        failures.add(
+                            RecipeDatabaseFailureRegistry.Failure
+                                    .from(ref, item.database().id(), item.recipeClass(), exception)
+                        );
                     }
                     logger.warn(
                         "Failed to resolve recipe database record: database={}, system={}, recipe={}, recipeClass={}, exception={}, message={}",
@@ -838,7 +878,7 @@ public final class RecipeDatabaseIndex {
                     int done = resolvedCount.addAndGet(pendingProgress);
                     pendingProgress = 0;
                     if (shouldReportProgress(done, items.size())) {
-                        progress.update(BuildPhase.RESOLVING_RECORDS, done, items.size());
+                        progress.update(BuildPhase.resolvingRecords, done, items.size());
                     }
                     logBuildProgress("resolve", done, items.size(), resolveStartNanos, resolveDebugBucket);
                 }
@@ -846,26 +886,24 @@ public final class RecipeDatabaseIndex {
             if (pendingProgress > 0) {
                 int done = resolvedCount.addAndGet(pendingProgress);
                 if (shouldReportProgress(done, items.size())) {
-                    progress.update(BuildPhase.RESOLVING_RECORDS, done, items.size());
+                    progress.update(BuildPhase.resolvingRecords, done, items.size());
                 }
                 logBuildProgress("resolve", done, items.size(), resolveStartNanos, resolveDebugBucket);
             }
         });
-        progress.update(BuildPhase.RESOLVING_RECORDS, items.size(), items.size());
+        progress.update(BuildPhase.resolvingRecords, items.size(), items.size());
         logBuildProgress("resolve", items.size(), items.size(), resolveStartNanos, resolveDebugBucket);
 
         ArrayList<RecipeDatabaseRecord> records = new ArrayList<>();
         Set<DatabaseRecipeRef> seenRefs = new HashSet<>();
         Set<RecipeEntry<?>> seenEntriesWithoutRef = new HashSet<>();
         int duplicateCount = 0;
-        progress.update(BuildPhase.DEDUPING_RECORDS, 0, items.size());
+        progress.update(BuildPhase.dedupingRecords, 0, items.size());
         for (int index = 0; index < items.size(); index++) {
             RecipeDatabaseRecord record = resolved[index];
             if (record != null) {
                 DatabaseRecipeRef ref = recipeRef(record.recipe());
-                boolean first = ref == null
-                    ? seenEntriesWithoutRef.add(record.recipe())
-                    : seenRefs.add(ref);
+                boolean first = ref == null ? seenEntriesWithoutRef.add(record.recipe()) : seenRefs.add(ref);
                 if (first) {
                     records.add(record);
                 } else {
@@ -874,11 +912,14 @@ public final class RecipeDatabaseIndex {
             }
             int done = index + 1;
             if (shouldReportProgress(done, items.size())) {
-                progress.update(BuildPhase.DEDUPING_RECORDS, done, items.size());
+                progress.update(BuildPhase.dedupingRecords, done, items.size());
             }
         }
-        progress.update(BuildPhase.DEDUPING_RECORDS, items.size(), items.size());
-        if (failedCount.get() > 0 || unsupportedCount.get() > 0 || duplicateCount > 0 || records.size() != items.size()) {
+        progress.update(BuildPhase.dedupingRecords, items.size(), items.size());
+        if (failedCount.get() > 0
+                || unsupportedCount.get() > 0
+                || duplicateCount > 0
+                || records.size() != items.size()) {
             logger.info(
                 "Resolved recipe database records: workItems={}, records={}, failed={}, unsupported={}, duplicates={}, empty={}",
                 items.size(),
@@ -893,14 +934,16 @@ public final class RecipeDatabaseIndex {
         return records;
     }
 
-    private static @Nullable int[] interleavedResolveOrder(List<WorkItem> items) {
+    private static int @Nullable [] interleavedResolveOrder(List<WorkItem> items) {
         if (items == null || items.size() <= recordBuildChunk * 4) {
             return null;
         }
         LinkedHashMap<Namespace, IntScratch> bySystem = new LinkedHashMap<>();
         for (int index = 0; index < items.size(); index++) {
             WorkItem item = items.get(index);
-            Namespace systemId = item.entry() == null ? Namespace.of("cirrus", "unknown") : item.entry().systemId();
+            Namespace systemId = item.entry() == null
+                    ? CirrusNamespaces.ofInternal("unknown")
+                    : item.entry().systemId();
             bySystem.computeIfAbsent(systemId, ignored -> new IntScratch()).add(index);
         }
         if (bySystem.size() <= 1) {
@@ -967,11 +1010,7 @@ public final class RecipeDatabaseIndex {
         try {
             return DatabaseRecipeRef.fromEntry(entry);
         } catch (RuntimeException | LinkageError exception) {
-            logger.warn(
-                "Failed to read recipe database ref: system={}",
-                entry.systemId(),
-                exception
-            );
+            logger.warn("Failed to read recipe database ref: system={}", entry.systemId(), exception);
             return null;
         }
     }
@@ -1004,10 +1043,7 @@ public final class RecipeDatabaseIndex {
         private final Map<ResolveError, LongAdder> emptyByError = new ConcurrentHashMap<>();
     }
 
-    private record RecordBuildResult(
-        @Nullable RecipeDatabaseRecord record,
-        @Nullable ResolveError error
-    ) {
+    private record RecordBuildResult(@Nullable RecipeDatabaseRecord record, @Nullable ResolveError error) {
         private static RecordBuildResult resolved(RecipeDatabaseRecord record) {
             return new RecordBuildResult(record, null);
         }
@@ -1051,9 +1087,9 @@ public final class RecipeDatabaseIndex {
     }
 
     private static final class CachedStackStrings {
-        private volatile String displayName;
-        private volatile String contentId;
-        private volatile String typeString;
+        private volatile @Nullable String displayName;
+        private volatile @Nullable String contentId;
+        private volatile @Nullable String typeString;
 
         // racy single-flight: several workers may compute the same string once, but
         // the cost is a cheap derivation and this stays lock-free on the hot path
@@ -1085,11 +1121,7 @@ public final class RecipeDatabaseIndex {
         }
     }
 
-    private record StackKey(
-        Object type,
-        Object content,
-        Object components
-    ) {
+    private record StackKey(Object type, Object content, Object components) {
         private static StackKey of(ContentStack<?, ?> stack) {
             return new StackKey(stack.type(), stack.content(), stack.componentsPatch());
         }
@@ -1106,18 +1138,21 @@ public final class RecipeDatabaseIndex {
             return RecordBuildResult.empty(ResolveError.unsupported);
         }
         ResolveResult result = entry.resolveResult(ResolveContext.empty());
-        if (!result.resolved()) {
+        RecipeProjection resolvedProjection = result.projection();
+        if (resolvedProjection == null) {
             return RecordBuildResult.empty(result.error());
         }
-        RecipeProjection projection = snapshotProjection(result.projection());
-        RecipeDatabaseSearchDocument searchDocument = document(database, entry, systemTags, projection, cache, normalizedTexts);
-        return RecordBuildResult.resolved(new RecipeDatabaseRecord(
-            entry,
+        RecipeProjection projection = snapshotProjection(resolvedProjection);
+        RecipeDatabaseSearchDocument searchDocument = document(
             database,
-            searchDocument,
+            entry,
+            systemTags,
             projection,
-            systemTags
-        ));
+            cache,
+            normalizedTexts
+        );
+        return RecordBuildResult
+                .resolved(new RecipeDatabaseRecord(entry, database, searchDocument, projection, systemTags));
     }
 
     private static RecipeProjection snapshotProjection(RecipeProjection projection) {
@@ -1138,16 +1173,12 @@ public final class RecipeDatabaseIndex {
         );
     }
 
-    private static void recordEmpty(
-        @Nullable ResolveStats stats,
-        WorkItem item,
-        @Nullable ResolveError error
-    ) {
+    private static void recordEmpty(@Nullable ResolveStats stats, WorkItem item, @Nullable ResolveError error) {
         if (stats == null) {
             return;
         }
         ResolveError effectiveError = error == null ? ResolveError.unsupported : error;
-        Namespace systemId = item.entry() == null ? Namespace.of("cirrus", "unknown") : item.entry().systemId();
+        Namespace systemId = item.entry() == null ? CirrusNamespaces.ofInternal("unknown") : item.entry().systemId();
         String recipeClass = item.recipeClass();
         if (cacheableUnsupported(effectiveError)) {
             stats.unsupported.increment();
@@ -1276,7 +1307,7 @@ public final class RecipeDatabaseIndex {
         // recipe screening tags (junk/duplicate/recolor/...): filtered recipes
         // stay browsable here but carry their marker on the tag channel
         for (String classificationTag : RecipeClassificationService.classifier()
-            .classifyLocal(ClassifyViewFactory.fromProjection(entry, projection))) {
+                .classifyLocal(ClassifyViewFactory.fromProjection(entry, projection))) {
             builder.text(CirrusSearchFields.tag, classificationTag);
         }
         if (projection != null) {
@@ -1285,7 +1316,11 @@ public final class RecipeDatabaseIndex {
         return builder.build();
     }
 
-    private static void addProjection(RecipeDatabaseSearchDocument.Builder builder, RecipeProjection projection, StackSearchCache cache) {
+    private static void addProjection(
+        RecipeDatabaseSearchDocument.Builder builder,
+        RecipeProjection projection,
+        StackSearchCache cache
+    ) {
         for (ClausedContent<InputContent> input : projection.inputs()) {
             addContent(builder, CirrusSearchFields.in, input.content(), cache);
             if (input.content().notConsumed()) {
@@ -1300,7 +1335,12 @@ public final class RecipeDatabaseIndex {
         }
     }
 
-    private static void addContent(RecipeDatabaseSearchDocument.Builder builder, SearchField field, RecipeContent content, StackSearchCache cache) {
+    private static void addContent(
+        RecipeDatabaseSearchDocument.Builder builder,
+        SearchField field,
+        RecipeContent content,
+        StackSearchCache cache
+    ) {
         if (content == null || content.isEmpty()) {
             return;
         }
@@ -1319,12 +1359,16 @@ public final class RecipeDatabaseIndex {
                 }
             }
             case TagStackContent<?> tag -> {
-                builder.searchableContent(idField(field), tag.tagKey().location().toString(), content.amount(), ContentKind.tagId);
+                builder.searchableContent(
+                    idField(field),
+                    tag.tagKey().location().toString(),
+                    content.amount(),
+                    ContentKind.tagId
+                );
                 builder.text(CirrusSearchFields.tag, tag.tagKey().location().toString());
             }
             case ValueContent<?> value -> addValue(builder, field, value.content(), content.amount());
-            default -> {
-            }
+            default -> {}
         }
     }
 
@@ -1339,8 +1383,12 @@ public final class RecipeDatabaseIndex {
             return;
         }
         CachedStackStrings strings = cache.strings(stack);
-        ContentKind nameKind = stack.isFluid() ? ContentKind.fluidName : stack.isItem() ? ContentKind.itemName : ContentKind.otherName;
-        ContentKind idKind = stack.isFluid() ? ContentKind.fluidId : stack.isItem() ? ContentKind.itemId : ContentKind.otherId;
+        ContentKind nameKind = stack.isFluid()
+                ? ContentKind.fluidName
+                : stack.isItem() ? ContentKind.itemName : ContentKind.otherName;
+        ContentKind idKind = stack.isFluid()
+                ? ContentKind.fluidId
+                : stack.isItem() ? ContentKind.itemId : ContentKind.otherId;
         if (stack.isItem() || stack.isFluid()) {
             builder.searchableContent(field, strings.displayName(stack), amount, nameKind);
         } else {
@@ -1371,10 +1419,10 @@ public final class RecipeDatabaseIndex {
     }
 
     private static SearchField idField(SearchField field) {
-        if (field == CirrusSearchFields.in) return CirrusSearchFields.in_id;
-        if (field == CirrusSearchFields.out) return CirrusSearchFields.out_id;
-        if (field == CirrusSearchFields.cat) return CirrusSearchFields.cat_id;
-        if (field == CirrusSearchFields.byproduct) return CirrusSearchFields.byproduct_id;
+        if (field == CirrusSearchFields.in) return CirrusSearchFields.inId;
+        if (field == CirrusSearchFields.out) return CirrusSearchFields.outId;
+        if (field == CirrusSearchFields.cat) return CirrusSearchFields.catId;
+        if (field == CirrusSearchFields.byproduct) return CirrusSearchFields.byproductId;
         return field;
     }
 
@@ -1418,10 +1466,8 @@ public final class RecipeDatabaseIndex {
     }
 
     private static Comparator<DatabaseDefinition> databaseOrder() {
-        return Comparator
-            .comparingInt(DatabaseDefinition::priority)
-            .thenComparingInt(definition -> definition.kind().defaultRank())
-            .thenComparing(DatabaseDefinition::id);
+        return Comparator.comparingInt(DatabaseDefinition::priority)
+                .thenComparingInt(definition -> definition.kind().defaultRank()).thenComparing(DatabaseDefinition::id);
     }
 
     private record WorkItem(
@@ -1446,9 +1492,7 @@ public final class RecipeDatabaseIndex {
         int duplicates = 0;
         for (WorkItem item : items) {
             DatabaseRecipeRef ref = item.ref();
-            boolean first = ref == null
-                ? seenEntriesWithoutRef.add(item.entry())
-                : seenRefs.add(ref);
+            boolean first = ref == null ? seenEntriesWithoutRef.add(item.entry()) : seenRefs.add(ref);
             if (first) {
                 deduped.add(item);
             } else {
@@ -1458,11 +1502,7 @@ public final class RecipeDatabaseIndex {
         return new WorkItemDedupResult(deduped, duplicates);
     }
 
-    private record WorkItemDedupResult(
-        ArrayList<WorkItem> items,
-        int duplicates
-    ) {
-    }
+    private record WorkItemDedupResult(ArrayList<WorkItem> items, int duplicates) {}
 
     @FunctionalInterface
     private interface RangeTask {
@@ -1606,7 +1646,7 @@ public final class RecipeDatabaseIndex {
 
         private void add(int value) {
             if (size >= values.length) {
-                values = java.util.Arrays.copyOf(values, values.length + Math.max(8, values.length));
+                values = Arrays.copyOf(values, values.length + Math.max(8, values.length));
             }
             values[size++] = value;
         }
@@ -1620,7 +1660,7 @@ public final class RecipeDatabaseIndex {
         }
 
         private int[] toArray() {
-            return size == 0 ? new int[0] : java.util.Arrays.copyOf(values, size);
+            return size == 0 ? new int[0] : Arrays.copyOf(values, size);
         }
     }
 }

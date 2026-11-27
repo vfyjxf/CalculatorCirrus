@@ -22,11 +22,11 @@ import java.util.Set;
 
 public final class ConeModel {
 
-    public static final int INF_TIER = Integer.MAX_VALUE;
-    public static final byte ACTIVE_NONE = 0;
-    public static final byte ACTIVE_STANDARD = 1;
-    public static final byte ACTIVE_CONVERT = 2;
-    public static final byte ACTIVE_BOTH = 3;
+    public static final int infTier = Integer.MAX_VALUE;
+    public static final byte activeNone = 0;
+    public static final byte activeStandard = 1;
+    public static final byte activeConvert = 2;
+    public static final byte activeBoth = 3;
 
     public final CompiledRecipeGraph graph;
     public final int nodeCount;
@@ -91,106 +91,106 @@ public final class ConeModel {
     public final Map<ResourceKey, Set<String>> blockingRuleIds;
 
     ConeModel(
-            CompiledRecipeGraph graph,
-            ResourceKey[] resKeys,
-            int[] resGlobalId,
-            Map<ResourceKey, Integer> localByKey,
-            IntIntMap localByGlobalRes,
-            int[] tier,
-            long[] usableStock,
-            boolean[] freeBase,
-            boolean[] dormant,
-            boolean[] bannedRes,
-            AcquisitionOption[] acquireOption,
-            AutomatedLine[] bestLine,
-            List<AutomatedLine>[] allLines,
-            int[] recCompactId,
-            CompiledRecipe[] recObjects,
-            IntIntMap localByCompactId,
-            RecipeRole[] recRole,
-            RecipeAdvisory[] recAdvisory,
-            boolean[] recPinned,
-            boolean[] recHandCraftable,
-            MachineCapabilityId[] recCapability,
-            List<String>[] recCompatMachines,
-            byte[] recActive,
-            int[] recPsi,
-            int[] inStart,
-            int[] inSlotIndex,
-            long[] inAmount,
-            String[] inTagId,
-            SlotMatchMode[] inMatchMode,
-            int[] inOrigCandCount,
-            int[] inClassStart,
-            int[] classRep,
-            int[] classMemStart,
-            int[] classMemRes,
-            int[] catStart,
-            int[] catSlotIndex,
-            int[] catDurCost,
-            int[] catMaxDur,
-            int[] catCandStart,
-            int[] catCandRes,
-            int[] outStart,
-            int[] outRes,
-            long[] outAmount,
-            int[] prodStart,
-            int[] prodRecipe,
-            List<CompiledCycleMacro> activeMacros,
-            Map<Integer, List<CompiledCycleMacro>> macrosByLocalOut,
-            List<CoupledComponent> coupledComponents,
-            int collapsedOrCandidates,
-            boolean truncatedByBudget,
-            Set<ResourceKey> dormantResources,
-            Map<ResourceKey, Set<String>> blockingRuleIds
+        CompiledRecipeGraph graph,
+        ResourceKey[] resKeys,
+        int[] resGlobalId,
+        Map<ResourceKey, Integer> localByKey,
+        IntIntMap localByGlobalRes,
+        int[] tier,
+        long[] usableStock,
+        boolean[] freeBase,
+        boolean[] dormant,
+        boolean[] bannedRes,
+        AcquisitionOption[] acquireOption,
+        AutomatedLine[] bestLine,
+        List<AutomatedLine>[] allLines,
+        int[] recCompactId,
+        CompiledRecipe[] recObjects,
+        IntIntMap localByCompactId,
+        RecipeRole[] recRole,
+        RecipeAdvisory[] recAdvisory,
+        boolean[] recPinned,
+        boolean[] recHandCraftable,
+        MachineCapabilityId[] recCapability,
+        List<String>[] recCompatMachines,
+        byte[] recActive,
+        int[] recPsi,
+        int[] inStart,
+        int[] inSlotIndex,
+        long[] inAmount,
+        String[] inTagId,
+        SlotMatchMode[] inMatchMode,
+        int[] inOrigCandCount,
+        int[] inClassStart,
+        int[] classRep,
+        int[] classMemStart,
+        int[] classMemRes,
+        int[] catStart,
+        int[] catSlotIndex,
+        int[] catDurCost,
+        int[] catMaxDur,
+        int[] catCandStart,
+        int[] catCandRes,
+        int[] outStart,
+        int[] outRes,
+        long[] outAmount,
+        int[] prodStart,
+        int[] prodRecipe,
+        List<CompiledCycleMacro> activeMacros,
+        Map<Integer, List<CompiledCycleMacro>> macrosByLocalOut,
+        List<CoupledComponent> coupledComponents,
+        int collapsedOrCandidates,
+        boolean truncatedByBudget,
+        Set<ResourceKey> dormantResources,
+        Map<ResourceKey, Set<String>> blockingRuleIds
     ) {
         this.graph = graph;
         this.nodeCount = resKeys.length;
-        this.resKeys = resKeys;
-        this.resGlobalId = resGlobalId;
+        this.resKeys = resKeys.clone();
+        this.resGlobalId = resGlobalId.clone();
         this.localByKey = localByKey;
         this.localByGlobalRes = localByGlobalRes;
-        this.tier = tier;
-        this.usableStock = usableStock;
-        this.freeBase = freeBase;
-        this.dormant = dormant;
-        this.bannedRes = bannedRes;
-        this.acquireOption = acquireOption;
-        this.bestLine = bestLine;
-        this.allLines = allLines;
+        this.tier = tier.clone();
+        this.usableStock = usableStock.clone();
+        this.freeBase = freeBase.clone();
+        this.dormant = dormant.clone();
+        this.bannedRes = bannedRes.clone();
+        this.acquireOption = acquireOption.clone();
+        this.bestLine = bestLine.clone();
+        this.allLines = allLines.clone();
         this.recipeCount = recCompactId.length;
-        this.recCompactId = recCompactId;
-        this.recObjects = recObjects;
+        this.recCompactId = recCompactId.clone();
+        this.recObjects = recObjects.clone();
         this.localByCompactId = localByCompactId;
-        this.recRole = recRole;
-        this.recAdvisory = recAdvisory;
-        this.recPinned = recPinned;
-        this.recHandCraftable = recHandCraftable;
-        this.recCapability = recCapability;
-        this.recCompatMachines = recCompatMachines;
-        this.recActive = recActive;
-        this.recPsi = recPsi;
-        this.inStart = inStart;
-        this.inSlotIndex = inSlotIndex;
-        this.inAmount = inAmount;
-        this.inTagId = inTagId;
-        this.inMatchMode = inMatchMode;
-        this.inOrigCandCount = inOrigCandCount;
-        this.inClassStart = inClassStart;
-        this.classRep = classRep;
-        this.classMemStart = classMemStart;
-        this.classMemRes = classMemRes;
-        this.catStart = catStart;
-        this.catSlotIndex = catSlotIndex;
-        this.catDurCost = catDurCost;
-        this.catMaxDur = catMaxDur;
-        this.catCandStart = catCandStart;
-        this.catCandRes = catCandRes;
-        this.outStart = outStart;
-        this.outRes = outRes;
-        this.outAmount = outAmount;
-        this.prodStart = prodStart;
-        this.prodRecipe = prodRecipe;
+        this.recRole = recRole.clone();
+        this.recAdvisory = recAdvisory.clone();
+        this.recPinned = recPinned.clone();
+        this.recHandCraftable = recHandCraftable.clone();
+        this.recCapability = recCapability.clone();
+        this.recCompatMachines = recCompatMachines.clone();
+        this.recActive = recActive.clone();
+        this.recPsi = recPsi.clone();
+        this.inStart = inStart.clone();
+        this.inSlotIndex = inSlotIndex.clone();
+        this.inAmount = inAmount.clone();
+        this.inTagId = inTagId.clone();
+        this.inMatchMode = inMatchMode.clone();
+        this.inOrigCandCount = inOrigCandCount.clone();
+        this.inClassStart = inClassStart.clone();
+        this.classRep = classRep.clone();
+        this.classMemStart = classMemStart.clone();
+        this.classMemRes = classMemRes.clone();
+        this.catStart = catStart.clone();
+        this.catSlotIndex = catSlotIndex.clone();
+        this.catDurCost = catDurCost.clone();
+        this.catMaxDur = catMaxDur.clone();
+        this.catCandStart = catCandStart.clone();
+        this.catCandRes = catCandRes.clone();
+        this.outStart = outStart.clone();
+        this.outRes = outRes.clone();
+        this.outAmount = outAmount.clone();
+        this.prodStart = prodStart.clone();
+        this.prodRecipe = prodRecipe.clone();
         this.activeMacros = activeMacros;
         this.macrosByLocalOut = macrosByLocalOut;
         this.coupledComponents = coupledComponents;
@@ -210,15 +210,15 @@ public final class ConeModel {
     }
 
     public boolean isStandardActive(int localR) {
-        return (recActive[localR] & ACTIVE_STANDARD) != 0;
+        return (recActive[localR] & activeStandard) != 0;
     }
 
     public boolean isConvertActive(int localR) {
-        return (recActive[localR] & ACTIVE_CONVERT) != 0;
+        return (recActive[localR] & activeConvert) != 0;
     }
 
     public boolean isAnyActive(int localR) {
-        return recActive[localR] != ACTIVE_NONE;
+        return recActive[localR] != activeNone;
     }
 
     public List<EquivalenceClass> reducedCandidatesForLocalSlot(int slotPos) {

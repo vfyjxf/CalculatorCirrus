@@ -36,15 +36,16 @@ import dev.vfyjxf.cirrus.planning.core.cost.StepCosts;
 import dev.vfyjxf.cirrus.planning.core.lang.Fnv1a64;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
 import dev.vfyjxf.cirrus.planning.core.select.DiverseParetoSelector;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.Set;
@@ -53,14 +54,21 @@ import java.util.TreeSet;
 
 public final class SchedulerAndFinalizer {
 
-    private static final VerificationCertificate PENDING_CERT = new VerificationCertificate(
-            false, false, false, false, false, false, List.of("PENDING_VERIFICATION"));
+    private static final VerificationCertificate pendingCert = new VerificationCertificate(
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        List.of("PENDING_VERIFICATION")
+    );
 
     public record AssembleOutcome(
-            ProductionPlan plan,
-            int repairResLocalId,
-            long repairExtraAmount,
-            String cycleMachineToDetach
+        @Nullable ProductionPlan plan,
+        int repairResLocalId,
+        long repairExtraAmount,
+        @Nullable String cycleMachineToDetach
     ) {
         public static AssembleOutcome ok(ProductionPlan plan) {
             return new AssembleOutcome(plan, -1, 0L, null);
@@ -80,13 +88,7 @@ public final class SchedulerAndFinalizer {
     }
 
     private enum NodeKind {
-        ACQUIRE(0),
-        LINE_PULL(0),
-        SETUP_LINE(1),
-        PROVISION(1),
-        CONVERT(2),
-        CRAFT(2),
-        CYCLE_LOOP(2);
+        acquire(0), linePull(0), setupLine(1), provision(1), convert(2), craft(2), cycleLoop(2);
 
         final int rank;
 
@@ -96,25 +98,23 @@ public final class SchedulerAndFinalizer {
     }
 
     private record StepNode(
-            NodeKind kind,
-            int localId,
-            String stringId,
-            CompiledCycleMacroKey macroKey,
-            int psi,
-            String tieKey
-    ) {
-    }
+        NodeKind kind,
+        int localId,
+        @Nullable String stringId,
+        @Nullable CompiledCycleMacroKey macroKey,
+        int psi,
+        String tieKey
+    ) {}
 
-    private SchedulerAndFinalizer() {
-    }
+    private SchedulerAndFinalizer() {}
 
-    public static ProductionPlan assembleWithRepair(
-            ConeModel cone,
-            PlanningRequest request,
-            Potentials potentials,
-            ChoiceTable choices,
-            CostMetadataProvider meta,
-            String strategyLabel
+    public static @Nullable ProductionPlan assembleWithRepair(
+        ConeModel cone,
+        PlanningRequest request,
+        Potentials potentials,
+        ChoiceTable choices,
+        CostMetadataProvider meta,
+        String strategyLabel
     ) {
         Map<Integer, Long> extraPresence = new HashMap<>();
         Set<String> forcedPlayerPrepared = new HashSet<>();
@@ -150,11 +150,11 @@ public final class SchedulerAndFinalizer {
     }
 
     public static AssembleOutcome scheduleAndFinalize(
-            ConeModel cone,
-            PlanningRequest request,
-            ProductionVector vec,
-            CostMetadataProvider meta,
-            String strategyLabel
+        ConeModel cone,
+        PlanningRequest request,
+        ProductionVector vec,
+        CostMetadataProvider meta,
+        String strategyLabel
     ) {
         FacilitySnapshot fac = request.context().facilities();
         HumanGuidanceView guidance = request.context().guidance();
@@ -163,44 +163,60 @@ public final class SchedulerAndFinalizer {
         List<StepNode> nodes = new ArrayList<>();
         for (int u = 0; u < cone.nodeCount; u++) {
             if (vec.acq[u] > 0L) {
-                nodes.add(new StepNode(NodeKind.ACQUIRE, u, null, null, 0, "A:" + cone.resKeys[u].shortString()));
+                nodes.add(new StepNode(NodeKind.acquire, u, null, null, 0, "A:" + cone.resKeys[u].shortString()));
             }
             if (vec.line[u] > 0L) {
-                nodes.add(new StepNode(NodeKind.LINE_PULL, u, null, null, 0, "L:" + cone.resKeys[u].shortString()));
+                nodes.add(new StepNode(NodeKind.linePull, u, null, null, 0, "L:" + cone.resKeys[u].shortString()));
             }
         }
         for (var e : vec.setupLines.entrySet()) {
-            nodes.add(new StepNode(NodeKind.SETUP_LINE, -1, e.getKey(), null, 0, "S:" + e.getKey()));
+            nodes.add(new StepNode(NodeKind.setupLine, -1, e.getKey(), null, 0, "S:" + e.getKey()));
         }
         for (var e : vec.provisionedMachines.entrySet()) {
             String mid = e.getKey();
             int mu = cone.localRes(ResourceKey.item(mid));
             int psi = (!vec.playerPreparedMachines.contains(mid) && mu >= 0) ? cone.tier[mu] : 0;
-            nodes.add(new StepNode(NodeKind.PROVISION, mu, mid, null, psi, "P:" + mid));
+            nodes.add(new StepNode(NodeKind.provision, mu, mid, null, psi, "P:" + mid));
         }
         for (int r = 0; r < cone.recipeCount; r++) {
             if (vec.convertBatches[r] > 0L) {
-                nodes.add(new StepNode(NodeKind.CONVERT, r, null, null,
-                        Math.max(1, cone.recPsi[r]), "V:" + cone.recObjects[r].key().shortString()));
+                nodes.add(
+                    new StepNode(
+                        NodeKind.convert,
+                        r,
+                        null,
+                        null,
+                        Math.max(1, cone.recPsi[r]),
+                        "V:" + cone.recObjects[r].key().shortString()
+                    )
+                );
             }
             if (vec.batches[r] > 0L) {
-                nodes.add(new StepNode(NodeKind.CRAFT, r, null, null,
-                        Math.max(1, cone.recPsi[r]), "C:" + cone.recObjects[r].key().shortString()));
+                nodes.add(
+                    new StepNode(
+                        NodeKind.craft,
+                        r,
+                        null,
+                        null,
+                        Math.max(1, cone.recPsi[r]),
+                        "C:" + cone.recObjects[r].key().shortString()
+                    )
+                );
             }
         }
         for (var e : vec.macroIters.entrySet()) {
             if (e.getValue() > 0L) {
-                CompiledCycleMacro m = vec.usedMacros.get(e.getKey());
+                CompiledCycleMacro m = Objects.requireNonNull(vec.usedMacros.get(e.getKey()));
                 int psi = 1;
                 for (var d : m.netDeltaPerIter().entrySet()) {
                     if (d.getValue() > 0L) {
                         int ou = cone.localRes(d.getKey());
-                        if (ou >= 0 && cone.tier[ou] < ConeModel.INF_TIER) {
+                        if (ou >= 0 && cone.tier[ou] < ConeModel.infTier) {
                             psi = Math.max(psi, cone.tier[ou]);
                         }
                     }
                 }
-                nodes.add(new StepNode(NodeKind.CYCLE_LOOP, -1, null, e.getKey(), psi, "Y:" + e.getKey().macroId()));
+                nodes.add(new StepNode(NodeKind.cycleLoop, -1, null, e.getKey(), psi, "Y:" + e.getKey().macroId()));
             }
         }
 
@@ -216,19 +232,19 @@ public final class SchedulerAndFinalizer {
         for (int i = 0; i < mCount; i++) {
             StepNode nd = nodes.get(i);
             switch (nd.kind) {
-                case ACQUIRE, LINE_PULL -> producersOf.computeIfAbsent(nd.localId, ignored -> new ArrayList<>(2)).add(i);
-                case SETUP_LINE -> {
-                    ProductionVector.SetupLineMeta sm = vec.setupLines.get(nd.stringId);
+                case acquire, linePull -> producersOf.computeIfAbsent(nd.localId, ignored -> new ArrayList<>(2)).add(i);
+                case setupLine -> {
+                    ProductionVector.SetupLineMeta sm = Objects.requireNonNull(vec.setupLines.get(nd.stringId));
                     machineProvider.put(sm.primaryMachineId(), i);
                     systemAutoProvider.put(sm.systemId(), i);
                 }
-                case PROVISION -> {
+                case provision -> {
                     machineProvider.putIfAbsent(nd.stringId, i);
                     if (!vec.playerPreparedMachines.contains(nd.stringId) && nd.localId >= 0) {
                         consumersOf.computeIfAbsent(nd.localId, ignored -> new ArrayList<>(2)).add(i);
                     }
                 }
-                case CONVERT -> {
+                case convert -> {
                     int r = nd.localId;
                     for (int pos = cone.inStart[r]; pos < cone.inStart[r + 1]; pos++) {
                         int inU = vec.chosenSlotBind[pos];
@@ -238,7 +254,7 @@ public final class SchedulerAndFinalizer {
                         producersOf.computeIfAbsent(cone.outRes[oi], ignored -> new ArrayList<>(2)).add(i);
                     }
                 }
-                case CRAFT -> {
+                case craft -> {
                     int r = nd.localId;
                     for (int pos = cone.inStart[r]; pos < cone.inStart[r + 1]; pos++) {
                         int inU = vec.chosenSlotBind[pos];
@@ -259,11 +275,13 @@ public final class SchedulerAndFinalizer {
                         machineWaiters.computeIfAbsent(mach, ignored -> new ArrayList<>(2)).add(i);
                     }
                     if (vec.automatedLocalRecipes.contains(r)) {
-                        systemAutoWaiters.computeIfAbsent(cone.recObjects[r].key().systemId(), ignored -> new ArrayList<>(2)).add(i);
+                        systemAutoWaiters
+                                .computeIfAbsent(cone.recObjects[r].key().systemId(), ignored -> new ArrayList<>(2))
+                                .add(i);
                     }
                 }
-                case CYCLE_LOOP -> {
-                    CompiledCycleMacro macro = vec.usedMacros.get(nd.macroKey);
+                case cycleLoop -> {
+                    CompiledCycleMacro macro = Objects.requireNonNull(vec.usedMacros.get(nd.macroKey));
                     for (var e : macro.netDeltaPerIter().entrySet()) {
                         int lu = cone.localRes(e.getKey());
                         if (lu < 0) continue;
@@ -285,7 +303,8 @@ public final class SchedulerAndFinalizer {
                         String mach = (lr >= 0 && vec.chosenMachine[lr] != null)
                                 ? vec.chosenMachine[lr]
                                 : (inner.machineRequirement().compatibleMachineIds().isEmpty()
-                                ? null : inner.machineRequirement().compatibleMachineIds().get(0));
+                                        ? null
+                                        : inner.machineRequirement().compatibleMachineIds().get(0));
                         if (mach != null) {
                             machineWaiters.computeIfAbsent(mach, ignored -> new ArrayList<>(2)).add(i);
                         }
@@ -358,7 +377,16 @@ public final class SchedulerAndFinalizer {
                 idx = deferred.remove(0);
                 forced = true;
             }
-            if (!forced && wouldStarvePendingPresence(cone, vec, nodes.get(idx), idx, simStock, presenceNeedsOf, scheduled)) {
+            if (!forced
+                    && wouldStarvePendingPresence(
+                        cone,
+                        vec,
+                        nodes.get(idx),
+                        idx,
+                        simStock,
+                        presenceNeedsOf,
+                        scheduled
+                    )) {
                 deferred.add(idx);
                 continue;
             }
@@ -375,9 +403,10 @@ public final class SchedulerAndFinalizer {
         // Detect cycle (e.g., TC-10 self-dependent machine crafting): detach a cyclic ProvisionMachine node.
         if (order.size() != mCount) {
             for (int i = 0; i < mCount; i++) {
-                if (!scheduled[i] && nodes.get(i).kind == NodeKind.PROVISION
+                if (!scheduled[i]
+                        && nodes.get(i).kind == NodeKind.provision
                         && !vec.playerPreparedMachines.contains(nodes.get(i).stringId)) {
-                    return AssembleOutcome.detachMachine(nodes.get(i).stringId);
+                    return AssembleOutcome.detachMachine(Objects.requireNonNull(nodes.get(i).stringId));
                 }
             }
             return AssembleOutcome.fail();
@@ -410,21 +439,22 @@ public final class SchedulerAndFinalizer {
             deps.sort(String::compareTo);
 
             switch (nd.kind) {
-                case ACQUIRE -> {
+                case acquire -> {
                     int u = nd.localId;
                     ResourceKey rk = cone.resKeys[u];
                     long amt = vec.acq[u];
                     AcquisitionOption opt = cone.acquireOption[u];
                     AcquisitionKind kind = (cone.freeBase[u] || opt == null)
-                            ? AcquisitionKind.PLAYER_DECLARED_FREE : opt.kind();
+                            ? AcquisitionKind.baseSupply
+                            : opt.kind();
                     CostVector sc = opt != null
                             ? StepCosts.acquireCost(opt, amt, cone.freeBase[u])
-                            : StepCosts.FREE_BASE_COST;
+                            : StepCosts.freeBaseCost;
                     planSteps.add(new AcquireStep(sid, deps, rk, amt, kind, sc));
                     produceFifo(producedPool, rk, amt, sid);
                     totalAcquired.merge(rk, amt, SafeMath::addSaturating);
                 }
-                case LINE_PULL -> {
+                case linePull -> {
                     int u = nd.localId;
                     ResourceKey rk = cone.resKeys[u];
                     long amt = vec.line[u];
@@ -434,14 +464,16 @@ public final class SchedulerAndFinalizer {
                     produceFifo(producedPool, rk, amt, sid);
                     linesUsed.add(line.lineId());
                 }
-                case SETUP_LINE -> {
-                    ProductionVector.SetupLineMeta sm = vec.setupLines.get(nd.stringId);
+                case setupLine -> {
+                    ProductionVector.SetupLineMeta sm = Objects.requireNonNull(vec.setupLines.get(nd.stringId));
                     CostVector sc = StepCosts.setupLineCost(sm.systemId(), sm.capability(), meta);
-                    planSteps.add(new SetupLineStep(sid, deps, sm.systemId(), sm.primaryMachineId(), sm.targetOutput(), sc));
+                    planSteps.add(
+                        new SetupLineStep(sid, deps, sm.systemId(), sm.primaryMachineId(), sm.targetOutput(), sc)
+                    );
                 }
-                case PROVISION -> {
-                    String mid = nd.stringId;
-                    ProductionVector.ProvisionMeta pm = vec.provisionedMachines.get(mid);
+                case provision -> {
+                    String mid = Objects.requireNonNull(nd.stringId);
+                    ProductionVector.ProvisionMeta pm = Objects.requireNonNull(vec.provisionedMachines.get(mid));
                     boolean craftedFromStock = !vec.playerPreparedMachines.contains(mid);
                     if (craftedFromStock) {
                         ResourceKey mk = ResourceKey.item(mid);
@@ -450,17 +482,26 @@ public final class SchedulerAndFinalizer {
                         }
                     }
                     CostVector sc = StepCosts.provisionMachineCost(mid, pm.systemId(), pm.count(), meta);
-                    planSteps.add(new ProvisionMachineStep(
-                            sid, deps, mid, Optional.ofNullable(pm.capability()), pm.count(), craftedFromStock, sc));
+                    planSteps.add(
+                        new ProvisionMachineStep(
+                            sid,
+                            deps,
+                            mid,
+                            Optional.ofNullable(pm.capability()),
+                            pm.count(),
+                            craftedFromStock,
+                            sc
+                        )
+                    );
                     totalMachinesProv.merge(mid, pm.count(), Integer::sum);
                 }
-                case CONVERT -> {
+                case convert -> {
                     int r = nd.localId;
                     CompiledRecipe rec = cone.recObjects[r];
                     long b = vec.convertBatches[r];
                     Map<Integer, SlotBinding> bindings = buildSlotBindings(cone, vec, r);
                     for (InputSlot slot : rec.inputs()) {
-                        ResourceKey chosen = bindings.get(slot.slotIndex()).chosenResource();
+                        ResourceKey chosen = Objects.requireNonNull(bindings.get(slot.slotIndex())).chosenResource();
                         long need = SafeMath.mulSaturating(b, slot.amountPerBatch());
                         if (!consumeFifo(producedPool, initialPool, chosen, need)) {
                             int lu = cone.localRes(chosen);
@@ -470,18 +511,21 @@ public final class SchedulerAndFinalizer {
                     for (OutputSlot out : rec.outputs()) {
                         produceFifo(producedPool, out.resource(), SafeMath.mulSaturating(b, out.amountPerBatch()), sid);
                     }
-                    planSteps.add(new ConvertStep(sid, deps, rec.key(), b, bindings, StepCosts.CONVERT_COST));
+                    planSteps.add(new ConvertStep(sid, deps, rec.key(), b, bindings, StepCosts.convertCost));
                 }
-                case CRAFT -> {
+                case craft -> {
                     int r = nd.localId;
                     CompiledRecipe rec = cone.recObjects[r];
                     long b = vec.batches[r];
                     Map<Integer, SlotBinding> bindings = buildSlotBindings(cone, vec, r);
                     Map<Integer, ResourceKey> catBindings = buildCatBindings(cone, vec, r);
                     for (CatalystSlot cat : rec.catalysts()) {
-                        ResourceKey ck = catBindings.get(cat.slotIndex());
+                        ResourceKey ck = Objects.requireNonNull(catBindings.get(cat.slotIndex()));
                         long minNeed = (cat.durabilityCostPerBatch() > 0 && cat.maxDurability() > 0)
-                                ? SafeMath.ceilDiv(SafeMath.mulSaturating(b, cat.durabilityCostPerBatch()), cat.maxDurability())
+                                ? SafeMath.ceilDiv(
+                                    SafeMath.mulSaturating(b, cat.durabilityCostPerBatch()),
+                                    cat.maxDurability()
+                                )
                                 : 1L;
                         if (totalFifo(producedPool, initialPool, ck) < minNeed) {
                             int lu = cone.localRes(ck);
@@ -490,7 +534,7 @@ public final class SchedulerAndFinalizer {
                         catalystsReq.add(ck);
                     }
                     for (InputSlot slot : rec.inputs()) {
-                        ResourceKey chosen = bindings.get(slot.slotIndex()).chosenResource();
+                        ResourceKey chosen = Objects.requireNonNull(bindings.get(slot.slotIndex())).chosenResource();
                         long need = SafeMath.mulSaturating(b, slot.amountPerBatch());
                         if (!consumeFifo(producedPool, initialPool, chosen, need)) {
                             int lu = cone.localRes(chosen);
@@ -502,12 +546,12 @@ public final class SchedulerAndFinalizer {
                     }
                     Optional<String> chosenM = Optional.ofNullable(vec.chosenMachine[r]);
                     boolean auto = fac.automatedRecipe(rec.key()).isPresent() || vec.automatedLocalRecipes.contains(r);
-                    CostVector sc = StepCosts.craftCost(rec, b, chosenM, auto, fac, meta, guidance);
+                    CostVector sc = StepCosts.craftCost(rec, b, chosenM, auto, fac, meta);
                     planSteps.add(new CraftStep(sid, deps, rec.key(), b, chosenM, auto, bindings, catBindings, sc));
                 }
-                case CYCLE_LOOP -> {
-                    CompiledCycleMacro macro = vec.usedMacros.get(nd.macroKey);
-                    long iters = vec.macroIters.get(nd.macroKey);
+                case cycleLoop -> {
+                    CompiledCycleMacro macro = Objects.requireNonNull(vec.usedMacros.get(nd.macroKey));
+                    long iters = Objects.requireNonNull(vec.macroIters.get(nd.macroKey));
                     for (var se : macro.workingSeeds().entrySet()) {
                         if (totalFifo(producedPool, initialPool, se.getKey()) < se.getValue()) {
                             int lu = cone.localRes(se.getKey());
@@ -533,11 +577,23 @@ public final class SchedulerAndFinalizer {
                         String mach = (lr >= 0 && vec.chosenMachine[lr] != null)
                                 ? vec.chosenMachine[lr]
                                 : (inner.machineRequirement().compatibleMachineIds().isEmpty()
-                                ? null : inner.machineRequirement().compatibleMachineIds().get(0));
+                                        ? null
+                                        : inner.machineRequirement().compatibleMachineIds().get(0));
                         Optional<String> machOpt = Optional.ofNullable(mach);
-                        CostVector icost = StepCosts.craftCost(inner, mult, machOpt, false, fac, meta, guidance);
-                        template.add(new CraftStep(
-                                sid + "_inner_" + k, List.of(), inner.key(), mult, machOpt, false, ib, icb, icost));
+                        CostVector icost = StepCosts.craftCost(inner, mult, machOpt, false, fac, meta);
+                        template.add(
+                            new CraftStep(
+                                sid + "_inner_" + k,
+                                List.of(),
+                                inner.key(),
+                                mult,
+                                machOpt,
+                                false,
+                                ib,
+                                icb,
+                                icost
+                            )
+                        );
                     }
                     for (var de : macro.netDeltaPerIter().entrySet()) {
                         long d = de.getValue();
@@ -552,9 +608,18 @@ public final class SchedulerAndFinalizer {
                         }
                     }
                     CostVector loopCost = StepCosts.cycleLoopCost(template, iters);
-                    planSteps.add(new CycleLoopStep(
-                            sid, deps, macro.macroKey(), iters, macro.workingSeeds(),
-                            template, macro.netDeltaPerIter(), loopCost));
+                    planSteps.add(
+                        new CycleLoopStep(
+                            sid,
+                            deps,
+                            macro.macroKey(),
+                            iters,
+                            macro.workingSeeds(),
+                            template,
+                            macro.netDeltaPerIter(),
+                            loopCost
+                        )
+                    );
                 }
             }
         }
@@ -586,16 +651,26 @@ public final class SchedulerAndFinalizer {
         }
 
         PreparationSummary prep = new PreparationSummary(
-                new StockLedger(consumedInv),
-                new StockLedger(totalAcquired),
-                totalMachinesProv,
-                List.copyOf(linesUsed),
-                List.copyOf(catalystsReq)
+            new StockLedger(consumedInv),
+            new StockLedger(totalAcquired),
+            totalMachinesProv,
+            List.copyOf(linesUsed),
+            List.copyOf(catalystsReq)
         );
         CostVector totalCost = PlanCosts.aggregate(planSteps);
-        ProductionPlan temp = new ProductionPlan("tmp", strategyLabel, planSteps, prep, surplus, totalCost, PENDING_CERT);
-        String planId = "plan-" + strategyLabel + "-" + Long.toHexString(Fnv1a64.hashUtf8(DiverseParetoSelector.structuralKey(temp)));
-        return AssembleOutcome.ok(new ProductionPlan(planId, strategyLabel, planSteps, prep, surplus, totalCost, PENDING_CERT));
+        ProductionPlan temp = new ProductionPlan(
+            "tmp",
+            strategyLabel,
+            planSteps,
+            prep,
+            surplus,
+            totalCost,
+            pendingCert
+        );
+        String planId = "plan-" + strategyLabel + "-"
+                + Long.toHexString(Fnv1a64.hashUtf8(DiverseParetoSelector.structuralKey(temp)));
+        return AssembleOutcome
+                .ok(new ProductionPlan(planId, strategyLabel, planSteps, prep, surplus, totalCost, pendingCert));
     }
 
     private static Map<Integer, SlotBinding> buildSlotBindings(ConeModel cone, ProductionVector vec, int r) {
@@ -634,52 +709,73 @@ public final class SchedulerAndFinalizer {
     }
 
     private static boolean wouldStarvePendingPresence(
-            ConeModel cone,
-            ProductionVector vec,
-            StepNode nd,
-            int nodeIdx,
-            long[] simStock,
-            Map<Integer, List<Integer>> presenceNeedsOf,
-            boolean[] scheduled
+        ConeModel cone,
+        ProductionVector vec,
+        StepNode nd,
+        int nodeIdx,
+        long[] simStock,
+        Map<Integer, List<Integer>> presenceNeedsOf,
+        boolean[] scheduled
     ) {
         if (presenceNeedsOf.isEmpty()) return false;
         return switch (nd.kind) {
-            case PROVISION -> {
+            case provision -> {
                 if (vec.playerPreparedMachines.contains(nd.stringId) || nd.localId < 0) yield false;
                 yield starves(nd.localId, 1L, nodeIdx, simStock, presenceNeedsOf, scheduled);
             }
-            case CONVERT -> {
+            case convert -> {
                 int r = nd.localId;
                 long b = vec.convertBatches[r];
                 for (int pos = cone.inStart[r]; pos < cone.inStart[r + 1]; pos++) {
                     int u = vec.chosenSlotBind[pos];
-                    if (u >= 0 && starves(u, SafeMath.mulSaturating(b, cone.inAmount[pos]),
-                            nodeIdx, simStock, presenceNeedsOf, scheduled)) {
+                    if (u >= 0
+                            && starves(
+                                u,
+                                SafeMath.mulSaturating(b, cone.inAmount[pos]),
+                                nodeIdx,
+                                simStock,
+                                presenceNeedsOf,
+                                scheduled
+                            )) {
                         yield true;
                     }
                 }
                 yield false;
             }
-            case CRAFT -> {
+            case craft -> {
                 int r = nd.localId;
                 long b = vec.batches[r];
                 for (int pos = cone.inStart[r]; pos < cone.inStart[r + 1]; pos++) {
                     int u = vec.chosenSlotBind[pos];
-                    if (u >= 0 && starves(u, SafeMath.mulSaturating(b, cone.inAmount[pos]),
-                            nodeIdx, simStock, presenceNeedsOf, scheduled)) {
+                    if (u >= 0
+                            && starves(
+                                u,
+                                SafeMath.mulSaturating(b, cone.inAmount[pos]),
+                                nodeIdx,
+                                simStock,
+                                presenceNeedsOf,
+                                scheduled
+                            )) {
                         yield true;
                     }
                 }
                 yield false;
             }
-            case CYCLE_LOOP -> {
-                CompiledCycleMacro m = vec.usedMacros.get(nd.macroKey);
-                long iters = vec.macroIters.get(nd.macroKey);
+            case cycleLoop -> {
+                CompiledCycleMacro m = Objects.requireNonNull(vec.usedMacros.get(nd.macroKey));
+                long iters = Objects.requireNonNull(vec.macroIters.get(nd.macroKey));
                 for (var e : m.netDeltaPerIter().entrySet()) {
                     if (e.getValue() < 0L) {
                         int u = cone.localRes(e.getKey());
-                        if (u >= 0 && starves(u, SafeMath.mulSaturating(iters, -e.getValue()),
-                                nodeIdx, simStock, presenceNeedsOf, scheduled)) {
+                        if (u >= 0
+                                && starves(
+                                    u,
+                                    SafeMath.mulSaturating(iters, -e.getValue()),
+                                    nodeIdx,
+                                    simStock,
+                                    presenceNeedsOf,
+                                    scheduled
+                                )) {
                             yield true;
                         }
                     }
@@ -691,8 +787,12 @@ public final class SchedulerAndFinalizer {
     }
 
     private static boolean starves(
-            int u, long taken, int selfIdx, long[] simStock,
-            Map<Integer, List<Integer>> presenceNeedsOf, boolean[] scheduled
+        int u,
+        long taken,
+        int selfIdx,
+        long[] simStock,
+        Map<Integer, List<Integer>> presenceNeedsOf,
+        boolean[] scheduled
     ) {
         List<Integer> waiters = presenceNeedsOf.get(u);
         if (waiters == null) return false;
@@ -707,14 +807,14 @@ public final class SchedulerAndFinalizer {
 
     private static void advanceSimStock(ConeModel cone, ProductionVector vec, StepNode nd, long[] simStock) {
         switch (nd.kind) {
-            case ACQUIRE -> simStock[nd.localId] = SafeMath.addSaturating(simStock[nd.localId], vec.acq[nd.localId]);
-            case LINE_PULL -> simStock[nd.localId] = SafeMath.addSaturating(simStock[nd.localId], vec.line[nd.localId]);
-            case PROVISION -> {
+            case acquire -> simStock[nd.localId] = SafeMath.addSaturating(simStock[nd.localId], vec.acq[nd.localId]);
+            case linePull -> simStock[nd.localId] = SafeMath.addSaturating(simStock[nd.localId], vec.line[nd.localId]);
+            case provision -> {
                 if (!vec.playerPreparedMachines.contains(nd.stringId) && nd.localId >= 0) {
                     simStock[nd.localId] -= 1L;
                 }
             }
-            case CONVERT -> {
+            case convert -> {
                 int r = nd.localId;
                 long b = vec.convertBatches[r];
                 for (int pos = cone.inStart[r]; pos < cone.inStart[r + 1]; pos++) {
@@ -722,11 +822,11 @@ public final class SchedulerAndFinalizer {
                     if (u >= 0) simStock[u] -= SafeMath.mulSaturating(b, cone.inAmount[pos]);
                 }
                 for (int oi = cone.outStart[r]; oi < cone.outStart[r + 1]; oi++) {
-                    simStock[cone.outRes[oi]] = SafeMath.addSaturating(
-                            simStock[cone.outRes[oi]], SafeMath.mulSaturating(b, cone.outAmount[oi]));
+                    simStock[cone.outRes[oi]] = SafeMath
+                            .addSaturating(simStock[cone.outRes[oi]], SafeMath.mulSaturating(b, cone.outAmount[oi]));
                 }
             }
-            case CRAFT -> {
+            case craft -> {
                 int r = nd.localId;
                 long b = vec.batches[r];
                 for (int pos = cone.inStart[r]; pos < cone.inStart[r + 1]; pos++) {
@@ -734,20 +834,20 @@ public final class SchedulerAndFinalizer {
                     if (u >= 0) simStock[u] -= SafeMath.mulSaturating(b, cone.inAmount[pos]);
                 }
                 for (int oi = cone.outStart[r]; oi < cone.outStart[r + 1]; oi++) {
-                    simStock[cone.outRes[oi]] = SafeMath.addSaturating(
-                            simStock[cone.outRes[oi]], SafeMath.mulSaturating(b, cone.outAmount[oi]));
+                    simStock[cone.outRes[oi]] = SafeMath
+                            .addSaturating(simStock[cone.outRes[oi]], SafeMath.mulSaturating(b, cone.outAmount[oi]));
                 }
             }
-            case CYCLE_LOOP -> {
-                CompiledCycleMacro m = vec.usedMacros.get(nd.macroKey);
-                long iters = vec.macroIters.get(nd.macroKey);
+            case cycleLoop -> {
+                CompiledCycleMacro m = Objects.requireNonNull(vec.usedMacros.get(nd.macroKey));
+                long iters = Objects.requireNonNull(vec.macroIters.get(nd.macroKey));
                 for (var e : m.netDeltaPerIter().entrySet()) {
                     int u = cone.localRes(e.getKey());
-                    if (u >= 0) simStock[u] = SafeMath.addSaturating(simStock[u], SafeMath.mulSaturating(iters, e.getValue()));
+                    if (u >= 0)
+                        simStock[u] = SafeMath.addSaturating(simStock[u], SafeMath.mulSaturating(iters, e.getValue()));
                 }
             }
-            default -> {
-            }
+            default -> {}
         }
     }
 
@@ -764,7 +864,11 @@ public final class SchedulerAndFinalizer {
         pool.computeIfAbsent(rk, ignored -> new ArrayDeque<>()).addLast(new FinalBatch(stepId, amt));
     }
 
-    private static long totalFifo(Map<ResourceKey, Deque<FinalBatch>> prod, Map<ResourceKey, Long> init, ResourceKey rk) {
+    private static long totalFifo(
+        Map<ResourceKey, Deque<FinalBatch>> prod,
+        Map<ResourceKey, Long> init,
+        ResourceKey rk
+    ) {
         long sum = init.getOrDefault(rk, 0L);
         Deque<FinalBatch> q = prod.get(rk);
         if (q != null) {
@@ -773,7 +877,12 @@ public final class SchedulerAndFinalizer {
         return sum;
     }
 
-    private static boolean consumeFifo(Map<ResourceKey, Deque<FinalBatch>> prod, Map<ResourceKey, Long> init, ResourceKey rk, long need) {
+    private static boolean consumeFifo(
+        Map<ResourceKey, Deque<FinalBatch>> prod,
+        Map<ResourceKey, Long> init,
+        ResourceKey rk,
+        long need
+    ) {
         if (need <= 0L) return true;
         if (totalFifo(prod, init, rk) < need) return false;
         long rem = need;

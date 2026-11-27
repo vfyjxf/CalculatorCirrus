@@ -3,11 +3,11 @@ package dev.vfyjxf.cirrus.api.planning.human;
 import java.util.Objects;
 
 public record MachineRule(
-        String ruleId,
-        GuidanceScope scope,
-        RuleStrength strength,
-        String machineId,
-        boolean willingToBuildNew
+    String ruleId,
+    GuidanceScope scope,
+    RuleStrength strength,
+    String machineId,
+    boolean willingToBuildNew
 ) implements GuidanceRule {
 
     public MachineRule {

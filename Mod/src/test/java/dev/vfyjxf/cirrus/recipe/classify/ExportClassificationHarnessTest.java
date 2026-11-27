@@ -4,8 +4,9 @@ import com.google.gson.stream.JsonReader;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationResult;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassificationTags;
 import dev.vfyjxf.cirrus.api.recipe.classify.ClassifyContent;
-import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifyView;
 import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifier;
+import dev.vfyjxf.cirrus.api.recipe.classify.RecipeClassifyView;
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
@@ -14,7 +15,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,8 +43,10 @@ class ExportClassificationHarnessTest {
     @Test
     void analyzeExports() throws IOException {
         Path exportDir = exportDir();
-        Assumptions.assumeTrue(exportDir != null && Files.isDirectory(exportDir),
-            "no export directory (set -Dcirrus.export.dir=... or CIRRUS_EXPORT_DIR)");
+        Assumptions.assumeTrue(
+            exportDir != null && Files.isDirectory(exportDir),
+            "no export directory (set -Dcirrus.export.dir=... or CIRRUS_EXPORT_DIR)"
+        );
 
         RecipeClassifier classifier = RecipeClassifier.createDefault();
         List<Path> packs;
@@ -61,7 +66,7 @@ class ExportClassificationHarnessTest {
         System.out.println(report);
     }
 
-    private static Path exportDir() {
+    private static @Nullable Path exportDir() {
         String property = System.getProperty("cirrus.export.dir");
         if (property == null || property.isBlank()) {
             property = System.getenv("CIRRUS_EXPORT_DIR");
@@ -69,34 +74,44 @@ class ExportClassificationHarnessTest {
         return property == null || property.isBlank() ? null : Path.of(property);
     }
 
-    private static Path findRecipesFile(Path pack) throws IOException {
+    private static @Nullable Path findRecipesFile(Path pack) throws IOException {
         try (Stream<Path> stream = Files.list(pack)) {
-            return stream
-                .filter(path -> path.getFileName().toString().startsWith("recipes-"))
-                .filter(path -> path.getFileName().toString().endsWith(".json"))
-                .findFirst()
-                .orElse(null);
+            return stream.filter(path -> path.getFileName().toString().startsWith("recipes-"))
+                    .filter(path -> path.getFileName().toString().endsWith(".json")).findFirst().orElse(null);
         }
     }
 
-    private static void analyzePack(RecipeClassifier classifier, String pack, Path recipesFile, StringBuilder report) throws IOException {
+    private static void analyzePack(RecipeClassifier classifier, String pack, Path recipesFile, StringBuilder report)
+            throws IOException {
         long started = System.nanoTime();
         List<RecipeClassifyView> views = parseRecipes(recipesFile);
         long parsed = System.nanoTime();
         ClassificationResult result = classifier.classifyAll(views);
         long classified = System.nanoTime();
 
-        BitSet excluded = result.recipesWithTag(ClassificationTags.JUNK);
-        excluded.or(result.recipesWithTag(ClassificationTags.DUPLICATE));
+        BitSet excluded = result.recipesWithTag(ClassificationTags.junk);
+        excluded.or(result.recipesWithTag(ClassificationTags.duplicate));
 
         Map<String, Integer> fanInBefore = fanIn(views, null);
         Map<String, Integer> fanInAfter = fanIn(views, excluded);
 
         report.append("\n=== ").append(pack).append(" ===\n");
-        report.append(String.format("recipes=%d parseMs=%d classifyMs=%d%n",
-            views.size(), (parsed - started) / 1_000_000, (classified - parsed) / 1_000_000));
-        report.append(String.format("excluded=%d (%.1f%%) kept=%d%n",
-            excluded.cardinality(), 100.0 * excluded.cardinality() / Math.max(1, views.size()), views.size() - excluded.cardinality()));
+        report.append(
+            String.format(
+                "recipes=%d parseMs=%d classifyMs=%d%n",
+                views.size(),
+                (parsed - started) / 1_000_000,
+                (classified - parsed) / 1_000_000
+            )
+        );
+        report.append(
+            String.format(
+                "excluded=%d (%.1f%%) kept=%d%n",
+                excluded.cardinality(),
+                100.0 * excluded.cardinality() / Math.max(1, views.size()),
+                views.size() - excluded.cardinality()
+            )
+        );
         for (Map.Entry<String, Integer> entry : result.tagCounts().entrySet()) {
             report.append(String.format("  %-28s %d%n", entry.getKey(), entry.getValue()));
         }
@@ -107,45 +122,47 @@ class ExportClassificationHarnessTest {
             for (String tag : tags) {
                 int left = sampleBudget.merge(tag, 1, Integer::sum);
                 if (left <= 8) {
-                    report.append(String.format("    [%s] %s | %s | in=%s out=%s%n",
-                        tag.substring(tag.indexOf(':') + 1), view.systemId(), view.recipeId(),
-                        abbreviate(view.allInputIds()), abbreviate(view.allOutputIds())));
+                    report.append(
+                        String.format(
+                            "    [%s] %s | %s | in=%s out=%s%n",
+                            tag.substring(tag.indexOf(':') + 1),
+                            view.systemId(),
+                            view.recipeId(),
+                            abbreviate(view.allInputIds()),
+                            abbreviate(view.allOutputIds())
+                        )
+                    );
                 }
             }
         }
         // systems feeding the top fan-in survivors
         report.append("  top fan-in survivor systems:\n");
-        fanInAfter.entrySet().stream()
-            .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-            .limit(8)
-            .forEach(top -> {
-                Map<String, Integer> bySystem = new TreeMap<>();
-                for (RecipeClassifyView view : views) {
-                    if (excluded.get(view.index()) || !view.allOutputIds().contains(top.getKey())) {
-                        continue;
+        fanInAfter.entrySet().stream().sorted(Map.Entry.<String, Integer>comparingByValue().reversed()).limit(8)
+                .forEach(top -> {
+                    Map<String, Integer> bySystem = new TreeMap<>();
+                    for (RecipeClassifyView view : views) {
+                        if (excluded.get(view.index()) || !view.allOutputIds().contains(top.getKey())) {
+                            continue;
+                        }
+                        bySystem.merge(view.systemId(), 1, Integer::sum);
                     }
-                    bySystem.merge(view.systemId(), 1, Integer::sum);
-                }
-                StringBuilder line = new StringBuilder("    ").append(top.getKey()).append(" <- ");
-                bySystem.entrySet().stream()
-                    .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                    .limit(5)
-                    .forEach(e -> line.append(e.getKey()).append('(').append(e.getValue()).append(") "));
-                report.append(line).append('\n');
-            });
+                    StringBuilder line = new StringBuilder("    ").append(top.getKey()).append(" <- ");
+                    bySystem.entrySet().stream().sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                            .limit(5)
+                            .forEach(e -> line.append(e.getKey()).append('(').append(e.getValue()).append(") "));
+                    report.append(line).append('\n');
+                });
         report.append("  fan-in before: ").append(histogram(fanInBefore)).append('\n');
         report.append("  fan-in after : ").append(histogram(fanInAfter)).append('\n');
         report.append("  top after exclusion:\n");
-        fanInAfter.entrySet().stream()
-            .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-            .limit(25)
-            .forEach(entry -> report.append(String.format("    %6d  %s%n", entry.getValue(), entry.getKey())));
+        fanInAfter.entrySet().stream().sorted(Map.Entry.<String, Integer>comparingByValue().reversed()).limit(25)
+                .forEach(entry -> report.append(String.format("    %6d  %s%n", entry.getValue(), entry.getKey())));
         List<String> coverageLoss = coverageLoss(fanInBefore, fanInAfter);
         report.append("  coverage loss (outputs losing all producers): ").append(coverageLoss.size()).append('\n');
         coverageLoss.stream().limit(20).forEach(id -> report.append("    ").append(id).append('\n'));
     }
 
-    private static Map<String, Integer> fanIn(List<RecipeClassifyView> views, BitSet excluded) {
+    private static Map<String, Integer> fanIn(List<RecipeClassifyView> views, @Nullable BitSet excluded) {
         Map<String, Integer> producers = new HashMap<>();
         for (RecipeClassifyView view : views) {
             if (excluded != null && excluded.get(view.index())) {
@@ -180,7 +197,7 @@ class ExportClassificationHarnessTest {
         return lost;
     }
 
-    private static String abbreviate(java.util.Collection<String> ids) {
+    private static String abbreviate(Collection<String> ids) {
         if (ids.size() <= 3) {
             return ids.toString();
         }
@@ -255,7 +272,7 @@ class ExportClassificationHarnessTest {
         String tagId = null;
         double amount = 1;
         double chance = 1.0;
-        java.util.Set<String> ids = new java.util.LinkedHashSet<>();
+        Set<String> ids = new LinkedHashSet<>();
         reader.beginObject();
         while (reader.hasNext()) {
             switch (reader.nextName()) {
@@ -296,7 +313,7 @@ class ExportClassificationHarnessTest {
         return new ClassifyContent(contentKind, ids, tagId, amount, chance);
     }
 
-    private static String parseStackId(JsonReader reader) throws IOException {
+    private static @Nullable String parseStackId(JsonReader reader) throws IOException {
         String id = null;
         String fluid = null;
         reader.beginObject();
