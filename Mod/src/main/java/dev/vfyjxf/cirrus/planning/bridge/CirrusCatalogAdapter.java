@@ -21,9 +21,9 @@ import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.constraint.RecipeConstraint;
 import dev.vfyjxf.cirrus.api.recipe.machine.ItemMachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionKeys;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionSlot;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
 import dev.vfyjxf.cirrus.api.recipe.screening.RecipeScreeningHints;
 import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
@@ -40,7 +40,6 @@ import dev.vfyjxf.cirrus.planning.normalize.JeiNormalizationPatch;
 import dev.vfyjxf.cirrus.planning.normalize.JeiRecipeNormalizer;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.classify.RecipeClassificationService;
-import dev.vfyjxf.cirrus.recipe.clause.DurabilityCostClause;
 import dev.vfyjxf.cirrus.recipe.system.jei.JeiCategoryRecipeSystem;
 import dev.vfyjxf.cirrus.util.CirrusNamespaces;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
@@ -75,7 +74,7 @@ public final class CirrusCatalogAdapter {
     public record RecipeContentSource(
         List<InputContent> inputs,
         List<OutputContent> outputs,
-        Map<Integer, DurabilityCostClause> durabilityClauses
+        Map<Integer, Integer> durabilityCosts
     ) {
         public RecipeContentSource(List<InputContent> inputs, List<OutputContent> outputs) {
             this(inputs, outputs, Map.of());
@@ -84,9 +83,9 @@ public final class CirrusCatalogAdapter {
         public RecipeContentSource {
             inputs = List.copyOf(Objects.requireNonNull(inputs, "inputs"));
             outputs = List.copyOf(Objects.requireNonNull(outputs, "outputs"));
-            durabilityClauses = durabilityClauses == null || durabilityClauses.isEmpty()
+            durabilityCosts = durabilityCosts == null || durabilityCosts.isEmpty()
                     ? Map.of()
-                    : Map.copyOf(durabilityClauses);
+                    : Map.copyOf(durabilityCosts);
         }
     }
 
@@ -346,27 +345,25 @@ public final class CirrusCatalogAdapter {
             return Optional.empty();
         }
         List<InputContent> inputs = new ArrayList<>(projection.inputs().size());
-        Map<Integer, DurabilityCostClause> durabilityClauses = null;
+        Map<Integer, Integer> durabilityCosts = null;
         int idx = 0;
-        for (ClausedContent<InputContent> claused : projection.inputs()) {
-            inputs.add(claused.content());
-            if (claused.hasClause(CirrusTypes.Clauses.durabilityCost)) {
-                RecipeClause clause = claused.getClause(CirrusTypes.Clauses.durabilityCost);
-                if (clause instanceof DurabilityCostClause dur) {
-                    if (durabilityClauses == null) {
-                        durabilityClauses = new HashMap<>(2);
-                    }
-                    durabilityClauses.put(idx, dur);
+        for (ProjectionSlot<InputContent> slot : projection.inputs()) {
+            inputs.add(slot.content());
+            Integer cost = slot.attribute(ProjectionKeys.durabilityCost);
+            if (cost != null && cost > 0) {
+                if (durabilityCosts == null) {
+                    durabilityCosts = new HashMap<>(2);
                 }
+                durabilityCosts.put(idx, cost);
             }
             idx++;
         }
         List<OutputContent> outputs = new ArrayList<>(projection.outputs().size());
-        for (ClausedContent<OutputContent> claused : projection.outputs()) {
-            outputs.add(claused.content());
+        for (ProjectionSlot<OutputContent> slot : projection.outputs()) {
+            outputs.add(slot.content());
         }
         return Optional
-                .of(new RecipeContentSource(inputs, outputs, durabilityClauses == null ? Map.of() : durabilityClauses));
+                .of(new RecipeContentSource(inputs, outputs, durabilityCosts == null ? Map.of() : durabilityCosts));
     }
 
     private static @Nullable RecipeUsePolicy extractRoutingHintPolicy(RecipeEntry<?> entry) {
@@ -410,8 +407,8 @@ public final class CirrusCatalogAdapter {
 
         for (int i = 0; i < source.inputs().size(); i++) {
             InputContent in = source.inputs().get(i);
-            DurabilityCostClause durClause = source.durabilityClauses().get(i);
-            CirrusContentBridge.InputMapping mapped = CirrusContentBridge.mapInput(in, durClause);
+            int durCost = source.durabilityCosts().getOrDefault(i, 0);
+            CirrusContentBridge.InputMapping mapped = CirrusContentBridge.mapInput(in, durCost);
             if (mapped.dropReason() != null) {
                 return AdaptOutcome.dropped(mapped.dropReason());
             }

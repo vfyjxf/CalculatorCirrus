@@ -1,16 +1,12 @@
 package dev.vfyjxf.cirrus.recipe;
 
-import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolver;
 import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolverType;
 import dev.vfyjxf.cirrus.api.recipe.filter.RecipeFilter;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionTransformer;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextOption;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionEffect;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.extension.RecipeSubsystem;
 import dev.vfyjxf.cirrus.api.recipe.system.extension.SubsystemOrder;
@@ -18,8 +14,8 @@ import dev.vfyjxf.cirrus.api.register.IngredientResolverRegister;
 import dev.vfyjxf.cirrus.api.register.JeiRecipeTypeBridgeRegister;
 import dev.vfyjxf.cirrus.api.register.MachineEntryRegister;
 import dev.vfyjxf.cirrus.api.register.ProjectionContextOptionRegister;
+import dev.vfyjxf.cirrus.api.register.ProjectionEffectRegister;
 import dev.vfyjxf.cirrus.api.register.ProjectionPluginRegister;
-import dev.vfyjxf.cirrus.api.register.RecipeClauseRegister;
 import dev.vfyjxf.cirrus.api.register.RecipeFilterRegister;
 import dev.vfyjxf.cirrus.api.register.RecipeSystemRegister;
 import dev.vfyjxf.cirrus.api.register.RecipeSystemTagRegister;
@@ -36,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RecipeApiRegistryBuilder
         implements
             RecipeSystemRegister,
-            RecipeClauseRegister,
+            ProjectionEffectRegister,
             MachineEntryRegister,
             IngredientResolverRegister,
             JeiRecipeTypeBridgeRegister,
@@ -46,9 +42,7 @@ public class RecipeApiRegistryBuilder
             ProjectionContextOptionRegister {
 
     final ConcurrentHashMap<Namespace, RecipeSystem<?>> recipeSystems = new ConcurrentHashMap<>();
-    final ConcurrentHashMap<Namespace, ClauseType> clauses = new ConcurrentHashMap<>();
-    final ConcurrentHashMap<ClauseType, ContentTransformer<?, ?>> contentTransformers = new ConcurrentHashMap<>();
-    final ConcurrentHashMap<ClauseType, ProjectionTransformer<?>> projectionTransformers = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<Namespace, ProjectionEffect> projectionEffects = new ConcurrentHashMap<>();
     final ConcurrentHashMap<Namespace, Set<MachineEntry>> handlerEntries = new ConcurrentHashMap<>();
     final ConcurrentHashMap<Namespace, Set<RecipeType<?>>> jeiRecipeTypes = new ConcurrentHashMap<>();
     final ConcurrentHashMap<IngredientResolverType<?>, Set<IngredientResolver<?>>> ingredientResolvers = new ConcurrentHashMap<>();
@@ -88,48 +82,15 @@ public class RecipeApiRegistryBuilder
     }
 
     @Override
-    public <T extends RecipeContent, F extends RecipeClause> void registerContentTransformer(
-        ClauseType type,
-        ContentTransformer<T, F> transformer
-    ) {
-        Checks.checkNotNull(type, "type");
-        Checks.checkNotNull(transformer, "transformer");
-        Checks.checkArgument(
-            type.plugin().equals(transformer.plugin()),
-            "Content transformer plugin must match clause type plugin"
-        );
-        registerClauseType(type);
-        contentTransformers.put(type, transformer);
-    }
-
-    @Override
-    public void registerClauseType(ClauseType type) {
-        Checks.checkNotNull(type, "type");
-        registerProjectionPlugin(type.plugin());
-        ClauseType existing = clauses.putIfAbsent(type.id(), type);
-        if (existing != null && !existing.equals(type)) {
-            throw new IllegalArgumentException("Recipe clause type with id: " + type.id() + " already registered");
-        }
-    }
-
-    @Override
-    public <F extends RecipeClause> void registerProjectionTransformer(
-        ClauseType type,
-        ProjectionTransformer<F> transformer
-    ) {
-        Checks.checkNotNull(type, "type");
-        Checks.checkNotNull(transformer, "transformer");
-        Checks.checkArgument(
-            type.plugin().equals(transformer.plugin()),
-            "Projection transformer plugin must match clause type plugin"
-        );
-        registerClauseType(type);
-        if (projectionTransformers.containsKey(type)) {
+    public void registerProjectionEffect(ProjectionEffect effect) {
+        Checks.checkNotNull(effect, "effect");
+        registerProjectionPlugin(effect.plugin());
+        ProjectionEffect existing = projectionEffects.putIfAbsent(effect.id(), effect);
+        if (existing != null && !existing.equals(effect)) {
             throw new IllegalArgumentException(
-                "Projection transformer for clause with id: " + type.id() + " already registered"
+                "Projection effect with id: " + effect.id() + " already registered"
             );
         }
-        projectionTransformers.put(type, transformer);
     }
 
     @Override

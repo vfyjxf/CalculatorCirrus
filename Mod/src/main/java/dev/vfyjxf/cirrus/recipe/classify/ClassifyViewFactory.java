@@ -14,8 +14,8 @@ import dev.vfyjxf.cirrus.api.recipe.content.StackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TagStackContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TypedStackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionSlot;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
 import net.minecraft.resources.ResourceLocation;
 import org.jspecify.annotations.Nullable;
 
@@ -60,11 +60,11 @@ public final class ClassifyViewFactory {
         List<ClassifyContent> outputs = List.of();
         if (projection != null) {
             inputs = new ArrayList<>(projection.inputs().size());
-            for (ClausedContent<InputContent> input : projection.inputs()) {
+            for (ProjectionSlot<InputContent> input : projection.inputs()) {
                 inputs.add(of(input.content()));
             }
             outputs = new ArrayList<>(projection.outputs().size());
-            for (ClausedContent<OutputContent> output : projection.outputs()) {
+            for (ProjectionSlot<OutputContent> output : projection.outputs()) {
                 outputs.add(of(output.content()));
             }
         }

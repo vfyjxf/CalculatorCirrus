@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe;
 
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemas;
+import dev.vfyjxf.cirrus.api.recipe.projection.SlotAddress;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.VanillaRecipeSystem;
 import dev.vfyjxf.cirrus.recipe.system.BrewingRecipeSystem;
@@ -93,8 +93,8 @@ class VanillaRecipeSystemRegistrationTest {
         RecipeProjection projection = api.resolve(ResolveContext.empty(), crafting, shaped).projection();
 
         assertNotNull(projection);
-        assertNotNull(projection.schema().find(ProjectionSchemas.gridSize));
-        assertTrue(projection.inputs().anySatisfy(input -> input.schema().has(ProjectionSchemas.gridIndex)));
+        assertNotNull(projection.inputGrid());
+        assertTrue(projection.inputs().anySatisfy(slot -> slot.address() instanceof SlotAddress.GridCell));
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

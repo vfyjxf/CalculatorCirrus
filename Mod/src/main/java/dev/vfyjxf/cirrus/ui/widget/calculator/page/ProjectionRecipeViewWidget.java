@@ -5,12 +5,12 @@ import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridIndex;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridSize;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemas;
+import dev.vfyjxf.cirrus.api.recipe.projection.SlotAddress;
+import dev.vfyjxf.cirrus.api.recipe.projection.SlotChannel;
+import dev.vfyjxf.cirrus.api.recipe.projection.display.ProjectionDisplayModel;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionResult;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.SlotDiff;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
-import dev.vfyjxf.cirrus.ui.CirrusTextures;
 import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
 import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayContentHelper;
@@ -26,19 +26,28 @@ import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipContext;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.taffy.style.Overflow;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
+import org.eclipse.collections.api.list.ImmutableList;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.boxSizingBorderBox;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.overflow;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeOf;
 
+/**
+ * Diff-aware recipe projection viewer backed directly by {@link ProjectionDisplayModel}.
+ *
+ * <p>Renders 2D input/output grids (preserving exact {@code (col, row)} coordinates), loose/named
+ * slots, value gauges, and optional per-cell / per-slot diff overlays (added, removed ghost,
+ * adjusted delta badge, transformed swap, moved arrow) with rich before→after hover tooltips.
+ */
 final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipProvider {
     private static final int framePadding = 5;
     private static final int slotSize = 18;
@@ -57,7 +66,21 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
         if (projection == null) {
             return null;
         }
-        Layout layout = Layout.build(projection);
+        return create(ProjectionDisplayModel.fromProjection(projection));
+    }
+
+    static @Nullable ProjectionRecipeViewWidget create(@Nullable ProjectionResult result) {
+        if (result == null) {
+            return null;
+        }
+        return create(result.toDisplayModel());
+    }
+
+    static @Nullable ProjectionRecipeViewWidget create(@Nullable ProjectionDisplayModel model) {
+        if (model == null) {
+            return null;
+        }
+        Layout layout = Layout.build(model);
         return layout.hasContent() ? new ProjectionRecipeViewWidget(layout) : null;
     }
 
@@ -87,6 +110,20 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
         return layout.usesGrid();
     }
 
+    int changedSlotCount() {
+        int count = 0;
+        for (Slot slot : layout.slots()) {
+            if (slot.status().isChanged()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    boolean hasDiffOverlays() {
+        return changedSlotCount() > 0 || layout.valueMeters().stream().anyMatch(m -> m.status().isChanged());
+    }
+
     @Override
     protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
         super.renderInternal(canvas, mouseX, mouseY, partialTicks);
@@ -97,14 +134,14 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
         WorkbenchThemeMode theme = CirrusUiTheme.mode(this);
 
         renderSectionBackgrounds(canvas, baseX, baseY);
-        renderSlotBackgrounds(canvas, baseX, baseY);
+        renderSlotDiffUnderlays(canvas, baseX, baseY, palette);
         if (layout.showArrow()) {
             int ax0 = baseX + layout.arrowX() + 1;
             int ax1 = baseX + layout.arrowX() + arrowRenderWidth - 1;
             int midY = baseY + layout.arrowY() + arrowRenderHeight / 2;
             OreUiRecipeGrid.drawRecipeArrow(canvas, ax0, ax1, midY, palette, false);
         }
-        renderContent(canvas, baseX, baseY, partialTicks);
+        renderContent(canvas, baseX, baseY, partialTicks, palette);
         renderValueMeters(canvas, baseX, baseY, mouseX, mouseY, palette, theme);
     }
 
@@ -141,6 +178,10 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
                 theme,
                 hovered
             );
+            if (meter.status().isChanged()) {
+                int accent = statusColor(meter.status(), palette);
+                canvas.strokeRect(mx, my, meter.width(), meter.height(), OreUiPaint.withAlpha(accent, 0.72f), 1);
+            }
         }
     }
 
@@ -151,15 +192,34 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
         }
     }
 
-    private void renderSlotBackgrounds(SceneCanvas canvas, int baseX, int baseY) {
-        // Section backgrounds already render all occupied and empty slot cells as one tight group.
+    private void renderSlotDiffUnderlays(SceneCanvas canvas, int baseX, int baseY, CirrusPalette palette) {
+        boolean dark = OreUiPaint.isDark(palette);
+        for (Slot slot : layout.slots()) {
+            if (!slot.status().isChanged()) {
+                continue;
+            }
+            int sx = baseX + slot.x();
+            int sy = baseY + slot.y();
+            int accent = statusColor(slot.status(), palette);
+            float tintAlpha = slot.status() == SlotDiff.DiffStatus.removed
+                    ? (dark ? 0.28f : 0.20f)
+                    : (dark ? 0.20f : 0.14f);
+            canvas.fill(sx + 1, sy + 1, slotSize - 2, slotSize - 2, OreUiPaint.withAlpha(accent, tintAlpha));
+            canvas.strokeRect(sx, sy, slotSize, slotSize, OreUiPaint.withAlpha(accent, 0.85f), 1);
+        }
     }
 
-    private void renderContent(SceneCanvas canvas, int baseX, int baseY, float partialTicks) {
+    private void renderContent(
+        SceneCanvas canvas,
+        int baseX,
+        int baseY,
+        float partialTicks,
+        CirrusPalette palette
+    ) {
         BatchableRecipeContentRenderer.Batch batch = BatchableRecipeContentRenderer.Batch
                 .create(canvas.layeredGraphics(), partialTicks);
         for (Slot slot : layout.slots()) {
-            RecipeContent content = slot.content();
+            RecipeContent content = slot.displayContent();
             if (ExecutionOverlayContentHelper.hasRenderableVisual(content)) {
                 batch.add(
                     content,
@@ -176,11 +236,70 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
         Font font = context().font();
         GuiGraphics graphics = canvas.layeredGraphics();
         for (Slot slot : layout.slots()) {
-            if (!ExecutionOverlayContentHelper.hasRenderableVisual(slot.content())) {
+            RecipeContent content = slot.displayContent();
+            if (!ExecutionOverlayContentHelper.hasRenderableVisual(content)) {
                 renderFallbackMarker(graphics, baseX + slot.x(), baseY + slot.y());
             }
+            if (slot.status() == SlotDiff.DiffStatus.removed) {
+                renderRemovedScrim(graphics, baseX + slot.x(), baseY + slot.y(), palette);
+            }
             renderAmount(font, graphics, baseX, baseY, slot);
+            if (slot.status().isChanged() && !slot.deltaBadge().isEmpty()) {
+                renderDeltaBadge(font, graphics, baseX + slot.x(), baseY + slot.y(), slot.status(), slot.deltaBadge(), palette);
+            }
         }
+    }
+
+    private void renderRemovedScrim(GuiGraphics graphics, int sx, int sy, CirrusPalette palette) {
+        graphics.pose().pushPose();
+        graphics.pose().translate(0f, 0f, 180f);
+        graphics.fill(
+            sx + 1,
+            sy + 1,
+            sx + slotSize - 1,
+            sy + slotSize - 1,
+            OreUiPaint.withAlpha(OreUiPaint.outerInk(palette), 0.44f)
+        );
+        // Crisp horizontal strike bar across removed ghost slot
+        int midY = sy + slotSize / 2;
+        graphics.fill(sx + 2, midY, sx + slotSize - 2, midY + 1, palette.diffRemoved());
+        graphics.pose().popPose();
+    }
+
+    private void renderDeltaBadge(
+        Font font,
+        GuiGraphics graphics,
+        int sx,
+        int sy,
+        SlotDiff.DiffStatus status,
+        String badge,
+        CirrusPalette palette
+    ) {
+        int rawW = Math.max(1, font.width(badge));
+        float scale = Math.max(0.45f, Math.min(0.62f, (slotSize - 3.0f) / rawW));
+        float scaledW = rawW * scale;
+        float scaledH = 8f * scale;
+        float tx = sx + 1.5f;
+        float ty = sy + 1.2f;
+        int bgW = Math.min(slotSize - 2, (int) Math.ceil(scaledW + 2.0f));
+        int bgH = Math.min(slotSize - 2, (int) Math.ceil(scaledH + 1.0f));
+        int accent = statusColor(status, palette);
+
+        graphics.pose().pushPose();
+        graphics.pose().translate(0f, 0f, 220f);
+        if (bgW > 0 && bgH > 0) {
+            graphics.fill(
+                sx + 1,
+                sy + 1,
+                sx + 1 + bgW,
+                sy + 1 + bgH,
+                OreUiPaint.withAlpha(OreUiPaint.outerInk(palette), 0.78f)
+            );
+        }
+        graphics.pose().translate(tx, ty, 0f);
+        graphics.pose().scale(scale, scale, 1f);
+        graphics.drawString(font, badge, 0, 0, accent, true);
+        graphics.pose().popPose();
     }
 
     private void renderFallbackMarker(GuiGraphics graphics, int x, int y) {
@@ -192,7 +311,7 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
     }
 
     private void renderAmount(Font font, GuiGraphics graphics, int baseX, int baseY, Slot slot) {
-        long amount = slot.content().amount();
+        long amount = slot.displayContent().amount();
         String text = OreUiSlotAmount.format(amount);
         if (text.isEmpty()) {
             return;
@@ -216,13 +335,52 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
         if (bgW > 0 && bgH > 0) {
             graphics.fill(bgX, bgY, bgX + bgW, bgY + bgH, OreUiPaint.withAlpha(OreUiPaint.outerInk(palette), 0.64f));
         }
-        int ink = amount >= 1_000_000L
-                ? OreUiPaint.lighten(palette.focusRing(), 0.25f)
-                : amount >= 1_000L ? OreUiPaint.lighten(palette.costH(), 0.25f) : palette.textOnAccent();
+        int ink = slot.status() == SlotDiff.DiffStatus.removed
+                ? palette.textMuted()
+                : amount >= 1_000_000L
+                        ? OreUiPaint.lighten(palette.focusRing(), 0.25f)
+                        : amount >= 1_000L ? OreUiPaint.lighten(palette.costH(), 0.25f) : palette.textOnAccent();
         graphics.pose().translate(tx, ty, 0f);
         graphics.pose().scale(scale, scale, 1f);
         graphics.drawString(font, text, 0, 0, ink, true);
         graphics.pose().popPose();
+    }
+
+    private static int statusColor(SlotDiff.DiffStatus status, CirrusPalette palette) {
+        return switch (status) {
+            case added -> palette.diffAdded();
+            case removed -> palette.diffRemoved();
+            case adjusted -> palette.focusRing();
+            case transformed -> palette.costH();
+            case moved -> palette.costP();
+            case unchanged -> palette.hairlineBorder();
+        };
+    }
+
+    private static OreUiRichTooltip.Tone statusTone(SlotDiff.DiffStatus status) {
+        return switch (status) {
+            case added -> OreUiRichTooltip.Tone.positive;
+            case removed -> OreUiRichTooltip.Tone.danger;
+            case adjusted -> OreUiRichTooltip.Tone.accent;
+            case transformed -> OreUiRichTooltip.Tone.warning;
+            case moved -> OreUiRichTooltip.Tone.costP;
+            case unchanged -> OreUiRichTooltip.Tone.secondary;
+        };
+    }
+
+    private static String statusLabel(SlotDiff.DiffStatus status, String badge) {
+        String name = switch (status) {
+            case added -> "ADDED";
+            case removed -> "REMOVED";
+            case adjusted -> "ADJUSTED";
+            case transformed -> "TRANSFORMED";
+            case moved -> "MOVED";
+            case unchanged -> "";
+        };
+        if (name.isEmpty()) {
+            return "";
+        }
+        return badge.isEmpty() ? name : name + " " + badge;
     }
 
     @Override
@@ -242,10 +400,61 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
             return ValueTypeGaugeRenderer.richTooltipFor(meter.entry(), CirrusUiTheme.palette(this));
         }
         Slot slot = layout.slotAt(localX - baseX, localY - baseY);
-        if (slot == null || slot.content().isEmpty()) {
+        if (slot == null || slot.displayContent().isEmpty()) {
             return null;
         }
-        return RecipeContentSlotWidget.richTooltipFor(slot.content(), null);
+        if (!slot.status().isChanged()) {
+            return RecipeContentSlotWidget.richTooltipFor(slot.displayContent(), null);
+        }
+        return buildDiffRichTooltip(slot);
+    }
+
+    private OreUiRichTooltip buildDiffRichTooltip(Slot slot) {
+        Component title = contentDisplayName(slot.displayContent());
+        OreUiRichTooltip.Builder builder = OreUiRichTooltip.builder(title)
+                .badge(statusLabel(slot.status(), slot.deltaBadge()), statusTone(slot.status()))
+                .subtitle(slot.address().channel().name().toUpperCase() + " " + slot.address().shortLabel());
+        builder.keyValue(
+            "Before",
+            slot.before() == null ? "(empty)" : contentSummary(slot.before()),
+            OreUiRichTooltip.Tone.secondary
+        );
+        builder.keyValue(
+            "After",
+            slot.after() == null ? "(removed)" : contentSummary(slot.after()),
+            statusTone(slot.status())
+        );
+        if (slot.movedFrom() != null) {
+            builder.keyValue("Moved From", slot.movedFrom().shortLabel(), OreUiRichTooltip.Tone.costP);
+        }
+        if (!slot.sourceEffects().isEmpty()) {
+            StringBuilder fx = new StringBuilder();
+            for (int i = 0; i < slot.sourceEffects().size(); i++) {
+                if (i > 0) {
+                    fx.append(", ");
+                }
+                fx.append(slot.sourceEffects().get(i).path());
+            }
+            builder.keyValue("Effects", fx.toString(), OreUiRichTooltip.Tone.muted);
+        }
+        return builder.build();
+    }
+
+    private static Component contentDisplayName(RecipeContent content) {
+        try {
+            return RecipeContentRenderer.getRenderer(content).getName(content);
+        } catch (RuntimeException ignored) {
+            return Component.literal(content.getClass().getSimpleName());
+        }
+    }
+
+    private static String contentSummary(RecipeContent content) {
+        String name = contentDisplayName(content).getString();
+        long amount = content.amount();
+        if (content.chance() < RecipeContent.MAX_CHANCE) {
+            return name + " x" + amount + " (" + Math.round(content.chance() * 100f) + "%)";
+        }
+        return name + " x" + amount;
     }
 
     private @Nullable Tooltip tooltipAt(double localX, double localY) {
@@ -256,16 +465,32 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
             return ValueTypeGaugeRenderer.tooltipFor(meter.entry());
         }
         Slot slot = layout.slotAt(localX - baseX, localY - baseY);
-        if (slot == null || slot.content().isEmpty()) {
+        if (slot == null || slot.displayContent().isEmpty()) {
             return null;
+        }
+        if (slot.status().isChanged()) {
+            Tooltip tooltip = Tooltip.create();
+            tooltip.add(contentDisplayName(slot.displayContent()), Tooltip.title);
+            tooltip.add(
+                Component.literal(
+                    slot.address().shortLabel() + " · " + statusLabel(slot.status(), slot.deltaBadge())
+                )
+            );
+            tooltip.add(
+                Component.literal(
+                    (slot.before() == null ? "∅" : contentSummary(slot.before())) + " → "
+                            + (slot.after() == null ? "∅" : contentSummary(slot.after()))
+                )
+            );
+            return tooltip;
         }
         try {
             @SuppressWarnings("unchecked")
             RecipeContentRenderer<RecipeContent> renderer = (RecipeContentRenderer<RecipeContent>) RecipeContentRenderer
-                    .getRenderer(slot.content());
+                    .getRenderer(slot.displayContent());
             return renderer.tooltip(
-                slot.content(),
-                ExecutionOverlayContentHelper.currentVisualIndex(slot.content()),
+                slot.displayContent(),
+                ExecutionOverlayContentHelper.currentVisualIndex(slot.displayContent()),
                 TooltipContext.create()
             );
         } catch (RuntimeException ignored) {
@@ -273,23 +498,36 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
         }
     }
 
-    private record Slot(RecipeContent content, int x, int y) {}
+    private record Slot(
+        SlotAddress address,
+        SlotDiff.DiffStatus status,
+        @Nullable RecipeContent before,
+        @Nullable RecipeContent after,
+        @Nullable SlotAddress movedFrom,
+        String deltaBadge,
+        ImmutableList<Namespace> sourceEffects,
+        int x,
+        int y
+    ) {
+        private RecipeContent displayContent() {
+            RecipeContent c = after != null ? after : before;
+            return c != null ? c : RecipeContent.empty();
+        }
+    }
 
-    private record ValueMeter(ValueTypeGaugeRenderer.ValueEntry entry, int x, int y, int width, int height) {}
+    private record ValueMeter(
+        ValueTypeGaugeRenderer.ValueEntry entry,
+        SlotDiff.DiffStatus status,
+        String deltaBadge,
+        int x,
+        int y,
+        int width,
+        int height
+    ) {}
 
     private record Section(int x, int y, List<CirrusSlotGroupRenderer.Cell> cells) {
         private Section {
             cells = List.copyOf(cells);
-        }
-
-        private int width() {
-            CirrusSlotGroupRenderer.Bounds bounds = CirrusSlotGroupRenderer.bounds(cells);
-            return bounds.empty() ? 0 : bounds.width(slotSize);
-        }
-
-        private int height() {
-            CirrusSlotGroupRenderer.Bounds bounds = CirrusSlotGroupRenderer.bounds(cells);
-            return bounds.empty() ? 0 : bounds.height(slotSize);
         }
     }
 
@@ -297,7 +535,7 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
         private static final Side empty = new Side(List.of(), List.of(), 0, 0, false);
 
         private Side offset(int x, int y) {
-            if (this == empty || x == 0 && y == 0) {
+            if (this == empty || (x == 0 && y == 0)) {
                 return this;
             }
             ArrayList<Section> shiftedSections = new ArrayList<>(sections.size());
@@ -306,7 +544,19 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
             }
             ArrayList<Slot> shiftedSlots = new ArrayList<>(slots.size());
             for (Slot slot : slots) {
-                shiftedSlots.add(new Slot(slot.content(), slot.x() + x, slot.y() + y));
+                shiftedSlots.add(
+                    new Slot(
+                        slot.address(),
+                        slot.status(),
+                        slot.before(),
+                        slot.after(),
+                        slot.movedFrom(),
+                        slot.deltaBadge(),
+                        slot.sourceEffects(),
+                        slot.x() + x,
+                        slot.y() + y
+                    )
+                );
             }
             return new Side(List.copyOf(shiftedSections), List.copyOf(shiftedSlots), width, height, usesGrid);
         }
@@ -325,34 +575,38 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
         int width,
         int height
     ) {
-        static Layout build(RecipeProjection projection) {
-            ArrayList<ValueTypeGaugeRenderer.ValueEntry> valueEntries = new ArrayList<>();
+        static Layout build(ProjectionDisplayModel model) {
+            ArrayList<ValueEntryWithDiff> valueEntries = new ArrayList<>();
             int inValues = 0;
             int outValues = 0;
-            for (ClausedContent<?> input : projection.inputs()) {
-                if (input.content() instanceof ValueContent<?> value && value.notEmpty()) {
-                    valueEntries.add(
-                        ValueTypeGaugeRenderer.ValueEntry.fromContent(value, ValueTypeGaugeRenderer.Direction.input)
-                    );
-                    inValues++;
+            for (ProjectionDisplayModel.ValueView vv : model.values()) {
+                ValueContent<?> display = vv.displayValue();
+                if (display == null || display.isEmpty()) {
+                    continue;
                 }
-            }
-            for (ClausedContent<?> output : projection.outputs()) {
-                if (output.content() instanceof ValueContent<?> value && value.notEmpty()) {
-                    valueEntries.add(
-                        ValueTypeGaugeRenderer.ValueEntry.fromContent(value, ValueTypeGaugeRenderer.Direction.output)
-                    );
+                ValueTypeGaugeRenderer.Direction dir = vv.channel() == SlotChannel.input
+                        ? ValueTypeGaugeRenderer.Direction.input
+                        : ValueTypeGaugeRenderer.Direction.output;
+                valueEntries.add(
+                    new ValueEntryWithDiff(
+                        ValueTypeGaugeRenderer.ValueEntry.fromContent(display, dir),
+                        vv.status(),
+                        vv.deltaBadge()
+                    )
+                );
+                if (vv.channel() == SlotChannel.input) {
+                    inValues++;
+                } else {
                     outValues++;
                 }
             }
 
-            Side inputSide = inputSide(projection);
-            Side outputSide = contentSide(
-                projection.outputs().collect(ClausedContent::content)
-                        .select(content -> !(content instanceof ValueContent<?>)).toList()
-            );
-            boolean hasSlots = !inputSide.slots().isEmpty() || !outputSide.slots().isEmpty();
-            boolean arrow = !inputSide.slots().isEmpty() && !outputSide.slots().isEmpty();
+            Side inputSide = buildSide(model.inputSide());
+            Side outputSide = buildSide(model.outputSide());
+            boolean hasSlots = !inputSide.slots().isEmpty() || !outputSide.slots().isEmpty()
+                    || inputSide.usesGrid() || outputSide.usesGrid();
+            boolean arrow = (!inputSide.slots().isEmpty() || inputSide.usesGrid())
+                    && (!outputSide.slots().isEmpty() || outputSide.usesGrid());
             int arrowWidth = arrow ? arrowRenderWidth : 0;
             int arrowHeight = arrow ? arrowRenderHeight : 0;
             int middleWidth = arrow ? arrowGapLeft + arrowWidth + arrowGapRight : 0;
@@ -393,7 +647,8 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
                     int w = lastOdd ? totalWidth : cellW;
                     int x = col * (cellW + gap);
                     int y = meterTop + row * (meterH + gap);
-                    meters.add(new ValueMeter(valueEntries.get(i), x, y, w, meterH));
+                    ValueEntryWithDiff item = valueEntries.get(i);
+                    meters.add(new ValueMeter(item.entry(), item.status(), item.deltaBadge(), x, y, w, meterH));
                 }
                 int rows = (int) Math.ceil(valueEntries.size() / (double) meterCols);
                 totalHeight = meterTop + rows * meterH + Math.max(0, rows - 1) * gap;
@@ -414,77 +669,68 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
             );
         }
 
-        private static Side inputSide(RecipeProjection projection) {
-            GridSize gridSize = projection.schema().find(ProjectionSchemas.gridSize);
-            if (gridSize == null) {
-                return contentSide(
-                    projection.inputs().collect(ClausedContent::content)
-                            .select(content -> !(content instanceof ValueContent<?>)).toList()
-                );
-            }
+        private record ValueEntryWithDiff(
+            ValueTypeGaugeRenderer.ValueEntry entry,
+            SlotDiff.DiffStatus status,
+            String deltaBadge
+        ) {}
 
-            int gridSlotCount = gridSize.width() * gridSize.height();
-            ArrayList<@Nullable RecipeContent> grid = new ArrayList<>(Collections.nCopies(gridSlotCount, null));
-            ArrayList<RecipeContent> loose = new ArrayList<>();
-            boolean hasAnyGridSlot = false;
-            for (ClausedContent<?> input : projection.inputs()) {
-                RecipeContent content = input.content();
-                if (content.isEmpty() || content instanceof ValueContent<?>) {
-                    continue;
-                }
-                GridIndex gridIndex = input.schema().find(ProjectionSchemas.gridIndex);
-                if (gridIndex != null
-                        && gridIndex.index() >= 0
-                        && gridIndex.index() < gridSlotCount
-                        && grid.get(gridIndex.index()) == null) {
-                    grid.set(gridIndex.index(), content);
-                    hasAnyGridSlot = true;
-                } else {
-                    loose.add(content);
-                }
+        private static Side buildSide(ProjectionDisplayModel.SideView sideView) {
+            ProjectionDisplayModel.GridView grid = sideView.grid();
+            if (grid == null) {
+                return looseSide(sideView.looseSlots().castToList());
             }
-
-            if (!hasAnyGridSlot && loose.isEmpty()) {
+            if (!grid.hasAnyOccupiedCell() && sideView.looseSlots().isEmpty()) {
                 return new Side(List.of(), List.of(), 0, 0, true);
             }
 
             ArrayList<Section> sections = new ArrayList<>();
             ArrayList<Slot> slots = new ArrayList<>();
-            int gridWidth = gridSize.width() * slotSize;
-            int gridHeight = gridSize.height() * slotSize;
-            sections.add(new Section(0, 0, CirrusSlotGroupRenderer.rectCells(gridSize.width(), gridSize.height())));
-            for (int index = 0; index < grid.size(); index++) {
-                RecipeContent content = grid.get(index);
-                if (content == null || content.isEmpty()) {
+            int gridW = grid.spec().width() * slotSize;
+            int gridH = grid.spec().height() * slotSize;
+            sections.add(new Section(0, 0, CirrusSlotGroupRenderer.rectCells(grid.spec().width(), grid.spec().height())));
+            for (ProjectionDisplayModel.CellView cell : grid.cells()) {
+                if (!cell.isOccupied()) {
                     continue;
                 }
-                int x = (index % gridSize.width()) * slotSize;
-                int y = (index / gridSize.width()) * slotSize;
-                slots.add(new Slot(content, x, y));
+                slots.add(
+                    new Slot(
+                        cell.address(),
+                        cell.status(),
+                        cell.before(),
+                        cell.after(),
+                        cell.movedFrom(),
+                        cell.deltaBadge(),
+                        cell.sourceEffects(),
+                        cell.col() * slotSize,
+                        cell.row() * slotSize
+                    )
+                );
             }
 
-            Side looseSide = contentSide(loose);
-            if (!looseSide.slots().isEmpty()) {
-                int y = gridHeight + sectionGap;
-                Side shifted = looseSide.offset(0, y);
+            Side loose = looseSide(sideView.looseSlots().castToList());
+            if (!loose.slots().isEmpty()) {
+                int y = gridH + sectionGap;
+                Side shifted = loose.offset(0, y);
                 sections.addAll(shifted.sections());
                 slots.addAll(shifted.slots());
                 return new Side(
                     List.copyOf(sections),
                     List.copyOf(slots),
-                    Math.max(gridWidth, looseSide.width()),
-                    y + looseSide.height(),
+                    Math.max(gridW, loose.width()),
+                    y + loose.height(),
                     true
                 );
             }
-            return new Side(List.copyOf(sections), List.copyOf(slots), gridWidth, gridHeight, true);
+            return new Side(List.copyOf(sections), List.copyOf(slots), gridW, gridH, true);
         }
 
-        private static Side contentSide(List<? extends RecipeContent> contents) {
-            ArrayList<RecipeContent> visible = new ArrayList<>();
-            for (RecipeContent content : contents) {
-                if (content != null && content.notEmpty() && !(content instanceof ValueContent<?>)) {
-                    visible.add(content);
+        private static Side looseSide(List<ProjectionDisplayModel.SlotView> views) {
+            ArrayList<ProjectionDisplayModel.SlotView> visible = new ArrayList<>();
+            for (ProjectionDisplayModel.SlotView sv : views) {
+                RecipeContent display = sv.displayContent();
+                if (display != null && display.notEmpty() && !(display instanceof ValueContent<?>)) {
+                    visible.add(sv);
                 }
             }
             if (visible.isEmpty()) {
@@ -497,8 +743,21 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
             int width = columns * slotSize;
             int height = rows * slotSize;
             ArrayList<Slot> slots = new ArrayList<>(visible.size());
-            for (int index = 0; index < visible.size(); index++) {
-                slots.add(new Slot(visible.get(index), (index % columns) * slotSize, (index / columns) * slotSize));
+            for (int i = 0; i < visible.size(); i++) {
+                ProjectionDisplayModel.SlotView sv = visible.get(i);
+                slots.add(
+                    new Slot(
+                        sv.address(),
+                        sv.status(),
+                        sv.before(),
+                        sv.after(),
+                        sv.movedFrom(),
+                        sv.deltaBadge(),
+                        sv.sourceEffects(),
+                        (i % columns) * slotSize,
+                        (i / columns) * slotSize
+                    )
+                );
             }
             return new Side(
                 List.of(new Section(0, 0, CirrusSlotGroupRenderer.rowMajorCells(visible.size(), columns))),
@@ -518,7 +777,7 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
         }
 
         private boolean usesGrid() {
-            return inputs.usesGrid();
+            return inputs.usesGrid() || outputs.usesGrid();
         }
 
         private int inputCount() {

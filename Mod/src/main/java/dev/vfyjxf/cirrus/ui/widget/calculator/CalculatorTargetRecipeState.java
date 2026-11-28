@@ -7,11 +7,11 @@ import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectedRecipe;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionEngine;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.CalculatorProjectionContext;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContexts;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionPipeline;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusCatalogAdapter;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusContentBridge;
 import net.minecraft.world.item.Item;
@@ -192,7 +192,7 @@ public final class CalculatorTargetRecipeState {
         Selection selection = current();
         int times = selection != null && recipe.equals(selection.recipe()) ? selection.times() : 1;
         long version = selection != null && recipe.equals(selection.recipe()) ? selection.version() : 0L;
-        return new ProjectionEngine().project(
+        return ProjectionPipeline.fromRegistry().project(
             ProjectionContexts
                     .calculator(ProjectionContexts.global(), new CalculatorProjectionContext(recipe, times, version)),
             projection

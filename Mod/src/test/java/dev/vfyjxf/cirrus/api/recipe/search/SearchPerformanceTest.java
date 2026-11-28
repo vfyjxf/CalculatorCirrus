@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.search;
 
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
+import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
@@ -20,6 +21,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 import org.jetbrains.annotations.Nullable;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -30,11 +32,21 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SearchPerformanceTest {
 
+    private static @Nullable RecipeApi previousRecipeApi;
+
     @BeforeAll
     static void setupRecipeApi() {
+        previousRecipeApi = RecipeApiImpl.instance();
         var builder = new RecipeApiRegistryBuilder();
         var api = new RecipeApiImpl(builder);
         RecipeApiImpl.attach(api);
+    }
+
+    @AfterAll
+    static void restoreRecipeApi() {
+        if (previousRecipeApi instanceof RecipeApiImpl impl) {
+            RecipeApiImpl.attach(impl);
+        }
     }
 
     private static final String[] mods = {"minecraft", "thermal", "mekanism", "create", "immersiveengineering",

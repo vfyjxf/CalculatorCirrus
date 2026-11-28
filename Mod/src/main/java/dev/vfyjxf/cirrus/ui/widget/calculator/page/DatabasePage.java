@@ -24,11 +24,15 @@ import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseRecord;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseResult;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseWorkspace;
 import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContext;
+import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContextKey;
+import dev.vfyjxf.cirrus.api.recipe.projection.GridSpec;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectedRecipe;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionKeys;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionSlot;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionEngine;
+import dev.vfyjxf.cirrus.api.recipe.projection.SlotAddress;
+import dev.vfyjxf.cirrus.api.recipe.projection.SlotChannel;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.BooleanProjectionContextOption;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.CalculatorProjectionContext;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ChoiceProjectionContextOption;
@@ -39,20 +43,12 @@ import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextKeys;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextOption;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextScope;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContexts;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.InputEffect;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.InputSchemaPut;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputEffect;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputSchemaPut;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionEffect;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionEffectPhase;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionPluginReport;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionReport;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionSchemaPut;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.SchemaEffect;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridIndex;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridSize;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemaKey;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemas;
+import dev.vfyjxf.cirrus.api.recipe.projection.display.ProjectionDisplayModel;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.PipelineStepTrace;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionEffect;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionPipeline;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionResult;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.SlotDiff;
 import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.search.SearchExpression;
@@ -582,16 +578,18 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             case multiOutput -> projection.outputs().size() > 1;
             case simpleInputs -> projection.inputs().size() <= 2;
             case withClauses -> {
-                boolean special = false;
-                for (ClausedContent<OutputContent> out : projection.outputs()) {
-                    if (out.clauses().allClauses().notEmpty()) {
-                        special = true;
-                        break;
+                boolean special = !projection.tags().isEmpty() || !projection.localEffects().isEmpty();
+                if (!special) {
+                    for (ProjectionSlot<OutputContent> out : projection.outputs()) {
+                        if (!out.tags().isEmpty() || !out.attributes().isEmpty()) {
+                            special = true;
+                            break;
+                        }
                     }
                 }
                 if (!special) {
-                    for (ClausedContent<InputContent> in : projection.inputs()) {
-                        if (in.clauses().allClauses().notEmpty()) {
+                    for (ProjectionSlot<InputContent> in : projection.inputs()) {
+                        if (!in.tags().isEmpty() || !in.attributes().isEmpty()) {
                             special = true;
                             break;
                         }
@@ -2164,15 +2162,15 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
     private void addRecipeDetailPage(RecipeDatabaseRecord record) {
         visibleResultCount = 0;
         visibleSystemRecipeSelectionCount = 0;
-        ProjectionReport report = projectionReport(record.projection());
-        visibleRecipeDetailEffectCount = report == null ? 0 : report.effects().size();
-        visibleProjectionOptionsByPlugin = relevantProjectionOptionsByPlugin(record.projection(), report);
-        List<ProjectionPlugin> detailPlugins = relevantProjectionPlugins(record.projection(), report);
+        ProjectionResult result = projectionResult(record.projection());
+        visibleRecipeDetailEffectCount = result == null ? 0 : result.allChanges().size();
+        visibleProjectionOptionsByPlugin = relevantProjectionOptionsByPlugin(record.projection(), result);
+        List<ProjectionPlugin> detailPlugins = relevantProjectionPlugins(record.projection(), result);
         visibleRecipeDetailPluginCount = detailPlugins.size();
         visibleRecipeDetailSectionCount = 0;
         visibleRecipeDetailJeiPreview = false;
 
-        ensureSelectedProjectionPlugin(record.projection(), report, detailPlugins);
+        ensureSelectedProjectionPlugin(record.projection(), result, detailPlugins);
         WidgetGroup<Widget> shell = new WidgetGroup<>();
         shell.useStyle(
             flexColumn(),
@@ -2184,15 +2182,15 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         );
         results.addWidget(shell);
 
-        addRecipeDetailHeader(shell, record, report);
-        addRecipePreviewSection(shell, record, report);
-        addRecipeProjectionSection(shell, record.projection(), report, detailPlugins);
+        addRecipeDetailHeader(shell, record, result);
+        addRecipePreviewSection(shell, record, result);
+        addRecipeProjectionSection(shell, record.projection(), result, detailPlugins);
     }
 
     private void addRecipeDetailHeader(
         WidgetGroup<Widget> parent,
         RecipeDatabaseRecord record,
-        @Nullable ProjectionReport report
+        @Nullable ProjectionResult result
     ) {
         CirrusCardWidget card = detailCard();
         parent.addWidget(card);
@@ -2213,14 +2211,14 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         title.addWidget(CirrusFittedTextWidget.muted(Component.literal(recipeLabel(record))).textPadding(1, 1))
                 .useStyle(heightOf(10), minWidth(0));
         header.addWidget(title);
-        header.addWidget(detailMetadataStrip(record, report));
+        header.addWidget(detailMetadataStrip(record, result));
         card.addContent(header);
     }
 
     private void addRecipePreviewSection(
         WidgetGroup<Widget> parent,
         RecipeDatabaseRecord record,
-        @Nullable ProjectionReport report
+        @Nullable ProjectionResult result
     ) {
         CirrusCardWidget card = detailCard(CirrusLangs.Calculator.Database.preview.component());
         parent.addWidget(card);
@@ -2231,8 +2229,8 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             card.addContent(jeiPreview);
             return;
         }
-        if (report != null && !report.effects().isEmpty()) {
-            Widget fused = fusedOriginalAndProjectedPreview(record, report);
+        if (result != null && !result.allChanges().isEmpty()) {
+            Widget fused = fusedOriginalAndProjectedPreview(record, result);
             if (fused != null) {
                 card.addContent(fused);
                 return;
@@ -2248,12 +2246,12 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         ).useStyle(heightOf(14), minWidth(0));
     }
 
-    private @Nullable Widget fusedOriginalAndProjectedPreview(RecipeDatabaseRecord record, ProjectionReport report) {
+    private @Nullable Widget fusedOriginalAndProjectedPreview(RecipeDatabaseRecord record, ProjectionResult result) {
         RecipeProjection original = record.projection();
-        RecipeProjection projected = report.projection();
+        RecipeProjection projected = result.projected();
         ExecutionRecipeLayoutPreviewWidget originalPreview = ExecutionRecipeLayoutPreviewWidget
                 .create(record.recipe(), original, null);
-        ProjectionRecipeViewWidget projectedPreview = ProjectionRecipeViewWidget.create(projected);
+        ProjectionRecipeViewWidget projectedPreview = ProjectionRecipeViewWidget.create(result);
         if (originalPreview == null && projectedPreview == null) {
             return null;
         }
@@ -2275,7 +2273,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             row.addWidget(origPanel);
         }
 
-        row.addWidget(new TransformBridgeWidget(report));
+        row.addWidget(new TransformBridgeWidget(result));
 
         if (projectedPreview != null) {
             int projIn = projected.inputs().size();
@@ -2314,12 +2312,12 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
     }
 
     private static final class TransformBridgeWidget extends Widget {
-        private final int effectCount;
+        private final int changeCount;
         private final boolean runnable;
 
-        private TransformBridgeWidget(ProjectionReport report) {
-            this.effectCount = report.effects().size();
-            this.runnable = report.runnable();
+        private TransformBridgeWidget(ProjectionResult result) {
+            this.changeCount = result.allChanges().size();
+            this.runnable = result.runnable();
             useStyle(sizeOf(84, 48), flexShrink(0));
         }
 
@@ -2335,7 +2333,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             int accent = runnable ? p.focusRing() : p.ruleHardBan();
             int casing = dark ? OreUiPaint.outerInk(p) : p.cardSurface();
 
-            Component badge = Component.literal("+" + effectCount + " edits");
+            Component badge = Component.literal("+" + changeCount + " edits");
             int bw = ChromeText.width(canvas, badge) + 10;
             OreUiPaint.tagPill(canvas, Math.max(0, (w - bw) / 2), 2, OreUiPaint.minPillHeight, badge, accent, p);
 
@@ -2359,7 +2357,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         }
     }
 
-    private Widget detailMetadataStrip(RecipeDatabaseRecord record, @Nullable ProjectionReport report) {
+    private Widget detailMetadataStrip(RecipeDatabaseRecord record, @Nullable ProjectionResult result) {
         WidgetGroup<Widget> row = new WidgetGroup<>();
         row.useStyle(flexRow(), flexNoWrap(), alignItemsCenter(), gap(4), flexShrink(0));
         row.addWidget(
@@ -2384,7 +2382,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                 CirrusPalette::focusRing
             )
         );
-        boolean runnable = report != null && report.runnable();
+        boolean runnable = result != null && result.runnable();
         row.addWidget(
             detailMetadataChip(
                 (runnable
@@ -2433,7 +2431,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
     private void addRecipeProjectionSection(
         WidgetGroup<Widget> parent,
         @Nullable RecipeProjection projection,
-        @Nullable ProjectionReport report,
+        @Nullable ProjectionResult result,
         List<ProjectionPlugin> detailPlugins
     ) {
         ProjectionPlugin selected = selectedProjectionPlugin(detailPlugins);
@@ -2455,9 +2453,9 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         );
         card.addContent(workspace);
 
-        ProjectionPluginReport selectedReport = selected == null
+        ProjectionResult.PluginSummary selectedSummary = selected == null
                 ? null
-                : report == null ? ProjectionPluginReport.empty(selected) : report.pluginReport(selected);
+                : result == null ? ProjectionResult.PluginSummary.empty(selected) : result.pluginSummary(selected);
         int maxOverviewWidth = Math.max(
             240,
             860
@@ -2466,7 +2464,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                     - detailProjectionPanelGap
                     - detailProjectionControlMarginLeft
         );
-        Widget overview = projectionOverviewPanel(projection, report, detailPlugins, selected, selectedReport);
+        Widget overview = projectionOverviewPanel(projection, result, detailPlugins, selected, selectedSummary);
         overview.useStyle(
             flexGrow(1),
             flexShrink(1),
@@ -2477,7 +2475,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         );
         workspace.addWidget(overview);
 
-        Widget controls = projectionControlPanel(projection, report, detailPlugins, selected);
+        Widget controls = projectionControlPanel(projection, result, detailPlugins, selected);
         controls.useStyle(
             widthOf(detailProjectionControlPanelWidth),
             maxWidth(detailProjectionControlPanelWidth),
@@ -2492,16 +2490,16 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
 
     private Widget projectionOverviewPanel(
         @Nullable RecipeProjection projection,
-        @Nullable ProjectionReport report,
+        @Nullable ProjectionResult result,
         List<ProjectionPlugin> detailPlugins,
         @Nullable ProjectionPlugin selected,
-        @Nullable ProjectionPluginReport selectedReport
+        ProjectionResult.@Nullable PluginSummary selectedSummary
     ) {
         WidgetGroup<Widget> panel = detailSubPanel(CirrusLangs.Calculator.Database.effects.component());
         panel.addWidget(
             new ProjectionPipelineWidget(
                 projection,
-                report,
+                result,
                 detailPlugins,
                 selected,
                 this::projectionPluginEnabled,
@@ -2509,36 +2507,40 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             )
         );
         if (selected != null) {
-            panel.addWidget(projectionSelectedHeader(selected, selectedReport));
+            panel.addWidget(projectionSelectedHeader(selected, selectedSummary));
         }
 
-        ProjectionRecipeViewWidget projectionView = ProjectionRecipeViewWidget
-                .create(report == null ? projection : report.projection());
+        ProjectionRecipeViewWidget projectionView = result != null
+                ? ProjectionRecipeViewWidget.create(result)
+                : ProjectionRecipeViewWidget.create(projection);
         if (projectionView != null) {
             panel.addWidget(projectionView);
         }
 
-        if (selectedReport == null || selectedReport.effects().isEmpty()) {
+        if (result == null || selected == null || selectedSummary == null || !selectedSummary.hasChanges()) {
             panel.addWidget(
                 CirrusWrappedTextWidget.muted(CirrusLangs.Calculator.Database.effectsNone).padding(2).maxLines(2)
             ).useStyle(heightOf(20), minWidth(0));
         } else {
             panel.addWidget(projectionEffectMergeRow());
-            panel.addWidget(effectSummaryStrip(selectedReport));
+            panel.addWidget(effectSummaryStrip(selectedSummary));
+            ProjectionDisplayModel selectedModel = result.toDisplayModel(
+                new ProjectionDisplayModel.Options(true, projectionEffectsMerged, selected.id())
+            );
             addEffectGroup(
                 panel,
                 CirrusLangs.Calculator.Database.detailInputs.component(),
-                effectRowsForChannel(selectedReport, EffectChannel.input)
+                changeRowsToData(selectedModel.changeRows(SlotChannel.input))
             );
             addEffectGroup(
                 panel,
                 CirrusLangs.Calculator.Database.detailOutputs.component(),
-                effectRowsForChannel(selectedReport, EffectChannel.output)
+                changeRowsToData(selectedModel.changeRows(SlotChannel.output))
             );
             addEffectGroup(
                 panel,
                 CirrusLangs.Calculator.Database.effects.component(),
-                rawEffectRows(uncategorizedEffects(selectedReport))
+                changeRowsToData(selectedModel.metaChangeRows())
             );
         }
         return panel;
@@ -2546,7 +2548,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
 
     private Widget projectionSelectedHeader(
         ProjectionPlugin selected,
-        @Nullable ProjectionPluginReport selectedReport
+        ProjectionResult.@Nullable PluginSummary selectedSummary
     ) {
         WidgetGroup<Widget> header = new WidgetGroup<>();
         header.useStyle(flexRow(), alignItemsCenter(), gap(3), minWidth(0), minHeight(20));
@@ -2556,8 +2558,8 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         label.useStyle(flexGrow(1), minWidth(0), minHeight(20));
         header.addWidget(label);
 
-        if (selectedReport != null) {
-            int effectCount = selectedReport.effectCount();
+        if (selectedSummary != null) {
+            int effectCount = selectedSummary.totalChangeCount();
             CirrusFittedTextWidget count = new CirrusFittedTextWidget(
                 Component.literal(String.valueOf(effectCount)),
                 effectCount == 0 ? CirrusPalette::textMuted : CirrusPalette::focusRing
@@ -2578,7 +2580,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
 
     private Widget projectionControlPanel(
         @Nullable RecipeProjection projection,
-        @Nullable ProjectionReport report,
+        @Nullable ProjectionResult result,
         List<ProjectionPlugin> detailPlugins,
         @Nullable ProjectionPlugin selected
     ) {
@@ -2590,7 +2592,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                 .trackTexture(initialTextures.scrollTrack()).thumbTexture(initialTextures.scrollThumb())
                 .scrollbarWidth(detailProjectionControlScrollbarWidth).minThumbSize(14).viewportInset(2, 1, 2, 0);
         scrollState.showScrollbar(
-            detailPlugins.size() > 3 || (selected != null && optionsForPlugin(selected, projection, report).size() > 3)
+            detailPlugins.size() > 3 || (selected != null && optionsForPlugin(selected, projection).size() > 3)
         );
         viewport.useEffect(UIEffects.scrollable(scrollState));
         viewport.onMount((scene, context, handle) -> CirrusUiTheme.bindThemeListener(viewport, handle, () -> {
@@ -2605,9 +2607,9 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             return viewport;
         }
 
-        viewport.addWidget(projectionPluginPanel(report, detailPlugins));
+        viewport.addWidget(projectionPluginPanel(result, detailPlugins));
         if (selected != null) {
-            viewport.addWidget(projectionConfigurationPanel(selected, projection, report));
+            viewport.addWidget(projectionConfigurationPanel(selected, projection));
         }
         return viewport;
     }
@@ -2623,7 +2625,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         return row;
     }
 
-    private Widget projectionPluginPanel(@Nullable ProjectionReport report, List<ProjectionPlugin> detailPlugins) {
+    private Widget projectionPluginPanel(@Nullable ProjectionResult result, List<ProjectionPlugin> detailPlugins) {
         WidgetGroup<Widget> panel = detailSubPanel(CirrusLangs.Calculator.Database.plugins.component());
         WidgetGroup<Widget> pluginColumn = new WidgetGroup<>();
         pluginColumn.useStyle(flexColumn(), gap(2), minWidth(0));
@@ -2631,7 +2633,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             pluginColumn.addWidget(
                 projectionPluginRow(
                     plugin,
-                    report == null ? ProjectionPluginReport.empty(plugin) : report.pluginReport(plugin)
+                    result == null ? ProjectionResult.PluginSummary.empty(plugin) : result.pluginSummary(plugin)
                 )
             );
         }
@@ -2641,11 +2643,10 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
 
     private Widget projectionConfigurationPanel(
         ProjectionPlugin selected,
-        @Nullable RecipeProjection projection,
-        @Nullable ProjectionReport report
+        @Nullable RecipeProjection projection
     ) {
         WidgetGroup<Widget> parameters = detailSubPanel(CirrusLangs.Calculator.Database.parameters.component());
-        List<ProjectionContextOption<?>> options = optionsForPlugin(selected, projection, report);
+        List<ProjectionContextOption<?>> options = optionsForPlugin(selected, projection);
         if (options.isEmpty()) {
             parameters.addWidget(
                 CirrusWrappedTextWidget.muted(CirrusLangs.Calculator.Database.parametersNone).padding(2).maxLines(2)
@@ -2689,33 +2690,33 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         );
     }
 
-    private Widget projectionPluginRow(ProjectionPlugin plugin, ProjectionPluginReport pluginReport) {
+    private Widget projectionPluginRow(ProjectionPlugin plugin, ProjectionResult.PluginSummary summary) {
         CirrusRowWidget row = CirrusRowWidget.selectable(detailProjectionPluginRowHeight, 4)
                 .selected(() -> Objects.equals(plugin.id(), selectedProjectionPluginId))
                 .onPress(input -> selectProjectionPlugin(plugin.id()));
         row.useStyle(minWidth(0), padding(detailProjectionRowPadding), boxSizingBorderBox());
-        row.onHoverTooltip((mouseX, mouseY) -> projectionPluginTooltip(plugin, pluginReport));
+        row.onHoverTooltip((mouseX, mouseY) -> projectionPluginTooltip(plugin, summary));
 
         CirrusWrappedTextWidget label = CirrusWrappedTextWidget.primary(Component.translatable(plugin.labelKey()))
                 .padding(1).maxLines(2);
         label.useStyle(flexGrow(1), minHeight(18), minWidth(0));
         row.addWidget(label);
 
-        int effectCount = pluginReport.effectCount();
+        int changeCount = summary.totalChangeCount();
         CirrusFittedTextWidget effects = new CirrusFittedTextWidget(
-            Component.literal(String.valueOf(effectCount)),
-            effectCount == 0 ? CirrusPalette::textMuted : CirrusPalette::focusRing
+            Component.literal(String.valueOf(changeCount)),
+            changeCount == 0 ? CirrusPalette::textMuted : CirrusPalette::focusRing
         );
         effects.textPadding(1, 1);
         effects.useStyle(widthOf(18), heightOf(12), flexShrink(0));
         bindThemedSurface(effects, "cirrus-page", CirrusThemeTextures::inset);
-        effects.onHoverTooltip((mouseX, mouseY) -> projectionPluginTooltip(plugin, pluginReport));
+        effects.onHoverTooltip((mouseX, mouseY) -> projectionPluginTooltip(plugin, summary));
         row.addWidget(effects);
 
         Slide toggle = new Slide(
             () -> projectionPluginEnabled(plugin),
             value -> setProjectionPluginEnabled(plugin, value),
-            () -> projectionPluginTooltip(plugin, pluginReport)
+            () -> projectionPluginTooltip(plugin, summary)
         );
         toggle.useStyle(sizeOf(20, 13), flexShrink(0));
         row.addWidget(toggle);
@@ -2759,19 +2760,19 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         return panel;
     }
 
-    private Widget effectSummaryStrip(ProjectionPluginReport report) {
+    private Widget effectSummaryStrip(ProjectionResult.PluginSummary summary) {
         WidgetGroup<Widget> row = new WidgetGroup<>();
         row.useStyle(flexRow(), alignItemsCenter(), gap(6), minWidth(0), heightOf(18));
         row.addWidget(
             detailTinyMetric(
-                CirrusLangs.Calculator.Database.effectInputChanges.component(report.inputChangeCount()),
-                report.changesInputs() ? CirrusPalette::focusRing : CirrusPalette::textMuted
+                CirrusLangs.Calculator.Database.effectInputChanges.component(summary.inputChangeCount()),
+                summary.changesInputs() ? CirrusPalette::focusRing : CirrusPalette::textMuted
             )
         );
         row.addWidget(
             detailTinyMetric(
-                CirrusLangs.Calculator.Database.effectOutputChanges.component(report.outputChangeCount()),
-                report.changesOutputs() ? CirrusPalette::costS : CirrusPalette::textMuted
+                CirrusLangs.Calculator.Database.effectOutputChanges.component(summary.outputChangeCount()),
+                summary.changesOutputs() ? CirrusPalette::costS : CirrusPalette::textMuted
             )
         );
         return row;
@@ -2915,23 +2916,29 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
 
     private void ensureSelectedProjectionPlugin(
         @Nullable RecipeProjection projection,
-        @Nullable ProjectionReport report,
+        @Nullable ProjectionResult result,
         List<ProjectionPlugin> detailPlugins
     ) {
         if (detailPlugins.isEmpty()) {
             selectedProjectionPluginId = null;
             return;
         }
-        if (report != null) {
-            for (ProjectionEffect effect : report.effects()) {
-                ProjectionPlugin effectPlugin = effect.source().plugin();
+        if (result != null) {
+            for (PipelineStepTrace step : result.steps()) {
+                if (!step.hasChanges()) {
+                    continue;
+                }
+                ProjectionPlugin effectPlugin = step.plugin();
                 if (Objects.equals(effectPlugin.id(), selectedProjectionPluginId)
                         && containsPlugin(detailPlugins, effectPlugin.id())) {
                     return;
                 }
             }
-            for (ProjectionEffect effect : report.effects()) {
-                ProjectionPlugin effectPlugin = effect.source().plugin();
+            for (PipelineStepTrace step : result.steps()) {
+                if (!step.hasChanges()) {
+                    continue;
+                }
+                ProjectionPlugin effectPlugin = step.plugin();
                 for (ProjectionPlugin plugin : detailPlugins) {
                     if (plugin.id().equals(effectPlugin.id())) {
                         selectedProjectionPluginId = plugin.id();
@@ -2944,7 +2951,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             return;
         }
         for (ProjectionPlugin plugin : detailPlugins) {
-            if (!optionsForPlugin(plugin, projection, report).isEmpty()) {
+            if (!optionsForPlugin(plugin, projection).isEmpty()) {
                 selectedProjectionPluginId = plugin.id();
                 return;
             }
@@ -2982,8 +2989,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
 
     private List<ProjectionContextOption<?>> optionsForPlugin(
         ProjectionPlugin plugin,
-        @Nullable RecipeProjection projection,
-        @Nullable ProjectionReport report
+        @Nullable RecipeProjection projection
     ) {
         if (projection == null) {
             return List.of();
@@ -2993,19 +2999,21 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
 
     private Map<Namespace, List<ProjectionContextOption<?>>> relevantProjectionOptionsByPlugin(
         @Nullable RecipeProjection projection,
-        @Nullable ProjectionReport report
+        @Nullable ProjectionResult result
     ) {
         if (projection == null || projectionPlugins.isEmpty()) {
             return Map.of();
         }
+        Map<Namespace, Set<ExecutionContextKey<?>>> watchedByPlugin = watchedKeysByPlugin(projection, result);
         LinkedHashMap<Namespace, List<ProjectionContextOption<?>>> out = new LinkedHashMap<>();
         for (ProjectionPlugin plugin : projectionPlugins) {
-            if (!projectionMentionsPlugin(projection, plugin)) {
+            Set<ExecutionContextKey<?>> watched = watchedByPlugin.get(plugin.id());
+            if (watched == null) {
                 continue;
             }
             ArrayList<ProjectionContextOption<?>> relevantOptions = new ArrayList<>();
             for (ProjectionContextOption<?> option : optionsForPlugin(plugin)) {
-                if (projectionContextOptionRelevant(option, projection, report)) {
+                if (watched.contains(option.key())) {
                     relevantOptions.add(option);
                 }
             }
@@ -3016,156 +3024,43 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
 
     private List<ProjectionPlugin> relevantProjectionPlugins(
         @Nullable RecipeProjection projection,
-        @Nullable ProjectionReport report
+        @Nullable ProjectionResult result
     ) {
         if (projection == null || projectionPlugins.isEmpty()) {
             return List.of();
         }
+        Map<Namespace, Set<ExecutionContextKey<?>>> watchedByPlugin = watchedKeysByPlugin(projection, result);
         ArrayList<ProjectionPlugin> out = new ArrayList<>();
         for (ProjectionPlugin plugin : projectionPlugins) {
-            if (projectionPluginRelevant(plugin, projection, report)) {
+            if (watchedByPlugin.containsKey(plugin.id())
+                    || (result != null && result.pluginSummary(plugin).hasChanges())) {
                 out.add(plugin);
             }
         }
         return List.copyOf(out);
     }
 
-    private boolean projectionPluginRelevant(
-        ProjectionPlugin plugin,
+    private Map<Namespace, Set<ExecutionContextKey<?>>> watchedKeysByPlugin(
         RecipeProjection projection,
-        @Nullable ProjectionReport report
+        @Nullable ProjectionResult result
     ) {
-        if (!projectionMentionsPlugin(projection, plugin)) {
-            return false;
+        LinkedHashMap<Namespace, Set<ExecutionContextKey<?>>> byPlugin = new LinkedHashMap<>();
+        try {
+            List<ProjectionEffect> applicable = ProjectionPipeline.fromRegistry()
+                    .applicableEffects(projectionContext(), projection, true);
+            for (ProjectionEffect effect : applicable) {
+                byPlugin.computeIfAbsent(effect.plugin().id(), ignored -> new LinkedHashSet<>())
+                        .addAll(effect.watchedContextKeys());
+            }
+        } catch (RuntimeException ignored) {
+            // Fall back to executed steps if pipeline introspection fails.
         }
-        if (reportHasPluginEffects(report, plugin)) {
-            return true;
-        }
-        if (projectionReportHasPluginEffects(projection, plugin, Map.of(plugin.id(), true))) {
-            return true;
-        }
-        return !visibleProjectionOptionsByPlugin.getOrDefault(plugin.id(), List.of()).isEmpty();
-    }
-
-    private boolean projectionContextOptionRelevant(
-        ProjectionContextOption<?> option,
-        RecipeProjection projection,
-        @Nullable ProjectionReport report
-    ) {
-        if (!projectionMentionsPlugin(projection, option.plugin())) {
-            return false;
-        }
-        ProjectionPluginReport currentReport = report == null
-                ? ProjectionPluginReport.empty(option.plugin())
-                : report.pluginReport(option.plugin());
-        for (Object value : optionProbeValues(option)) {
-            ProjectionReport probe = projectionReport(
-                projection,
-                projectionContext(Map.of(option.plugin().id(), true, option.id(), value))
-            );
-            if (probe != null && !probe.pluginReport(option.plugin()).effects().equals(currentReport.effects())) {
-                return true;
+        if (result != null) {
+            for (PipelineStepTrace step : result.steps()) {
+                byPlugin.computeIfAbsent(step.plugin().id(), ignored -> new LinkedHashSet<>());
             }
         }
-        return false;
-    }
-
-    private List<Object> optionProbeValues(ProjectionContextOption<?> option) {
-        Object current = projectionContextValues.get(option.id());
-        ArrayList<Object> values = new ArrayList<>();
-        if (option instanceof BooleanProjectionContextOption booleanOption) {
-            values.add(!booleanOption.normalize(current));
-        } else if (option instanceof LongProjectionContextOption longOption) {
-            long normalized = longOption.normalize(current);
-            addDistinctProbe(values, normalized + longOption.step(), longOption);
-            addDistinctProbe(values, normalized - longOption.step(), longOption);
-            addDistinctProbe(values, longOption.max(), longOption);
-            addDistinctProbe(values, longOption.min(), longOption);
-        } else if (option instanceof ChoiceProjectionContextOption<?> choiceOption) {
-            Object normalized = choiceOption.normalize(current);
-            for (ProjectionContextChoice<?> choice : choiceOption.choices()) {
-                if (!Objects.equals(choice.value(), normalized)) {
-                    values.add(choice.value());
-                }
-            }
-        }
-        return List.copyOf(values);
-    }
-
-    private static void addDistinctProbe(List<Object> values, long raw, LongProjectionContextOption option) {
-        long normalized = option.normalize(raw);
-        if (!values.contains(normalized)) {
-            values.add(normalized);
-        }
-    }
-
-    private boolean projectionReportHasPluginEffects(
-        RecipeProjection projection,
-        ProjectionPlugin plugin,
-        Map<Namespace, Object> overrides
-    ) {
-        ProjectionReport probe = projectionReport(projection, projectionContext(overrides));
-        return reportHasPluginEffects(probe, plugin);
-    }
-
-    private static boolean reportHasPluginEffects(@Nullable ProjectionReport report, ProjectionPlugin plugin) {
-        return report != null && report.pluginReport(plugin).hasEffects();
-    }
-
-    private static boolean projectionMentionsPlugin(RecipeProjection projection, ProjectionPlugin plugin) {
-        for (var clause : projection.clauses().allClauses()) {
-            if (clause.plugin().id().equals(plugin.id())) {
-                return true;
-            }
-        }
-        for (ClausedContent<InputContent> input : projection.inputs()) {
-            for (var clause : input.clauses().allClauses()) {
-                if (clause.plugin().id().equals(plugin.id())) {
-                    return true;
-                }
-            }
-        }
-        for (ClausedContent<OutputContent> output : projection.outputs()) {
-            for (var clause : output.clauses().allClauses()) {
-                if (clause.plugin().id().equals(plugin.id())) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private List<ProjectionEffect> effectsForPlugin(@Nullable ProjectionReport report, ProjectionPlugin plugin) {
-        if (report == null) {
-            return List.of();
-        }
-        ArrayList<ProjectionEffect> out = new ArrayList<>();
-        for (ProjectionEffect effect : report.effects()) {
-            if (effect.source().plugin().id().equals(plugin.id())) {
-                out.add(effect);
-            }
-        }
-        return List.copyOf(out);
-    }
-
-    private static List<ProjectionEffect> effectsForChannel(ProjectionPluginReport report, EffectChannel channel) {
-        ArrayList<ProjectionEffect> out = new ArrayList<>();
-        for (ProjectionEffect effect : report.effects()) {
-            if (effectChannel(effect) == channel) {
-                out.add(effect);
-            }
-        }
-        return List.copyOf(out);
-    }
-
-    private static List<ProjectionEffect> uncategorizedEffects(ProjectionPluginReport report) {
-        ArrayList<ProjectionEffect> out = new ArrayList<>();
-        for (ProjectionEffect effect : report.effects()) {
-            if (!isContentEffect(effect)) {
-                out.add(effect);
-            }
-        }
-        return List.copyOf(out);
+        return byPlugin;
     }
 
     private Tooltip projectionContextOptionTooltip(ProjectionContextOption<?> option) {
@@ -3186,7 +3081,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         return tooltip;
     }
 
-    private Tooltip projectionPluginTooltip(ProjectionPlugin plugin, ProjectionPluginReport report) {
+    private Tooltip projectionPluginTooltip(ProjectionPlugin plugin, ProjectionResult.PluginSummary summary) {
         Tooltip tooltip = Tooltip.create();
         tooltip.add(Component.translatable(plugin.labelKey()), Tooltip.title);
         if (!plugin.descriptionKey().isBlank()) {
@@ -3199,9 +3094,9 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                         : CirrusLangs.Calculator.Settings.switchOff).string()
             )
         );
-        tooltip.add(CirrusLangs.Calculator.Database.pluginEffects.component(report.effectCount()));
-        tooltip.add(CirrusLangs.Calculator.Database.effectInputChanges.component(report.inputChangeCount()));
-        tooltip.add(CirrusLangs.Calculator.Database.effectOutputChanges.component(report.outputChangeCount()));
+        tooltip.add(CirrusLangs.Calculator.Database.pluginEffects.component(summary.totalChangeCount()));
+        tooltip.add(CirrusLangs.Calculator.Database.effectInputChanges.component(summary.inputChangeCount()));
+        tooltip.add(CirrusLangs.Calculator.Database.effectOutputChanges.component(summary.outputChangeCount()));
         return tooltip;
     }
 
@@ -4449,7 +4344,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                 builder.itemFlow(Component.literal("Formula"), ins, outs);
             }
             builder.keyValue("System", card.systemLabel(), OreUiRichTooltip.Tone.secondary);
-            GridSize grid = card.gridSize();
+            GridSpec grid = card.gridSize();
             if (grid != null) {
                 builder.keyValue("Grid", grid.width() + "\u00d7" + grid.height(), OreUiRichTooltip.Tone.secondary);
             }
@@ -4625,7 +4520,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             boolean first = true;
 
             String typeLabel = humanizeTag(card.systemTypeTag());
-            GridSize gridSize = card.gridSize();
+            GridSpec gridSize = card.gridSize();
             if (gridSize != null) {
                 String gridText = gridSize.width() + "\u00d7" + gridSize.height();
                 typeLabel = typeLabel.isEmpty() ? gridText : typeLabel + " " + gridText;
@@ -6306,7 +6201,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             private final String recipeIdLabel;
             private final String systemLabel;
             private final String systemTypeTag;
-            private final @Nullable GridSize gridSize;
+            private final @Nullable GridSpec gridSize;
             private final long energyAmount;
             private final long timeTicks;
             private final boolean hasChance;
@@ -6348,12 +6243,12 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                         ? sysPath.substring(lastSlash + 1)
                         : (!sysPath.isEmpty() ? sysPath : sysId.toString());
                 RecipeProjection proj = record.projection();
-                this.gridSize = proj == null ? null : proj.schema().find(ProjectionSchemas.gridSize);
+                this.gridSize = proj == null ? null : proj.inputGrid();
                 long energy = 0L;
                 long ticks = 0L;
                 boolean chance = false;
                 if (proj != null) {
-                    for (ClausedContent<InputContent> entry : proj.inputs()) {
+                    for (ProjectionSlot<InputContent> entry : proj.inputs()) {
                         InputContent content = entry.content();
                         if (content instanceof ValueContent<?> val) {
                             if (val.type() == CirrusTypes.Contents.energy) {
@@ -6365,7 +6260,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                             chance = true;
                         }
                     }
-                    for (ClausedContent<OutputContent> entry : proj.outputs()) {
+                    for (ProjectionSlot<OutputContent> entry : proj.outputs()) {
                         OutputContent content = entry.content();
                         if (content instanceof ValueContent<?> val) {
                             if (val.type() == CirrusTypes.Contents.energy) {
@@ -6381,9 +6276,13 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                 this.energyAmount = energy;
                 this.timeTicks = ticks;
                 this.hasChance = chance;
-                this.hasGuaranteed = proj != null && proj.hasClause(CirrusTypes.Clauses.guaranteedOutput);
-                this.hasPolicy = proj != null && proj.hasClause(CirrusTypes.Clauses.resolvePolicy);
-                this.hasDurability = proj != null && proj.hasClause(CirrusTypes.Clauses.durabilityCost);
+                this.hasGuaranteed = proj != null && proj.hasTag(ProjectionKeys.Tags.guaranteedOutput);
+                this.hasPolicy = proj != null && !proj.localEffects().isEmpty();
+                this.hasDurability = proj != null && proj.inputs()
+                        .anySatisfy(
+                            s -> s.attributes().has(ProjectionKeys.durabilityCost)
+                                    || s.tags().has(ProjectionKeys.Tags.durabilityTool)
+                        );
             }
 
             private int index() {
@@ -6398,7 +6297,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                 return systemTypeTag;
             }
 
-            private @Nullable GridSize gridSize() {
+            private @Nullable GridSpec gridSize() {
                 return gridSize;
             }
 
@@ -6749,60 +6648,39 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         return !inputPreviews(projection, projected).isEmpty() || !outputPreviews(projection, projected).isEmpty();
     }
 
-    private List<EffectRowData> effectRowsForChannel(ProjectionPluginReport report, EffectChannel channel) {
-        List<ProjectionEffect> effects = effectsForChannel(report, channel);
-        return projectionEffectsMerged ? mergedEffectRows(effects) : rawEffectRows(effects);
-    }
-
-    private List<EffectRowData> rawEffectRows(List<ProjectionEffect> effects) {
-        ArrayList<EffectRowData> rows = new ArrayList<>(effects.size());
-        for (ProjectionEffect effect : effects) {
-            rows.add(rawEffectRow(effect));
+    private List<EffectRowData> changeRowsToData(List<ProjectionDisplayModel.ChangeRow> rows) {
+        ArrayList<EffectRowData> out = new ArrayList<>(rows.size());
+        for (ProjectionDisplayModel.ChangeRow row : rows) {
+            out.add(toEffectRowData(row));
         }
-        return List.copyOf(rows);
+        return List.copyOf(out);
     }
 
-    private EffectRowData rawEffectRow(ProjectionEffect effect) {
-        if (!isContentEffect(effect)) {
+    private EffectRowData toEffectRowData(ProjectionDisplayModel.ChangeRow row) {
+        if (row.isMeta()) {
+            String target = row.address() == null
+                    ? ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.projection)
+                    : row.address().shortLabel();
+            String summary = row.metaSummary() == null ? row.badge() : row.metaSummary();
             return new EffectRowData(
                 null,
                 null,
-                effectActionIcon(effect),
-                Component.literal(schemaEffectLabel(effect)),
-                Component.literal(schemaEffectSummary(effect)),
+                CirrusTextures.Icon.setting,
+                Component.literal(target),
+                Component.literal(summary),
                 CirrusPalette::textMuted,
-                effectTooltip(effect)
+                changeRowTooltip(row)
             );
         }
         return new EffectRowData(
-            effectBefore(effect),
-            effectAfter(effect),
-            effectActionIcon(effect),
-            Component.literal(effectLabel(effect)),
-            Component.literal(effectAmountSummary(effect)),
-            effectColor(effect),
-            effectTooltip(effect)
+            row.before(),
+            row.after(),
+            changeRowActionIcon(row),
+            Component.literal(changeRowLabel(row)),
+            Component.literal(changeRowSummary(row)),
+            changeRowColor(row),
+            changeRowTooltip(row)
         );
-    }
-
-    private List<EffectRowData> mergedEffectRows(List<ProjectionEffect> effects) {
-        LinkedHashMap<EffectMergeKey, EffectMergeBucket> buckets = new LinkedHashMap<>();
-        ArrayList<EffectRowData> passthrough = new ArrayList<>();
-        for (ProjectionEffect effect : effects) {
-            if (!isContentEffect(effect)) {
-                passthrough.add(rawEffectRow(effect));
-                continue;
-            }
-            EffectMergeKey key = new EffectMergeKey(Objects.requireNonNull(effectChannel(effect)), effectIndex(effect));
-            buckets.computeIfAbsent(key, ignored -> new EffectMergeBucket()).add(effect);
-        }
-
-        ArrayList<EffectRowData> rows = new ArrayList<>(buckets.size() + passthrough.size());
-        for (EffectMergeBucket bucket : buckets.values()) {
-            rows.add(bucket.toRow());
-        }
-        rows.addAll(passthrough);
-        return List.copyOf(rows);
     }
 
     private void addEffectGroup(WidgetGroup<Widget> parent, Component title, List<EffectRowData> rows) {
@@ -6932,58 +6810,6 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         Tooltip tooltip
     ) {}
 
-    private record EffectMergeKey(EffectChannel channel, int index) {}
-
-    private final class EffectMergeBucket {
-        private final ArrayList<ProjectionEffect> effects = new ArrayList<>();
-        private @Nullable EffectChannel channel;
-        private int index;
-        private @Nullable RecipeContent before;
-        private @Nullable RecipeContent after;
-
-        private void add(ProjectionEffect effect) {
-            if (effects.isEmpty()) {
-                channel = Objects.requireNonNull(effectChannel(effect));
-                index = effectIndex(effect);
-                before = effectBefore(effect);
-            }
-            after = effectAfter(effect);
-            effects.add(effect);
-        }
-
-        private EffectRowData toRow() {
-            if (effects.size() == 1) {
-                return rawEffectRow(effects.getFirst());
-            }
-            RecipeContent content = after != null ? after : before;
-            Tooltip tooltip = mergedEffectTooltip(this);
-            return new EffectRowData(
-                before,
-                after,
-                effectActionIcon(before, after),
-                Component.literal(effectLabel(Objects.requireNonNull(channel), index, before, after)),
-                Component.literal(effectAmountSummary(before, after)),
-                effectColor(before, after),
-                tooltip
-            );
-        }
-    }
-
-    private static Component pluginMeta(ProjectionEffect effect) {
-        var source = effect.source();
-        if (source.resolveEffectId() != null) {
-            return Component.literal(
-                ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.pluginResolve) + ": " + source.resolveEffectId()
-                        + " · " + ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.pluginOrder) + " "
-                        + source.resolveEffectOrder()
-            );
-        }
-        return Component.literal(
-            ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.pluginClause) + ": " + source.clauseId() + " · "
-                    + phaseLabel(source.phase())
-        );
-    }
-
     private void activateRecipeCard(RecipeDatabaseRecord record, ResultCardAction action, boolean clickSound) {
         activateRecipeCard(record, action, RecipeDatabaseKeyMappings.openRecipeInCalculatorDown(), clickSound);
     }
@@ -7050,8 +6876,8 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         Tooltip tooltip = Tooltip.create();
         tooltip.add(ExecutionOverlayUi.tooltipTitleText(shortRecipeLabel(record)));
 
-        ProjectionReport report = projectionReport(record.projection());
-        ProjectedRecipe projected = report == null ? null : report.projectedRecipe();
+        ProjectionResult result = projectionResult(record.projection());
+        ProjectedRecipe projected = result == null ? null : result.projectedRecipe();
         RecipeContent previewContent = ExecutionRecipeTooltipPreview
                 .firstPreviewContent(record.projection(), projected);
         TooltipStack<?> stack = ExecutionOverlayContentHelper.tooltipStack(previewContent);
@@ -7106,13 +6932,14 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                 .append(usage.copy().withColor(ExecutionOverlayUi.tooltipTextSecondary));
     }
 
-    private void appendEffectPreview(RichTooltipComponent.Builder builder, @Nullable ProjectionReport report) {
-        if (report == null) {
+    private void appendEffectPreview(RichTooltipComponent.Builder builder, @Nullable ProjectionResult result) {
+        if (result == null) {
             return;
         }
         builder.gap(2);
         builder.section(ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effects), ExecutionOverlayUi.warning);
-        if (report.effects().isEmpty()) {
+        var rows = result.toDisplayModel().changeRows();
+        if (rows.isEmpty()) {
             builder.text(
                 ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectsNone),
                 ExecutionOverlayUi.tooltipTextSecondary,
@@ -7121,24 +6948,28 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             return;
         }
         int shown = 0;
-        for (ProjectionEffect effect : report.effects()) {
+        for (ProjectionDisplayModel.ChangeRow row : rows) {
             if (shown >= tooltipEffectLimit) {
                 break;
             }
-            if (!isContentEffect(effect)) {
+            if (row.isMeta()) {
+                continue;
+            }
+            RecipeContent content = row.after() != null ? row.after() : row.before();
+            if (content == null) {
                 continue;
             }
             builder.contentIconText(
-                effectContent(effect),
-                effectColor(effect).applyAsInt(CirrusUiTheme.palette(this)),
-                effectLabel(effect),
+                content,
+                changeRowColor(row).applyAsInt(CirrusUiTheme.palette(this)),
+                changeRowLabel(row),
                 ExecutionOverlayUi.tooltipTextPrimary,
-                effectSourceLabel(effect),
+                formatEffectIds(row.effectIds()),
                 ExecutionOverlayUi.tooltipTextSecondary
             );
             shown++;
         }
-        int remaining = Math.max(0, report.effects().size() - shown);
+        int remaining = Math.max(0, rows.size() - shown);
         if (remaining > 0) {
             builder.text(
                 ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectsMore, remaining),
@@ -8237,7 +8068,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             return List.of();
         }
         ArrayList<RecipeContent> inputs = new ArrayList<>();
-        for (ClausedContent<InputContent> input : projection.inputs()) {
+        for (ProjectionSlot<InputContent> input : projection.inputs()) {
             if (isVisibleRecipePreviewContent(input.content())) {
                 inputs.add(input.content());
             }
@@ -8266,7 +8097,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             return List.of();
         }
         ArrayList<RecipeContent> outputs = new ArrayList<>();
-        for (ClausedContent<OutputContent> output : projection.outputs()) {
+        for (ProjectionSlot<OutputContent> output : projection.outputs()) {
             if (isVisibleRecipePreviewContent(output.content())) {
                 outputs.add(output.content());
             }
@@ -8296,16 +8127,16 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         return ticks + "t";
     }
 
-    private @Nullable ProjectionReport projectionReport(@Nullable RecipeProjection projection) {
+    private @Nullable ProjectionResult projectionResult(@Nullable RecipeProjection projection) {
         if (projection == null) {
             return null;
         }
-        return projectionReport(projection, projectionContext());
+        return projectionResult(projection, projectionContext());
     }
 
-    private @Nullable ProjectionReport projectionReport(RecipeProjection projection, ExecutionContext context) {
+    private @Nullable ProjectionResult projectionResult(RecipeProjection projection, ExecutionContext context) {
         try {
-            return new ProjectionEngine().projectReport(context, projection);
+            return ProjectionPipeline.fromRegistry().trace(context, projection);
         } catch (RuntimeException ignored) {
             return null;
         }
@@ -8355,199 +8186,56 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         context.set(option.key(), option.normalize(value));
     }
 
-    private enum EffectChannel {
-        input, output
-    }
-
-    private static boolean isContentEffect(ProjectionEffect effect) {
-        return effect instanceof InputEffect || effect instanceof OutputEffect;
-    }
-
-    private static @Nullable EffectChannel effectChannel(ProjectionEffect effect) {
-        if (effect instanceof InputEffect) return EffectChannel.input;
-        if (effect instanceof OutputEffect) return EffectChannel.output;
-        return null;
-    }
-
-    private static int effectIndex(ProjectionEffect effect) {
-        if (effect instanceof InputEffect input) return input.index();
-        if (effect instanceof OutputEffect output) return output.index();
-        return -1;
-    }
-
-    private static @Nullable RecipeContent effectBefore(ProjectionEffect effect) {
-        if (effect instanceof InputEffect input) return input.before();
-        if (effect instanceof OutputEffect output) return output.before();
-        return null;
-    }
-
-    private static @Nullable RecipeContent effectAfter(ProjectionEffect effect) {
-        if (effect instanceof InputEffect input) return input.after();
-        if (effect instanceof OutputEffect output) return output.after();
-        return null;
-    }
-
-    private static long effectBeforeAmount(ProjectionEffect effect) {
-        if (effect instanceof InputEffect input) return input.beforeAmount();
-        if (effect instanceof OutputEffect output) return output.beforeAmount();
-        return 0L;
-    }
-
-    private static long effectAfterAmount(ProjectionEffect effect) {
-        if (effect instanceof InputEffect input) return input.afterAmount();
-        if (effect instanceof OutputEffect output) return output.afterAmount();
-        return 0L;
-    }
-
-    private static long effectAmountDelta(ProjectionEffect effect) {
-        if (effect instanceof InputEffect input) return input.amountDelta();
-        if (effect instanceof OutputEffect output) return output.amountDelta();
-        return 0L;
-    }
-
-    private static @Nullable Double effectAmountFactor(ProjectionEffect effect) {
-        if (effect instanceof InputEffect input) return input.amountFactor();
-        if (effect instanceof OutputEffect output) return output.amountFactor();
-        return null;
-    }
-
-    private static RecipeContent effectContent(ProjectionEffect effect) {
-        RecipeContent content = effectAfter(effect) != null ? effectAfter(effect) : effectBefore(effect);
-        return content == null ? RecipeContent.empty() : content;
-    }
-
-    private static SizedTexture effectActionIcon(ProjectionEffect effect) {
-        if (effect instanceof SchemaEffect) {
-            return CirrusTextures.Icon.setting;
-        }
-        return effectActionIcon(effectBefore(effect), effectAfter(effect));
-    }
-
-    private static SizedTexture effectActionIcon(@Nullable RecipeContent before, @Nullable RecipeContent after) {
-        if (before == null && after != null) {
-            return CirrusTextures.Icon.Small.plus;
-        }
-        if (before != null && after == null) {
-            return CirrusTextures.Icon.Small.minus;
-        }
-        return CirrusTextures.Icon.arrowRight;
-    }
-
-    private static ToIntFunction<CirrusPalette> effectColor(ProjectionEffect effect) {
-        return effectColor(effectBefore(effect), effectAfter(effect));
-    }
-
-    private static ToIntFunction<CirrusPalette> effectColor(
-        @Nullable RecipeContent before,
-        @Nullable RecipeContent after
-    ) {
-        if (before == null && after != null) {
-            return CirrusPalette::diffAdded;
-        }
-        if (before != null && after == null) {
-            return CirrusPalette::diffRemoved;
-        }
-        return CirrusPalette::focusRing;
-    }
-
-    private static String effectLabel(
-        EffectChannel channel,
-        int index,
-        @Nullable RecipeContent before,
-        @Nullable RecipeContent after
-    ) {
-        String translatedChannel = ExecutionOverlayUi.tr(
-            channel == EffectChannel.input
-                    ? CirrusLangs.Calculator.Database.Effect.input
-                    : CirrusLangs.Calculator.Database.Effect.output
-        );
-        int displayIndex = index + 1;
-        if (before == null && after != null) {
-            return ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.Effect.added, translatedChannel, displayIndex);
-        }
-        if (before != null && after == null) {
-            return ExecutionOverlayUi
-                    .tr(CirrusLangs.Calculator.Database.Effect.removed, translatedChannel, displayIndex);
-        }
-        return ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.Effect.replaced, translatedChannel, displayIndex);
-    }
-
-    private static String effectLabel(ProjectionEffect effect) {
-        EffectChannel channel = effectChannel(effect);
-        if (channel == null) return effectSourceLabel(effect);
-        return effectLabel(channel, effectIndex(effect), effectBefore(effect), effectAfter(effect));
-    }
-
-    private static String effectTargetLabel(ProjectionEffect effect) {
-        EffectChannel channel = effectChannel(effect);
-        if (channel == null) {
-            return schemaEffectLabel(effect);
-        }
-        return effectTargetLabel(channel, effectIndex(effect));
-    }
-
-    private static String effectTargetLabel(EffectChannel channel, int index) {
-        String translatedChannel = ExecutionOverlayUi.tr(
-            channel == EffectChannel.input
-                    ? CirrusLangs.Calculator.Database.Effect.input
-                    : CirrusLangs.Calculator.Database.Effect.output
-        );
-        return translatedChannel + " #" + (index + 1);
-    }
-
-    private static String schemaEffectLabel(ProjectionEffect effect) {
-        if (effect instanceof ProjectionSchemaPut<?>) {
-            return ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.projection);
-        }
-        if (effect instanceof InputSchemaPut<?> input) {
-            return effectTargetLabel(EffectChannel.input, input.index());
-        }
-        if (effect instanceof OutputSchemaPut<?> output) {
-            return effectTargetLabel(EffectChannel.output, output.index());
-        }
-        return phaseLabel(effect.source().phase());
-    }
-
-    private static String schemaEffectSummary(ProjectionEffect effect) {
-        if (effect instanceof ProjectionSchemaPut<?> schema) {
-            return schemaSummary(schema.key(), schema.value());
-        }
-        if (effect instanceof InputSchemaPut<?> schema) {
-            return schemaSummary(schema.key(), schema.value());
-        }
-        if (effect instanceof OutputSchemaPut<?> schema) {
-            return schemaSummary(schema.key(), schema.value());
-        }
-        return phaseLabel(effect.source().phase());
-    }
-
-    private static String schemaSummary(ProjectionSchemaKey<?> key, Object value) {
-        String valueText = switch (value) {
-            case GridSize size -> size.width() + "x" + size.height();
-            case GridIndex index -> "#" + (index.index() + 1);
-            default -> String.valueOf(value);
+    private static SizedTexture changeRowActionIcon(ProjectionDisplayModel.ChangeRow row) {
+        return switch (row.status()) {
+            case added -> CirrusTextures.Icon.Small.plus;
+            case removed -> CirrusTextures.Icon.Small.minus;
+            default -> CirrusTextures.Icon.arrowRight;
         };
-        return schemaKeyName(key) + " " + valueText;
     }
 
-    private static String schemaKeyName(ProjectionSchemaKey<?> key) {
-        String path = key.id().path();
-        int slash = path.lastIndexOf('/');
-        return slash >= 0 ? path.substring(slash + 1) : path;
+    private static ToIntFunction<CirrusPalette> changeRowColor(ProjectionDisplayModel.ChangeRow row) {
+        return switch (row.status()) {
+            case added -> CirrusPalette::diffAdded;
+            case removed -> CirrusPalette::diffRemoved;
+            case transformed -> CirrusPalette::costH;
+            case moved -> CirrusPalette::costP;
+            case adjusted -> CirrusPalette::focusRing;
+            case unchanged -> CirrusPalette::textMuted;
+        };
     }
 
-    private static String effectAmountSummary(ProjectionEffect effect) {
-        return effectAmountSummary(effectBefore(effect), effectAfter(effect));
+    private static String changeRowLabel(ProjectionDisplayModel.ChangeRow row) {
+        String channelLabel = ExecutionOverlayUi.tr(
+            row.channel() == SlotChannel.input
+                    ? CirrusLangs.Calculator.Database.Effect.input
+                    : CirrusLangs.Calculator.Database.Effect.output
+        );
+        SlotAddress addr = row.address();
+        String addrLabel = addr == null ? "" : addr.shortLabel();
+        if (addr instanceof SlotAddress.GridCell) {
+            return channelLabel + " " + addrLabel + " · " + row.status().name();
+        }
+        return switch (row.status()) {
+            case added -> channelLabel + " " + addrLabel + " +";
+            case removed -> channelLabel + " " + addrLabel + " \u00d7";
+            case moved -> channelLabel + " " + addrLabel + " \u2192";
+            case transformed -> channelLabel + " " + addrLabel + " \u21c4";
+            default -> channelLabel + " " + addrLabel;
+        };
     }
 
-    private static String effectAmountSummary(@Nullable RecipeContent before, @Nullable RecipeContent after) {
-        long beforeAmount = before == null ? 0L : before.amount();
-        long afterAmount = after == null ? 0L : after.amount();
-        if (before == null && after != null) {
+    private static String changeRowSummary(ProjectionDisplayModel.ChangeRow row) {
+        long beforeAmount = amountOf(row.before());
+        long afterAmount = amountOf(row.after());
+        if (row.before() == null && row.after() != null) {
             return "+" + afterAmount;
         }
-        if (before != null && after == null) {
+        if (row.before() != null && row.after() == null) {
             return "-" + beforeAmount;
+        }
+        if (row.status() == SlotDiff.DiffStatus.transformed) {
+            return row.badge().isEmpty() ? "\u21c4" : row.badge();
         }
         String value = beforeAmount + " -> " + afterAmount;
         Double factor = amountFactor(beforeAmount, afterAmount);
@@ -8568,16 +8256,15 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         return String.format(Locale.ROOT, "%.2f", value);
     }
 
-    private static String effectSourceLabel(ProjectionEffect effect) {
-        var source = effect.source();
-        if (source.resolveEffectId() != null) {
-            return source.resolveEffectId().toString();
+    private static String formatEffectIds(Iterable<Namespace> ids) {
+        StringBuilder sb = new StringBuilder();
+        for (Namespace id : ids) {
+            if (!sb.isEmpty()) {
+                sb.append(", ");
+            }
+            sb.append(id);
         }
-        return source.clauseId().toString();
-    }
-
-    private static String effectSourceMeta(ProjectionEffect effect) {
-        return effectSourceLabel(effect) + " · " + phaseLabel(effect.source().phase());
+        return sb.toString();
     }
 
     private Tooltip projectionEffectMergeTooltip() {
@@ -8594,104 +8281,51 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         return tooltip;
     }
 
-    private Tooltip mergedEffectTooltip(EffectMergeBucket bucket) {
+    private Tooltip changeRowTooltip(ProjectionDisplayModel.ChangeRow row) {
         Tooltip tooltip = Tooltip.create();
-        tooltip.add(
-            Component.literal(
-                effectLabel(Objects.requireNonNull(bucket.channel), bucket.index, bucket.before, bucket.after)
-            ),
-            Tooltip.title
-        );
+        String title = row.isMeta()
+                ? (row.metaSummary() == null ? "Metadata" : row.metaSummary())
+                : changeRowLabel(row);
+        tooltip.add(ExecutionOverlayUi.tooltipTitleText(title));
         RichTooltipComponent.Builder builder = RichTooltipComponent.builder();
-        builder.kv(
-            ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effects),
-            ExecutionOverlayUi.tooltipTextSecondary,
-            Integer.toString(bucket.effects.size()),
-            ExecutionOverlayUi.tooltipAccent
-        );
-        builder.kv(
-            ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectBefore),
-            ExecutionOverlayUi.tooltipTextSecondary,
-            Long.toString(amountOf(bucket.before)),
-            ExecutionOverlayUi.tooltipTextPrimary
-        );
-        builder.kv(
-            ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectAfter),
-            ExecutionOverlayUi.tooltipTextSecondary,
-            Long.toString(amountOf(bucket.after)),
-            ExecutionOverlayUi.tooltipTextPrimary
-        );
-        builder.kv(
-            ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectDelta),
-            ExecutionOverlayUi.tooltipTextSecondary,
-            Long.toString(amountOf(bucket.after) - amountOf(bucket.before)),
-            effectColor(bucket.before, bucket.after).applyAsInt(CirrusUiTheme.palette(this))
-        );
-        int shown = 0;
-        for (ProjectionEffect effect : bucket.effects) {
-            if (shown >= tooltipEffectLimit || !isContentEffect(effect)) {
-                continue;
-            }
-            builder.text(
-                effectLabel(effect) + "  " + effectAmountSummary(effect),
+        if (!row.effectIds().isEmpty()) {
+            builder.kv(
+                ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectSource),
                 ExecutionOverlayUi.tooltipTextSecondary,
-                false
+                formatEffectIds(row.effectIds()),
+                ExecutionOverlayUi.tooltipTextPrimary
             );
-            shown++;
         }
-        tooltip.add(builder.build());
-        return tooltip;
-    }
-
-    private static long amountOf(@Nullable RecipeContent content) {
-        return content == null ? 0L : content.amount();
-    }
-
-    private static String phaseLabel(ProjectionEffectPhase phase) {
-        return switch (phase) {
-            case projectionTransformer ->
-                ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.Effect.projectionTransformer);
-            case contentTransformer -> ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.Effect.contentTransformer);
-            case resolveEffect -> ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.Effect.resolveEffect);
-        };
-    }
-
-    private Tooltip effectTooltip(ProjectionEffect effect) {
-        Tooltip tooltip = Tooltip.create();
-        tooltip.add(ExecutionOverlayUi.tooltipTitleText(effectSourceLabel(effect)));
-        RichTooltipComponent.Builder builder = RichTooltipComponent.builder();
-        builder.kv(
-            ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectSource),
-            ExecutionOverlayUi.tooltipTextSecondary,
-            effectSourceLabel(effect),
-            ExecutionOverlayUi.tooltipTextPrimary
-        );
-        builder.kv(
-            ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectPhase),
-            ExecutionOverlayUi.tooltipTextSecondary,
-            phaseLabel(effect.source().phase()),
-            ExecutionOverlayUi.tooltipAccent
-        );
-        if (isContentEffect(effect)) {
+        if (row.mergedStepCount() > 1) {
+            builder.kv(
+                ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effects),
+                ExecutionOverlayUi.tooltipTextSecondary,
+                Integer.toString(row.mergedStepCount()),
+                ExecutionOverlayUi.tooltipAccent
+            );
+        }
+        if (!row.isMeta()) {
+            long beforeAmt = amountOf(row.before());
+            long afterAmt = amountOf(row.after());
             builder.kv(
                 ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectBefore),
                 ExecutionOverlayUi.tooltipTextSecondary,
-                Long.toString(effectBeforeAmount(effect)),
+                Long.toString(beforeAmt),
                 ExecutionOverlayUi.tooltipTextPrimary
             );
             builder.kv(
                 ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectAfter),
                 ExecutionOverlayUi.tooltipTextSecondary,
-                Long.toString(effectAfterAmount(effect)),
+                Long.toString(afterAmt),
                 ExecutionOverlayUi.tooltipTextPrimary
             );
             builder.kv(
                 ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectDelta),
                 ExecutionOverlayUi.tooltipTextSecondary,
-                Long.toString(effectAmountDelta(effect)),
-                effectColor(effect).applyAsInt(CirrusUiTheme.palette(this))
+                Long.toString(afterAmt - beforeAmt),
+                changeRowColor(row).applyAsInt(CirrusUiTheme.palette(this))
             );
-            Double factor = effectAmountFactor(effect);
+            Double factor = amountFactor(beforeAmt, afterAmt);
             if (factor != null) {
                 builder.kv(
                     ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectFactor),
@@ -8700,9 +8334,21 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                     ExecutionOverlayUi.tooltipAccent
                 );
             }
+            if (row.movedFrom() != null) {
+                builder.kv(
+                    "Moved From",
+                    ExecutionOverlayUi.tooltipTextSecondary,
+                    row.movedFrom().shortLabel(),
+                    ExecutionOverlayUi.tooltipAccent
+                );
+            }
         }
         tooltip.add(builder.build());
         return tooltip;
+    }
+
+    private static long amountOf(@Nullable RecipeContent content) {
+        return content == null ? 0L : content.amount();
     }
 
     private static String recipeLabel(RecipeDatabaseRecord record) {

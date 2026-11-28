@@ -2,7 +2,7 @@ package dev.vfyjxf.cirrus.recipe.system;
 
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
+import dev.vfyjxf.cirrus.api.recipe.projection.GridSpec;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.system.RoutingRecipeView;
@@ -16,7 +16,6 @@ import net.minecraft.world.item.crafting.RecipeType;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
-import java.util.function.IntFunction;
 
 public abstract class VanillaIngredientRecipeSystem<T extends Recipe<?>> extends BasicVanillaSystem<T> {
 
@@ -32,8 +31,7 @@ public abstract class VanillaIngredientRecipeSystem<T extends Recipe<?>> extends
             recipeHolder,
             ingredients(recipe),
             result(recipe),
-            projectionSchema(recipe),
-            inputSchema(recipe),
+            inputGrid(recipe),
             extraInputs(recipe),
             extraOutputs(recipe)
         );
@@ -58,12 +56,8 @@ public abstract class VanillaIngredientRecipeSystem<T extends Recipe<?>> extends
         return RecipeHelper.getOutput(recipe);
     }
 
-    protected ProjectionSchema projectionSchema(T recipe) {
-        return ProjectionSchema.empty();
-    }
-
-    protected IntFunction<ProjectionSchema> inputSchema(T recipe) {
-        return ignored -> ProjectionSchema.empty();
+    protected @Nullable GridSpec inputGrid(T recipe) {
+        return null;
     }
 
     protected List<InputContent> extraInputs(T recipe) {

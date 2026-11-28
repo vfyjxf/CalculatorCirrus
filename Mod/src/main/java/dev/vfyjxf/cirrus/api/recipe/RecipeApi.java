@@ -6,11 +6,9 @@ import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolverType;
 import dev.vfyjxf.cirrus.api.recipe.filter.RecipeFilter;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionTransformer;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextOption;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionEffect;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionPipeline;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -110,45 +108,16 @@ public interface RecipeApi {
 
     //endregion
 
-    //region clause
+    //region projection
 
-    /**
-     * Check if a recipe clause type is registered.
-     *
-     * @param clauseId the id of the clause type
-     * @return true if the clause type is registered, false otherwise
-     */
-    boolean hasClause(Namespace clauseId);
+    RichIterable<ProjectionEffect> projectionEffects();
 
-    /**
-     * Get a recipe clause type.
-     *
-     * @param clauseId the id of the clause type
-     * @return the clause type
-     * @throws IllegalArgumentException if the clause type is not registered
-     */
-    ClauseType getClauseType(Namespace clauseId) throws IllegalArgumentException;
+    @Nullable
+    ProjectionEffect findProjectionEffect(Namespace effectId);
 
-    /**
-     * Find a content transformer for the given clause type.
-     *
-     * @param type the clause type
-     * @param <T>  the type of the content
-     * @param <F>  the type of the clause
-     * @return the transformer if found, null otherwise
-     */
-    <T extends RecipeContent, F extends RecipeClause> @Nullable ContentTransformer<T, F> findContentTransformer(
-        ClauseType type
-    );
-
-    /**
-     * Find a projection transformer for the given clause type.
-     *
-     * @param type the clause type
-     * @param <F>  the type of the clause
-     * @return the transformer if found, null otherwise
-     */
-    <F extends RecipeClause> @Nullable ProjectionTransformer<F> findProjectionTransformer(ClauseType type);
+    default ProjectionPipeline defaultProjectionPipeline() {
+        return ProjectionPipeline.fromRegistry();
+    }
 
     //endregion
 

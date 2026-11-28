@@ -252,7 +252,7 @@ public final class ExecutionPlanBridge {
         if (slotBindings.isEmpty() || rawIn instanceof StackContent<?, ?>) {
             return rawIn;
         }
-        CirrusContentBridge.InputMapping mapped = CirrusContentBridge.mapInput(rawIn, null);
+        CirrusContentBridge.InputMapping mapped = CirrusContentBridge.mapInput(rawIn, 0);
         RawIngredientSlot rawSlot = mapped.slot();
         if (rawSlot == null || rawSlot.candidates().size() <= 1) {
             return rawIn;
@@ -278,7 +278,7 @@ public final class ExecutionPlanBridge {
         if (catalystBindings.isEmpty() || rawIn instanceof StackContent<?, ?>) {
             return rawIn;
         }
-        CirrusContentBridge.InputMapping mapped = CirrusContentBridge.mapInput(rawIn, null);
+        CirrusContentBridge.InputMapping mapped = CirrusContentBridge.mapInput(rawIn, 0);
         RawIngredientSlot rawSlot = mapped.slot();
         if (rawSlot == null || rawSlot.candidates().size() <= 1) {
             return rawIn;

@@ -1,10 +1,7 @@
 package dev.vfyjxf.cirrus.recipe.system;
 
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridIndex;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridSize;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemas;
+import dev.vfyjxf.cirrus.api.recipe.projection.GridSpec;
 import dev.vfyjxf.cirrus.api.recipe.screening.RecipeScreeningHints;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -29,6 +26,8 @@ public final class SmithingRecipeSystem extends BasicVanillaSystem<SmithingRecip
 
     public static final Namespace systemId = Namespace.ofMc("smithing");
 
+    private static final GridSpec smithingGrid = new GridSpec(3, 1);
+
     private static final RecipeScreeningHints trimHints = RecipeScreeningHints.builder()
             .targetOnly()
             .penalty(500)
@@ -47,8 +46,9 @@ public final class SmithingRecipeSystem extends BasicVanillaSystem<SmithingRecip
             recipeHolder,
             smithingIngredients(recipe),
             smithingResult(recipe),
-            ProjectionSchema.empty().with(ProjectionSchemas.gridSize, new GridSize(3, 1)),
-            index -> ProjectionSchema.empty().with(ProjectionSchemas.gridIndex, new GridIndex(index))
+            smithingGrid,
+            List.of(),
+            List.of()
         );
     }
 

@@ -3,11 +3,11 @@ package dev.vfyjxf.cirrus.internal.performance;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContext;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectedRecipe;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionEngine;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.CalculatorProjectionContext;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContexts;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionPipeline;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.content.ContentApiImpl;
 import dev.vfyjxf.cirrus.content.ContentRegistryBuilder;
@@ -90,7 +90,7 @@ class CalculatorLongChainTimingTest {
             new CalculatorProjectionContext(target, Math.max(1, times), 0L)
         );
         long start = System.nanoTime();
-        ProjectedRecipe projected = new ProjectionEngine().project(context, projection);
+        ProjectedRecipe projected = ProjectionPipeline.fromRegistry().project(context, projection);
         long nanos = System.nanoTime() - start;
         return new ProjectionTiming(times, projected.inputs().size(), projected.outputs().size(), nanos);
     }
@@ -100,11 +100,11 @@ class CalculatorLongChainTimingTest {
         InternalPlugin internal = new InternalPlugin();
         RecipeApiRegistryBuilder builder = new RecipeApiRegistryBuilder();
         internal.registerProjectionPlugin(builder);
-        internal.registerRecipeClause(builder);
+        internal.registerProjectionEffect(builder);
         plugin.registerProjectionPlugin(builder);
         plugin.registerProjectionContextOption(builder);
         plugin.registerRecipeSystem(builder);
-        plugin.registerRecipeClause(builder);
+        plugin.registerProjectionEffect(builder);
         plugin.registerMachineEntry(builder);
         RecipeApiImpl api = new RecipeApiImpl(builder);
         RecipeApiImpl.attach(api);

@@ -6,7 +6,7 @@ import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.TagType;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
 import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolverType;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionEffect;
 import dev.vfyjxf.cirrus.api.recipe.value.EnergyContentType;
 import dev.vfyjxf.cirrus.api.recipe.value.EnergyValue;
 import dev.vfyjxf.cirrus.api.recipe.value.TimeValue;
@@ -15,10 +15,7 @@ import dev.vfyjxf.cirrus.content.type.FluidContentType;
 import dev.vfyjxf.cirrus.content.type.FluidStackType;
 import dev.vfyjxf.cirrus.content.type.ItemContentType;
 import dev.vfyjxf.cirrus.content.type.ItemStackType;
-import dev.vfyjxf.cirrus.recipe.clause.DurabilityCostClause;
-import dev.vfyjxf.cirrus.recipe.clause.FluidContainerUnpackClause;
-import dev.vfyjxf.cirrus.recipe.clause.GuaranteedOutputClause;
-import dev.vfyjxf.cirrus.recipe.clause.ResolvePolicyClause;
+import dev.vfyjxf.cirrus.recipe.projection.BuiltinProjectionEffects;
 import dev.vfyjxf.cirrus.util.CirrusNamespaces;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.core.registries.Registries;
@@ -31,7 +28,7 @@ import net.neoforged.neoforge.fluids.crafting.FluidIngredient;
 import net.neoforged.neoforge.internal.versions.neoforge.NeoForgeVersion;
 
 /**
- * All builtin {@link ContentType} & {@link StackType} & {@link TagType} & {@link ClauseType} & {@link ContentResolverType} & {@link IngredientResolverType}
+ * All builtin {@link ContentType} & {@link StackType} & {@link TagType} & {@link ProjectionEffect} & {@link ContentResolverType} & {@link IngredientResolverType}
  * For the purpose of reducing ambiguity, members here use uppercase names
  */
 public final class CirrusTypes {
@@ -66,17 +63,15 @@ public final class CirrusTypes {
         }
     }
 
-    public final static class Clauses {
+    public final static class ProjectionEffects {
 
-        public static final ClauseType fluidContainerUnpack = FluidContainerUnpackClause.type;
+        public static final ProjectionEffect fluidContainerUnpack = BuiltinProjectionEffects.fluidContainerUnpack;
 
-        public static final ClauseType durabilityCost = DurabilityCostClause.type;
+        public static final ProjectionEffect durabilityCost = BuiltinProjectionEffects.durabilityCost;
 
-        public static final ClauseType guaranteedOutput = GuaranteedOutputClause.type;
+        public static final ProjectionEffect guaranteedOutput = BuiltinProjectionEffects.guaranteedOutput;
 
-        public static final ClauseType resolvePolicy = ResolvePolicyClause.type;
-
-        private Clauses() {
+        private ProjectionEffects() {
             throw new AssertionError("This class should not be instantiated!");
         }
     }

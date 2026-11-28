@@ -105,10 +105,10 @@ public sealed abstract class Cirrus permits CirrusClient, CirrusServer {
                 tracker.phase("Registering Projection Plugins")
             );
             plugins.dispatchLogged(
-                plugin -> plugin.registerRecipeClause(recipeApiRegistry),
-                "Registering Recipe Facets",
+                plugin -> plugin.registerProjectionEffect(recipeApiRegistry),
+                "Registering Projection Effects",
                 logger,
-                tracker.phase("Registering Recipe Facets")
+                tracker.phase("Registering Projection Effects")
             );
             plugins.dispatchLogged(
                 plugin -> plugin.registerProjectionContextOption(recipeApiRegistry),

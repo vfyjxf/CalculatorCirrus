@@ -9,37 +9,27 @@ import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContextKey;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionAttributes;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionKeys;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionTags;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseSet;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
+import dev.vfyjxf.cirrus.api.recipe.projection.SlotChannel;
+import dev.vfyjxf.cirrus.api.recipe.projection.TagQuery;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.BooleanProjectionContextOption;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ChoiceProjectionContextOption;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.LongProjectionContextOption;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextChoice;
-import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveEffect;
-import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveGuard;
-import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveGuardResult;
-import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolvePolicy;
-import dev.vfyjxf.cirrus.api.recipe.projection.resolve.ResolveScope;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridIndex;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridSize;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemas;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionEffect;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionGuard;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionStage;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.register.MachineEntryRegister;
 import dev.vfyjxf.cirrus.api.register.ProjectionContextOptionRegister;
+import dev.vfyjxf.cirrus.api.register.ProjectionEffectRegister;
 import dev.vfyjxf.cirrus.api.register.ProjectionPluginRegister;
-import dev.vfyjxf.cirrus.api.register.RecipeClauseRegister;
 import dev.vfyjxf.cirrus.api.register.RecipeSystemRegister;
-import dev.vfyjxf.cirrus.recipe.clause.DurabilityCostClause;
-import dev.vfyjxf.cirrus.recipe.clause.FluidContainerUnpackClause;
-import dev.vfyjxf.cirrus.recipe.clause.GuaranteedOutputClause;
-import dev.vfyjxf.cirrus.recipe.clause.ResolvePolicyClause;
 import dev.vfyjxf.cirrus.recipe.system.BasicRecipeSystem;
 import dev.vfyjxf.cloudlib.api.plugin.PluginMarker;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
@@ -58,7 +48,6 @@ import org.jetbrains.annotations.Unmodifiable;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 @PluginMarker
@@ -69,57 +58,75 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
         "cirrus.ui.calculator.database.debug_plugin.desc",
         true
     );
-    public static final Namespace clauseId = Namespace.of(CirrusConstants.modId, "debug/projection_probe");
+    public static final Namespace effectId = Namespace.of(CirrusConstants.modId, "debug/projection_probe");
+    public static final Namespace probeTag = Namespace.of(CirrusConstants.modId, "debug/tag/projection_probe");
     public static final Namespace systemId = Namespace.of(CirrusConstants.modId, "debug_projection");
-    public static final ClauseType clauseType = new ClauseType(
-        clauseId,
-        plugin,
-        (entry, content) -> content instanceof StackContent<?, ?> stack && stack.isItem()
-    );
-    public static final DebugProjectionClause clause = new DebugProjectionClause();
     public static final ExecutionContextKey<Long> scaleKey = key("scale", Long.class, 1L);
     public static final ExecutionContextKey<Boolean> extraOutputKey = key("extra_output", Boolean.class, false);
     public static final ExecutionContextKey<String> channelKey = key("channel", String.class, "input");
     public static final Namespace resolveGuardFailId = Namespace.of(CirrusConstants.modId, "debug/resolve_guard_fail");
+    public static final Namespace resolveGuardPassId = Namespace.of(CirrusConstants.modId, "debug/resolve_guard_pass");
     public static final Namespace resolveBoostInputId = Namespace
             .of(CirrusConstants.modId, "debug/resolve_boost_input");
     public static final int longChainDepth = 72;
     public static final String longChainTargetId = "debug_chain_target";
-    public static final ContentTransformer<StackContent<Item, ItemStack>, DebugProjectionClause> transformer = ContentTransformer
-            .of(
-                plugin,
-                (context, projection, content, asInput) -> debugEnabled()
-                        && content instanceof StackContent<?, ?> stack
-                        && stack.isItem(),
-                (context, recipe, content, facet, asInput, increment, decrement) -> {
-                    long scale = Math.max(1L, context.get(scaleKey));
-                    String channel = context.get(channelKey);
-                    if ("input".equals(channel) && asInput && scale != 1L) {
-                        content.content().setAmount(Math.multiplyExact(content.amount(), scale));
-                    }
-                    if ("output".equals(channel) && !asInput && scale != 1L) {
-                        content.content().setAmount(Math.multiplyExact(content.amount(), scale));
-                    }
-                    if (context.get(extraOutputKey) && asInput) {
-                        increment.injectOutput(OutputContent.fromItemStack(new ItemStack(Items.LIGHTNING_ROD)));
-                    }
-                    return ContentTransformer.ActionResult.retain;
+
+    public static final ProjectionEffect debugEffect = ProjectionEffect.builder(effectId)
+            .plugin(plugin)
+            .stage(ProjectionStage.transform)
+            .watches(scaleKey, extraOutputKey, channelKey)
+            .when((context, view) -> debugEnabled())
+            .forEachSlot(null, TagQuery.requireAll(probeTag), (tx, slot) -> {
+                if (!(slot.content() instanceof StackContent<?, ?> stack) || !stack.isItem()) {
+                    return;
                 }
-            );
-    public static final ResolveGuard failingGuard = ResolveGuard
-            .of(resolveGuardFailId, (context, recipe) -> ResolveGuardResult.fail("debug_guard_failed"));
-    public static final ResolveGuard passingGuard = ResolveGuard.of(
-        Namespace.of(CirrusConstants.modId, "debug/resolve_guard_pass"),
-        (context, recipe) -> ResolveGuardResult.pass()
-    );
-    public static final ResolveEffect boostFirstInput = ResolveEffect
-            .of(resolveBoostInputId, 0, ResolveScope.input, (context, inputs, outputs) -> {
+                long scale = Math.max(1L, tx.context().get(scaleKey));
+                String channel = tx.context().get(channelKey);
+                boolean asInput = slot.channel() == SlotChannel.input;
+                if ("input".equals(channel) && asInput && scale != 1L) {
+                    tx.setSlotAmount(slot.address(), Math.multiplyExact(slot.content().amount(), scale));
+                }
+                if ("output".equals(channel) && !asInput && scale != 1L) {
+                    tx.setSlotAmount(slot.address(), Math.multiplyExact(slot.content().amount(), scale));
+                }
+                if (tx.context().get(extraOutputKey) && asInput) {
+                    tx.addOutput(OutputContent.fromItemStack(new ItemStack(Items.LIGHTNING_ROD)));
+                }
+            })
+            .build();
+
+    public static final ProjectionGuard failingGuard = ProjectionGuard
+            .of(resolveGuardFailId, (context, view) -> ProjectionGuard.Result.fail("debug_guard_failed"));
+    public static final ProjectionGuard passingGuard = ProjectionGuard
+            .of(resolveGuardPassId, (context, view) -> ProjectionGuard.Result.pass());
+
+    public static final ProjectionEffect boostFirstInput = ProjectionEffect.builder(resolveBoostInputId)
+            .plugin(ProjectionPlugin.builtin)
+            .stage(ProjectionStage.transform)
+            .guard(passingGuard)
+            .apply(tx -> {
+                var inputs = tx.inputSlots();
                 if (inputs.isEmpty()) {
                     return;
                 }
-                InputContent first = inputs.getFirst();
-                inputs.set(0, (InputContent) first.copyWithAmount(first.amount() + 3L));
-            });
+                var first = inputs.getFirst();
+                tx.setSlotAmount(first.address(), first.content().amount() + 3L);
+            })
+            .build();
+
+    public static final ProjectionEffect blockedBoostFirstInput = ProjectionEffect.builder(resolveBoostInputId)
+            .plugin(ProjectionPlugin.builtin)
+            .stage(ProjectionStage.transform)
+            .guard(failingGuard)
+            .apply(tx -> {
+                var inputs = tx.inputSlots();
+                if (inputs.isEmpty()) {
+                    return;
+                }
+                var first = inputs.getFirst();
+                tx.setSlotAmount(first.address(), first.content().amount() + 3L);
+            })
+            .build();
 
     @Override
     public Namespace pluginId() {
@@ -195,9 +202,9 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
     }
 
     @Override
-    public void registerRecipeClause(RecipeClauseRegister register) {
+    public void registerProjectionEffect(ProjectionEffectRegister register) {
         if (debugEnabled()) {
-            register.registerContentTransformer(clauseType, transformer);
+            register.registerProjectionEffect(debugEffect);
         }
     }
 
@@ -213,27 +220,21 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
         );
     }
 
-    public static final class DebugProjectionClause implements RecipeClause {
-        private DebugProjectionClause() {}
-
-        @Override
-        public Namespace id() {
-            return clauseId;
-        }
-
-        @Override
-        public ProjectionPlugin plugin() {
-            return plugin;
-        }
-    }
-
     public record DebugProjectionRecipe(String id, Kind kind, int chainIndex) {
         public DebugProjectionRecipe(String id, Kind kind) {
             this(id, kind, -1);
         }
 
         public enum Kind {
-            debugTransformer, fluidContainerUnpack, durabilityCost, guaranteedOutput, resolvePolicyEffect, resolvePolicyGuard, longChainStep, longChainTarget
+            debugTransformer,
+            fluidContainerUnpack,
+            durabilityCost,
+            guaranteedOutput,
+            resolvePolicyEffect,
+            resolvePolicyGuard,
+            craftingGridTransform,
+            longChainStep,
+            longChainTarget
         }
 
         public RecipeProjection toProjection() {
@@ -244,80 +245,107 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
                 case guaranteedOutput -> guaranteedOutputProjection();
                 case resolvePolicyEffect -> resolvePolicyEffectProjection();
                 case resolvePolicyGuard -> resolvePolicyGuardProjection();
+                case craftingGridTransform -> craftingGridTransformProjection();
                 case longChainStep -> longChainStepProjection();
                 case longChainTarget -> longChainTargetProjection();
             };
         }
 
         private RecipeProjection debugTransformerProjection() {
-            ClausedContent<InputContent> input = input(
-                InputContent.fromItemStack(new ItemStack(Items.COPPER_INGOT, 2))
-            );
-            input.addClause(clause);
-            ClausedContent<OutputContent> output = output(
-                OutputContent.fromItemStack(new ItemStack(Items.COPPER_BLOCK))
-            );
-            output.addClause(clause);
-            return projection(List.of(input), List.of(output));
+            return builder()
+                    .input(
+                        InputContent.fromItemStack(new ItemStack(Items.COPPER_INGOT, 2)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(probeTag)
+                    )
+                    .output(
+                        OutputContent.fromItemStack(new ItemStack(Items.COPPER_BLOCK)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(probeTag)
+                    )
+                    .build();
         }
 
         private RecipeProjection fluidContainerUnpackProjection() {
-            ClausedContent<InputContent> input = input(InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)));
-            input.addClause(FluidContainerUnpackClause.instance);
-            return projection(List.of(input), List.of(output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))));
+            return builder()
+                    .input(
+                        InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(ProjectionKeys.Tags.fluidContainer)
+                    )
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.STONE)))
+                    .build();
         }
 
         private RecipeProjection durabilityCostProjection() {
             ItemStack tool = new ItemStack(Items.IRON_PICKAXE);
             tool.setDamageValue(Math.max(0, tool.getMaxDamage() - 1));
-            ClausedContent<InputContent> input = input(InputContent.fromItemStack(tool));
-            input.addClause(new DurabilityCostClause(1));
-            return projection(
-                List.of(input),
-                List.of(output(OutputContent.fromItemStack(new ItemStack(Items.IRON_NUGGET))))
-            );
+            return builder()
+                    .input(
+                        InputContent.fromItemStack(tool),
+                        ProjectionAttributes.of(ProjectionKeys.durabilityCost, 1),
+                        ProjectionTags.of(ProjectionKeys.Tags.durabilityTool)
+                    )
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.IRON_NUGGET)))
+                    .build();
         }
 
         private RecipeProjection guaranteedOutputProjection() {
-            RecipeProjection projection = projection(
-                List.of(input(InputContent.fromItemStack(new ItemStack(Items.STICK)))),
-                List.of(
-                    output(OutputContent.fromItemStack(new ItemStack(Items.DIAMOND), 1, 0.25F)),
-                    output(OutputContent.fromItemStack(new ItemStack(Items.COBBLESTONE)))
-                )
-            );
-            projection.addClause(GuaranteedOutputClause.instance);
-            return projection;
+            return builder()
+                    .input(InputContent.fromItemStack(new ItemStack(Items.STICK)))
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.DIAMOND), 1, 0.25F))
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.COBBLESTONE)))
+                    .tag(ProjectionKeys.Tags.guaranteedOutput)
+                    .build();
         }
 
         private RecipeProjection resolvePolicyEffectProjection() {
-            RecipeProjection projection = projection(
-                List.of(input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)))),
-                List.of(output(OutputContent.fromItemStack(new ItemStack(Items.TORCH))))
-            );
-            projection.addClause(
-                new ResolvePolicyClause(
-                    new ResolvePolicy(
-                        Lists.immutable.with(passingGuard),
-                        Lists.immutable.with(boostFirstInput),
-                        Comparator.comparingInt(ResolveEffect::order)
-                    )
-                )
-            );
-            return projection;
+            return builder()
+                    .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)))
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.TORCH)))
+                    .localEffect(boostFirstInput)
+                    .build();
         }
 
         private RecipeProjection resolvePolicyGuardProjection() {
-            RecipeProjection projection = projection(
-                List.of(input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)))),
-                List.of(output(OutputContent.fromItemStack(new ItemStack(Items.REDSTONE_TORCH))))
-            );
-            projection.addClause(
-                new ResolvePolicyClause(
-                    new ResolvePolicy(Lists.immutable.with(failingGuard), Lists.immutable.with(boostFirstInput))
-                )
-            );
-            return projection;
+            return builder()
+                    .input(InputContent.fromItemStack(new ItemStack(Items.STICK, 2)))
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.REDSTONE_TORCH)))
+                    .localEffect(blockedBoostFirstInput)
+                    .build();
+        }
+
+        private RecipeProjection craftingGridTransformProjection() {
+            ItemStack breakingTool = new ItemStack(Items.IRON_PICKAXE);
+            breakingTool.setDamageValue(Math.max(0, breakingTool.getMaxDamage() - 1));
+            return builder()
+                    .inputGrid(3, 3)
+                    .inputCell(
+                        0,
+                        0,
+                        InputContent.fromItemStack(breakingTool),
+                        ProjectionAttributes.of(ProjectionKeys.durabilityCost, 1),
+                        ProjectionTags.of(ProjectionKeys.Tags.durabilityTool)
+                    )
+                    .inputCell(
+                        1,
+                        1,
+                        InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(ProjectionKeys.Tags.fluidContainer)
+                    )
+                    .inputCell(
+                        2,
+                        1,
+                        InputContent.fromItemStack(new ItemStack(Items.COPPER_INGOT, 2)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(probeTag)
+                    )
+                    .inputCell(1, 2, InputContent.fromItemStack(new ItemStack(Items.STICK)))
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.COPPER_BLOCK)))
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.DIAMOND), 1, 0.25F))
+                    .tag(ProjectionKeys.Tags.guaranteedOutput)
+                    .build();
         }
 
         private RecipeProjection longChainStepProjection() {
@@ -325,131 +353,60 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
                 throw new IllegalStateException("Invalid debug chain step index: " + chainIndex);
             }
 
-            ArrayList<ClausedContent<InputContent>> inputs = new ArrayList<>();
-            ArrayList<ClausedContent<OutputContent>> outputs = new ArrayList<>();
+            RecipeProjection.Builder b = builder().inputGrid(3, 3).outputGrid(3, 3);
             InputContent stageInput = chainIndex == 0
                     ? InputContent.fromItemStack(new ItemStack(Items.COPPER_INGOT), 1)
                     : InputContent.fromItemStack(chainStack(chainIndex), 1);
-            inputs.add(chainInput(stageInput, 0));
+            b.inputCellIndex(0, stageInput);
             if (chainIndex % 3 == 0) {
-                inputs.add(chainInput(InputContent.fromItemStack(new ItemStack(Items.REDSTONE), 1), 1));
+                b.inputCellIndex(1, InputContent.fromItemStack(new ItemStack(Items.REDSTONE), 1));
             }
             if (chainIndex % 5 == 0) {
-                inputs.add(
-                    chainInput(
-                        InputContent.fromItemStack(new ItemStack(Items.GLASS_BOTTLE), 1, RecipeContent.MIN_CHANCE),
-                        2
-                    )
+                b.inputCellIndex(
+                    2,
+                    InputContent.fromItemStack(new ItemStack(Items.GLASS_BOTTLE), 1, RecipeContent.MIN_CHANCE)
                 );
             }
             if (chainIndex % 8 == 0) {
-                inputs.add(chainInput(InputContent.fromFluidStack(new FluidStack(Fluids.WATER, 250)), 3));
+                b.inputCellIndex(3, InputContent.fromFluidStack(new FluidStack(Fluids.WATER, 250)));
             }
 
-            ClausedContent<OutputContent> primary = chainOutput(
-                OutputContent.fromItemStack(chainStack(chainIndex + 1), 1),
-                0
-            );
-            if (chainIndex % 4 == 0) {
-                primary.addClause(clause);
-            }
-            outputs.add(primary);
+            ProjectionTags primaryTags = chainIndex % 4 == 0 ? ProjectionTags.of(probeTag) : ProjectionTags.empty();
+            b.outputCell(0, 0, OutputContent.fromItemStack(chainStack(chainIndex + 1), 1), ProjectionAttributes.empty(), primaryTags);
             if (chainIndex % 6 == 0) {
-                outputs.add(chainOutput(OutputContent.fromEnergy(128L * (chainIndex + 1)), 1));
+                b.outputCell(1, 0, OutputContent.fromEnergy(128L * (chainIndex + 1)));
             }
             if (chainIndex % 7 == 0) {
-                outputs.add(chainOutput(OutputContent.fromTimeTick(20 + chainIndex), 2));
+                b.outputCell(2, 0, OutputContent.fromTimeTick(20 + chainIndex));
             }
             if (chainIndex % 11 == 0) {
-                outputs.add(chainOutput(OutputContent.fromItemStack(new ItemStack(Items.IRON_NUGGET), 1, 0.35F), 3));
+                b.outputCell(0, 1, OutputContent.fromItemStack(new ItemStack(Items.IRON_NUGGET), 1, 0.35F));
             }
-
-            RecipeProjection projection = projection(
-                inputs,
-                outputs,
-                ProjectionSchema.empty().with(ProjectionSchemas.gridSize, new GridSize(3, 3))
-            );
             if (chainIndex % 11 == 0 || chainIndex % 13 == 0) {
-                projection.addClause(GuaranteedOutputClause.instance);
+                b.tag(ProjectionKeys.Tags.guaranteedOutput);
             }
-            return projection;
+            return b.build();
         }
 
         private RecipeProjection longChainTargetProjection() {
-            ArrayList<ClausedContent<InputContent>> inputs = new ArrayList<>();
-            inputs.add(chainInput(InputContent.fromItemStack(chainStack(longChainDepth), 1), 0));
-            inputs.add(chainInput(InputContent.fromItemStack(new ItemStack(Items.DIAMOND), 2), 1));
-            inputs.add(
-                chainInput(InputContent.fromItemStack(new ItemStack(Items.BLAZE_ROD), 1, RecipeContent.MIN_CHANCE), 2)
-            );
-
-            ArrayList<ClausedContent<OutputContent>> outputs = new ArrayList<>();
-            outputs.add(
-                chainOutput(OutputContent.fromItemStack(namedStack(Items.NETHER_STAR, "Debug chain result"), 1), 0)
-            );
-            outputs.add(chainOutput(OutputContent.fromEnergy(64_000L), 1));
-            outputs.add(chainOutput(OutputContent.fromTimeTick(240), 2));
-
-            RecipeProjection projection = projection(
-                inputs,
-                outputs,
-                ProjectionSchema.empty().with(ProjectionSchemas.gridSize, new GridSize(3, 3))
-            );
-            projection.addClause(
-                new ResolvePolicyClause(
-                    new ResolvePolicy(
-                        Lists.immutable.with(passingGuard),
-                        Lists.immutable.with(boostFirstInput),
-                        Comparator.comparingInt(ResolveEffect::order)
+            return builder()
+                    .inputGrid(3, 3)
+                    .outputGrid(3, 3)
+                    .inputCellIndex(0, InputContent.fromItemStack(chainStack(longChainDepth), 1))
+                    .inputCellIndex(1, InputContent.fromItemStack(new ItemStack(Items.DIAMOND), 2))
+                    .inputCellIndex(
+                        2,
+                        InputContent.fromItemStack(new ItemStack(Items.BLAZE_ROD), 1, RecipeContent.MIN_CHANCE)
                     )
-                )
-            );
-            return projection;
+                    .outputCell(0, 0, OutputContent.fromItemStack(namedStack(Items.NETHER_STAR, "Debug chain result"), 1))
+                    .outputCell(1, 0, OutputContent.fromEnergy(64_000L))
+                    .outputCell(2, 0, OutputContent.fromTimeTick(240))
+                    .localEffect(boostFirstInput)
+                    .build();
         }
 
-        private RecipeProjection projection(
-            List<ClausedContent<InputContent>> inputs,
-            List<ClausedContent<OutputContent>> outputs
-        ) {
-            return projection(inputs, outputs, ProjectionSchema.empty());
-        }
-
-        private RecipeProjection projection(
-            List<ClausedContent<InputContent>> inputs,
-            List<ClausedContent<OutputContent>> outputs,
-            ProjectionSchema schema
-        ) {
-            return new RecipeProjection(
-                RecipeEntry.of(DebugProjectionRecipeSystem.instance, this),
-                Lists.immutable.withAll(inputs),
-                Lists.immutable.withAll(outputs),
-                schema,
-                ClauseSet.create()
-            );
-        }
-
-        private static ClausedContent<InputContent> input(InputContent content) {
-            return ClausedContent.from(content);
-        }
-
-        private static ClausedContent<OutputContent> output(OutputContent content) {
-            return ClausedContent.from(content);
-        }
-
-        private static ClausedContent<InputContent> chainInput(InputContent content, int slot) {
-            return ClausedContent.from(
-                content,
-                ProjectionSchema.empty().with(ProjectionSchemas.gridIndex, new GridIndex(slot)),
-                ClauseSet.create()
-            );
-        }
-
-        private static ClausedContent<OutputContent> chainOutput(OutputContent content, int slot) {
-            return ClausedContent.from(
-                content,
-                ProjectionSchema.empty().with(ProjectionSchemas.gridIndex, new GridIndex(slot)),
-                ClauseSet.create()
-            );
+        private RecipeProjection.Builder builder() {
+            return RecipeProjection.builder(RecipeEntry.of(DebugProjectionRecipeSystem.instance, this));
         }
 
         private static ItemStack chainStack(int index) {
@@ -481,6 +438,9 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
             out.add(new DebugProjectionRecipe("guaranteed_output", DebugProjectionRecipe.Kind.guaranteedOutput));
             out.add(new DebugProjectionRecipe("resolve_policy_effect", DebugProjectionRecipe.Kind.resolvePolicyEffect));
             out.add(new DebugProjectionRecipe("resolve_policy_guard", DebugProjectionRecipe.Kind.resolvePolicyGuard));
+            out.add(
+                new DebugProjectionRecipe("crafting_grid_transform", DebugProjectionRecipe.Kind.craftingGridTransform)
+            );
             for (int i = 0; i < longChainDepth; i++) {
                 out.add(
                     new DebugProjectionRecipe("debug_chain_step_" + i, DebugProjectionRecipe.Kind.longChainStep, i)

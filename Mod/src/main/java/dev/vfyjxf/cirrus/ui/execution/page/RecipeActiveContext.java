@@ -8,10 +8,10 @@ import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
 import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.InteractionStep;
 import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectedRecipe;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionEngine;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContexts;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionPipeline;
 import dev.vfyjxf.cirrus.recipe.execution.driver.slot.CraftingTableExecutionDriver;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayContentHelper;
@@ -182,7 +182,7 @@ public record RecipeActiveContext(
         if (projection == null) {
             return null;
         }
-        return new ProjectionEngine().project(ProjectionContexts.global(), projection);
+        return ProjectionPipeline.fromRegistry().project(ProjectionContexts.global(), projection);
     }
 
     private static RecipeContent previewContent(@Nullable ProjectedRecipe projected) {

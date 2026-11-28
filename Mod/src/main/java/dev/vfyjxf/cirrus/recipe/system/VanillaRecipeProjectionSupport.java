@@ -3,10 +3,8 @@ package dev.vfyjxf.cirrus.recipe.system;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.projection.GridSpec;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseSet;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveError;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -20,7 +18,6 @@ import org.eclipse.collections.api.list.MutableList;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
-import java.util.function.IntFunction;
 
 final class VanillaRecipeProjectionSupport {
 
@@ -32,16 +29,7 @@ final class VanillaRecipeProjectionSupport {
         List<Ingredient> ingredients,
         ItemStack result
     ) {
-        return resolve(
-            system,
-            holder,
-            ingredients,
-            result,
-            ProjectionSchema.empty(),
-            ignored -> ProjectionSchema.empty(),
-            List.of(),
-            List.of()
-        );
+        return resolve(system, holder, ingredients, result, null, List.of(), List.of());
     }
 
     static <T extends Recipe<?>> ResolveResult resolve(
@@ -49,73 +37,46 @@ final class VanillaRecipeProjectionSupport {
         RecipeHolder<T> holder,
         List<Ingredient> ingredients,
         ItemStack result,
-        ProjectionSchema projectionSchema,
-        IntFunction<ProjectionSchema> inputSchema
-    ) {
-        return resolve(
-            system,
-            holder,
-            ingredients,
-            result,
-            projectionSchema,
-            inputSchema,
-            List.of(),
-            List.of()
-        );
-    }
-
-    static <T extends Recipe<?>> ResolveResult resolve(
-        RecipeSystem<RecipeHolder<T>> system,
-        RecipeHolder<T> holder,
-        List<Ingredient> ingredients,
-        ItemStack result,
-        ProjectionSchema projectionSchema,
-        IntFunction<ProjectionSchema> inputSchema,
+        @Nullable GridSpec inputGrid,
         List<InputContent> extraInputs,
         List<OutputContent> extraOutputs
     ) {
         try {
-            MutableList<ClausedContent<InputContent>> inputs = MutableLists.empty();
+            RecipeProjection.Builder builder = RecipeProjection.builder(RecipeEntry.of(system, holder));
+            if (inputGrid != null) {
+                builder.inputGrid(inputGrid.width(), inputGrid.height());
+            }
+            int inputCount = 0;
             for (int index = 0; index < ingredients.size(); index++) {
                 InputContent input = InputContent.fromItemIngredient(ingredients.get(index));
-                if (!input.isEmpty()) {
-                    ProjectionSchema schema = inputSchema.apply(index);
-                    inputs.add(
-                        ClausedContent.from(
-                            input,
-                            schema == null ? ProjectionSchema.empty() : schema,
-                            ClauseSet.create()
-                        )
-                    );
+                if (input.isEmpty()) {
+                    continue;
                 }
+                if (inputGrid != null && index < inputGrid.cellCount()) {
+                    builder.inputCellIndex(index, input);
+                } else {
+                    builder.input(input);
+                }
+                inputCount++;
             }
             for (InputContent extra : extraInputs) {
                 if (extra != null && !extra.isEmpty()) {
-                    inputs.add(ClausedContent.from(extra));
+                    builder.input(extra);
+                    inputCount++;
                 }
             }
 
             OutputContent output = OutputContent.fromItemStack(result);
-            if (inputs.isEmpty() || output.isEmpty()) {
+            if (inputCount == 0 || output.isEmpty()) {
                 return ResolveResult.failed(ResolveError.invalidRecipe);
             }
-
-            MutableList<ClausedContent<OutputContent>> outputs = MutableLists.empty();
-            outputs.add(ClausedContent.from(output));
+            builder.output(output);
             for (OutputContent extra : extraOutputs) {
                 if (extra != null && !extra.isEmpty()) {
-                    outputs.add(ClausedContent.from(extra));
+                    builder.output(extra);
                 }
             }
-            return ResolveResult.resolved(
-                new RecipeProjection(
-                    RecipeEntry.of(system, holder),
-                    inputs.toImmutable(),
-                    outputs.toImmutable(),
-                    projectionSchema,
-                    ClauseSet.create()
-                )
-            );
+            return ResolveResult.resolved(builder.build());
         } catch (RuntimeException ignored) {
             return ResolveResult.failed(ResolveError.invalidRecipe);
         }

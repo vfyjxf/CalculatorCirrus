@@ -50,7 +50,7 @@ public interface CirrusPlugin extends ModPlugin {
 
     default void registerRecipeSystem(RecipeSystemRegister register) {}
 
-    default void registerRecipeClause(RecipeClauseRegister register) {}
+    default void registerProjectionEffect(ProjectionEffectRegister register) {}
 
     default void registerProjectionPlugin(ProjectionPluginRegister register) {}
 

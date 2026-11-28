@@ -11,17 +11,14 @@ import dev.vfyjxf.cirrus.api.recipe.database.DatabaseDefinition;
 import dev.vfyjxf.cirrus.api.recipe.database.DatabaseKind;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseIndex;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseWorkspace;
+import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContext;
 import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContextKey;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseSet;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.LongProjectionContextOption;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextScope;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridIndex;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridSize;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemas;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionPipeline;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionResult;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -361,27 +358,13 @@ class DatabasePageListLayoutTest {
     void projectionRecipeViewKeepsGridSchemaAndLooseOutputsGeneric() {
         FakeRecipeSystem system = new FakeRecipeSystem(Namespace.of("test", "projection_view"), List.of());
         FakeRecipe recipe = new FakeRecipe("projection_view", List.of(), List.of());
-        RecipeProjection projection = new RecipeProjection(
-            RecipeEntry.of(system, recipe),
-            Lists.immutable.with(
-                ClausedContent.from(
-                    InputContent.fromValue(input, 1L),
-                    ProjectionSchema.empty().with(ProjectionSchemas.gridIndex, new GridIndex(0)),
-                    ClauseSet.create()
-                ),
-                ClausedContent.from(
-                    InputContent.fromValue(input, 2L),
-                    ProjectionSchema.empty().with(ProjectionSchemas.gridIndex, new GridIndex(4)),
-                    ClauseSet.create()
-                )
-            ),
-            Lists.immutable.with(
-                ClausedContent.from(OutputContent.fromValue(outA, 1L)),
-                ClausedContent.from(OutputContent.fromValue(outB, 2L))
-            ),
-            ProjectionSchema.empty().with(ProjectionSchemas.gridSize, new GridSize(3, 3)),
-            ClauseSet.create()
-        );
+        RecipeProjection projection = RecipeProjection.builder(RecipeEntry.of(system, recipe))
+                .inputGrid(3, 3)
+                .inputCellIndex(0, InputContent.fromValue(input, 1L))
+                .inputCellIndex(4, InputContent.fromValue(input, 2L))
+                .output(OutputContent.fromValue(outA, 1L))
+                .output(OutputContent.fromValue(outB, 2L))
+                .build();
 
         ProjectionRecipeViewWidget view = ProjectionRecipeViewWidget.create(projection);
 
@@ -389,6 +372,45 @@ class DatabasePageListLayoutTest {
         assertTrue(view.usesGrid());
         assertEquals(2, view.inputCount());
         assertEquals(2, view.outputCount());
+        assertFalse(view.hasDiffOverlays());
+    }
+
+    @Test
+    void projectionRecipeViewRendersCraftingGridCellDiffOverlays() {
+        assumeTrue(DebugProjectionPlugin.debugEnabled());
+
+        RecipeApi previous = RecipeApiImpl.instance();
+        ContentApiImpl previousContent = ContentApiImpl.instance();
+        attachContentApiForDebugProjection();
+        RecipeApiImpl api = attachDebugProjectionRecipeApi();
+        try {
+            @SuppressWarnings("unchecked")
+            RecipeSystem<DebugProjectionPlugin.DebugProjectionRecipe> system = (RecipeSystem<DebugProjectionPlugin.DebugProjectionRecipe>) api
+                    .findSystem(DebugProjectionPlugin.systemId);
+            assertNotNull(system);
+            DebugProjectionPlugin.DebugProjectionRecipe gridRecipe = system.findRecipe("crafting_grid_transform");
+            assertNotNull(gridRecipe);
+            RecipeProjection raw = api.resolve(ResolveContext.empty(), system, gridRecipe).projection();
+            assertNotNull(raw);
+
+            ExecutionContext ctx = new ExecutionContext()
+                    .set(DebugProjectionPlugin.scaleKey, 3L)
+                    .set(DebugProjectionPlugin.channelKey, "input");
+            ProjectionResult result = ProjectionPipeline.fromRegistry().trace(ctx, raw);
+            ProjectionRecipeViewWidget view = ProjectionRecipeViewWidget.create(result);
+
+            assertNotNull(view);
+            assertTrue(view.usesGrid());
+            assertTrue(view.hasDiffOverlays());
+            assertTrue(view.changedSlotCount() >= 4);
+        } finally {
+            if (previous instanceof RecipeApiImpl impl) {
+                RecipeApiImpl.attach(impl);
+            }
+            if (previousContent != null) {
+                ContentApiImpl.attach(previousContent);
+            }
+        }
     }
 
     @Test
@@ -1276,12 +1298,15 @@ class DatabasePageListLayoutTest {
     }
 
     private static RecipeApiImpl attachDebugProjectionRecipeApi() {
+        InternalPlugin internal = new InternalPlugin();
         DebugProjectionPlugin plugin = new DebugProjectionPlugin();
         RecipeApiRegistryBuilder builder = new RecipeApiRegistryBuilder();
+        internal.registerProjectionPlugin(builder);
+        internal.registerProjectionEffect(builder);
         plugin.registerProjectionPlugin(builder);
         plugin.registerProjectionContextOption(builder);
         plugin.registerRecipeSystem(builder);
-        plugin.registerRecipeClause(builder);
+        plugin.registerProjectionEffect(builder);
         plugin.registerMachineEntry(builder);
         builder.registerProjectionPlugin(irrelevantProjectionPlugin);
         builder.registerProjectionContextOption(

@@ -3,8 +3,8 @@ package dev.vfyjxf.cirrus.api.recipe.system;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionSlot;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.jspecify.annotations.Nullable;
 
@@ -54,11 +54,11 @@ public interface RecipeLookupExtractor<R> {
                 return null;
             }
             List<InputContent> inputs = new ArrayList<>(projection.inputs().size());
-            for (ClausedContent<InputContent> in : projection.inputs()) {
+            for (ProjectionSlot<InputContent> in : projection.inputs()) {
                 inputs.add(in.content());
             }
             List<OutputContent> outputs = new ArrayList<>(projection.outputs().size());
-            for (ClausedContent<OutputContent> out : projection.outputs()) {
+            for (ProjectionSlot<OutputContent> out : projection.outputs()) {
                 outputs.add(out.content());
             }
             return new RoutingRecipeView(inputs, outputs);

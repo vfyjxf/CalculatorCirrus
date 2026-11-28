@@ -44,10 +44,10 @@ import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionProbeResult
 import dev.vfyjxf.cirrus.api.recipe.execution.util.ExecutionGuidance;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowNode;
 import dev.vfyjxf.cirrus.api.recipe.execution.view.ExecutionFlowViewModel;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectedRecipe;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectedRecipe;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionEngine;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContexts;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionPipeline;
 import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusCatalogAdapter;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusContentBridge;
@@ -195,7 +195,7 @@ public final class ExecutionTargetRecipeState {
         if (projection == null) {
             return null;
         }
-        return new ProjectionEngine().project(ProjectionContexts.global(), projection);
+        return ProjectionPipeline.fromRegistry().project(ProjectionContexts.global(), projection);
     }
 
     public static ItemStack previewStack(@Nullable RecipeEntry<?> recipe) {

@@ -29,7 +29,6 @@ import dev.vfyjxf.cirrus.api.recipe.content.TypedStackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
 import dev.vfyjxf.cirrus.planning.adapter.DropReason;
 import dev.vfyjxf.cirrus.planning.adapter.StackIdentity;
-import dev.vfyjxf.cirrus.recipe.clause.DurabilityCostClause;
 import dev.vfyjxf.cloudlib.api.util.Games;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
@@ -194,7 +193,7 @@ public final class CirrusContentBridge {
         }
     }
 
-    public static InputMapping mapInput(@Nullable InputContent input, @Nullable DurabilityCostClause durabilityClause) {
+    public static InputMapping mapInput(@Nullable InputContent input, int durabilityCost) {
         if (input == null || input.isEmpty() || input instanceof EmptyRecipeContent) {
             return InputMapping.empty();
         }
@@ -228,7 +227,7 @@ public final class CirrusContentBridge {
             }
             ResourceKey key = keyOpt.get();
             SlotMatchMode mode = modeOpt.get();
-            if (durabilityClause != null && durabilityClause.durabilityCost() > 0) {
+            if (durabilityCost > 0) {
                 int maxDur = extractMaxDurability(stackContent.content());
                 if (maxDur > 0) {
                     return InputMapping.slot(
@@ -237,7 +236,7 @@ public final class CirrusContentBridge {
                             List.of(key),
                             amount,
                             mode,
-                            durabilityClause.durabilityCost(),
+                            durabilityCost,
                             maxDur
                         ),
                         null

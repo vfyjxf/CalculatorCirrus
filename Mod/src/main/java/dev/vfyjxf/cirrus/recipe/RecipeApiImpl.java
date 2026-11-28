@@ -8,11 +8,8 @@ import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolverType;
 import dev.vfyjxf.cirrus.api.recipe.filter.RecipeFilter;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseType;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ContentTransformer;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ProjectionTransformer;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.RecipeClause;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextOption;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionEffect;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveError;
@@ -100,9 +97,7 @@ public class RecipeApiImpl implements RecipeApi {
     }
 
     private final ImmutableMap<Namespace, RecipeSystem<?>> systems;
-    private final ImmutableMap<Namespace, ClauseType> clauses;
-    private final ImmutableMap<ClauseType, ContentTransformer<?, ?>> contentTransformers;
-    private final ImmutableMap<ClauseType, ProjectionTransformer<?>> projectionTransformers;
+    private final ImmutableMap<Namespace, ProjectionEffect> projectionEffects;
     private final ImmutableMap<Namespace, ImmutableSet<MachineEntry>> handlerEntries;
     private final ImmutableMap<Namespace, ImmutableSet<RecipeType<?>>> jeiRecipeTypes;
     private final ImmutableMap<IngredientResolverType<?>, ImmutableSet<IngredientResolver<?>>> ingredientResolvers;
@@ -124,9 +119,7 @@ public class RecipeApiImpl implements RecipeApi {
 
     public RecipeApiImpl(RecipeApiRegistryBuilder builder) {
         this.systems = Maps.immutable.ofMap(builder.recipeSystems);
-        this.clauses = Maps.immutable.ofMap(builder.clauses);
-        this.contentTransformers = Maps.immutable.ofMap(builder.contentTransformers);
-        this.projectionTransformers = Maps.immutable.ofMap(builder.projectionTransformers);
+        this.projectionEffects = Maps.immutable.ofMap(builder.projectionEffects);
         this.handlerEntries = builder.handlerEntries.entrySet().stream().collect(
             Collectors2.toImmutableMap(Map.Entry::getKey, entry -> Sets.immutable.withAll(entry.getValue()))
         );
@@ -366,31 +359,14 @@ public class RecipeApiImpl implements RecipeApi {
     }
 
     @Override
-    public boolean hasClause(Namespace clauseId) {
-        return clauses.containsKey(clauseId);
+    public RichIterable<ProjectionEffect> projectionEffects() {
+        return projectionEffects.valuesView();
     }
 
     @Override
-    public ClauseType getClauseType(Namespace clauseId) throws IllegalArgumentException {
-        var ret = clauses.get(clauseId);
-        if (ret == null) {
-            throw new IllegalArgumentException("No clause type found with id: " + clauseId);
-        }
-        return ret;
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public @Nullable <T extends RecipeContent, F extends RecipeClause> ContentTransformer<T, F> findContentTransformer(
-        ClauseType type
-    ) {
-        return (ContentTransformer<T, F>) contentTransformers.get(type);
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public @Nullable <F extends RecipeClause> ProjectionTransformer<F> findProjectionTransformer(ClauseType type) {
-        return (ProjectionTransformer<F>) projectionTransformers.get(type);
+    public @Nullable ProjectionEffect findProjectionEffect(Namespace effectId) {
+        Checks.checkNotNull(effectId, "effectId");
+        return projectionEffects.get(effectId);
     }
 
     @Override

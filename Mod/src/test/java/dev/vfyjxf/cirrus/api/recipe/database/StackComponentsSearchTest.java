@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.api.recipe.database;
 
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
+import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
@@ -23,6 +24,7 @@ import net.neoforged.testframework.junit.EphemeralTestServerProvider;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
 import org.jetbrains.annotations.Nullable;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -41,11 +43,21 @@ import java.util.Objects;
 @ExtendWith(EphemeralTestServerProvider.class)
 class StackComponentsSearchTest {
 
+    private static @Nullable RecipeApi previousRecipeApi;
+
     @BeforeAll
     static void setupRecipeApi() {
+        previousRecipeApi = RecipeApiImpl.instance();
         var builder = new RecipeApiRegistryBuilder();
         var api = new RecipeApiImpl(builder);
         RecipeApiImpl.attach(api);
+    }
+
+    @AfterAll
+    static void restoreRecipeApi() {
+        if (previousRecipeApi instanceof RecipeApiImpl impl) {
+            RecipeApiImpl.attach(impl);
+        }
     }
 
     private record FixtureRecipe(String id, List<InputContent> inputs, List<OutputContent> outputs) {}

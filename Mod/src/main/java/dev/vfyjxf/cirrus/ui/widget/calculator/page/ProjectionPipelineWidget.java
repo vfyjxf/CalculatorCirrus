@@ -5,14 +5,14 @@ import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionSlot;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.InputEffect;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.OutputEffect;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionEffect;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionEffectPhase;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionPluginReport;
-import dev.vfyjxf.cirrus.api.recipe.projection.effect.ProjectionReport;
+import dev.vfyjxf.cirrus.api.recipe.projection.SlotAddress;
+import dev.vfyjxf.cirrus.api.recipe.projection.SlotChannel;
+import dev.vfyjxf.cirrus.api.recipe.projection.display.ProjectionDisplayModel;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionResult;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionStage;
+import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.SlotDiff;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusUiSound;
@@ -37,9 +37,7 @@ import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -49,7 +47,9 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.heightOf;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minWidth;
 
 /**
- * Compact OreUI recipe projection transform pipeline with full stage names, graphical icons, and concrete per-decorator visual effects.
+ * Compact OreUI visualization of the GAS recipe projection pipeline:
+ * {@code Base → Prepare → Transform → Finalize → Validate → Output},
+ * paired with address-tagged per-plugin diff chips driven directly by {@link ProjectionDisplayModel}.
  */
 final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvider {
 
@@ -57,19 +57,20 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
     private static final int titleRowHeight = 16;
     private static final int stageCardHeight = 56;
     private static final int stageHeaderHeight = 15;
-    private static final int minStageWidth = 78;
-    private static final int maxStageWidth = 122;
-    private static final int arrowGap = 22;
+    private static final int minStageWidth = 66;
+    private static final int maxStageWidth = 104;
+    private static final int arrowGap = 16;
     private static final int tapHeight = 14;
     private static final int compactChainHeight = 26;
     private static final int richChainHeight = 58;
 
     private enum StageIcon {
-        original, projection, content, resolve, projected
+        original, prepare, transform, finalizeStage, validate, projected
     }
 
     private final @Nullable RecipeProjection original;
-    private final @Nullable ProjectionReport report;
+    private final @Nullable ProjectionResult result;
+    private final @Nullable ProjectionDisplayModel displayModel;
     private final List<ProjectionPlugin> plugins;
     private final @Nullable Namespace selectedPluginId;
     private final Predicate<ProjectionPlugin> pluginEnabled;
@@ -78,34 +79,28 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
     private final List<PluginHit> pluginHits = new ArrayList<>();
     private final List<StageHit> stageHits = new ArrayList<>();
 
-    private record PluginHit(Rect rect, ProjectionPlugin plugin, int effectCount, boolean enabled) {}
+    private record PluginHit(Rect rect, ProjectionPlugin plugin, int changeCount, boolean enabled) {}
 
     private record StageHit(Rect rect, StageSpec spec) {}
-
-    private record ConcreteEffect(
-        boolean inputChannel,
-        @Nullable RecipeContent before,
-        @Nullable RecipeContent after,
-        boolean schema
-    ) {}
 
     private record MiniSlotDraw(RecipeContent content, int x, int y, int slotSize) {}
 
     ProjectionPipelineWidget(
         @Nullable RecipeProjection original,
-        @Nullable ProjectionReport report,
+        @Nullable ProjectionResult result,
         List<ProjectionPlugin> plugins,
         @Nullable ProjectionPlugin selectedPlugin,
         Predicate<ProjectionPlugin> pluginEnabled,
         Consumer<Namespace> onSelectPlugin
     ) {
         this.original = original;
-        this.report = report;
+        this.result = result;
+        this.displayModel = result == null ? null : result.toDisplayModel();
         this.plugins = plugins == null ? List.of() : List.copyOf(plugins);
         this.selectedPluginId = selectedPlugin == null ? null : selectedPlugin.id();
         this.pluginEnabled = Objects.requireNonNull(pluginEnabled, "pluginEnabled");
         this.onSelectPlugin = Objects.requireNonNull(onSelectPlugin, "onSelectPlugin");
-        this.hasVisualEffects = hasAnyPluginEffects();
+        this.hasVisualEffects = hasAnyPluginChanges();
         int chainH = this.plugins.isEmpty() ? 0 : tapHeight + (hasVisualEffects ? richChainHeight : compactChainHeight);
         int totalHeight = pad * 2 + titleRowHeight + stageCardHeight + chainH;
         useStyle(heightOf(totalHeight), minWidth(0), flexShrink(0));
@@ -127,12 +122,12 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         });
     }
 
-    private boolean hasAnyPluginEffects() {
-        if (report == null || plugins.isEmpty()) {
+    private boolean hasAnyPluginChanges() {
+        if (result == null || plugins.isEmpty()) {
             return false;
         }
         for (ProjectionPlugin plugin : plugins) {
-            if (report.pluginReport(plugin).effectCount() > 0) {
+            if (result.pluginSummary(plugin).hasChanges()) {
                 return true;
             }
         }
@@ -145,24 +140,37 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
             if (hit.rect().contains((int) localX, (int) localY)) {
                 return OreUiRichTooltip.builder(Component.translatable(hit.plugin().labelKey()))
                         .badge(
-                            hit.enabled() ? "ACTIVE +" + hit.effectCount() : "DISABLED",
+                            hit.enabled() ? "ACTIVE +" + hit.changeCount() : "DISABLED",
                             hit.enabled() ? OreUiRichTooltip.Tone.positive : OreUiRichTooltip.Tone.muted
                         ).subtitle(hit.plugin().id().toString())
-                        .keyValue("Transforms Applied", String.valueOf(hit.effectCount()), OreUiRichTooltip.Tone.accent)
-                        .footer("Click to inspect & configure decorator parameters").build();
+                        .keyValue("Changes Applied", String.valueOf(hit.changeCount()), OreUiRichTooltip.Tone.accent)
+                        .footer("Click to inspect & configure plugin parameters").build();
             }
         }
         for (StageHit hit : stageHits) {
             if (hit.rect().contains((int) localX, (int) localY)) {
                 StageSpec spec = hit.spec();
-                return OreUiRichTooltip.builder(spec.title()).badge(spec.active() ? "ACTIVE" : "PASS", spec.accent())
-                        .keyValue(Component.literal("Stage Output"), spec.detail(), spec.accent())
-                        .text(
-                            spec.active()
-                                    ? "Active pipeline stage modifying or validating this projection."
-                                    : "Pass-through stage with no transforms under current context.",
-                            OreUiRichTooltip.Tone.secondary
-                        ).build();
+                OreUiRichTooltip.Builder builder = OreUiRichTooltip.builder(spec.title())
+                        .badge(spec.active() ? "ACTIVE" : "PASS", spec.accent())
+                        .keyValue(Component.literal("Stage Summary"), spec.detail(), spec.accent());
+                if (spec.stageView() != null && !spec.stageView().slotDiffs().isEmpty()) {
+                    for (SlotDiff diff : spec.stageView().slotDiffs()) {
+                        String badge = diff.deltaBadge().isEmpty() ? diff.status().name() : diff.deltaBadge();
+                        builder.keyValue(
+                            diff.channel().name().toUpperCase() + " " + diff.address().shortLabel(),
+                            badge,
+                            OreUiRichTooltip.Tone.accent
+                        );
+                    }
+                } else {
+                    builder.text(
+                        spec.active()
+                                ? "Active pipeline stage modifying or validating this projection."
+                                : "Pass-through stage with no transforms under current context.",
+                        OreUiRichTooltip.Tone.secondary
+                    );
+                }
+                return builder.build();
             }
         }
         return null;
@@ -183,26 +191,27 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         renderHeaderStrip(canvas, palette, width);
 
         int stageY = pad + titleRowHeight;
-        int stageCount = 5;
+        int stageCount = 6;
         int totalArrows = (stageCount - 1) * arrowGap;
-        int availW = Math.max(stageCount * 56 + totalArrows, width - pad * 2);
+        int availW = Math.max(stageCount * 46 + totalArrows, width - pad * 2);
         int stageW = Math.max(minStageWidth, Math.min(maxStageWidth, (availW - totalArrows) / stageCount));
         if (stageW * stageCount + totalArrows > width - pad * 2) {
-            stageW = Math.max(48, (width - pad * 2 - totalArrows) / stageCount);
+            stageW = Math.max(42, (width - pad * 2 - totalArrows) / stageCount);
         }
         int totalFlowW = stageW * stageCount + totalArrows;
         int startX = pad + Math.max(0, (width - pad * 2 - totalFlowW) / 2);
 
         int baseIn = original == null ? 0 : original.inputs().size();
         int baseOut = original == null ? 0 : original.outputs().size();
-        RecipeProjection finalProj = report == null ? original : report.projection();
+        RecipeProjection finalProj = result == null ? original : result.projected();
         int outIn = finalProj == null ? 0 : finalProj.inputs().size();
         int outOut = finalProj == null ? 0 : finalProj.outputs().size();
-        int projCount = phaseCount(ProjectionEffectPhase.projectionTransformer);
-        int contentCount = phaseCount(ProjectionEffectPhase.contentTransformer);
-        int resolveCount = phaseCount(ProjectionEffectPhase.resolveEffect);
-        boolean runnable = report == null || report.runnable();
-        int guardsFailed = report == null ? 0 : report.guardFindings().size();
+        boolean runnable = result == null || result.runnable();
+
+        ProjectionDisplayModel.StageView prepView = stageView(ProjectionStage.prepare);
+        ProjectionDisplayModel.StageView txView = stageView(ProjectionStage.transform);
+        ProjectionDisplayModel.StageView finView = stageView(ProjectionStage.finalize);
+        ProjectionDisplayModel.StageView valView = stageView(ProjectionStage.validate);
 
         StageSpec[] stages = {
                 new StageSpec(
@@ -214,37 +223,22 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
                     original,
                     null
                 ),
-                new StageSpec(
-                    StageIcon.projection,
-                    CirrusLangs.Calculator.Database.Effect.projectionTransformer.component(),
-                    stageSummary(projCount),
-                    projCount > 0 ? palette.craftStep().accent() : palette.textMuted(),
-                    projCount > 0,
-                    null,
-                    ProjectionEffectPhase.projectionTransformer
+                buildStageSpec(StageIcon.prepare, Component.literal("Prepare"), prepView, palette.costP(), palette),
+                buildStageSpec(
+                    StageIcon.transform,
+                    Component.literal("Transform"),
+                    txView,
+                    palette.craftStep().accent(),
+                    palette
                 ),
-                new StageSpec(
-                    StageIcon.content,
-                    CirrusLangs.Calculator.Database.Effect.contentTransformer.component(),
-                    stageSummary(contentCount),
-                    contentCount > 0 ? palette.convertStep().accent() : palette.textMuted(),
-                    contentCount > 0,
-                    null,
-                    ProjectionEffectPhase.contentTransformer
+                buildStageSpec(
+                    StageIcon.finalizeStage,
+                    Component.literal("Finalize"),
+                    finView,
+                    palette.convertStep().accent(),
+                    palette
                 ),
-                new StageSpec(
-                    StageIcon.resolve,
-                    CirrusLangs.Calculator.Database.Effect.resolveEffect.component(),
-                    !runnable
-                            ? CirrusLangs.Calculator.Database.pipelineBlocked.component()
-                            : guardsFailed > 0
-                                    ? Component.literal(resolveCount + " \u00b7 " + guardsFailed + " guard")
-                                    : stageSummary(resolveCount),
-                    !runnable ? palette.ruleHardBan() : resolveCount > 0 ? palette.costH() : palette.textMuted(),
-                    !runnable || resolveCount > 0,
-                    null,
-                    ProjectionEffectPhase.resolveEffect
-                ),
+                buildValidateSpec(valView, runnable, palette),
                 new StageSpec(
                     StageIcon.projected,
                     CirrusLangs.Calculator.Database.pipelineOutput.component(),
@@ -297,8 +291,78 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
             );
         }
 
-        // Flush item sprites last so SceneCanvas textures never paint over GuiGraphics item draws.
         renderPendingMiniSlots(canvas, pendingSlots, palette, partialTicks);
+    }
+
+    private StageSpec buildStageSpec(
+        StageIcon icon,
+        Component title,
+        ProjectionDisplayModel.@Nullable StageView view,
+        int activeAccent,
+        CirrusPalette palette
+    ) {
+        if (view == null || !view.active()) {
+            return new StageSpec(
+                icon,
+                title,
+                CirrusLangs.Calculator.Database.pipelinePassThrough.component(),
+                palette.textMuted(),
+                false,
+                null,
+                view
+            );
+        }
+        if (view.blocked()) {
+            return new StageSpec(
+                icon,
+                title,
+                CirrusLangs.Calculator.Database.pipelineBlocked.component(),
+                palette.ruleHardBan(),
+                true,
+                null,
+                view
+            );
+        }
+        return new StageSpec(
+            icon,
+            title,
+            stageSummary(view.changeCount()),
+            activeAccent,
+            true,
+            null,
+            view
+        );
+    }
+
+    private StageSpec buildValidateSpec(
+        ProjectionDisplayModel.@Nullable StageView valView,
+        boolean runnable,
+        CirrusPalette palette
+    ) {
+        int guardFailures = result == null ? 0 : result.guardFindings().size();
+        int changes = valView == null ? 0 : valView.changeCount();
+        boolean active = !runnable || guardFailures > 0 || changes > 0;
+        Component detail = !runnable
+                ? CirrusLangs.Calculator.Database.pipelineBlocked.component()
+                : guardFailures > 0
+                        ? Component.literal(guardFailures + " guard")
+                        : stageSummary(changes);
+        int accent = !runnable
+                ? palette.ruleHardBan()
+                : active ? palette.costH() : palette.textMuted();
+        return new StageSpec(StageIcon.validate, Component.literal("Validate"), detail, accent, active, null, valView);
+    }
+
+    private ProjectionDisplayModel.@Nullable StageView stageView(ProjectionStage stage) {
+        if (displayModel == null) {
+            return null;
+        }
+        for (ProjectionDisplayModel.StageView sv : displayModel.stages()) {
+            if (sv.stage() == stage) {
+                return sv;
+            }
+        }
+        return null;
     }
 
     private void renderHeaderStrip(SceneCanvas canvas, CirrusPalette palette, int width) {
@@ -312,7 +376,7 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
             palette.textPrimary()
         );
         int rightX = width - pad;
-        boolean runnable = report == null || report.runnable();
+        boolean runnable = result == null || result.runnable();
         Component statusComp = runnable ? Component.literal("RUNNABLE") : Component.literal("BLOCKED");
         int statusW = ChromeText.width(canvas, statusComp) + 10;
         OreUiPaint.tagPill(
@@ -326,8 +390,8 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         );
         rightX -= statusW + 5;
 
-        int totalEffects = report == null ? 0 : report.effects().size();
-        Component effectsComp = Component.literal(totalEffects == 0 ? "No edits" : "+" + totalEffects + " transforms");
+        int totalChanges = result == null ? 0 : result.allChanges().size();
+        Component effectsComp = Component.literal(totalChanges == 0 ? "No edits" : "+" + totalChanges + " changes");
         int effectsW = ChromeText.width(canvas, effectsComp) + 10;
         if (rightX - effectsW > pad + 90) {
             OreUiPaint.tagPill(
@@ -336,7 +400,7 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
                 y,
                 OreUiPaint.minPillHeight,
                 effectsComp,
-                totalEffects > 0 ? palette.focusRing() : palette.textMuted(),
+                totalChanges > 0 ? palette.focusRing() : palette.textMuted(),
                 palette
             );
         }
@@ -385,11 +449,9 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
             return;
         }
 
-        // Middle stage cards: show concrete micro-effect icons when active, or a crisp status pill.
-        List<ConcreteEffect> phaseEffects = spec.phase() == null ? List.of() : collectPhaseEffects(spec.phase());
-        if (!phaseEffects.isEmpty()) {
-            ConcreteEffect first = phaseEffects.get(0);
-            drawMiniEffectSample(canvas, first, x + 5, y + stageHeaderHeight + 4, w - 10, palette, pendingSlots);
+        if (spec.stageView() != null && !spec.stageView().slotDiffs().isEmpty()) {
+            SlotDiff sample = spec.stageView().slotDiffs().getFirst();
+            drawMiniDiffSample(canvas, sample, x + 5, y + stageHeaderHeight + 4, w - 10, palette, pendingSlots);
             ChromeText.drawFitted(canvas, spec.detail(), x + 5, y + h - 13, Math.max(8, w - 10), spec.accent());
             return;
         }
@@ -409,19 +471,24 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
                 canvas.strokeRect(x, y + 1, 7, 6, color, 1);
                 canvas.fill(x + 2, y + 3, 3, 2, color);
             }
-            case projection -> {
+            case prepare -> {
                 canvas.fill(x + 3, y, 1, 7, color);
                 canvas.fill(x + 2, y + 1, 3, 5, color);
                 canvas.fill(x + 1, y + 2, 5, 3, color);
                 canvas.fill(x, y + 3, 7, 1, color);
             }
-            case content -> {
+            case transform -> {
                 canvas.fill(x, y + 1, 5, 1, color);
                 canvas.fill(x + 4, y, 1, 3, color);
                 canvas.fill(x + 2, y + 5, 5, 1, color);
                 canvas.fill(x + 2, y + 4, 1, 3, color);
             }
-            case resolve -> {
+            case finalizeStage -> {
+                canvas.fill(x, y + 1, 7, 1, color);
+                canvas.fill(x + 1, y + 3, 5, 1, color);
+                canvas.fill(x + 2, y + 5, 3, 1, color);
+            }
+            case validate -> {
                 canvas.fill(x + 1, y, 5, 1, color);
                 canvas.fill(x, y + 1, 7, 3, color);
                 canvas.fill(x + 1, y + 4, 5, 2, color);
@@ -435,9 +502,9 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         }
     }
 
-    private void drawMiniEffectSample(
+    private void drawMiniDiffSample(
         SceneCanvas canvas,
-        ConcreteEffect effect,
+        SlotDiff diff,
         int x,
         int y,
         int maxW,
@@ -446,31 +513,30 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
     ) {
         int slotDim = 18;
         int cx = x;
-        if (effect.before() != null && effect.after() != null) {
+        if (diff.before() != null && diff.after() != null) {
             OreUiPaint.slot(canvas, cx, y, slotDim, palette);
-            pendingSlots.add(new MiniSlotDraw(effect.before(), cx, y, slotDim));
+            pendingSlots.add(new MiniSlotDraw(diff.before(), cx, y, slotDim));
             cx += slotDim + 2;
-            if (cx + 12 + slotDim <= x + maxW + 1) {
+            if (cx + 10 + slotDim <= x + maxW + 1) {
                 int midY = y + slotDim / 2;
-                OreUiRecipeGrid.drawRecipeArrow(canvas, cx, cx + 10, midY, palette, true);
-                cx += 12;
+                OreUiRecipeGrid.drawRecipeArrow(canvas, cx, cx + 8, midY, palette, true);
+                cx += 10;
                 OreUiPaint.slot(canvas, cx, y, slotDim, palette);
-                pendingSlots.add(new MiniSlotDraw(effect.after(), cx, y, slotDim));
+                pendingSlots.add(new MiniSlotDraw(diff.after(), cx, y, slotDim));
             }
-        } else if (effect.after() != null) {
-            int plusY = y + 3;
-            OreUiPaint.tagPill(canvas, cx, plusY, 12, Component.literal("+"), palette.costS(), palette);
+        } else if (diff.after() != null) {
+            OreUiPaint.tagPill(canvas, cx, y + 3, 12, Component.literal("+"), palette.diffAdded(), palette);
             cx += 16;
             if (cx + slotDim <= x + maxW + 1) {
                 OreUiPaint.slot(canvas, cx, y, slotDim, palette);
-                pendingSlots.add(new MiniSlotDraw(effect.after(), cx, y, slotDim));
+                pendingSlots.add(new MiniSlotDraw(diff.after(), cx, y, slotDim));
             }
-        } else if (effect.before() != null) {
+        } else if (diff.before() != null) {
             OreUiPaint.slot(canvas, cx, y, slotDim, palette);
-            pendingSlots.add(new MiniSlotDraw(effect.before(), cx, y, slotDim));
+            pendingSlots.add(new MiniSlotDraw(diff.before(), cx, y, slotDim));
             cx += slotDim + 3;
             if (cx + 14 <= x + maxW + 1) {
-                OreUiPaint.tagPill(canvas, cx, y + 3, 12, Component.literal("\u00d7"), palette.ruleHardBan(), palette);
+                OreUiPaint.tagPill(canvas, cx, y + 3, 12, Component.literal("\u00d7"), palette.diffRemoved(), palette);
             }
         }
     }
@@ -490,11 +556,11 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
 
         int inLimit = Math.min(2, projection.inputs().size());
         for (int i = 0; i < inLimit; i++) {
-            if (cursor + slotDim > limit - 28) {
+            if (cursor + slotDim > limit - 24) {
                 break;
             }
-            ClausedContent<InputContent> claused = projection.inputs().get(i);
-            RecipeContent content = claused.content();
+            ProjectionSlot<InputContent> slot = projection.inputs().get(i);
+            RecipeContent content = slot.content();
             OreUiPaint.slot(canvas, cursor, y, slotDim, palette);
             if (!content.isEmpty()) {
                 pendingSlots.add(new MiniSlotDraw(content, cursor, y, slotDim));
@@ -504,20 +570,18 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         if (inLimit > 0) {
             cursor += 2;
         }
-
-        if (cursor + 12 < limit - slotDim) {
+        if (cursor + 10 < limit - slotDim) {
             int arrowMidY = y + slotDim / 2;
-            OreUiRecipeGrid.drawRecipeArrow(canvas, cursor, cursor + 10, arrowMidY, palette, false);
-            cursor += 12;
+            OreUiRecipeGrid.drawRecipeArrow(canvas, cursor, cursor + 8, arrowMidY, palette, false);
+            cursor += 10;
         }
-
         int outLimit = Math.min(2, projection.outputs().size());
         for (int i = 0; i < outLimit; i++) {
             if (cursor + slotDim > limit + 1) {
                 break;
             }
-            ClausedContent<OutputContent> claused = projection.outputs().get(i);
-            RecipeContent content = claused.content();
+            ProjectionSlot<OutputContent> slot = projection.outputs().get(i);
+            RecipeContent content = slot.content();
             OreUiPaint.slot(canvas, cursor, y, slotDim, palette);
             if (!content.isEmpty()) {
                 pendingSlots.add(new MiniSlotDraw(content, cursor, y, slotDim));
@@ -569,7 +633,7 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
                     );
                 }
             } catch (RuntimeException ignored) {
-                // Skip slot rendering when client content renderer is unavailable in headless mode.
+                // Skip slot rendering in headless test mode.
             }
         }
     }
@@ -626,74 +690,38 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         int highlight = OreUiPaint.lighten(color, dark ? 0.45f : 0.30f);
         float startX = x + 1f;
         float endX = x + span - 1f;
-        float dockX = endX - 1.5f;
-        float ribbonEndX = Math.max(startX + 2f, dockX - 7.4f);
+        float dockX = endX - 1.2f;
+        float ribbonEndX = Math.max(startX + 2f, dockX - 6.6f);
 
         canvas.fill(x - 1, centerY - 3, 4, 6, casing);
         canvas.fill(x, centerY - 2, 2, 4, color);
 
         if (active) {
             canvas.coloredQuad(
-                startX,
-                centerY - 2.2f,
-                ribbonEndX,
-                centerY - 2.2f,
-                ribbonEndX,
-                centerY + 2.2f,
-                startX,
-                centerY + 2.2f,
-                casing,
-                casing,
-                casing,
-                casing
+                startX, centerY - 2.2f, ribbonEndX, centerY - 2.2f,
+                ribbonEndX, centerY + 2.2f, startX, centerY + 2.2f,
+                casing, casing, casing, casing
             );
             canvas.coloredQuad(
-                startX,
-                centerY - 1.2f,
-                ribbonEndX,
-                centerY - 1.2f,
-                ribbonEndX,
-                centerY + 1.2f,
-                startX,
-                centerY + 1.2f,
-                color,
-                color,
-                color,
-                color
+                startX, centerY - 1.2f, ribbonEndX, centerY - 1.2f,
+                ribbonEndX, centerY + 1.2f, startX, centerY + 1.2f,
+                color, color, color, color
             );
             canvas.coloredQuad(
-                startX,
-                centerY - 0.5f,
-                ribbonEndX,
-                centerY - 0.5f,
-                ribbonEndX,
-                centerY + 0.2f,
-                startX,
-                centerY + 0.2f,
-                highlight,
-                highlight,
-                highlight,
-                highlight
+                startX, centerY - 0.5f, ribbonEndX, centerY - 0.5f,
+                ribbonEndX, centerY + 0.2f, startX, centerY + 0.2f,
+                highlight, highlight, highlight, highlight
             );
             if (!OreUiMotion.reducedMotion() && ribbonEndX - startX >= 4f) {
                 float phase = OreUiMotion.cycle01(OreUiMotion.nowMs(), 1450L, (x % 97) / 97f, false);
                 float px = OreUiMotion.lerp(startX, ribbonEndX, phase);
-                float p0 = Math.max(startX, px - 4.5f);
+                float p0 = Math.max(startX, px - 4.0f);
                 float p1 = Math.min(ribbonEndX, px + 1.5f);
                 int pulseColor = OreUiPaint.withAlpha(OreUiPaint.lighten(color, 0.55f), 0.90f);
                 canvas.coloredQuad(
-                    p0,
-                    centerY - 1.3f,
-                    p1,
-                    centerY - 1.3f,
-                    p1,
-                    centerY + 1.3f,
-                    p0,
-                    centerY + 1.3f,
-                    pulseColor,
-                    pulseColor,
-                    pulseColor,
-                    pulseColor
+                    p0, centerY - 1.3f, p1, centerY - 1.3f,
+                    p1, centerY + 1.3f, p0, centerY + 1.3f,
+                    pulseColor, pulseColor, pulseColor, pulseColor
                 );
             }
         } else {
@@ -701,38 +729,20 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
                 float sx = (float) dx;
                 float segEnd = (float) Math.min(ribbonEndX, dx + 3.0);
                 canvas.coloredQuad(
-                    sx,
-                    centerY - 1.5f,
-                    segEnd,
-                    centerY - 1.5f,
-                    segEnd,
-                    centerY + 1.5f,
-                    sx,
-                    centerY + 1.5f,
-                    casing,
-                    casing,
-                    casing,
-                    casing
+                    sx, centerY - 1.5f, segEnd, centerY - 1.5f,
+                    segEnd, centerY + 1.5f, sx, centerY + 1.5f,
+                    casing, casing, casing, casing
                 );
                 canvas.coloredQuad(
-                    sx,
-                    centerY - 0.8f,
-                    segEnd,
-                    centerY - 0.8f,
-                    segEnd,
-                    centerY + 0.8f,
-                    sx,
-                    centerY + 0.8f,
-                    color,
-                    color,
-                    color,
-                    color
+                    sx, centerY - 0.8f, segEnd, centerY - 0.8f,
+                    segEnd, centerY + 0.8f, sx, centerY + 0.8f,
+                    color, color, color, color
                 );
             }
         }
 
-        DagEdgeRenderer.drawTriangleArrow(canvas, startX, centerY, dockX + 0.7f, centerY, 9.6f, 4.6f, casing);
-        DagEdgeRenderer.drawTriangleArrow(canvas, startX, centerY, dockX, centerY, 8.2f, 3.8f, color);
+        DagEdgeRenderer.drawTriangleArrow(canvas, startX, centerY, dockX + 0.7f, centerY, 8.6f, 4.2f, casing);
+        DagEdgeRenderer.drawTriangleArrow(canvas, startX, centerY, dockX, centerY, 7.4f, 3.5f, color);
     }
 
     private void renderDecoratorChain(
@@ -754,7 +764,7 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         int busColor = palette.focusRing();
         boolean reduced = OreUiMotion.reducedMotion();
         long nowMs = OreUiMotion.nowMs();
-        for (int i = 1; i <= 3; i++) {
+        for (int i = 1; i <= 4; i++) {
             if (stages[i].active()) {
                 if (firstActiveCenter < 0) {
                     firstActiveCenter = stageCentersX[i];
@@ -795,23 +805,27 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
             ProjectionPlugin plugin = plugins.get(index);
             boolean enabled = pluginEnabled.test(plugin);
             boolean selected = Objects.equals(plugin.id(), selectedPluginId);
-            ProjectionPluginReport pluginReport = report == null
-                    ? ProjectionPluginReport.empty(plugin)
-                    : report.pluginReport(plugin);
-            int effectCount = pluginReport.effectCount();
-            List<ConcreteEffect> concrete = collectPluginEffects(pluginReport);
+            ProjectionResult.PluginSummary summary = result == null
+                    ? ProjectionResult.PluginSummary.empty(plugin)
+                    : result.pluginSummary(plugin);
+            int changeCount = summary.totalChangeCount();
+            List<ProjectionDisplayModel.ChangeRow> rows = result == null
+                    ? List.of()
+                    : result.toDisplayModel(ProjectionDisplayModel.Options.defaults.withFilterPlugin(plugin.id()))
+                            .changeRows().castToList();
+
             Component name = Component.translatable(plugin.labelKey());
-            Component countBadge = Component.literal("+" + effectCount);
+            Component countBadge = Component.literal("+" + changeCount);
             int badgeW = ChromeText.width(canvas, countBadge) + 8;
             int headerMinW = Math.max(104, 18 + ChromeText.width(canvas, name) + 8 + badgeW + 8);
-            int arrowW = index > 0 ? 18 : 0;
+            int arrowW = index > 0 ? 16 : 0;
             int nodeW;
-            if (plugins.size() == 1 && !concrete.isEmpty()) {
+            if (plugins.size() == 1 && !rows.isEmpty()) {
                 nodeW = Math.max(headerMinW, availChainW);
-            } else if (!concrete.isEmpty()) {
+            } else if (!rows.isEmpty()) {
                 int perPlugin = Math
                         .max(headerMinW, (availChainW - arrowW * Math.max(0, plugins.size() - 1)) / plugins.size());
-                nodeW = Math.min(perPlugin, Math.max(headerMinW, concrete.size() * 94 + 14));
+                nodeW = Math.min(perPlugin, Math.max(headerMinW, rows.size() * 102 + 14));
             } else {
                 nodeW = Math.min(180, headerMinW);
             }
@@ -844,27 +858,20 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
                 OreUiPaint.raisedCard(canvas, rect.x(), rect.y(), rect.width(), rect.height(), palette, hovered, true);
             } else {
                 OreUiPaint.raisedButton(
-                    canvas,
-                    rect.x(),
-                    rect.y(),
-                    rect.width(),
-                    rect.height(),
-                    palette,
-                    !enabled,
-                    hovered,
-                    false,
-                    false
+                    canvas, rect.x(), rect.y(), rect.width(), rect.height(), palette, !enabled, hovered, false, false
                 );
             }
             int headerH = hasVisualEffects ? 20 : nodeH;
             if (hasVisualEffects) {
                 OreUiPaint.headerBand(canvas, rect.x(), rect.y(), rect.width(), headerH - 2, palette, selected);
             }
-            int dotColor = enabled ? (effectCount > 0 ? palette.costS() : palette.focusRing()) : palette.textDisabled();
+            int dotColor = enabled
+                    ? (changeCount > 0 ? palette.costS() : palette.focusRing())
+                    : palette.textDisabled();
             canvas.fill(rect.x() + 6, rect.y() + Math.max(3, (headerH - 2 - 5) / 2), 5, 5, dotColor);
             int badgeX = rect.right() - badgeW - 6;
             int badgeY = rect.y() + Math.max(2, (headerH - 2 - 11) / 2);
-            int badgeColor = effectCount > 0 ? palette.focusRing() : palette.textMuted();
+            int badgeColor = changeCount > 0 ? palette.focusRing() : palette.textMuted();
             canvas.fill(
                 badgeX,
                 badgeY,
@@ -884,11 +891,10 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
                 enabled ? palette.textPrimary() : palette.textMuted()
             );
 
-            // Concrete visual per-decorator effect chips directly inside the decorator card body.
             if (hasVisualEffects) {
-                renderDecoratorEffectsStrip(
+                renderDecoratorChangeStrip(
                     canvas,
-                    concrete,
+                    rows,
                     rect.x() + 6,
                     rect.y() + headerH + 3,
                     Math.max(20, rect.width() - 12),
@@ -898,7 +904,7 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
                 );
             }
 
-            pluginHits.add(new PluginHit(rect, plugin, effectCount, enabled));
+            pluginHits.add(new PluginHit(rect, plugin, changeCount, enabled));
             cursor += nodeW + 4;
         }
 
@@ -913,9 +919,9 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         }
     }
 
-    private void renderDecoratorEffectsStrip(
+    private void renderDecoratorChangeStrip(
         SceneCanvas canvas,
-        List<ConcreteEffect> effects,
+        List<ProjectionDisplayModel.ChangeRow> rows,
         int x,
         int y,
         int maxW,
@@ -923,7 +929,7 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         CirrusPalette palette,
         List<MiniSlotDraw> pendingSlots
     ) {
-        if (effects.isEmpty()) {
+        if (rows.isEmpty()) {
             ChromeText.drawFitted(
                 canvas,
                 CirrusLangs.Calculator.Database.pipelinePassThrough.component(),
@@ -941,23 +947,23 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         int limit = x + maxW;
         int rendered = 0;
 
-        for (int i = 0; i < effects.size(); i++) {
-            ConcreteEffect eff = effects.get(i);
-            int remainingAfter = effects.size() - (i + 1);
+        for (int i = 0; i < rows.size(); i++) {
+            ProjectionDisplayModel.ChangeRow row = rows.get(i);
+            int remainingAfter = rows.size() - (i + 1);
             int overflowReserve = remainingAfter > 0 ? 34 : 0;
-            int chipW = measureEffectChipWidth(canvas, eff, slotDim);
+            int chipW = measureChangeChipWidth(canvas, row, slotDim);
             if (cx + chipW > limit - overflowReserve && rendered > 0) {
                 break;
             }
             if (cx + chipW > limit) {
-                chipW = Math.max(34, limit - cx);
+                chipW = Math.max(38, limit - cx);
             }
-            drawEffectChip(canvas, eff, cx, pillY, chipW, pillH, slotDim, palette, pendingSlots);
+            drawChangeChip(canvas, row, cx, pillY, chipW, pillH, slotDim, palette, pendingSlots);
             cx += chipW + 5;
             rendered++;
         }
 
-        int extra = effects.size() - rendered;
+        int extra = rows.size() - rendered;
         if (extra > 0 && cx + 22 <= limit) {
             OreUiPaint.tagPill(
                 canvas,
@@ -971,27 +977,42 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         }
     }
 
-    private static int measureEffectChipWidth(SceneCanvas canvas, ConcreteEffect eff, int slotDim) {
-        if (eff.schema()) {
-            return ChromeText.width(canvas, Component.literal("Schema")) + 14;
+    private static String chipRoleTag(ProjectionDisplayModel.ChangeRow row) {
+        if (row.isMeta()) {
+            return "META";
         }
-        String tag = eff.inputChannel() ? "IN" : "OUT";
-        int tagW = ChromeText.width(canvas, Component.literal(tag)) + 6;
-        if (eff.before() != null && eff.after() != null) {
-            String delta = deltaBadgeText(eff.before(), eff.after());
-            int deltaW = delta.isEmpty() ? 0 : ChromeText.width(canvas, Component.literal(delta)) + 10;
+        String side = row.channel() == SlotChannel.input ? "IN" : "OUT";
+        SlotAddress addr = row.address();
+        if (addr instanceof SlotAddress.GridCell cell) {
+            return side + " " + cell.shortLabel();
+        }
+        return side;
+    }
+
+    private static int measureChangeChipWidth(
+        SceneCanvas canvas,
+        ProjectionDisplayModel.ChangeRow row,
+        int slotDim
+    ) {
+        if (row.isMeta()) {
+            String text = row.metaSummary() == null ? "Meta" : row.metaSummary();
+            return Math.min(140, ChromeText.width(canvas, Component.literal(text)) + 14);
+        }
+        int tagW = ChromeText.width(canvas, Component.literal(chipRoleTag(row))) + 6;
+        if (row.before() != null && row.after() != null) {
+            int deltaW = row.badge().isEmpty() ? 0 : ChromeText.width(canvas, Component.literal(row.badge())) + 10;
             return 5 + tagW + slotDim + 12 + slotDim + (deltaW > 0 ? 4 + deltaW : 0) + 5;
         }
-        if (eff.after() != null) {
-            String add = "+" + Math.max(1L, eff.after().amount());
-            return 5 + tagW + 10 + slotDim + 4 + ChromeText.width(canvas, Component.literal(add)) + 6;
+        if (row.after() != null) {
+            int badgeW = ChromeText.width(canvas, Component.literal(row.badge().isEmpty() ? "+1" : row.badge())) + 6;
+            return 5 + tagW + 10 + slotDim + 4 + badgeW;
         }
         return 5 + tagW + slotDim + 14;
     }
 
-    private static void drawEffectChip(
+    private static void drawChangeChip(
         SceneCanvas canvas,
-        ConcreteEffect eff,
+        ProjectionDisplayModel.ChangeRow row,
         int x,
         int y,
         int w,
@@ -1000,18 +1021,14 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         CirrusPalette palette,
         List<MiniSlotDraw> pendingSlots
     ) {
-        int accent = eff.schema()
-                ? palette.textSecondary()
-                : eff.before() == null
-                        ? palette.costS()
-                        : eff.after() == null ? palette.ruleHardBan() : palette.focusRing();
+        int accent = chipAccent(row, palette);
         canvas.fill(x, y, w, h, OreUiPaint.cardFooter(palette));
         canvas.strokeRect(x, y, w, h, OreUiPaint.withAlpha(accent, 0.55f), 1);
 
-        if (eff.schema()) {
+        if (row.isMeta()) {
             ChromeText.drawFitted(
                 canvas,
-                Component.literal("Schema"),
+                Component.literal(row.metaSummary() == null ? "Meta" : row.metaSummary()),
                 x + 6,
                 ChromeText.centeredY(y, h, canvas),
                 Math.max(8, w - 12),
@@ -1022,133 +1039,80 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
 
         int cx = x + 4;
         int slotY = y + Math.max(1, (h - slotDim) / 2);
-        Component role = Component.literal(eff.inputChannel() ? "IN" : "OUT");
+        Component role = Component.literal(chipRoleTag(row));
         int roleW = ChromeText.width(canvas, role);
         ChromeText.draw(
             canvas,
             role,
             cx,
             ChromeText.centeredY(y, h, canvas),
-            eff.inputChannel() ? palette.costP() : palette.costS()
+            row.channel() == SlotChannel.input ? palette.costP() : palette.costS()
         );
         cx += roleW + 4;
 
-        if (eff.before() != null && eff.after() != null) {
+        if (row.before() != null && row.after() != null) {
             OreUiPaint.slot(canvas, cx, slotY, slotDim, palette);
-            pendingSlots.add(new MiniSlotDraw(eff.before(), cx, slotY, slotDim));
+            pendingSlots.add(new MiniSlotDraw(row.before(), cx, slotY, slotDim));
             cx += slotDim + 2;
             int midY = slotY + slotDim / 2;
             OreUiRecipeGrid.drawRecipeArrow(canvas, cx, cx + 9, midY, palette, true);
             cx += 10;
             OreUiPaint.slot(canvas, cx, slotY, slotDim, palette);
-            pendingSlots.add(new MiniSlotDraw(eff.after(), cx, slotY, slotDim));
+            pendingSlots.add(new MiniSlotDraw(row.after(), cx, slotY, slotDim));
             cx += slotDim + 4;
-            String delta = deltaBadgeText(eff.before(), eff.after());
-            if (!delta.isEmpty() && cx + 14 <= x + w - 3) {
-                Component dc = Component.literal(delta);
+            if (!row.badge().isEmpty() && cx + 10 <= x + w - 3) {
                 ChromeText.drawFitted(
                     canvas,
-                    dc,
+                    Component.literal(row.badge()),
                     cx,
                     ChromeText.centeredY(y, h, canvas),
                     Math.max(8, x + w - cx - 3),
-                    palette.focusRing()
+                    accent
                 );
             }
-        } else if (eff.after() != null) {
-            ChromeText.draw(canvas, Component.literal("+"), cx, ChromeText.centeredY(y, h, canvas), palette.costS());
+        } else if (row.after() != null) {
+            ChromeText.draw(canvas, Component.literal("+"), cx, ChromeText.centeredY(y, h, canvas), accent);
             cx += 8;
             OreUiPaint.slot(canvas, cx, slotY, slotDim, palette);
-            pendingSlots.add(new MiniSlotDraw(eff.after(), cx, slotY, slotDim));
+            pendingSlots.add(new MiniSlotDraw(row.after(), cx, slotY, slotDim));
             cx += slotDim + 4;
-            Component addComp = Component.literal("+" + OreUiSlotAmount.format(Math.max(1L, eff.after().amount())));
-            if (eff.after().amount() <= 1L) {
-                addComp = Component.literal("+1");
-            }
+            String badge = row.badge().isEmpty() ? "+1" : row.badge();
             if (cx + 10 <= x + w - 3) {
                 ChromeText.drawFitted(
                     canvas,
-                    addComp,
+                    Component.literal(badge),
                     cx,
                     ChromeText.centeredY(y, h, canvas),
                     Math.max(8, x + w - cx - 3),
-                    palette.costS()
+                    accent
                 );
             }
-        } else if (eff.before() != null) {
+        } else if (row.before() != null) {
             OreUiPaint.slot(canvas, cx, slotY, slotDim, palette);
-            pendingSlots.add(new MiniSlotDraw(eff.before(), cx, slotY, slotDim));
+            pendingSlots.add(new MiniSlotDraw(row.before(), cx, slotY, slotDim));
             cx += slotDim + 4;
             ChromeText.draw(
                 canvas,
                 Component.literal("\u00d7"),
                 cx,
                 ChromeText.centeredY(y, h, canvas),
-                palette.ruleHardBan()
+                palette.diffRemoved()
             );
         }
     }
 
-    private static String deltaBadgeText(RecipeContent before, RecipeContent after) {
-        long b = before.amount();
-        long a = after.amount();
-        if (b > 0L && a > 0L && a != b) {
-            if (a > b && a % b == 0L) {
-                return "\u00d7" + (a / b);
-            }
-            long diff = a - b;
-            return (diff > 0L ? "+" : "") + diff;
+    private static int chipAccent(ProjectionDisplayModel.ChangeRow row, CirrusPalette palette) {
+        if (row.isMeta()) {
+            return palette.textSecondary();
         }
-        return "";
-    }
-
-    private List<ConcreteEffect> collectPluginEffects(ProjectionPluginReport pluginReport) {
-        return mergeEffects(pluginReport.effects());
-    }
-
-    private List<ConcreteEffect> collectPhaseEffects(ProjectionEffectPhase phase) {
-        if (report == null) {
-            return List.of();
-        }
-        List<ProjectionEffect> matching = new ArrayList<>();
-        for (ProjectionEffect effect : report.effects()) {
-            if (effect.source().phase() == phase) {
-                matching.add(effect);
-            }
-        }
-        return mergeEffects(matching);
-    }
-
-    private static List<ConcreteEffect> mergeEffects(@Nullable Iterable<ProjectionEffect> effects) {
-        if (effects == null) {
-            return List.of();
-        }
-        Map<String, ConcreteEffect> merged = new LinkedHashMap<>();
-        List<ConcreteEffect> schemas = new ArrayList<>();
-        for (ProjectionEffect effect : effects) {
-            if (effect instanceof InputEffect in) {
-                String key = "I:" + in.index();
-                ConcreteEffect prev = merged.get(key);
-                RecipeContent firstBefore = prev == null ? in.before() : prev.before();
-                merged.put(key, new ConcreteEffect(true, firstBefore, in.after(), false));
-            } else if (effect instanceof OutputEffect out) {
-                String key = "O:" + out.index();
-                ConcreteEffect prev = merged.get(key);
-                RecipeContent firstBefore = prev == null ? out.before() : prev.before();
-                merged.put(key, new ConcreteEffect(false, firstBefore, out.after(), false));
-            } else {
-                schemas.add(new ConcreteEffect(true, null, null, true));
-            }
-        }
-        if (merged.isEmpty() && schemas.isEmpty()) {
-            return List.of();
-        }
-        List<ConcreteEffect> out = new ArrayList<>(merged.size() + (schemas.isEmpty() ? 0 : 1));
-        out.addAll(merged.values());
-        if (!schemas.isEmpty()) {
-            out.add(schemas.get(0));
-        }
-        return out;
+        return switch (row.status()) {
+            case added -> palette.diffAdded();
+            case removed -> palette.diffRemoved();
+            case transformed -> palette.costH();
+            case moved -> palette.costP();
+            case adjusted -> palette.focusRing();
+            case unchanged -> palette.textMuted();
+        };
     }
 
     private Component stageSummary(int count) {
@@ -1158,19 +1122,6 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         return CirrusLangs.Calculator.Database.pipelineChanges.component(count);
     }
 
-    private int phaseCount(ProjectionEffectPhase phase) {
-        if (report == null) {
-            return 0;
-        }
-        int count = 0;
-        for (ProjectionEffect effect : report.effects()) {
-            if (effect.source().phase() == phase) {
-                count++;
-            }
-        }
-        return count;
-    }
-
     private record StageSpec(
         StageIcon icon,
         Component title,
@@ -1178,6 +1129,6 @@ final class ProjectionPipelineWidget extends Widget implements OreUiTooltipProvi
         int accent,
         boolean active,
         @Nullable RecipeProjection previewProjection,
-        @Nullable ProjectionEffectPhase phase
+        ProjectionDisplayModel.@Nullable StageView stageView
     ) {}
 }

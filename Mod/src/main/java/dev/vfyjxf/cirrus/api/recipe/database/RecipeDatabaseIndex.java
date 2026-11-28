@@ -15,8 +15,8 @@ import dev.vfyjxf.cirrus.api.recipe.database.search.NormalizedTextDictionary;
 import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchDocument;
 import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchDocument.ContentKind;
 import dev.vfyjxf.cirrus.api.recipe.database.search.RecipeDatabaseSearchEngine;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionSlot;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
 import dev.vfyjxf.cirrus.api.recipe.search.CirrusSearchFields;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
@@ -1142,7 +1142,7 @@ public final class RecipeDatabaseIndex {
         if (resolvedProjection == null) {
             return RecordBuildResult.empty(result.error());
         }
-        RecipeProjection projection = snapshotProjection(resolvedProjection);
+        RecipeProjection projection = resolvedProjection.snapshot();
         RecipeDatabaseSearchDocument searchDocument = document(
             database,
             entry,
@@ -1153,24 +1153,6 @@ public final class RecipeDatabaseIndex {
         );
         return RecordBuildResult
                 .resolved(new RecipeDatabaseRecord(entry, database, searchDocument, projection, systemTags));
-    }
-
-    private static RecipeProjection snapshotProjection(RecipeProjection projection) {
-        ArrayList<ClausedContent<InputContent>> inputs = new ArrayList<>(projection.inputs().size());
-        for (ClausedContent<InputContent> input : projection.inputs()) {
-            inputs.add(snapshotInput(input));
-        }
-        ArrayList<ClausedContent<OutputContent>> outputs = new ArrayList<>(projection.outputs().size());
-        for (ClausedContent<OutputContent> output : projection.outputs()) {
-            outputs.add(snapshotOutput(output));
-        }
-        return new RecipeProjection(
-            projection.recipe(),
-            Lists.immutable.ofAll(inputs),
-            Lists.immutable.ofAll(outputs),
-            projection.schema(),
-            projection.clauses().merge()
-        );
     }
 
     private static void recordEmpty(@Nullable ResolveStats stats, WorkItem item, @Nullable ResolveError error) {
@@ -1263,19 +1245,6 @@ public final class RecipeDatabaseIndex {
         return out;
     }
 
-    private static ClausedContent<InputContent> snapshotInput(ClausedContent<InputContent> input) {
-        return new ClausedContent<>(snapshotContent(input.content()), input.schema(), input.clauses().merge());
-    }
-
-    private static ClausedContent<OutputContent> snapshotOutput(ClausedContent<OutputContent> output) {
-        return new ClausedContent<>(snapshotContent(output.content()), output.schema(), output.clauses().merge());
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T extends RecipeContent> T snapshotContent(T content) {
-        return (T) content.copyWithAmountAndChance(content.amount(), content.chance());
-    }
-
     private static RecipeDatabaseSearchDocument document(
         DatabaseDefinition database,
         RecipeEntry<?> entry,
@@ -1321,13 +1290,13 @@ public final class RecipeDatabaseIndex {
         RecipeProjection projection,
         StackSearchCache cache
     ) {
-        for (ClausedContent<InputContent> input : projection.inputs()) {
+        for (ProjectionSlot<InputContent> input : projection.inputs()) {
             addContent(builder, CirrusSearchFields.in, input.content(), cache);
             if (input.content().notConsumed()) {
                 addContent(builder, CirrusSearchFields.cat, input.content(), cache);
             }
         }
-        for (ClausedContent<OutputContent> output : projection.outputs()) {
+        for (ProjectionSlot<OutputContent> output : projection.outputs()) {
             addContent(builder, CirrusSearchFields.out, output.content(), cache);
             if (output.content().chance() < RecipeContent.MAX_CHANCE) {
                 addContent(builder, CirrusSearchFields.byproduct, output.content(), cache);

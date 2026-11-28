@@ -6,14 +6,10 @@ import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClauseSet;
-import dev.vfyjxf.cirrus.api.recipe.projection.clause.ClausedContent;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
 import dev.vfyjxf.cirrus.api.recipe.screening.RecipeScreeningHints;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.system.RoutingRecipeView;
-import dev.vfyjxf.cloudlib.api.util.MutableLists;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.item.ItemStack;
@@ -29,7 +25,6 @@ import net.minecraft.world.item.crafting.MapCloningRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.SuspiciousStewRecipe;
 import net.minecraft.world.item.crafting.TippedArrowRecipe;
-import org.eclipse.collections.api.list.MutableList;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -160,27 +155,18 @@ final class VanillaSpecialCraftingSupport {
         RecipeHolder<CraftingRecipe> holder,
         SpecialSpec spec
     ) {
-        MutableList<ClausedContent<InputContent>> inputs = MutableLists.empty();
+        RecipeProjection.Builder builder = RecipeProjection.builder(RecipeEntry.of(system, holder));
         for (InputContent input : spec.inputs()) {
             if (!input.isEmpty()) {
-                inputs.add(ClausedContent.from(input));
+                builder.input(input);
             }
         }
-        MutableList<ClausedContent<OutputContent>> outputs = MutableLists.empty();
         for (OutputContent output : spec.outputs()) {
             if (!output.isEmpty()) {
-                outputs.add(ClausedContent.from(output));
+                builder.output(output);
             }
         }
-        return ResolveResult.resolved(
-            new RecipeProjection(
-                RecipeEntry.of(system, holder),
-                inputs.toImmutable(),
-                outputs.toImmutable(),
-                ProjectionSchema.empty(),
-                ClauseSet.create()
-            )
-        );
+        return ResolveResult.resolved(builder.build());
     }
 
     static RoutingRecipeView routingViewSpecial(SpecialSpec spec) {

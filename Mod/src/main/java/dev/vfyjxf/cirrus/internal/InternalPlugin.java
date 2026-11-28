@@ -11,10 +11,7 @@ import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
 import dev.vfyjxf.cirrus.api.register.*;
 import dev.vfyjxf.cirrus.content.resolver.fluid.VanillaFluidHandlerResolver;
 import dev.vfyjxf.cirrus.content.type.variant.*;
-import dev.vfyjxf.cirrus.recipe.clause.DurabilityCostClause;
-import dev.vfyjxf.cirrus.recipe.clause.FluidContainerUnpackClause;
-import dev.vfyjxf.cirrus.recipe.clause.GuaranteedOutputClause;
-import dev.vfyjxf.cirrus.recipe.clause.ResolvePolicyClause;
+import dev.vfyjxf.cirrus.recipe.projection.BuiltinProjectionEffects;
 import dev.vfyjxf.cirrus.recipe.content.ComplexRecipeContentRenderer;
 import dev.vfyjxf.cirrus.recipe.content.EmptyRecipeContentRenderer;
 import dev.vfyjxf.cirrus.recipe.content.StackListRecipeContentRenderer;
@@ -215,14 +212,10 @@ public class InternalPlugin implements CirrusPlugin, ModPlugin {
     }
 
     @Override
-    public void registerRecipeClause(RecipeClauseRegister register) {
-        register.registerContentTransformer(FluidContainerUnpackClause.type, FluidContainerUnpackClause.transformer);
-        register.registerContentTransformer(DurabilityCostClause.type, DurabilityCostClause.transformer);
-        register.registerProjectionTransformer(
-            GuaranteedOutputClause.type,
-            GuaranteedOutputClause.projectionTransformer
-        );
-        register.registerClauseType(ResolvePolicyClause.type);
+    public void registerProjectionEffect(ProjectionEffectRegister register) {
+        register.registerProjectionEffect(BuiltinProjectionEffects.fluidContainerUnpack);
+        register.registerProjectionEffect(BuiltinProjectionEffects.durabilityCost);
+        register.registerProjectionEffect(BuiltinProjectionEffects.guaranteedOutput);
     }
 
     @Override

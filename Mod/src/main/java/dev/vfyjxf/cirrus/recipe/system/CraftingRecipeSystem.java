@@ -2,10 +2,7 @@ package dev.vfyjxf.cirrus.recipe.system;
 
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridIndex;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.GridSize;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchema;
-import dev.vfyjxf.cirrus.api.recipe.projection.schema.ProjectionSchemas;
+import dev.vfyjxf.cirrus.api.recipe.projection.GridSpec;
 import dev.vfyjxf.cirrus.api.recipe.screening.RecipeScreeningHints;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
@@ -39,11 +36,9 @@ public class CraftingRecipeSystem extends BasicVanillaSystem<CraftingRecipe> {
             return VanillaSpecialCraftingSupport.resolveSpecial(this, recipeHolder, special);
         }
 
-        ProjectionSchema projectionSchema = ProjectionSchema.empty();
-        if (recipe instanceof ShapedRecipe shaped) {
-            projectionSchema = projectionSchema
-                    .with(ProjectionSchemas.gridSize, new GridSize(shaped.getWidth(), shaped.getHeight()));
-        }
+        GridSpec gridSpec = recipe instanceof ShapedRecipe shaped
+                ? new GridSpec(shaped.getWidth(), shaped.getHeight())
+                : null;
         List<Ingredient> ingredients = recipe.getIngredients();
         List<OutputContent> remainders = VanillaSpecialCraftingSupport.remainingOutputs(ingredients);
         return VanillaRecipeProjectionSupport.resolve(
@@ -51,10 +46,7 @@ public class CraftingRecipeSystem extends BasicVanillaSystem<CraftingRecipe> {
             recipeHolder,
             ingredients,
             RecipeHelper.getOutput(recipe),
-            projectionSchema,
-            recipe instanceof ShapedRecipe
-                    ? index -> ProjectionSchema.empty().with(ProjectionSchemas.gridIndex, new GridIndex(index))
-                    : ignored -> ProjectionSchema.empty(),
+            gridSpec,
             List.of(),
             remainders
         );
