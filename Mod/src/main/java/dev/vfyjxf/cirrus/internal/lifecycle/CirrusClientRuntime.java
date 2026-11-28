@@ -1,7 +1,6 @@
 package dev.vfyjxf.cirrus.internal.lifecycle;
 
 import dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer;
-import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseCatalogCache;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSideRequirement;
 import dev.vfyjxf.cirrus.api.recipe.execution.driver.DriverLookup;
@@ -12,7 +11,6 @@ import dev.vfyjxf.cirrus.api.recipe.execution.driver.context.SideContext;
 import dev.vfyjxf.cirrus.internal.integration.jei.JeiIntegration;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cirrus.planning.bridge.WorldFacilityRegistry;
-import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.classify.RecipeClassificationService;
 import dev.vfyjxf.cirrus.recipe.execution.ExecutionDriverApiImpl;
 import dev.vfyjxf.cirrus.recipe.execution.ExecutionTargetRecipeState;
@@ -110,17 +108,10 @@ public final class CirrusClientRuntime {
         // system instances on reload, so without this invalidate the prewarm
         // would hit the cache and serve the pre-reload catalog until TTL expiry
         RecipeDatabaseCatalogCache.invalidate();
-        // same reload-shape hazard as the catalog cache above: the empty-context
-        // resolve memo keys recipe instances by identity, and datapack reload can
-        // hand out rebuilt recipe content without changing the api instance, so
-        // stale memoized results must be dropped here even though the weak-keyed
-        // inner maps already evaporate replaced recipe instances on their own
-        RecipeApiImpl.clearEmptyContextResolveMemos();
         ExecutionChecklistWidget.ProbeSources.clear();
         ExecutionTargetRecipeState.setPlanStateSource(null);
         CirrusPlanningRuntime.closeShared();
         ComponentCanonicalizer.clear();
-        InputContent.clearIngredientMemo();
         RecipeClassificationService.clearRuntimeCaches();
     }
 }

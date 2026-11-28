@@ -31,7 +31,6 @@ import org.eclipse.collections.impl.list.fixed.ArrayAdapter;
 import org.jetbrains.annotations.UnmodifiableView;
 
 import java.util.SequencedCollection;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static dev.vfyjxf.cirrus.api.CirrusTypes.Contents;
 import static dev.vfyjxf.cirrus.api.CirrusTypes.Contents.fluidStack;
@@ -359,51 +358,8 @@ public sealed interface InputContent extends RecipeContent permits EmptyRecipeCo
         return fromItemIngredient(ingredient, 1, chance);
     }
 
-    /**
-     * Session-scoped memo of the no-arg {@link #fromItemIngredient(Ingredient)}
-     * expansion. Graph building expands every ingredient once through
-     * {@code routingView} and again through {@code resolve} when the routing
-     * view is absent, and JEI layout resolution repeats the same expansion;
-     * the result is a pure function of the ingredient's values (amount is
-     * fixed at 1, chance at {@link #MAX_CHANCE}), and NeoForge's Ingredient
-     * implements value-based equals/hashCode, so keying the memo by the
-     * ingredient itself is correct and the probe costs one small array hash.
-     * Racing threads may duplicate an expansion; the winner's instance is
-     * shared so nodes reference one copy.
-     *
-     * <p>Bounded by {@value #INGREDIENT_MEMO_LIMIT}; beyond the limit new
-     * expansions are simply not cached. Entries go stale only when datapack
-     * reload changes tag membership under a surviving ingredient instance —
-     * the same lifecycle contract as {@code ComponentCanonicalizer} — and
-     * the memo is dropped on client unload via {@link #clearIngredientMemo()}.
-     */
-    int INGREDIENT_MEMO_LIMIT = 1 << 20;
-    ConcurrentHashMap<Ingredient, InputContent> INGREDIENT_MEMO = new ConcurrentHashMap<>();
-
     static InputContent fromItemIngredient(Ingredient ingredient) {
-        if (ingredient.isEmpty()) return empty;
-        if (!ingredient.isCustom()) {
-            Ingredient.Value[] values = ingredient.getValues();
-            if (values.length == 1 && values[0] instanceof Ingredient.TagValue) {
-                // a lone tag value wraps into TagStackContent directly — that is
-                // cheaper than hashing the ingredient for the memo probe
-                return fromItemIngredient(ingredient, 1, MAX_CHANCE);
-            }
-        }
-        InputContent cached = INGREDIENT_MEMO.get(ingredient);
-        if (cached != null) return cached;
-        InputContent expanded = fromItemIngredient(ingredient, 1, MAX_CHANCE);
-        if (expanded.isEmpty()) return expanded;
-        if (INGREDIENT_MEMO.size() < INGREDIENT_MEMO_LIMIT) {
-            InputContent raced = INGREDIENT_MEMO.putIfAbsent(ingredient, expanded);
-            return raced != null ? raced : expanded;
-        }
-        return expanded;
-    }
-
-    /** Drops the ingredient expansion memo (client unload / cache lifecycle). */
-    static void clearIngredientMemo() {
-        INGREDIENT_MEMO.clear();
+        return fromItemIngredient(ingredient, 1, MAX_CHANCE);
     }
 
     static InputContent fromItemIngredient(SizedIngredient ingredient, float chance) {

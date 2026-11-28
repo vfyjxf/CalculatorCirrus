@@ -380,11 +380,10 @@ class RecipeDatabaseIndexTest {
             "working_recipe",
             Objects.requireNonNull(second.records().getFirst().recipe().id(), "recipe id").getPath()
         );
-        // broken recipes stay skipped on rebuild via the failure registry, while
-        // working recipes reuse the memoized empty-context result from the first
-        // build: both builds share one api instance and no invalidation ran in between
+        // broken recipes stay skipped on rebuild via the failure registry; working
+        // recipes are resolved again because resolve keeps no cross-build state
         assertEquals(1, system.resolveAttempts(broken));
-        assertEquals(1, system.resolveAttempts(working));
+        assertEquals(2, system.resolveAttempts(working));
     }
 
     @Test
