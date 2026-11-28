@@ -1,13 +1,21 @@
 package dev.vfyjxf.cirrus.planning;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
+import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOption;
+import dev.vfyjxf.cirrus.api.planning.context.BaseBoundarySnapshot;
+import dev.vfyjxf.cirrus.api.planning.context.ContextAttributeView;
+import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
+import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
+import dev.vfyjxf.cirrus.api.planning.context.PlanningBudget;
+import dev.vfyjxf.cirrus.api.planning.context.PlanningContext;
 import dev.vfyjxf.cirrus.api.planning.context.ProgressionState;
+import dev.vfyjxf.cirrus.api.planning.cost.PlanningProfile;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeRecord;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
 import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
@@ -20,18 +28,26 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
 import dev.vfyjxf.cirrus.api.planning.tag.CanonicalRecipeTag;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeEvidenceTier;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.bridge.DefaultDomainProfileProvider;
 import dev.vfyjxf.cirrus.planning.bridge.PlanningContextFactory;
 import dev.vfyjxf.cirrus.planning.core.cost.DefaultAcquisitionOracle;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.planning.core.service.DefaultPlanningService;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.compile;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.item;
@@ -68,16 +84,20 @@ class ComplexRecipeFeasibilityTest {
         Set<String> systemTags,
         Set<CanonicalRecipeTag> canonicalTags
     ) {
+        List<MachineEntry> machineEntries = machines.stream().map(OfflineContentTypes::machine).toList();
+        Set<Namespace> systemNamespaces = systemTags.stream()
+                .map(Namespace::parse)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
         return new RawRecipeRecord(
-            systemId,
+            Namespace.parse(systemId),
             "vanilla",
-            Optional.of(id),
-            machines,
+            Optional.of(ResourceLocation.parse(id)),
+            machineEntries,
             ins,
             outs,
             Map.of(),
             0L,
-            systemTags,
+            systemNamespaces,
             canonicalTags,
             RecipeEvidenceTier.tierA,
             1.0,
@@ -86,87 +106,111 @@ class ComplexRecipeFeasibilityTest {
         );
     }
 
+    private static PlanningContext offlineDomainContext(
+        CompiledRecipeGraph graph,
+        Set<ComponentStackKey> certifiedNatural,
+        Set<ComponentStackKey> protectedRare
+    ) {
+        BaseBoundarySnapshot boundary = new BaseBoundarySnapshot(
+            Map.of(),
+            Set.of(),
+            protectedRare,
+            certifiedNatural,
+            List.of()
+        );
+        AcquisitionOracle oracle = new DefaultAcquisitionOracle(graph, boundary, DefaultHumanGuidanceView.empty(), true);
+        return new PlanningContext(
+            InventorySnapshot.empty,
+            FacilitySnapshot.empty,
+            boundary,
+            oracle,
+            DefaultHumanGuidanceView.empty(),
+            ProgressionState.overworldDefault,
+            ContextAttributeView.empty
+        );
+    }
+
     private static CompiledRecipeGraph buildRealisticVanillaAndModdedGraph() {
         Set<String> craftTags = Set.of("calculator_cirrus:system/vanilla", "calculator_cirrus:system/hand_operable");
         Set<String> smeltTags = Set.of("calculator_cirrus:system/vanilla");
 
-        ResourceKey oakLog = item("minecraft:oak_log");
-        ResourceKey oakPlanks = item("minecraft:oak_planks");
-        ResourceKey stick = item("minecraft:stick");
-        ResourceKey cobble = item("minecraft:cobblestone");
-        ResourceKey stone = item("minecraft:stone");
-        ResourceKey smoothStone = item("minecraft:smooth_stone");
-        ResourceKey sand = item("minecraft:sand");
-        ResourceKey glass = item("minecraft:glass");
-        ResourceKey furnace = item("minecraft:furnace");
-        ResourceKey blastFurnace = item("minecraft:blast_furnace");
-        ResourceKey chest = item("minecraft:chest");
+        ComponentStackKey oakLog = item("minecraft:oak_log");
+        ComponentStackKey oakPlanks = item("minecraft:oak_planks");
+        ComponentStackKey stick = item("minecraft:stick");
+        ComponentStackKey cobble = item("minecraft:cobblestone");
+        ComponentStackKey stone = item("minecraft:stone");
+        ComponentStackKey smoothStone = item("minecraft:smooth_stone");
+        ComponentStackKey sand = item("minecraft:sand");
+        ComponentStackKey glass = item("minecraft:glass");
+        ComponentStackKey furnace = item("minecraft:furnace");
+        ComponentStackKey blastFurnace = item("minecraft:blast_furnace");
+        ComponentStackKey chest = item("minecraft:chest");
 
-        ResourceKey rawIron = item("minecraft:raw_iron");
-        ResourceKey ironOre = item("minecraft:iron_ore");
-        ResourceKey deepslateIronOre = item("minecraft:deepslate_iron_ore");
-        ResourceKey ironIngot = item("minecraft:iron_ingot");
-        ResourceKey ironBlock = item("minecraft:iron_block");
+        ComponentStackKey rawIron = item("minecraft:raw_iron");
+        ComponentStackKey ironOre = item("minecraft:iron_ore");
+        ComponentStackKey deepslateIronOre = item("minecraft:deepslate_iron_ore");
+        ComponentStackKey ironIngot = item("minecraft:iron_ingot");
+        ComponentStackKey ironBlock = item("minecraft:iron_block");
 
-        ResourceKey rawGold = item("minecraft:raw_gold");
-        ResourceKey goldIngot = item("minecraft:gold_ingot");
+        ComponentStackKey rawGold = item("minecraft:raw_gold");
+        ComponentStackKey goldIngot = item("minecraft:gold_ingot");
 
-        ResourceKey coal = item("minecraft:coal");
-        ResourceKey coalOre = item("minecraft:coal_ore");
-        ResourceKey redstone = item("minecraft:redstone");
-        ResourceKey redstoneOre = item("minecraft:redstone_ore");
-        ResourceKey quartz = item("minecraft:quartz");
-        ResourceKey quartzOre = item("minecraft:nether_quartz_ore");
-        ResourceKey lapis = item("minecraft:lapis_lazuli");
-        ResourceKey lapisOre = item("minecraft:lapis_ore");
+        ComponentStackKey coal = item("minecraft:coal");
+        ComponentStackKey coalOre = item("minecraft:coal_ore");
+        ComponentStackKey redstone = item("minecraft:redstone");
+        ComponentStackKey redstoneOre = item("minecraft:redstone_ore");
+        ComponentStackKey quartz = item("minecraft:quartz");
+        ComponentStackKey quartzOre = item("minecraft:nether_quartz_ore");
+        ComponentStackKey lapis = item("minecraft:lapis_lazuli");
+        ComponentStackKey lapisOre = item("minecraft:lapis_ore");
 
-        ResourceKey diamond = item("minecraft:diamond");
-        ResourceKey diamondOre = item("minecraft:diamond_ore");
-        ResourceKey obsidian = item("minecraft:obsidian");
-        ResourceKey sugarCane = item("minecraft:sugar_cane");
-        ResourceKey leather = item("minecraft:leather");
-        ResourceKey paper = item("minecraft:paper");
-        ResourceKey book = item("minecraft:book");
+        ComponentStackKey diamond = item("minecraft:diamond");
+        ComponentStackKey diamondOre = item("minecraft:diamond_ore");
+        ComponentStackKey obsidian = item("minecraft:obsidian");
+        ComponentStackKey sugarCane = item("minecraft:sugar_cane");
+        ComponentStackKey leather = item("minecraft:leather");
+        ComponentStackKey paper = item("minecraft:paper");
+        ComponentStackKey book = item("minecraft:book");
 
-        ResourceKey blazeRod = item("minecraft:blaze_rod");
-        ResourceKey blazePowder = item("minecraft:blaze_powder");
-        ResourceKey enderPearl = item("minecraft:ender_pearl");
-        ResourceKey enderEye = item("minecraft:ender_eye");
-        ResourceKey netherStar = item("minecraft:nether_star");
-        ResourceKey ancientDebris = item("minecraft:ancient_debris");
-        ResourceKey netheriteScrap = item("minecraft:netherite_scrap");
-        ResourceKey netheriteIngot = item("minecraft:netherite_ingot");
-        ResourceKey netheriteBlock = item("minecraft:netherite_block");
+        ComponentStackKey blazeRod = item("minecraft:blaze_rod");
+        ComponentStackKey blazePowder = item("minecraft:blaze_powder");
+        ComponentStackKey enderPearl = item("minecraft:ender_pearl");
+        ComponentStackKey enderEye = item("minecraft:ender_eye");
+        ComponentStackKey netherStar = item("minecraft:nether_star");
+        ComponentStackKey ancientDebris = item("minecraft:ancient_debris");
+        ComponentStackKey netheriteScrap = item("minecraft:netherite_scrap");
+        ComponentStackKey netheriteIngot = item("minecraft:netherite_ingot");
+        ComponentStackKey netheriteBlock = item("minecraft:netherite_block");
 
-        ResourceKey torch = item("minecraft:torch");
-        ResourceKey redstoneTorch = item("minecraft:redstone_torch");
-        ResourceKey piston = item("minecraft:piston");
-        ResourceKey observer = item("minecraft:observer");
-        ResourceKey comparator = item("minecraft:comparator");
-        ResourceKey hopper = item("minecraft:hopper");
-        ResourceKey minecart = item("minecraft:minecart");
-        ResourceKey hopperMinecart = item("minecraft:hopper_minecart");
-        ResourceKey enchantingTable = item("minecraft:enchanting_table");
-        ResourceKey brewingStand = item("minecraft:brewing_stand");
-        ResourceKey enderChest = item("minecraft:ender_chest");
-        ResourceKey beacon = item("minecraft:beacon");
-        ResourceKey anvil = item("minecraft:anvil");
+        ComponentStackKey torch = item("minecraft:torch");
+        ComponentStackKey redstoneTorch = item("minecraft:redstone_torch");
+        ComponentStackKey piston = item("minecraft:piston");
+        ComponentStackKey observer = item("minecraft:observer");
+        ComponentStackKey comparator = item("minecraft:comparator");
+        ComponentStackKey hopper = item("minecraft:hopper");
+        ComponentStackKey minecart = item("minecraft:minecart");
+        ComponentStackKey hopperMinecart = item("minecraft:hopper_minecart");
+        ComponentStackKey enchantingTable = item("minecraft:enchanting_table");
+        ComponentStackKey brewingStand = item("minecraft:brewing_stand");
+        ComponentStackKey enderChest = item("minecraft:ender_chest");
+        ComponentStackKey beacon = item("minecraft:beacon");
+        ComponentStackKey anvil = item("minecraft:anvil");
 
         // Modded raw ore with reversible packing cycle + processing
-        ResourceKey rawZinc = item("create:raw_zinc");
-        ResourceKey rawZincBlock = item("create:raw_zinc_block");
-        ResourceKey zincIngot = item("create:zinc_ingot");
-        ResourceKey brassCasing = item("create:brass_casing");
+        ComponentStackKey rawZinc = item("create:raw_zinc");
+        ComponentStackKey rawZincBlock = item("create:raw_zinc_block");
+        ComponentStackKey zincIngot = item("create:zinc_ingot");
+        ComponentStackKey brassCasing = item("create:brass_casing");
 
         // High-fanout exotic leaf tag (10 zero-producer members)
-        List<ResourceKey> flowers = new ArrayList<>();
+        List<ComponentStackKey> flowers = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             flowers.add(item("mod:exotic_flower_" + i));
         }
-        ResourceKey floralCrown = item("mod:floral_crown");
+        ComponentStackKey floralCrown = item("mod:floral_crown");
 
         // Choice recipe accepting iron OR diamond (planner must avoid protected rare diamond)
-        ResourceKey shinyBadge = item("mod:shiny_badge");
+        ComponentStackKey shinyBadge = item("mod:shiny_badge");
 
         List<RawRecipeRecord> records = List.of(
             taggedRec("minecraft:crafting", "minecraft:oak_planks", List.of(), List.of(slot(oakLog, 1)), List.of(out(oakPlanks, 4)), craftTags),
@@ -239,7 +283,7 @@ class ComplexRecipeFeasibilityTest {
         PlanningContextFactory factory = new PlanningContextFactory(graph);
         DefaultPlanningService service = new DefaultPlanningService(graph);
 
-        List<ResourceKey> targets = List.of(
+        List<ComponentStackKey> targets = List.of(
             item("minecraft:torch"),
             item("minecraft:piston"),
             item("minecraft:observer"),
@@ -254,7 +298,7 @@ class ComplexRecipeFeasibilityTest {
             item("minecraft:netherite_block")
         );
 
-        for (ResourceKey target : targets) {
+        for (ComponentStackKey target : targets) {
             PlanningRequest req = factory.createRequest(target, 1L, null, null, null);
             PlanningResult result = service.planOnce(req);
             assertEquals(
@@ -285,7 +329,8 @@ class ComplexRecipeFeasibilityTest {
         assertEquals(PlanningStatus.feasible, minecartRes.status());
         ProductionPlan minecartPlan = minecartRes.paretoPlans().get(0);
         boolean buildsFurnace = minecartPlan.steps().stream()
-                .anyMatch(s -> s instanceof ProvisionMachineStep pm && pm.machineId().equals("minecraft:furnace"));
+                .anyMatch(s -> s instanceof ProvisionMachineStep pm
+                        && pm.machine().contentKey().orElseThrow().equals(item("minecraft:furnace")));
         assertTrue(buildsFurnace, "Expected hopper_minecart plan to provision minecraft:furnace");
 
         // Anvil & Netherite Block must NEVER shortcut-acquire packed blocks as raw leaves.
@@ -314,13 +359,29 @@ class ComplexRecipeFeasibilityTest {
     @Test
     void moddedRawOreWithPackingCycleAndProtectedRarePenaltyWorkCleanly() {
         CompiledRecipeGraph graph = buildRealisticVanillaAndModdedGraph();
-        PlanningContextFactory factory = new PlanningContextFactory(graph);
         DefaultPlanningService service = new DefaultPlanningService(graph);
+        PlanningContext ctx = offlineDomainContext(
+            graph,
+            Set.of(item("create:raw_zinc")),
+            Set.of(item("minecraft:diamond"))
+        );
 
         PlanningResult modRes = service.planOnce(
-            factory.createRequest(item("create:brass_casing"), 2L, null, null, null)
+            new PlanningRequest(
+                List.of(new TargetDemand(item("create:brass_casing"), 2L)),
+                ctx,
+                PlanningProfile.defaultAutoSmart(),
+                PlanningBudget.defaultInteractive()
+            )
         );
-        assertEquals(PlanningStatus.feasible, modRes.status());
+        assertEquals(
+            PlanningStatus.feasible,
+            modRes.status(),
+            () -> "brass_casing status=" + modRes.status() + " unmet=" + modRes.diagnostics().unmetResources()
+                    + " prompts=" + modRes.decisionPrompts().size()
+                    + " compiled=" + graph.stats().compiledRecipes() + "/" + graph.stats().totalRawRecipes()
+                    + " brassProducers=" + graph.producersOf(item("create:brass_casing")).size()
+        );
         ProductionPlan modPlan = modRes.paretoPlans().get(0);
         assertTrue(modPlan.certificate().valid());
         boolean acquiredRawZinc = modPlan.steps().stream()
@@ -332,7 +393,12 @@ class ComplexRecipeFeasibilityTest {
 
         // Rare protection penalty must steer optional choice away from diamond toward iron_ingot.
         PlanningResult choiceRes = service.planOnce(
-            factory.createRequest(item("mod:shiny_badge"), 1L, null, null, null)
+            new PlanningRequest(
+                List.of(new TargetDemand(item("mod:shiny_badge"), 1L)),
+                ctx,
+                PlanningProfile.defaultAutoSmart(),
+                PlanningBudget.defaultInteractive()
+            )
         );
         assertEquals(PlanningStatus.feasible, choiceRes.status());
         ProductionPlan choicePlan = choiceRes.paretoPlans().get(0);
@@ -365,21 +431,23 @@ class ComplexRecipeFeasibilityTest {
         assertEquals(PlanningStatus.feasible, res.status());
         assertTrue(res.paretoPlans().get(0).certificate().valid());
 
-        // Verify DefaultAcquisitionOracle.withGuidance propagates bans to v3Delegate.
+        // Verify DefaultAcquisitionOracle.withGuidance propagates bans.
+        ComponentStackKey redstoneKey = ComponentStackKey.fromItemStack(new ItemStack(Items.REDSTONE))
+                .orElseThrow();
         DefaultAcquisitionOracle oracle = new DefaultAcquisitionOracle(
             graph,
             DefaultDomainProfileProvider.defaultSnapshot(),
             null,
             true
         );
-        assertTrue(oracle.assess(item("minecraft:redstone"), 1L, ProgressionState.overworldDefault).isPresent());
+        assertTrue(oracle.assess(redstoneKey, 1L, ProgressionState.overworldDefault).isPresent());
         DefaultAcquisitionOracle bannedOracle = oracle.withGuidance(
             DefaultHumanGuidanceView.of(
-                List.of(new ResourceRule("ban_rs", GuidanceScope.session, RuleStrength.hardBan, item("minecraft:redstone"), false))
+                List.of(new ResourceRule("ban_rs", GuidanceScope.session, RuleStrength.hardBan, redstoneKey, false))
             )
         );
         Optional<AcquisitionOption> bannedOpt = bannedOracle.assess(
-            item("minecraft:redstone"),
+            redstoneKey,
             1L,
             ProgressionState.overworldDefault
         );

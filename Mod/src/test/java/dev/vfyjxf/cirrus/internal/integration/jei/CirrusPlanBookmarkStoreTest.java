@@ -2,15 +2,16 @@ package dev.vfyjxf.cirrus.internal.integration.jei;
 
 import com.google.gson.JsonElement;
 import com.mojang.serialization.JsonOps;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PreparationSummary;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.VerificationCertificate;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -31,8 +32,8 @@ class CirrusPlanBookmarkStoreTest {
     }
 
     private static ProductionPlan samplePlan() {
-        ResourceKey ore = ResourceKey.item("minecraft:iron_ore");
-        ResourceKey ingot = ResourceKey.item("minecraft:iron_ingot");
+        ComponentStackKey ore = OfflineContentTypes.item("minecraft:iron_ore");
+        ComponentStackKey ingot = OfflineContentTypes.item("minecraft:iron_ingot");
         AcquireStep step1 = new AcquireStep("a001", List.of(), ore, 8L, AcquisitionKind.manualGather, CostVector.zero);
         AcquireStep step2 = new AcquireStep(
             "a002",
@@ -63,7 +64,7 @@ class CirrusPlanBookmarkStoreTest {
     @Test
     void planBookmarkRoundTripsThroughJsonWithMaterialsAndChecklistProgress() {
         ProductionPlan plan = samplePlan();
-        TargetDemand target = new TargetDemand(ResourceKey.item("minecraft:iron_ingot"), 8L);
+        TargetDemand target = new TargetDemand(OfflineContentTypes.item("minecraft:iron_ingot"), 8L);
         CirrusPlanBookmarkStore.PlanBookmarkEntry entry = CirrusPlanBookmarkStore
                 .fromPlan(plan, List.of(target), null, Set.of("a001"), "Iron Ingot");
         CirrusPlanBookmarkStore.put(entry);
@@ -108,7 +109,7 @@ class CirrusPlanBookmarkStoreTest {
     @Test
     void planFlowRecipeCodecRoundTripsFullFlowWithoutExternalStore() {
         ProductionPlan plan = samplePlan();
-        TargetDemand target = new TargetDemand(ResourceKey.item("minecraft:iron_ingot"), 8L);
+        TargetDemand target = new TargetDemand(OfflineContentTypes.item("minecraft:iron_ingot"), 8L);
         CirrusPlanBookmarkStore.PlanBookmarkEntry entry = CirrusPlanBookmarkStore
                 .fromPlan(plan, List.of(target), null, Set.of("a001"), "Iron Ingot");
         PlanFlowRecipe original = PlanFlowRecipe.of(entry);

@@ -2,6 +2,8 @@ package dev.vfyjxf.cirrus.ui.workbench.layout;
 
 import dev.vfyjxf.cirrus.api.planning.plan.PreparationSummary;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.workbench.layout.CriticalPathCalculator.CriticalPathSchedule;
 import dev.vfyjxf.cirrus.ui.workbench.layout.CriticalPathCalculator.GanttEntry;
 import org.junit.jupiter.api.Test;
@@ -24,6 +26,8 @@ class CriticalPathCalculatorTest {
     private static final double epsilon = 1e-9;
 
     private static final ProductionPlan diamond = WorkbenchLayoutFixtures.diamondPlan();
+
+    private static final MachineEntry furnace = OfflineContentTypes.machine("minecraft:furnace");
 
     @Test
     void diamondScheduleMatchesHandComputedCpm() {
@@ -94,7 +98,7 @@ class CriticalPathCalculatorTest {
         GanttEntry bottleneck = schedule.topBottleneck();
         assertNotNull(bottleneck);
         assertEquals("d2", bottleneck.stepId());
-        assertEquals("minecraft:furnace", bottleneck.bottleneckMachineId());
+        assertEquals(furnace, bottleneck.bottleneckMachine());
         assertEquals(1, bottleneck.suggestedOwnedCount(), "6s of passive wait does not justify a second machine");
     }
 
@@ -104,7 +108,7 @@ class CriticalPathCalculatorTest {
         GanttEntry bottleneck = schedule.topBottleneck();
         assertNotNull(bottleneck);
         assertEquals("h1", bottleneck.stepId());
-        assertEquals("minecraft:furnace", bottleneck.bottleneckMachineId());
+        assertEquals(furnace, bottleneck.bottleneckMachine());
         assertEquals(2, bottleneck.suggestedOwnedCount(), "more than 20s of passive wait suggests two machines");
         assertEquals(25.5, schedule.makespanSeconds(), epsilon);
     }

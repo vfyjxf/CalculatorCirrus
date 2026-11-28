@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.planning.human.ApplyRulesFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
 import dev.vfyjxf.cirrus.api.planning.human.MachineRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.widget.NumberInputWidget;
 import dev.vfyjxf.cirrus.ui.widget.calculator.search.SearchBoxWidget;
 import dev.vfyjxf.cirrus.ui.widget.common.CirrusTextInputWidget;
@@ -102,7 +103,7 @@ class ChromeFocusIsolationTest {
                         "rule-focus",
                         GuidanceScope.session,
                         RuleStrength.softPrefer,
-                        "minecraft:furnace",
+                        OfflineContentTypes.machine("minecraft:furnace"),
                         true
                     )
                 ),

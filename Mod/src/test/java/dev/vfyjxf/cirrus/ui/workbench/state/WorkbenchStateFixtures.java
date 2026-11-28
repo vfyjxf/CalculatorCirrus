@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.state;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
@@ -27,7 +28,6 @@ import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
 import dev.vfyjxf.cirrus.api.planning.human.HumanFeedback;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledCycleMacroKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
@@ -49,7 +49,11 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningSession;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.tags.TagKey;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -64,21 +68,21 @@ import java.util.function.Function;
 
 final class WorkbenchStateFixtures {
 
-    static final ResourceKey ironOre = ResourceKey.item("minecraft:iron_ore");
-    static final ResourceKey coal = ResourceKey.item("minecraft:coal");
-    static final ResourceKey ironIngot = ResourceKey.item("minecraft:iron_ingot");
-    static final ResourceKey ironBlock = ResourceKey.item("minecraft:iron_block");
-    static final ResourceKey ironSheet = ResourceKey.item("create:iron_sheet");
-    static final ResourceKey diamond = ResourceKey.item("minecraft:diamond");
-    static final ResourceKey cogwheel = ResourceKey.item("create:cogwheel");
-    static final ResourceKey shaft = ResourceKey.item("create:shaft");
-    static final ResourceKey piston = ResourceKey.item("minecraft:piston");
-    static final ResourceKey cobble = ResourceKey.item("minecraft:cobble");
-    static final ResourceKey paper = ResourceKey.item("minecraft:paper");
-    static final ResourceKey chest = ResourceKey.item("minecraft:chest");
-    static final ResourceKey oakLog = ResourceKey.item("minecraft:oak_log");
-    static final ResourceKey inscriber = ResourceKey.item("ae2:inscriber");
-    static final ResourceKey certus = ResourceKey.item("ae2:certus_quartz_crystal");
+    static final ComponentStackKey ironOre = OfflineContentTypes.item("minecraft:iron_ore");
+    static final ComponentStackKey coal = OfflineContentTypes.item("minecraft:coal");
+    static final ComponentStackKey ironIngot = OfflineContentTypes.item("minecraft:iron_ingot");
+    static final ComponentStackKey ironBlock = OfflineContentTypes.item("minecraft:iron_block");
+    static final ComponentStackKey ironSheet = OfflineContentTypes.item("create:iron_sheet");
+    static final ComponentStackKey diamond = OfflineContentTypes.item("minecraft:diamond");
+    static final ComponentStackKey cogwheel = OfflineContentTypes.item("create:cogwheel");
+    static final ComponentStackKey shaft = OfflineContentTypes.item("create:shaft");
+    static final ComponentStackKey piston = OfflineContentTypes.item("minecraft:piston");
+    static final ComponentStackKey cobble = OfflineContentTypes.item("minecraft:cobble");
+    static final ComponentStackKey paper = OfflineContentTypes.item("minecraft:paper");
+    static final ComponentStackKey chest = OfflineContentTypes.item("minecraft:chest");
+    static final ComponentStackKey oakLog = OfflineContentTypes.item("minecraft:oak_log");
+    static final ComponentStackKey inscriber = OfflineContentTypes.item("ae2:inscriber");
+    static final ComponentStackKey certus = OfflineContentTypes.item("ae2:certus_quartz_crystal");
 
     static final String smelting = "minecraft:smelting";
     static final String crafting = "minecraft:crafting";
@@ -97,22 +101,28 @@ final class WorkbenchStateFixtures {
     private WorkbenchStateFixtures() {}
 
     static CompiledRecipeKey key(String systemId, String recipeId) {
-        return new CompiledRecipeKey(systemId, Optional.of(recipeId), 0L);
+        return new CompiledRecipeKey(Namespace.parse(systemId), OfflineContentTypes.tryParseLocation(recipeId), 0L);
     }
 
     static CostVector cost(double human, double passive) {
         return new CostVector(human, passive, 0.0, 0.0, 0.0);
     }
 
-    static InputSlot input(int slotIndex, long amount, ResourceKey resource) {
+    static InputSlot input(int slotIndex, long amount, ComponentStackKey resource) {
         return new InputSlot(slotIndex, amount, Optional.empty(), List.of(resource), SlotMatchMode.identity);
     }
 
-    static InputSlot taggedInput(int slotIndex, long amount, String tagId, ResourceKey candidate) {
-        return new InputSlot(slotIndex, amount, Optional.of(tagId), List.of(candidate), SlotMatchMode.identity);
+    static InputSlot taggedInput(int slotIndex, long amount, String tagId, ComponentStackKey candidate) {
+        return new InputSlot(
+            slotIndex,
+            amount,
+            Optional.<TagKey<?>>of(OfflineContentTypes.tagFor(OfflineContentTypes.itemContentType, tagId)),
+            List.of(candidate),
+            SlotMatchMode.identity
+        );
     }
 
-    static SlotBinding binding(ResourceKey resource) {
+    static SlotBinding binding(ComponentStackKey resource) {
         return new SlotBinding(resource, List.of());
     }
 
@@ -122,12 +132,12 @@ final class WorkbenchStateFixtures {
         RecipeRole role,
         List<InputSlot> inputs,
         List<OutputSlot> outputs,
-        @Nullable String machineId
+        @Nullable MachineEntry machine
     ) {
         MachineRequirement requirement = new MachineRequirement(
             Optional.empty(),
-            machineId == null ? List.of() : List.of(machineId),
-            machineId == null
+            machine == null ? List.<MachineEntry>of() : List.of(machine),
+            machine == null
         );
         return new CompiledRecipe(
             compactId,
@@ -150,7 +160,7 @@ final class WorkbenchStateFixtures {
                 RecipeRole.standardProduction,
                 List.of(input(0, 1, ironOre)),
                 List.of(new OutputSlot(ironIngot, 1)),
-                "minecraft:furnace"
+                OfflineContentTypes.machine("minecraft:furnace")
             )
         );
         graph.put(
@@ -220,7 +230,7 @@ final class WorkbenchStateFixtures {
                 RecipeRole.standardProduction,
                 List.of(input(0, 1, ironIngot)),
                 List.of(new OutputSlot(certus, 1)),
-                "ae2:charger"
+                OfflineContentTypes.machine("ae2:charger")
             )
         );
         graph.addProducible(
@@ -243,7 +253,7 @@ final class WorkbenchStateFixtures {
         return graph;
     }
 
-    static AcquireStep acquire(String stepId, ResourceKey resource, long amount) {
+    static AcquireStep acquire(String stepId, ComponentStackKey resource, long amount) {
         return new AcquireStep(stepId, List.of(), resource, amount, AcquisitionKind.manualGather, cost(4.0, 0.0));
     }
 
@@ -280,7 +290,15 @@ final class WorkbenchStateFixtures {
         steps.add(acquire("s001", ironOre, 64L));
         steps.add(acquire("s002", coal, 32L));
         steps.add(
-            new ProvisionMachineStep("s003", List.of(), "minecraft:furnace", Optional.empty(), 2, false, cost(3.0, 0.0))
+            new ProvisionMachineStep(
+                "s003",
+                List.of(),
+                OfflineContentTypes.machine("minecraft:furnace"),
+                Optional.empty(),
+                2,
+                false,
+                cost(3.0, 0.0)
+            )
         );
         steps.add(
             new CraftStep(
@@ -288,7 +306,7 @@ final class WorkbenchStateFixtures {
                 List.of("s001"),
                 smeltIron,
                 2L,
-                Optional.of("minecraft:furnace"),
+                Optional.of(OfflineContentTypes.machine("minecraft:furnace")),
                 false,
                 Map.of(0, binding(ironOre)),
                 Map.of(0, diamond),
@@ -312,7 +330,14 @@ final class WorkbenchStateFixtures {
             new ConvertStep("s006", List.of("s005"), unpackIronBlock, 1L, Map.of(0, binding(ironBlock)), cost(0.5, 0.0))
         );
         steps.add(
-            new SetupLineStep("s007", List.of("s003"), pressing, "create:mechanical_press", ironSheet, cost(6.0, 0.0))
+            new SetupLineStep(
+                "s007",
+                List.of("s003"),
+                Namespace.parse(pressing),
+                OfflineContentTypes.machine("create:mechanical_press"),
+                ironSheet,
+                cost(6.0, 0.0)
+            )
         );
         steps.add(new LinePullStep("s008", List.of("s007"), "line:pressing", ironSheet, 16L, cost(0.5, 0.0)));
         steps.add(
@@ -348,7 +373,7 @@ final class WorkbenchStateFixtures {
         return new PreparationSummary(
             new StockLedger(Map.of(ironIngot, 8L)),
             new StockLedger(Map.of(ironOre, 64L, coal, 32L)),
-            Map.of("minecraft:furnace", 2),
+            Map.of(OfflineContentTypes.machine("minecraft:furnace"), 2),
             List.of("line:pressing"),
             List.of(diamond)
         );
@@ -449,7 +474,7 @@ final class WorkbenchStateFixtures {
         return new DecisionPrompt(promptId, kind, "prompt.title", "prompt.explain", leverageScore, List.of(options));
     }
 
-    static TargetDemand demand(ResourceKey resource, long amount) {
+    static TargetDemand demand(ComponentStackKey resource, long amount) {
         return new TargetDemand(resource, amount);
     }
 
@@ -643,13 +668,13 @@ final class WorkbenchStateFixtures {
     static final class FakeGraph implements CompiledRecipeGraph {
 
         private final Map<CompiledRecipeKey, CompiledRecipe> recipes = new TreeMap<>();
-        private final Set<ResourceKey> producible = new TreeSet<>();
+        private final Set<ComponentStackKey> producible = new TreeSet<>();
 
         void put(CompiledRecipe recipe) {
             recipes.put(recipe.key(), recipe);
         }
 
-        void addProducible(ResourceKey... resources) {
+        void addProducible(ComponentStackKey... resources) {
             producible.addAll(List.of(resources));
         }
 
@@ -659,12 +684,12 @@ final class WorkbenchStateFixtures {
         }
 
         @Override
-        public SystemAdmission admissionOf(String systemId) {
+        public SystemAdmission admissionOf(Namespace systemId) {
             return SystemAdmission.enabled;
         }
 
         @Override
-        public List<CompiledRecipe> producersOf(ResourceKey output) {
+        public List<CompiledRecipe> producersOf(ComponentStackKey output) {
             List<CompiledRecipe> producers = new ArrayList<>();
             for (CompiledRecipe recipe : recipes.values()) {
                 for (OutputSlot slot : recipe.outputs()) {
@@ -678,7 +703,7 @@ final class WorkbenchStateFixtures {
         }
 
         @Override
-        public List<CompiledRecipe> consumersOf(ResourceKey input) {
+        public List<CompiledRecipe> consumersOf(ComponentStackKey input) {
             List<CompiledRecipe> consumers = new ArrayList<>();
             for (CompiledRecipe recipe : recipes.values()) {
                 for (InputSlot slot : recipe.inputs()) {
@@ -692,7 +717,7 @@ final class WorkbenchStateFixtures {
         }
 
         @Override
-        public List<CompiledCycleMacro> cycleMacrosProducing(ResourceKey output) {
+        public List<CompiledCycleMacro> cycleMacrosProducing(ComponentStackKey output) {
             return List.of();
         }
 
@@ -712,7 +737,7 @@ final class WorkbenchStateFixtures {
         }
 
         @Override
-        public Set<ResourceKey> allProducibleResources() {
+        public Set<ComponentStackKey> allProducibleResources() {
             return Set.copyOf(producible);
         }
 
@@ -720,7 +745,7 @@ final class WorkbenchStateFixtures {
         public SccTopology sccTopology() {
             return new SccTopology() {
                 @Override
-                public int sccIdOf(ResourceKey resource) {
+                public int sccIdOf(ComponentStackKey resource) {
                     return 0;
                 }
 
@@ -730,12 +755,12 @@ final class WorkbenchStateFixtures {
                 }
 
                 @Override
-                public boolean isInNonTrivialScc(ResourceKey resource) {
+                public boolean isInNonTrivialScc(ComponentStackKey resource) {
                     return false;
                 }
 
                 @Override
-                public Set<ResourceKey> membersOfScc(int sccId) {
+                public Set<ComponentStackKey> membersOfScc(int sccId) {
                     return Set.of();
                 }
 

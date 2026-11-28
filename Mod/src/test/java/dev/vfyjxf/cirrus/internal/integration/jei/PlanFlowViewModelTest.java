@@ -2,9 +2,10 @@ package dev.vfyjxf.cirrus.internal.integration.jei;
 
 import com.google.gson.JsonElement;
 import com.mojang.serialization.JsonOps;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -25,12 +26,12 @@ class PlanFlowViewModelTest {
     }
 
     private static CirrusPlanBookmarkStore.PlanBookmarkEntry richEntry() {
-        ResourceKey ore = ResourceKey.item("minecraft:iron_ore");
-        ResourceKey coal = ResourceKey.item("minecraft:coal");
-        ResourceKey ingot = ResourceKey.item("minecraft:iron_ingot");
-        ResourceKey plate = ResourceKey.item("minecraft:iron_block");
-        ResourceKey mold = ResourceKey.item("minecraft:bucket");
-        ResourceKey slag = ResourceKey.item("minecraft:cobblestone");
+        ComponentStackKey ore = OfflineContentTypes.item("minecraft:iron_ore");
+        ComponentStackKey coal = OfflineContentTypes.item("minecraft:coal");
+        ComponentStackKey ingot = OfflineContentTypes.item("minecraft:iron_ingot");
+        ComponentStackKey plate = OfflineContentTypes.item("minecraft:iron_block");
+        ComponentStackKey mold = OfflineContentTypes.item("minecraft:bucket");
+        ComponentStackKey slag = OfflineContentTypes.item("minecraft:cobblestone");
 
         CirrusPlanBookmarkStore.StepLine s1 = new CirrusPlanBookmarkStore.StepLine(
             "s1",
@@ -66,7 +67,7 @@ class PlanFlowViewModelTest {
             ingot,
             16L,
             16L,
-            "minecraft:blast_furnace",
+            OfflineContentTypes.machine("minecraft:blast_furnace"),
             false,
             1.5,
             16.0,
@@ -107,7 +108,10 @@ class PlanFlowViewModelTest {
             ),
             List.of(s1, s2, s3, s4),
             Set.of("s2"),
-            List.of(new CirrusPlanBookmarkStore.MachineLine("minecraft:blast_furnace", 1)),
+            List.of(new CirrusPlanBookmarkStore.MachineLine(
+                OfflineContentTypes.machine("minecraft:blast_furnace"),
+                1
+            )),
             List.of(mold),
             List.of(new CirrusPlanBookmarkStore.MaterialLine(slag, 3L)),
             List.of("line_ore_wash"),
@@ -134,7 +138,12 @@ class PlanFlowViewModelTest {
     void materialDockMergesFilteringSortingScalingAndStepProgress() {
         CirrusPlanBookmarkStore.PlanBookmarkEntry entry = richEntry();
         InventorySnapshot inv = new InventorySnapshot(
-            new StockLedger(Map.of(ResourceKey.item("minecraft:coal"), 10L, ResourceKey.item("minecraft:iron_ore"), 4L)),
+            new StockLedger(Map.of(
+                OfflineContentTypes.item("minecraft:coal"),
+                10L,
+                OfflineContentTypes.item("minecraft:iron_ore"),
+                4L
+            )),
             StockLedger.empty
         );
 
@@ -148,7 +157,7 @@ class PlanFlowViewModelTest {
         assertEquals(2, scaled.totalMaterials());
         assertEquals(1, scaled.readyMaterials());
         assertEquals(1, scaled.missingMaterials());
-        assertEquals("minecraft:iron_ore", scaled.visibleMaterials().get(0).resource().resourceId());
+        assertEquals(OfflineContentTypes.item("minecraft:iron_ore"), scaled.visibleMaterials().get(0).resource());
         assertEquals(32L, scaled.visibleMaterials().get(0).needed());
         assertEquals(28L, scaled.visibleMaterials().get(0).missing());
         assertEquals(1, scaled.checkedSteps());
@@ -162,7 +171,7 @@ class PlanFlowViewModelTest {
             PlanFlowViewModel.MaterialSort.missingFirst
         );
         assertEquals(1, missingOnly.visibleMaterials().size());
-        assertEquals("minecraft:iron_ore", missingOnly.visibleMaterials().get(0).resource().resourceId());
+        assertEquals(OfflineContentTypes.item("minecraft:iron_ore"), missingOnly.visibleMaterials().get(0).resource());
     }
 
     @Test
@@ -172,7 +181,7 @@ class PlanFlowViewModelTest {
 
         assertEquals(2, prep.stations().size());
         PlanFlowViewModel.StationGroup first = prep.stations().get(0);
-        assertEquals("minecraft:blast_furnace", first.stationId());
+        assertEquals(OfflineContentTypes.machine("minecraft:blast_furnace"), first.machine());
         assertEquals(1, first.toBuildCount());
         assertEquals(32L, first.totalBatches());
         assertEquals(32.0, first.totalWaitSeconds(), 1e-6);
@@ -227,10 +236,10 @@ class PlanFlowViewModelTest {
         CirrusPlanBookmarkStore.StepLine machineStep = new CirrusPlanBookmarkStore.StepLine(
             "m1",
             "ProvisionMachineStep",
-            ResourceKey.item("minecraft:blast_furnace"),
+            OfflineContentTypes.item("minecraft:blast_furnace"),
             1L,
             1L,
-            "minecraft:blast_furnace",
+            OfflineContentTypes.machine("minecraft:blast_furnace"),
             false,
             0.0,
             0.0,
@@ -241,19 +250,19 @@ class PlanFlowViewModelTest {
         CirrusPlanBookmarkStore.StepLine fourInStep = new CirrusPlanBookmarkStore.StepLine(
             "c4",
             "CraftStep",
-            ResourceKey.item("minecraft:iron_block"),
+            OfflineContentTypes.item("minecraft:iron_block"),
             1L,
             1L,
-            "minecraft:blast_furnace",
+            OfflineContentTypes.machine("minecraft:blast_furnace"),
             true,
             0.0,
             0.0,
             List.of("m1"),
             List.of(
-                ResourceKey.item("minecraft:iron_ore"),
-                ResourceKey.item("minecraft:coal"),
-                ResourceKey.item("minecraft:iron_ingot"),
-                ResourceKey.item("minecraft:cobblestone")
+                OfflineContentTypes.item("minecraft:iron_ore"),
+                OfflineContentTypes.item("minecraft:coal"),
+                OfflineContentTypes.item("minecraft:iron_ingot"),
+                OfflineContentTypes.item("minecraft:cobblestone")
             ),
             List.of()
         );
@@ -275,10 +284,18 @@ class PlanFlowViewModelTest {
         CirrusPlanBookmarkStore.PlanBookmarkEntry restored = CirrusPlanBookmarkStore.find(entry.id());
         assertNotNull(restored);
         assertEquals(1, restored.machinesToProvision().size());
-        assertEquals("minecraft:blast_furnace", restored.machinesToProvision().get(0).machineId());
+        assertNotNull(restored.machinesToProvision().get(0).machine());
+        assertEquals(
+            OfflineContentTypes.machine("minecraft:blast_furnace").canonicalKey(),
+            restored.machinesToProvision().get(0).machine().canonicalKey()
+        );
         assertEquals(1, restored.catalysts().size());
         assertEquals(1, restored.surplusByproducts().size());
-        assertEquals("minecraft:blast_furnace", restored.steps().get(2).machineId());
+        assertNotNull(restored.steps().get(2).machine());
+        assertEquals(
+            OfflineContentTypes.machine("minecraft:blast_furnace").canonicalKey(),
+            restored.steps().get(2).machine().canonicalKey()
+        );
         assertEquals(16.0, restored.steps().get(2).waitSeconds(), 1e-6);
 
         JsonElement encoded = PlanFlowRecipe.codec.encodeStart(JsonOps.INSTANCE, PlanFlowRecipe.of(restored)).getOrThrow();
@@ -287,7 +304,11 @@ class PlanFlowViewModelTest {
         assertEquals(1, decoded.latestEntry().machinesToProvision().size());
         assertEquals(1, decoded.latestEntry().catalysts().size());
         assertEquals(1, decoded.latestEntry().surplusByproducts().size());
-        assertEquals("minecraft:blast_furnace", decoded.latestEntry().steps().get(2).machineId());
+        assertNotNull(decoded.latestEntry().steps().get(2).machine());
+        assertEquals(
+            OfflineContentTypes.machine("minecraft:blast_furnace").canonicalKey(),
+            decoded.latestEntry().steps().get(2).machine().canonicalKey()
+        );
         assertEquals(2, decoded.latestEntry().steps().get(2).inputAmounts().size());
     }
 

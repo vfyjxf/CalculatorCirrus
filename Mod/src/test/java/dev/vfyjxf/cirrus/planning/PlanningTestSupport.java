@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
@@ -17,19 +18,25 @@ import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmissionPolicy;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.model.PlanningTagKeys;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.core.cost.DefaultAcquisitionOracle;
 import dev.vfyjxf.cirrus.planning.core.graph.DefaultRecipeGraphCompiler;
 import dev.vfyjxf.cirrus.planning.core.graph.DefaultSystemAdmissionPolicy;
 import dev.vfyjxf.cirrus.planning.core.graph.MachineCapabilityGroups;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.planning.core.service.DefaultPlanningService;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,31 +46,63 @@ final class PlanningTestSupport {
 
     private PlanningTestSupport() {}
 
-    static ResourceKey item(String id) {
-        return ResourceKey.item(id);
+    static ComponentStackKey item(String id) {
+        return OfflineContentTypes.item(id);
     }
 
-    static ResourceKey fluid(String id) {
-        return ResourceKey.fluid(id);
+    static ComponentStackKey fluid(String id) {
+        return OfflineContentTypes.fluid(id);
     }
 
-    static RawIngredientSlot slot(ResourceKey key, long amount) {
+    static ComponentStackKey bare(Namespace contentType, String id) {
+        return OfflineContentTypes.bare(contentType, id);
+    }
+
+    static Namespace ns(String id) {
+        return Namespace.parse(id);
+    }
+
+    static MachineEntry machine(String id) {
+        return OfflineContentTypes.machine(id);
+    }
+
+    static TagKey<?> itemTag(String id) {
+        return PlanningTagKeys.itemTag(ResourceLocation.parse(id));
+    }
+
+    static TagKey<?> fluidTag(String id) {
+        return PlanningTagKeys.fluidTag(ResourceLocation.parse(id));
+    }
+
+    static List<MachineEntry> machines(String... ids) {
+        List<MachineEntry> out = new ArrayList<>(ids.length);
+        for (String id : ids) {
+            out.add(machine(id));
+        }
+        return List.copyOf(out);
+    }
+
+    static RawIngredientSlot slot(ComponentStackKey key, long amount) {
         return new RawIngredientSlot(Optional.empty(), List.of(key), amount, SlotMatchMode.identity);
     }
 
-    static RawIngredientSlot exactSlot(ResourceKey key, long amount) {
+    static RawIngredientSlot exactSlot(ComponentStackKey key, long amount) {
         return new RawIngredientSlot(Optional.empty(), List.of(key), amount, SlotMatchMode.identityAndComponent);
     }
 
-    static RawIngredientSlot tagSlot(String tagId, List<ResourceKey> members, long amount) {
-        return new RawIngredientSlot(Optional.of(tagId), members, amount, SlotMatchMode.identity);
+    static RawIngredientSlot tagSlot(TagKey<?> tag, List<ComponentStackKey> members, long amount) {
+        return new RawIngredientSlot(Optional.of(tag), members, amount, SlotMatchMode.identity);
     }
 
-    static RawIngredientSlot durabilityCatalyst(ResourceKey key, int durPerBatch, int maxDur) {
+    static RawIngredientSlot tagSlot(String tagId, List<ComponentStackKey> members, long amount) {
+        return tagSlot(itemTag(tagId), members, amount);
+    }
+
+    static RawIngredientSlot durabilityCatalyst(ComponentStackKey key, int durPerBatch, int maxDur) {
         return new RawIngredientSlot(Optional.empty(), List.of(key), 0L, SlotMatchMode.identity, durPerBatch, maxDur);
     }
 
-    static RawOutputSlot out(ResourceKey key, long amount) {
+    static RawOutputSlot out(ComponentStackKey key, long amount) {
         return new RawOutputSlot(key, amount);
     }
 
@@ -78,14 +117,24 @@ final class PlanningTestSupport {
                 ? "jei"
                 : (systemId.startsWith("minecraft:") ? "vanilla" : "custom");
         return new RawRecipeRecord(
-            systemId,
+            Namespace.parse(systemId),
             source,
-            id == null || id.isEmpty() ? Optional.empty() : Optional.of(id),
-            machines,
+            id == null || id.isEmpty() ? Optional.empty() : Optional.of(ResourceLocation.parse(id)),
+            machines(machines.toArray(String[]::new)),
             ins,
             outs,
             Map.of()
         );
+    }
+
+    static RawRecipeRecord rec(
+        Namespace systemId,
+        Optional<ResourceLocation> id,
+        List<MachineEntry> machines,
+        List<RawIngredientSlot> ins,
+        List<RawOutputSlot> outs
+    ) {
+        return new RawRecipeRecord(systemId, "custom", id, machines, ins, outs, Map.of());
     }
 
     static CompiledRecipeGraph compile(List<RawRecipeRecord> records) {
@@ -97,19 +146,27 @@ final class PlanningTestSupport {
     }
 
     static OwnedMachineGroup owned(String machineId, MachineCapabilityId cap, int count) {
-        return new OwnedMachineGroup(machineId, cap, count, 1.0, false);
+        return new OwnedMachineGroup(machine(machineId), cap, count, 1.0, false);
+    }
+
+    static OwnedMachineGroup owned(MachineEntry machine, MachineCapabilityId cap, int count) {
+        return new OwnedMachineGroup(machine, cap, count, 1.0, false);
+    }
+
+    static MachineCapabilityId capability(String systemId) {
+        return MachineCapabilityGroups.capabilityOf(Namespace.parse(systemId));
     }
 
     static OwnedMachineGroup ownedCraftingTable() {
-        return owned("minecraft:crafting_table", MachineCapabilityGroups.capabilityOf("minecraft:crafting"), 1);
+        return owned("minecraft:crafting_table", capability("minecraft:crafting"), 1);
     }
 
     static OwnedMachineGroup ownedFurnace() {
-        return owned("minecraft:furnace", MachineCapabilityGroups.capabilityOf("minecraft:smelting"), 1);
+        return owned("minecraft:furnace", capability("minecraft:smelting"), 1);
     }
 
     static OwnedMachineGroup ownedStonecutter() {
-        return owned("minecraft:stonecutter", MachineCapabilityGroups.capabilityOf("minecraft:stonecutting"), 1);
+        return owned("minecraft:stonecutter", capability("minecraft:stonecutting"), 1);
     }
 
     static FacilitySnapshot fac(OwnedMachineGroup... groups) {
@@ -136,7 +193,7 @@ final class PlanningTestSupport {
 
     static PlanningResult plan(
         CompiledRecipeGraph graph,
-        ResourceKey target,
+        ComponentStackKey target,
         long amount,
         InventorySnapshot inv,
         FacilitySnapshot fac,
@@ -158,8 +215,8 @@ final class PlanningTestSupport {
     }
 
     static void warmUpJvm() {
-        ResourceKey a = item("minecraft:cobblestone");
-        ResourceKey b = item("test:warmup_out");
+        ComponentStackKey a = item("minecraft:cobblestone");
+        ComponentStackKey b = item("test:warmup_out");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec(

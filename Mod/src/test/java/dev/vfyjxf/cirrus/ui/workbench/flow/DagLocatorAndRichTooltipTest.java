@@ -1,10 +1,11 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.layout.DagEdgeRoute;
 import dev.vfyjxf.cirrus.ui.workbench.layout.PlanDagLayout;
@@ -42,7 +43,7 @@ class DagLocatorAndRichTooltipTest {
             new AcquireStep(
                 "a2",
                 List.of(),
-                ResourceKey.item("minecraft:coal"),
+                OfflineContentTypes.item("minecraft:coal"),
                 16L,
                 AcquisitionKind.manualGather,
                 SpatialDagFixtures.cost(2.0, 0.0, 0.0, 0.5, 0.1)
@@ -50,7 +51,7 @@ class DagLocatorAndRichTooltipTest {
             new AcquireStep(
                 "a3",
                 List.of(),
-                ResourceKey.item("minecraft:redstone"),
+                OfflineContentTypes.item("minecraft:redstone"),
                 8L,
                 AcquisitionKind.manualGather,
                 SpatialDagFixtures.cost(3.0, 0.0, 0.0, 1.5, 0.2)
@@ -114,10 +115,10 @@ class DagLocatorAndRichTooltipTest {
 
     @Test
     void resourceConduitPaletteDistinguishesKeyMaterialsInBothThemes() {
-        ResourceKey coal = ResourceKey.item("minecraft:coal");
-        ResourceKey iron = ResourceKey.item("minecraft:iron_ore");
-        ResourceKey redstone = ResourceKey.item("minecraft:redstone");
-        ResourceKey planks = ResourceKey.item("minecraft:oak_planks");
+        ComponentStackKey coal = OfflineContentTypes.item("minecraft:coal");
+        ComponentStackKey iron = OfflineContentTypes.item("minecraft:iron_ore");
+        ComponentStackKey redstone = OfflineContentTypes.item("minecraft:redstone");
+        ComponentStackKey planks = OfflineContentTypes.item("minecraft:oak_planks");
         for (CirrusPalette palette : List.of(CirrusPalette.obsidianBlueprint, CirrusPalette.atelierStone)) {
             int cCoal = DagEdgeRenderer.resourceConduitColor(coal, palette);
             int cIron = DagEdgeRenderer.resourceConduitColor(iron, palette);
@@ -135,8 +136,8 @@ class DagLocatorAndRichTooltipTest {
                 .badge("CRAFT", OreUiRichTooltip.Tone.accent)
                 .itemFlow(
                     Component.literal("Flow"),
-                    List.of(OreUiRichTooltip.ItemBadge.of(ResourceKey.item("minecraft:iron_ore"), "×32")),
-                    List.of(OreUiRichTooltip.ItemBadge.of(ResourceKey.item("minecraft:iron_ingot"), "×32"))
+                    List.of(OreUiRichTooltip.ItemBadge.of(OfflineContentTypes.item("minecraft:iron_ore"), "×32")),
+                    List.of(OreUiRichTooltip.ItemBadge.of(OfflineContentTypes.item("minecraft:iron_ingot"), "×32"))
                 ).meter("Stage Time", 0.65, "26s (65%)", OreUiRichTooltip.Tone.costH)
                 .pills(
                     OreUiRichTooltip.Pill.of("Work 4s", OreUiRichTooltip.Tone.costH),

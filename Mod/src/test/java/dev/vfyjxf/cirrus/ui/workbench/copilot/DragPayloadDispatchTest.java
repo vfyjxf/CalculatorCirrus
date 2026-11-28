@@ -19,6 +19,7 @@ import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningDiagnostics;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.workbench.layout.DagNodeBox;
 import dev.vfyjxf.cirrus.ui.workbench.layout.PlanDagLayout;
 import dev.vfyjxf.cirrus.ui.workbench.layout.PlanDagLayoutResult;
@@ -171,7 +172,7 @@ class DragPayloadDispatchTest {
         );
         assertEquals(1, host.feedbacks.size());
         DeclareOwnedMachineFeedback declare = (DeclareOwnedMachineFeedback) host.feedbacks.get(0);
-        assertEquals(furnace, declare.machineId());
+        assertEquals(furnace, declare.machine());
         assertEquals(1, declare.ownedCount());
         assertFalse(declare.persistToWorld());
 
@@ -189,7 +190,7 @@ class DragPayloadDispatchTest {
             CoPilotDnd.accept(
                 host,
                 CoPilotDnd.DropTarget.provisionStep,
-                new DragPayload.MachineDrag("ae2:charger", 1),
+                new DragPayload.MachineDrag(OfflineContentTypes.machine("ae2:charger"), 1),
                 new CoPilotDnd.DropContext("s-prov", false, null)
             ).handled()
         );
@@ -494,7 +495,7 @@ class DragPayloadDispatchTest {
             List.of(
                 CoPilotTestFixtures.resolved(
                     CoPilotTestFixtures.prompt(
-                        "prompt:expensive_leaf:[minecraft:item]minecraft:iron_ore",
+                        "prompt:supply:[minecraft:item]minecraft:iron_ore",
                         DecisionPromptKind.baseOrSupplyBoundary,
                         0.6,
                         CoPilotTestFixtures.option("treat_free", CostVector.zero, List.of()),
@@ -650,7 +651,7 @@ class DragPayloadDispatchTest {
             assertEquals(4, host.feedbacks.size());
             MachineRule banMachine = (MachineRule) ((ApplyRulesFeedback) host.feedbacks.get(3)).rules().get(0);
             assertEquals(RuleStrength.hardBan, banMachine.strength());
-            assertEquals(furnace, banMachine.machineId());
+            assertEquals(furnace, banMachine.machine());
             assertTrue(host.toasts.isEmpty(), "Quick Drop drag-and-drop must not spawn toast notifications");
         } finally {
             scene.destroy();

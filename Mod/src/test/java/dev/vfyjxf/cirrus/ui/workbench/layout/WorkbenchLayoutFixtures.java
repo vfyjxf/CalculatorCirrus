@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.layout;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
@@ -16,7 +17,6 @@ import dev.vfyjxf.cirrus.api.planning.graph.SccTopology;
 import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledCycleMacroKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
@@ -32,6 +32,9 @@ import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SlotBinding;
 import dev.vfyjxf.cirrus.api.planning.plan.VerificationCertificate;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -43,15 +46,15 @@ import java.util.TreeMap;
 
 final class WorkbenchLayoutFixtures {
 
-    static final ResourceKey ironOre = ResourceKey.item("minecraft:iron_ore");
-    static final ResourceKey coal = ResourceKey.item("minecraft:coal");
-    static final ResourceKey ironIngot = ResourceKey.item("minecraft:iron_ingot");
-    static final ResourceKey ironBlock = ResourceKey.item("minecraft:iron_block");
-    static final ResourceKey ironSheet = ResourceKey.item("create:iron_sheet");
-    static final ResourceKey diamond = ResourceKey.item("minecraft:diamond");
-    static final ResourceKey cogwheel = ResourceKey.item("create:cogwheel");
-    static final ResourceKey shaft = ResourceKey.item("create:shaft");
-    static final ResourceKey piston = ResourceKey.item("minecraft:piston");
+    static final ComponentStackKey ironOre = OfflineContentTypes.item("minecraft:iron_ore");
+    static final ComponentStackKey coal = OfflineContentTypes.item("minecraft:coal");
+    static final ComponentStackKey ironIngot = OfflineContentTypes.item("minecraft:iron_ingot");
+    static final ComponentStackKey ironBlock = OfflineContentTypes.item("minecraft:iron_block");
+    static final ComponentStackKey ironSheet = OfflineContentTypes.item("create:iron_sheet");
+    static final ComponentStackKey diamond = OfflineContentTypes.item("minecraft:diamond");
+    static final ComponentStackKey cogwheel = OfflineContentTypes.item("create:cogwheel");
+    static final ComponentStackKey shaft = OfflineContentTypes.item("create:shaft");
+    static final ComponentStackKey piston = OfflineContentTypes.item("minecraft:piston");
 
     static final String smelting = "minecraft:smelting";
     static final String crafting = "minecraft:crafting";
@@ -67,7 +70,7 @@ final class WorkbenchLayoutFixtures {
     private WorkbenchLayoutFixtures() {}
 
     static CompiledRecipeKey key(String systemId, String recipeId) {
-        return new CompiledRecipeKey(systemId, Optional.of(recipeId), 0L);
+        return new CompiledRecipeKey(Namespace.parse(systemId), OfflineContentTypes.tryParseLocation(recipeId), 0L);
     }
 
     static CostVector cost(double human, double passive) {
@@ -83,7 +86,7 @@ final class WorkbenchLayoutFixtures {
                 RecipeRole.standardProduction,
                 List.of(input(0, 1, ironOre)),
                 List.of(new OutputSlot(ironIngot, 1)),
-                "minecraft:furnace"
+                OfflineContentTypes.machine("minecraft:furnace")
             )
         );
         graph.put(
@@ -145,12 +148,12 @@ final class WorkbenchLayoutFixtures {
         RecipeRole role,
         List<InputSlot> inputs,
         List<OutputSlot> outputs,
-        @Nullable String machineId
+        @Nullable MachineEntry machine
     ) {
         MachineRequirement requirement = new MachineRequirement(
             Optional.empty(),
-            machineId == null ? List.of() : List.of(machineId),
-            machineId == null
+            machine == null ? List.<MachineEntry>of() : List.of(machine),
+            machine == null
         );
         return new CompiledRecipe(
             compactId,
@@ -164,11 +167,11 @@ final class WorkbenchLayoutFixtures {
         );
     }
 
-    static InputSlot input(int slotIndex, long amountPerBatch, ResourceKey resource) {
+    static InputSlot input(int slotIndex, long amountPerBatch, ComponentStackKey resource) {
         return new InputSlot(slotIndex, amountPerBatch, Optional.empty(), List.of(resource), SlotMatchMode.identity);
     }
 
-    static SlotBinding binding(ResourceKey resource) {
+    static SlotBinding binding(ComponentStackKey resource) {
         return new SlotBinding(resource, List.of());
     }
 
@@ -205,7 +208,15 @@ final class WorkbenchLayoutFixtures {
         steps.add(new AcquireStep("s001", List.of(), ironOre, 64L, AcquisitionKind.manualGather, cost(4.0, 0.0)));
         steps.add(new AcquireStep("s002", List.of(), coal, 32L, AcquisitionKind.manualGather, cost(2.0, 0.0)));
         steps.add(
-            new ProvisionMachineStep("s003", List.of(), "minecraft:furnace", Optional.empty(), 2, false, cost(3.0, 0.0))
+            new ProvisionMachineStep(
+                "s003",
+                List.of(),
+                OfflineContentTypes.machine("minecraft:furnace"),
+                Optional.empty(),
+                2,
+                false,
+                cost(3.0, 0.0)
+            )
         );
         steps.add(
             new CraftStep(
@@ -213,7 +224,7 @@ final class WorkbenchLayoutFixtures {
                 List.of("s001"),
                 smeltIron,
                 2L,
-                Optional.of("minecraft:furnace"),
+                Optional.of(OfflineContentTypes.machine("minecraft:furnace")),
                 false,
                 Map.of(0, binding(ironOre)),
                 Map.of(0, diamond),
@@ -237,7 +248,14 @@ final class WorkbenchLayoutFixtures {
             new ConvertStep("s006", List.of("s005"), unpackIronBlock, 1L, Map.of(0, binding(ironBlock)), cost(0.5, 0.0))
         );
         steps.add(
-            new SetupLineStep("s007", List.of("s003"), pressing, "create:mechanical_press", ironSheet, cost(6.0, 0.0))
+            new SetupLineStep(
+                "s007",
+                List.of("s003"),
+                Namespace.parse(pressing),
+                OfflineContentTypes.machine("create:mechanical_press"),
+                ironSheet,
+                cost(6.0, 0.0)
+            )
         );
         steps.add(new LinePullStep("s008", List.of("s007"), "line:pressing", ironSheet, 16L, cost(0.5, 0.0)));
         steps.add(
@@ -273,7 +291,7 @@ final class WorkbenchLayoutFixtures {
         return new PreparationSummary(
             new StockLedger(Map.of(ironIngot, 8L)),
             new StockLedger(Map.of(ironOre, 64L, coal, 32L)),
-            Map.of("minecraft:furnace", 2),
+            Map.of(OfflineContentTypes.machine("minecraft:furnace"), 2),
             List.of("line:pressing"),
             List.of(diamond)
         );
@@ -314,8 +332,18 @@ final class WorkbenchLayoutFixtures {
 
     static ProductionPlan diamondPlan() {
         List<PlanStep> steps = List.of(
-            simpleCraft("d1", List.of(), cost(10.0, 0.0), Optional.of("minecraft:crafting_table")),
-            simpleCraft("d2", List.of("d1"), cost(4.0, 6.0), Optional.of("minecraft:furnace")),
+            simpleCraft(
+                "d1",
+                List.of(),
+                cost(10.0, 0.0),
+                Optional.of(OfflineContentTypes.machine("minecraft:crafting_table"))
+            ),
+            simpleCraft(
+                "d2",
+                List.of("d1"),
+                cost(4.0, 6.0),
+                Optional.of(OfflineContentTypes.machine("minecraft:furnace"))
+            ),
             simpleCraft("d3", List.of("d1"), cost(2.0, 0.0), Optional.empty()),
             simpleCraft("d4", List.of("d2", "d3"), cost(1.0, 0.0), Optional.empty()),
             simpleCraft("d5", List.of("d4"), cost(0.0, 0.0), Optional.empty())
@@ -324,12 +352,19 @@ final class WorkbenchLayoutFixtures {
     }
 
     static ProductionPlan heavyBottleneckPlan() {
-        List<PlanStep> steps = List.of(simpleCraft("h1", List.of(), cost(0.5, 25.0), Optional.of("minecraft:furnace")));
+        List<PlanStep> steps = List.of(
+            simpleCraft(
+                "h1",
+                List.of(),
+                cost(0.5, 25.0),
+                Optional.of(OfflineContentTypes.machine("minecraft:furnace"))
+            )
+        );
         return plan("plan-heavy", steps, PreparationSummary.empty, List.of());
     }
 
-    static CraftStep simpleCraft(String stepId, List<String> deps, CostVector cost, Optional<String> machineId) {
-        return new CraftStep(stepId, deps, craftPiston, 1L, machineId, false, Map.of(), Map.of(), cost);
+    static CraftStep simpleCraft(String stepId, List<String> deps, CostVector cost, Optional<MachineEntry> machine) {
+        return new CraftStep(stepId, deps, craftPiston, 1L, machine, false, Map.of(), Map.of(), cost);
     }
 
     static final class FakeRecipeGraph implements CompiledRecipeGraph {
@@ -346,12 +381,12 @@ final class WorkbenchLayoutFixtures {
         }
 
         @Override
-        public SystemAdmission admissionOf(String systemId) {
+        public SystemAdmission admissionOf(Namespace systemId) {
             return SystemAdmission.enabled;
         }
 
         @Override
-        public List<CompiledRecipe> producersOf(ResourceKey output) {
+        public List<CompiledRecipe> producersOf(ComponentStackKey output) {
             List<CompiledRecipe> producers = new ArrayList<>();
             for (CompiledRecipe recipe : recipes.values()) {
                 for (OutputSlot slot : recipe.outputs()) {
@@ -365,7 +400,7 @@ final class WorkbenchLayoutFixtures {
         }
 
         @Override
-        public List<CompiledRecipe> consumersOf(ResourceKey input) {
+        public List<CompiledRecipe> consumersOf(ComponentStackKey input) {
             List<CompiledRecipe> consumers = new ArrayList<>();
             for (CompiledRecipe recipe : recipes.values()) {
                 for (InputSlot slot : recipe.inputs()) {
@@ -379,7 +414,7 @@ final class WorkbenchLayoutFixtures {
         }
 
         @Override
-        public List<CompiledCycleMacro> cycleMacrosProducing(ResourceKey output) {
+        public List<CompiledCycleMacro> cycleMacrosProducing(ComponentStackKey output) {
             return List.of();
         }
 
@@ -399,7 +434,7 @@ final class WorkbenchLayoutFixtures {
         }
 
         @Override
-        public Set<ResourceKey> allProducibleResources() {
+        public Set<ComponentStackKey> allProducibleResources() {
             return Set.of();
         }
 
@@ -407,7 +442,7 @@ final class WorkbenchLayoutFixtures {
         public SccTopology sccTopology() {
             return new SccTopology() {
                 @Override
-                public int sccIdOf(ResourceKey resource) {
+                public int sccIdOf(ComponentStackKey resource) {
                     return 0;
                 }
 
@@ -417,12 +452,12 @@ final class WorkbenchLayoutFixtures {
                 }
 
                 @Override
-                public boolean isInNonTrivialScc(ResourceKey resource) {
+                public boolean isInNonTrivialScc(ComponentStackKey resource) {
                     return false;
                 }
 
                 @Override
-                public Set<ResourceKey> membersOfScc(int sccId) {
+                public Set<ComponentStackKey> membersOfScc(int sccId) {
                     return Set.of();
                 }
 

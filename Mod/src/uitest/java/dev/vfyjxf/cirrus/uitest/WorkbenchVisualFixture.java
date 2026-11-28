@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.uitest;
 
 import com.google.gson.JsonElement;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
@@ -29,7 +30,6 @@ import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
@@ -49,6 +49,7 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningSession;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusCatalogAdapter;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cirrus.planning.bridge.PlanningContextFactory;
@@ -80,8 +81,12 @@ import dev.vfyjxf.cirrus.ui.workbench.state.SessionTabManager;
 import dev.vfyjxf.cloudlib.api.ui.base.BasicScreen;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
@@ -102,23 +107,23 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeFull;
 /** Deterministic populated workbench screen for dual-theme visual verification. */
 final class WorkbenchVisualFixture {
 
-    static final ResourceKey ironOre = ResourceKey.item("minecraft:iron_ore");
-    static final ResourceKey coal = ResourceKey.item("minecraft:coal");
-    static final ResourceKey redstone = ResourceKey.item("minecraft:redstone");
-    static final ResourceKey oakPlanks = ResourceKey.item("minecraft:oak_planks");
-    static final ResourceKey cobblestone = ResourceKey.item("minecraft:cobblestone");
-    static final ResourceKey ironIngot = ResourceKey.item("minecraft:iron_ingot");
-    static final ResourceKey ironBlock = ResourceKey.item("minecraft:iron_block");
-    static final ResourceKey piston = ResourceKey.item("minecraft:piston");
-    static final ResourceKey compass = ResourceKey.item("minecraft:compass");
+    static final ComponentStackKey ironOre = ComponentStackKey.ofItem(Items.IRON_ORE);
+    static final ComponentStackKey coal = ComponentStackKey.ofItem(Items.COAL);
+    static final ComponentStackKey redstone = ComponentStackKey.ofItem(Items.REDSTONE);
+    static final ComponentStackKey oakPlanks = ComponentStackKey.ofItem(Items.OAK_PLANKS);
+    static final ComponentStackKey cobblestone = ComponentStackKey.ofItem(Items.COBBLESTONE);
+    static final ComponentStackKey ironIngot = ComponentStackKey.ofItem(Items.IRON_INGOT);
+    static final ComponentStackKey ironBlock = ComponentStackKey.ofItem(Items.IRON_BLOCK);
+    static final ComponentStackKey piston = ComponentStackKey.ofItem(Items.PISTON);
+    static final ComponentStackKey compass = ComponentStackKey.ofItem(Items.COMPASS);
 
-    private static final String smelting = "minecraft:smelting";
-    private static final String crafting = "minecraft:crafting";
-    private static final String blastFurnace = "minecraft:blast_furnace";
-    private static final String furnace = "minecraft:furnace";
-    private static final String stonecutter = "minecraft:stonecutter";
+    private static final Namespace smelting = Namespace.parse("minecraft:smelting");
+    private static final Namespace crafting = Namespace.parse("minecraft:crafting");
+    private static final MachineEntry blastFurnace = MachineEntry.fromItemStack(new ItemStack(Items.BLAST_FURNACE));
+    private static final MachineEntry furnace = MachineEntry.fromItemStack(new ItemStack(Items.FURNACE));
+    private static final MachineEntry stonecutter = MachineEntry.fromItemStack(new ItemStack(Items.STONECUTTER));
 
-    private static final String blasting = "minecraft:blasting";
+    private static final Namespace blasting = Namespace.parse("minecraft:blasting");
     private static final CompiledRecipeKey rSmeltIron = recipeKey(smelting, "minecraft:iron_ingot_from_smelting");
     private static final CompiledRecipeKey rBlastIron = recipeKey(blasting, "minecraft:iron_ingot_from_blasting");
     private static final CompiledRecipeKey rUnpackIron = recipeKey(crafting, "minecraft:iron_ingot_from_iron_block");
@@ -136,8 +141,8 @@ final class WorkbenchVisualFixture {
         return new VisualShowcaseScreen(graph, planningResult, snapshot, registry);
     }
 
-    private static CompiledRecipeKey recipeKey(String systemId, String id) {
-        return new CompiledRecipeKey(systemId, Optional.of(id), 0L);
+    private static CompiledRecipeKey recipeKey(Namespace systemId, String id) {
+        return new CompiledRecipeKey(systemId, Optional.of(ResourceLocation.parse(id)), 0L);
     }
 
     private static CostVector cost(double h, double p, double k, double s, double c) {
@@ -167,9 +172,9 @@ final class WorkbenchVisualFixture {
     private static CompiledRecipe recipe(
         int compactId,
         CompiledRecipeKey key,
-        List<ResourceKey> inputs,
-        List<ResourceKey> outputs,
-        List<String> machines,
+        List<ComponentStackKey> inputs,
+        List<ComponentStackKey> outputs,
+        List<MachineEntry> machines,
         boolean hasCatalyst
     ) {
         List<InputSlot> inputSlots = new ArrayList<>();
@@ -180,7 +185,7 @@ final class WorkbenchVisualFixture {
         }
         List<CatalystSlot> catalysts = hasCatalyst ? List.of(new CatalystSlot(0, List.of(coal), 1, 64)) : List.of();
         List<OutputSlot> outputSlots = new ArrayList<>();
-        for (ResourceKey output : outputs) {
+        for (ComponentStackKey output : outputs) {
             outputSlots.add(new OutputSlot(output, 1L));
         }
         return new CompiledRecipe(
@@ -218,7 +223,7 @@ final class WorkbenchVisualFixture {
                 "s-blast",
                 List.of(),
                 blastFurnace,
-                Optional.of(new MachineCapabilityId("smelting")),
+                Optional.of(new MachineCapabilityId(Namespace.ofMc("smelting"))),
                 1,
                 false,
                 cost(4.0, 0.0, 12.0, 1.0, 1.0)
@@ -390,9 +395,9 @@ final class WorkbenchVisualFixture {
 
     private static WorldFacilityRegistry buildFacilityRegistry() {
         WorldFacilityRegistry registry = WorldFacilityRegistry.createDetached();
-        registry.declareOwnedMachine(furnace, new MachineCapabilityId("smelting"), 4, 1.0, false);
-        registry.declareOwnedMachine(blastFurnace, new MachineCapabilityId("smelting"), 2, 2.5, true);
-        registry.declareOwnedMachine(stonecutter, new MachineCapabilityId("cutting"), 1, 3.2, false);
+        registry.declareOwnedMachine(furnace, new MachineCapabilityId(Namespace.ofMc("smelting")), 4, 1.0, false);
+        registry.declareOwnedMachine(blastFurnace, new MachineCapabilityId(Namespace.ofMc("smelting")), 2, 2.5, true);
+        registry.declareOwnedMachine(stonecutter, new MachineCapabilityId(Namespace.ofMc("cutting")), 1, 3.2, false);
         return registry;
     }
 
@@ -612,7 +617,7 @@ final class WorkbenchVisualFixture {
             }
 
             @Override
-            public List<String> systemIds() {
+            public List<Namespace> systemIds() {
                 return List.of(crafting, smelting);
             }
 
@@ -711,7 +716,7 @@ final class WorkbenchVisualFixture {
     static final class VisualGraph implements CompiledRecipeGraph {
 
         private final Map<CompiledRecipeKey, CompiledRecipe> recipes = new TreeMap<>();
-        private final Set<ResourceKey> producible = new LinkedHashSet<>();
+        private final Set<ComponentStackKey> producible = new LinkedHashSet<>();
 
         void put(CompiledRecipe recipe) {
             recipes.put(recipe.key(), recipe);
@@ -726,12 +731,12 @@ final class WorkbenchVisualFixture {
         }
 
         @Override
-        public SystemAdmission admissionOf(String systemId) {
+        public SystemAdmission admissionOf(Namespace systemId) {
             return SystemAdmission.enabled;
         }
 
         @Override
-        public List<CompiledRecipe> producersOf(ResourceKey output) {
+        public List<CompiledRecipe> producersOf(ComponentStackKey output) {
             List<CompiledRecipe> result = new ArrayList<>();
             for (CompiledRecipe recipe : recipes.values()) {
                 for (OutputSlot slot : recipe.outputs()) {
@@ -745,7 +750,7 @@ final class WorkbenchVisualFixture {
         }
 
         @Override
-        public List<CompiledRecipe> consumersOf(ResourceKey input) {
+        public List<CompiledRecipe> consumersOf(ComponentStackKey input) {
             List<CompiledRecipe> result = new ArrayList<>();
             for (CompiledRecipe recipe : recipes.values()) {
                 for (InputSlot slot : recipe.inputs()) {
@@ -759,7 +764,7 @@ final class WorkbenchVisualFixture {
         }
 
         @Override
-        public List<CompiledCycleMacro> cycleMacrosProducing(ResourceKey output) {
+        public List<CompiledCycleMacro> cycleMacrosProducing(ComponentStackKey output) {
             return List.of();
         }
 
@@ -779,7 +784,7 @@ final class WorkbenchVisualFixture {
         }
 
         @Override
-        public Set<ResourceKey> allProducibleResources() {
+        public Set<ComponentStackKey> allProducibleResources() {
             return Set.copyOf(producible);
         }
 
@@ -787,7 +792,7 @@ final class WorkbenchVisualFixture {
         public SccTopology sccTopology() {
             return new SccTopology() {
                 @Override
-                public int sccIdOf(ResourceKey resource) {
+                public int sccIdOf(ComponentStackKey resource) {
                     return 0;
                 }
 
@@ -797,12 +802,12 @@ final class WorkbenchVisualFixture {
                 }
 
                 @Override
-                public boolean isInNonTrivialScc(ResourceKey resource) {
+                public boolean isInNonTrivialScc(ComponentStackKey resource) {
                     return false;
                 }
 
                 @Override
-                public Set<ResourceKey> membersOfScc(int sccId) {
+                public Set<ComponentStackKey> membersOfScc(int sccId) {
                     return Set.of();
                 }
 

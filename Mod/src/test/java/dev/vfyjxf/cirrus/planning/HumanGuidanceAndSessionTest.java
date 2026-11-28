@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
@@ -29,7 +30,6 @@ import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -43,6 +43,8 @@ import dev.vfyjxf.cirrus.planning.core.human.ConflictMinimalCutDiagnoser;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.planning.core.human.LayeredHumanGuidanceStore;
 import dev.vfyjxf.cirrus.planning.core.service.DefaultPlanningService;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -50,6 +52,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -57,6 +60,8 @@ import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.compile;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.fac;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.generousBudget;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.item;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.itemTag;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.machine;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.out;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.ownedCraftingTable;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.ownedFurnace;
@@ -76,9 +81,9 @@ class HumanGuidanceAndSessionTest {
 
     @Test
     void tc12_decisionPromptsHavePureI18nKeysUniqueIdsFollowUpAndDismissOnAnswer() {
-        ResourceKey diamond = item("minecraft:diamond");
-        ResourceKey prod = item("mod:fancy");
-        List<ResourceKey> planks = List.of(
+        ComponentStackKey diamond = item("minecraft:diamond");
+        ComponentStackKey prod = item("mod:fancy");
+        List<ComponentStackKey> planks = List.of(
             item("minecraft:oak_planks"),
             item("minecraft:spruce_planks"),
             item("minecraft:birch_planks"),
@@ -87,7 +92,7 @@ class HumanGuidanceAndSessionTest {
             item("minecraft:dark_oak_planks"),
             item("minecraft:cherry_planks")
         );
-        ResourceKey alloy = item("mod:refined_alloy");
+        ComponentStackKey alloy = item("mod:refined_alloy");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec(
@@ -148,8 +153,8 @@ class HumanGuidanceAndSessionTest {
 
     @Test
     void tc13_sessionIncrementalRefineUndoRedoBranchTruncationCloseAndPersistToWorld() {
-        ResourceKey ore = item("minecraft:cobblestone");
-        ResourceKey prod = item("mod:gear");
+        ComponentStackKey ore = item("minecraft:cobblestone");
+        ComponentStackKey prod = item("mod:gear");
         CompiledRecipeGraph g = compile(
             List.of(rec("mod:press", "r_press", List.of("mod:presser"), List.of(slot(ore, 1)), List.of(out(prod, 1))))
         );
@@ -176,9 +181,11 @@ class HumanGuidanceAndSessionTest {
         PlanningSession session = svc.openSession(req);
         try {
             PlanningResult r0 = session.currentResult();
-            assertEquals(Set.of("mod:presser"), r0.paretoPlans().get(0).preparation().machinesToProvision().keySet());
+            assertEquals(
+                Set.of(machine("mod:presser")),
+                r0.paretoPlans().get(0).preparation().machinesToProvision().keySet());
 
-            PlanningResult r1 = session.refine(new DeclareOwnedMachineFeedback("mod:presser", 1, true));
+            PlanningResult r1 = session.refine(new DeclareOwnedMachineFeedback(machine("mod:presser"), 1, true));
             assertTrue(r1.paretoPlans().get(0).preparation().machinesToProvision().isEmpty());
             assertEquals(1, persistedMachines.size());
 
@@ -219,8 +226,8 @@ class HumanGuidanceAndSessionTest {
 
     @Test
     void tc14_conflictMinimalCutSinglePairTooManyAndStructuralUnreachable() {
-        ResourceKey ore = item("minecraft:cobblestone");
-        ResourceKey target = item("mod:widget");
+        ComponentStackKey ore = item("minecraft:cobblestone");
+        ComponentStackKey target = item("mod:widget");
         CompiledRecipeGraph g2 = compile(
             List.of(
                 rec("mod:s1", "r1", List.of("mod:m1"), List.of(slot(ore, 1)), List.of(out(target, 1))),
@@ -228,9 +235,9 @@ class HumanGuidanceAndSessionTest {
                 rec("mod:s3", "r3", List.of("mod:m3"), List.of(slot(ore, 1)), List.of(out(item("mod:other"), 1)))
             )
         );
-        CompiledRecipe r1 = g2.producersOf(target).stream().filter(r -> r.key().systemId().equals("mod:s1")).findFirst()
+        CompiledRecipe r1 = g2.producersOf(target).stream().filter(r -> r.key().systemId().equals(Namespace.parse("mod:s1"))).findFirst()
                 .orElseThrow();
-        CompiledRecipe r2 = g2.producersOf(target).stream().filter(r -> r.key().systemId().equals("mod:s2")).findFirst()
+        CompiledRecipe r2 = g2.producersOf(target).stream().filter(r -> r.key().systemId().equals(Namespace.parse("mod:s2"))).findFirst()
                 .orElseThrow();
 
         // Single rule blocking a 1-route item -> KEY_RELAX_SINGLE.
@@ -246,7 +253,8 @@ class HumanGuidanceAndSessionTest {
             FacilitySnapshot.empty,
             List.of(
                 new RecipeRule("ban_only", GuidanceScope.session, RuleStrength.hardBan, only.key()),
-                new SystemRule("irrel", GuidanceScope.session, RuleStrength.hardBan, "mod:unused", false)
+                new SystemRule(
+                    "irrel", GuidanceScope.session, RuleStrength.hardBan, Namespace.parse("mod:unused"), false)
             )
         );
         assertEquals(PlanningStatus.infeasibleByHumanRules, single.status());
@@ -269,7 +277,8 @@ class HumanGuidanceAndSessionTest {
             List.of(
                 new RecipeRule("ban_1", GuidanceScope.session, RuleStrength.hardBan, r1.key()),
                 new RecipeRule("ban_2", GuidanceScope.session, RuleStrength.hardBan, r2.key()),
-                new SystemRule("ban_unused", GuidanceScope.session, RuleStrength.hardBan, "mod:s3", false)
+                new SystemRule(
+                    "ban_unused", GuidanceScope.session, RuleStrength.hardBan, Namespace.parse("mod:s3"), false)
             )
         );
         assertEquals(PlanningStatus.infeasibleByHumanRules, joint.status());
@@ -308,7 +317,7 @@ class HumanGuidanceAndSessionTest {
                 )
             ),
             DefaultSystemAdmissionPolicy.defaults()
-                    .withSystemOverride("jei:category/gregtech/assembler", SystemAdmission.optInOnly)
+                    .withSystemOverride(Namespace.parse("jei:category/gregtech/assembler"), SystemAdmission.optInOnly)
         );
         PlanningResult unreach = plan(
             gLocked,
@@ -324,10 +333,10 @@ class HumanGuidanceAndSessionTest {
 
     @Test
     void inv07_allSevenHardRuleTypesAndCycleBreakScoping() {
-        ResourceKey a = item("minecraft:cobblestone");
-        ResourceKey b = item("minecraft:sand");
-        ResourceKey out1 = item("mod:out1");
-        ResourceKey out2 = item("mod:out2");
+        ComponentStackKey a = item("minecraft:cobblestone");
+        ComponentStackKey b = item("minecraft:sand");
+        ComponentStackKey out1 = item("mod:out1");
+        ComponentStackKey out2 = item("mod:out2");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec(
@@ -347,9 +356,9 @@ class HumanGuidanceAndSessionTest {
                 )
             )
         );
-        CompiledRecipe rA = g.producersOf(out1).stream().filter(r -> r.key().systemId().equals("minecraft:crafting"))
+        CompiledRecipe rA = g.producersOf(out1).stream().filter(r -> r.key().systemId().equals(Namespace.parse("minecraft:crafting")))
                 .findFirst().orElseThrow();
-        CompiledRecipe rB = g.producersOf(out1).stream().filter(r -> r.key().systemId().equals("beta:crusher"))
+        CompiledRecipe rB = g.producersOf(out1).stream().filter(r -> r.key().systemId().equals(Namespace.parse("beta:crusher")))
                 .findFirst().orElseThrow();
 
         // 1. RecipeRule HARD_BAN
@@ -369,7 +378,8 @@ class HumanGuidanceAndSessionTest {
             1L,
             InventorySnapshot.empty,
             fac(ownedCraftingTable()),
-            List.of(new SystemRule("h_sys", GuidanceScope.session, RuleStrength.hardBan, "minecraft:crafting", false))
+            List.of(new SystemRule(
+                    "h_sys", GuidanceScope.session, RuleStrength.hardBan, Namespace.parse("minecraft:crafting"), false))
         );
 
         // 3. MachineRule HARD_BAN
@@ -381,7 +391,7 @@ class HumanGuidanceAndSessionTest {
             FacilitySnapshot.empty,
             List.of(
                 new RecipeRule("ban_a", GuidanceScope.session, RuleStrength.hardBan, rA.key()),
-                new MachineRule("h_mach", GuidanceScope.session, RuleStrength.hardBan, "beta:machine", false)
+                new MachineRule("h_mach", GuidanceScope.session, RuleStrength.hardBan, machine("beta:machine"), false)
             )
         );
         assertEquals(PlanningStatus.infeasibleByHumanRules, res3.status());
@@ -404,7 +414,7 @@ class HumanGuidanceAndSessionTest {
             1L,
             InventorySnapshot.empty,
             fac(ownedCraftingTable()),
-            List.of(new TagDefaultRule("h_tag", GuidanceScope.session, RuleStrength.hardPin, "mod:mats", b))
+            List.of(new TagDefaultRule("h_tag", GuidanceScope.session, RuleStrength.hardPin, itemTag("mod:mats"), b))
         );
         CraftStep tagCraft = res5.paretoPlans().get(0).steps().stream().filter(CraftStep.class::isInstance)
                 .map(CraftStep.class::cast).findFirst().orElseThrow();
@@ -448,9 +458,9 @@ class HumanGuidanceAndSessionTest {
 
     @Test
     void softRulesNeverLeakIntoReportedCostAndSteerPreference() {
-        ResourceKey a = item("minecraft:cobblestone");
-        ResourceKey b = item("minecraft:sand");
-        ResourceKey out = item("mod:soft_out");
+        ComponentStackKey a = item("minecraft:cobblestone");
+        ComponentStackKey b = item("minecraft:sand");
+        ComponentStackKey out = item("mod:soft_out");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec(
@@ -470,9 +480,9 @@ class HumanGuidanceAndSessionTest {
             )
         );
         CompiledRecipe viaA = g.producersOf(out).stream()
-                .filter(r -> r.key().explicitRecipeId().orElse("").equals("via_a")).findFirst().orElseThrow();
+                .filter(r -> r.key().explicitRecipeId().equals(Optional.of(ResourceLocation.parse("via_a")))).findFirst().orElseThrow();
         CompiledRecipe viaB = g.producersOf(out).stream()
-                .filter(r -> r.key().explicitRecipeId().orElse("").equals("via_b")).findFirst().orElseThrow();
+                .filter(r -> r.key().explicitRecipeId().equals(Optional.of(ResourceLocation.parse("via_b")))).findFirst().orElseThrow();
         FacilitySnapshot f = fac(ownedCraftingTable(), ownedFurnace());
 
         PlanningResult base = plan(g, out, 1L, InventorySnapshot.empty, f, List.of());
@@ -502,10 +512,10 @@ class HumanGuidanceAndSessionTest {
     }
 
     @Test
-    void feedbackVariantsPinRejectAndOverrideStockWithReservedClamping() {
-        ResourceKey a = item("minecraft:cobblestone");
-        ResourceKey b = item("minecraft:sand");
-        ResourceKey out = item("mod:fb_out");
+    void feedbackVariantsPinRejectAndOverrideStockSupersedesReservedStock() {
+        ComponentStackKey a = item("minecraft:cobblestone");
+        ComponentStackKey b = item("minecraft:sand");
+        ComponentStackKey out = item("mod:fb_out");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec(
@@ -525,7 +535,7 @@ class HumanGuidanceAndSessionTest {
             )
         );
         CompiledRecipe rB = g.producersOf(out).stream()
-                .filter(r -> r.key().explicitRecipeId().orElse("").equals("route_b")).findFirst().orElseThrow();
+                .filter(r -> r.key().explicitRecipeId().equals(Optional.of(ResourceLocation.parse("route_b")))).findFirst().orElseThrow();
         InventorySnapshot invWithReserved = new InventorySnapshot(
             new StockLedger(Map.of(a, 10L)),
             new StockLedger(Map.of(a, 8L))
@@ -547,7 +557,9 @@ class HumanGuidanceAndSessionTest {
             PlanningResult rStock = session.refine(new OverrideStockFeedback(a, 3L));
             assertEquals(PlanningStatus.feasible, rStock.status());
             assertTrue(rStock.paretoPlans().get(0).certificate().valid());
-            assertEquals(2L, rStock.paretoPlans().get(0).preparation().toAcquireFromWorld().amountOf(a));
+            ProductionPlan stockPlan = rStock.paretoPlans().get(0);
+            assertEquals(2L, stockPlan.preparation().consumedFromInventory().amountOf(a));
+            assertEquals(0L, stockPlan.preparation().toAcquireFromWorld().amountOf(a));
 
             ProductionPlan cur = rStock.paretoPlans().get(0);
             CraftStep firstCraft = cur.steps().stream().filter(CraftStep.class::isInstance).map(CraftStep.class::cast)

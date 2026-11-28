@@ -45,13 +45,13 @@ class ExecutionTargetPlanHandoverTest {
     private static final RecipeEntry<?> stoneEntry = RecipeEntry.of(system, new FakeRecipe("stone"));
     private static final RecipeEntry<?> brickEntry = RecipeEntry.of(system, new FakeRecipe("bricks"));
     private static final CompiledRecipeKey stoneKey = new CompiledRecipeKey(
-        "minecraft:crafting",
-        Optional.of("test:stone"),
+        Namespace.parse("minecraft:crafting"),
+        Optional.of(ResourceLocation.parse("test:stone")),
         11L
     );
     private static final CompiledRecipeKey brickKey = new CompiledRecipeKey(
-        "minecraft:crafting",
-        Optional.of("test:bricks"),
+        Namespace.parse("minecraft:crafting"),
+        Optional.of(ResourceLocation.parse("test:bricks")),
         22L
     );
     private static final ExecutionInteraction interaction = new ExecutionInteraction(

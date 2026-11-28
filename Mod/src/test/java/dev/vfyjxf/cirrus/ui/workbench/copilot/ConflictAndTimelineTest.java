@@ -10,6 +10,7 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
 import dev.vfyjxf.cirrus.ui.workbench.state.HistoryEntry;
 import dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchUiSnapshot;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -57,7 +58,13 @@ class ConflictAndTimelineTest {
     }
 
     private static GuidanceRule banRule() {
-        return new SystemRule(banRuleId, GuidanceScope.session, RuleStrength.hardBan, "ae2:charger", false);
+        return new SystemRule(
+            banRuleId,
+            GuidanceScope.session,
+            RuleStrength.hardBan,
+            Namespace.parse("ae2:charger"),
+            false
+        );
     }
 
     private static WorkbenchUiSnapshot conflictSnapshot(List<HistoryEntry> undoHistory) {
@@ -114,7 +121,13 @@ class ConflictAndTimelineTest {
         List<GuidanceRule> rules = new ArrayList<>();
         for (int index = 0; index < ConflictDiagnosisOverlayWidget.tooManyRulesThreshold + 1; index++) {
             rules.add(
-                new SystemRule("r" + index, GuidanceScope.session, RuleStrength.softPenalize, "system:" + index, false)
+                new SystemRule(
+                    "r" + index,
+                    GuidanceScope.session,
+                    RuleStrength.softPenalize,
+                    Namespace.of("test", "system_" + index),
+                    false
+                )
             );
         }
         CoPilotTestFixtures.FakeHost host = new CoPilotTestFixtures.FakeHost(
@@ -164,7 +177,7 @@ class ConflictAndTimelineTest {
                 null,
                 ironIngot,
                 null,
-                "ae2:charger"
+                Namespace.parse("ae2:charger")
             );
             assertFalse(menu.items().isEmpty(), kind.name());
             assertTrue(menu.preferredHeight() > NodeContextMenuWidget.scopeRowHeight, kind.name());

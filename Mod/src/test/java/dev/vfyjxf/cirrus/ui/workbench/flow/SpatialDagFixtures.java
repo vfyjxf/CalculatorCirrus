@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningBudget;
 import dev.vfyjxf.cirrus.api.planning.context.ProgressionState;
@@ -19,7 +20,6 @@ import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
 import dev.vfyjxf.cirrus.api.planning.human.HumanFeedback;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
@@ -34,6 +34,8 @@ import dev.vfyjxf.cirrus.api.planning.plan.VerificationCertificate;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningDiagnostics;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.layout.CriticalPathCalculator;
 import dev.vfyjxf.cirrus.ui.workbench.layout.PlanDagLayout;
@@ -44,6 +46,7 @@ import dev.vfyjxf.cirrus.ui.workbench.state.FlowViewMode;
 import dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchPhase;
 import dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchUiSnapshot;
 import dev.vfyjxf.cloudlib.api.math.FloatPos;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -55,10 +58,10 @@ import java.util.TreeMap;
 
 final class SpatialDagFixtures {
 
-    static final ResourceKey ore = ResourceKey.item("minecraft:iron_ore");
-    static final ResourceKey ingot = ResourceKey.item("minecraft:iron_ingot");
-    static final ResourceKey block = ResourceKey.item("minecraft:iron_block");
-    static final ResourceKey gem = ResourceKey.item("minecraft:diamond");
+    static final ComponentStackKey ore = OfflineContentTypes.item("minecraft:iron_ore");
+    static final ComponentStackKey ingot = OfflineContentTypes.item("minecraft:iron_ingot");
+    static final ComponentStackKey block = OfflineContentTypes.item("minecraft:iron_block");
+    static final ComponentStackKey gem = OfflineContentTypes.item("minecraft:diamond");
 
     static final CompiledRecipeKey r1 = key("minecraft:smelting", "r1");
     static final CompiledRecipeKey r2 = key("minecraft:crafting", "r2");
@@ -67,7 +70,7 @@ final class SpatialDagFixtures {
     private SpatialDagFixtures() {}
 
     static CompiledRecipeKey key(String systemId, String recipeId) {
-        return new CompiledRecipeKey(systemId, Optional.of(recipeId), 0L);
+        return new CompiledRecipeKey(Namespace.parse(systemId), OfflineContentTypes.tryParseLocation(recipeId), 0L);
     }
 
     static CostVector cost(double human, double passive, double capital, double scarcity, double cognitive) {
@@ -80,7 +83,7 @@ final class SpatialDagFixtures {
             deps,
             key,
             1L,
-            Optional.of("minecraft:furnace"),
+            Optional.of(OfflineContentTypes.machine("minecraft:furnace")),
             false,
             Map.of(0, new SlotBinding(ore, List.of())),
             Map.of(),
@@ -130,8 +133,8 @@ final class SpatialDagFixtures {
     static CompiledRecipe recipe(
         int compactId,
         CompiledRecipeKey key,
-        List<ResourceKey> inputs,
-        List<ResourceKey> outputs
+        List<ComponentStackKey> inputs,
+        List<ComponentStackKey> outputs
     ) {
         List<InputSlot> inputSlots = new ArrayList<>();
         for (int index = 0; index < inputs.size(); index++) {
@@ -140,7 +143,7 @@ final class SpatialDagFixtures {
             );
         }
         List<OutputSlot> outputSlots = new ArrayList<>();
-        for (ResourceKey output : outputs) {
+        for (ComponentStackKey output : outputs) {
             outputSlots.add(new OutputSlot(output, 1L));
         }
         return new CompiledRecipe(
@@ -150,7 +153,7 @@ final class SpatialDagFixtures {
             inputSlots,
             List.<CatalystSlot>of(),
             outputSlots,
-            new MachineRequirement(Optional.empty(), List.of("minecraft:furnace"), false),
+            new MachineRequirement(Optional.empty(), List.of(OfflineContentTypes.machine("minecraft:furnace")), false),
             Map.of()
         );
     }
@@ -261,7 +264,7 @@ final class SpatialDagFixtures {
         public void onHoverEdge(
             @Nullable String fromStepId,
             @Nullable String toStepId,
-            @Nullable ResourceKey resource
+            @Nullable ComponentStackKey resource
         ) {}
 
         @Override
@@ -323,12 +326,12 @@ final class SpatialDagFixtures {
         }
 
         @Override
-        public SystemAdmission admissionOf(String systemId) {
+        public SystemAdmission admissionOf(Namespace systemId) {
             return SystemAdmission.enabled;
         }
 
         @Override
-        public List<CompiledRecipe> producersOf(ResourceKey output) {
+        public List<CompiledRecipe> producersOf(ComponentStackKey output) {
             List<CompiledRecipe> producers = new ArrayList<>();
             for (CompiledRecipe recipe : recipes.values()) {
                 for (OutputSlot slot : recipe.outputs()) {
@@ -342,7 +345,7 @@ final class SpatialDagFixtures {
         }
 
         @Override
-        public List<CompiledRecipe> consumersOf(ResourceKey input) {
+        public List<CompiledRecipe> consumersOf(ComponentStackKey input) {
             List<CompiledRecipe> consumers = new ArrayList<>();
             for (CompiledRecipe recipe : recipes.values()) {
                 for (InputSlot slot : recipe.inputs()) {
@@ -356,7 +359,7 @@ final class SpatialDagFixtures {
         }
 
         @Override
-        public List<CompiledCycleMacro> cycleMacrosProducing(ResourceKey output) {
+        public List<CompiledCycleMacro> cycleMacrosProducing(ComponentStackKey output) {
             return List.of();
         }
 
@@ -376,7 +379,7 @@ final class SpatialDagFixtures {
         }
 
         @Override
-        public Set<ResourceKey> allProducibleResources() {
+        public Set<ComponentStackKey> allProducibleResources() {
             return Set.of();
         }
 
@@ -384,7 +387,7 @@ final class SpatialDagFixtures {
         public SccTopology sccTopology() {
             return new SccTopology() {
                 @Override
-                public int sccIdOf(ResourceKey resource) {
+                public int sccIdOf(ComponentStackKey resource) {
                     return 0;
                 }
 
@@ -394,12 +397,12 @@ final class SpatialDagFixtures {
                 }
 
                 @Override
-                public boolean isInNonTrivialScc(ResourceKey resource) {
+                public boolean isInNonTrivialScc(ComponentStackKey resource) {
                     return false;
                 }
 
                 @Override
-                public Set<ResourceKey> membersOfScc(int sccId) {
+                public Set<ComponentStackKey> membersOfScc(int sccId) {
                     return Set.of();
                 }
 

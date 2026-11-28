@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.ui.workbench;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningBudget;
 import dev.vfyjxf.cirrus.api.planning.context.ProgressionState;
@@ -14,7 +15,6 @@ import dev.vfyjxf.cirrus.api.planning.graph.GraphCompilationStats;
 import dev.vfyjxf.cirrus.api.planning.graph.SccTopology;
 import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
@@ -28,6 +28,7 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningDiagnostics;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
@@ -63,6 +64,7 @@ import dev.vfyjxf.cloudlib.api.ui.base.SceneContext;
 import dev.vfyjxf.cloudlib.api.ui.base.SceneHost;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
@@ -91,9 +93,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WorkbenchLayoutAndMotionContractTest {
 
-    private static final ResourceKey ironOre = ResourceKey.item("minecraft:iron_ore");
-    private static final ResourceKey ironIngot = ResourceKey.item("minecraft:iron_ingot");
-    private static final ResourceKey coal = ResourceKey.item("minecraft:coal");
+    private static final ComponentStackKey ironOre = OfflineContentTypes.item("minecraft:iron_ore");
+    private static final ComponentStackKey ironIngot = OfflineContentTypes.item("minecraft:iron_ingot");
+    private static final ComponentStackKey coal = OfflineContentTypes.item("minecraft:coal");
 
     @Test
     void settingsAndDiagnosticsUsesTwoColumnFullHeightLayoutAndSizedNumberInputs() {
@@ -427,7 +429,11 @@ class WorkbenchLayoutAndMotionContractTest {
 
     private static ProductionPlan sampleChainPlan() {
         CostVector cost = new CostVector(4.0, 2.0, 1.0, 0.5, 0.1);
-        CompiledRecipeKey key = new CompiledRecipeKey("minecraft:smelting", Optional.of("smelt_iron"), 0L);
+        CompiledRecipeKey key = new CompiledRecipeKey(
+            Namespace.parse("minecraft:smelting"),
+            OfflineContentTypes.tryParseLocation("minecraft:smelt_iron"),
+            0L
+        );
         List<PlanStep> steps = List.of(
             new AcquireStep("s0", List.of(), ironOre, 4L, AcquisitionKind.manualGather, cost),
             new CraftStep(
@@ -435,7 +441,7 @@ class WorkbenchLayoutAndMotionContractTest {
                 List.of("s0"),
                 key,
                 4L,
-                Optional.of("minecraft:furnace"),
+                Optional.of(OfflineContentTypes.machine("minecraft:furnace")),
                 false,
                 Map.of(0, new SlotBinding(ironOre, List.of())),
                 Map.of(),
@@ -490,8 +496,8 @@ class WorkbenchLayoutAndMotionContractTest {
         );
     }
 
-    private static CompiledRecipeGraph minimalGraph(ResourceKey... producible) {
-        Set<ResourceKey> resources = Set.of(producible);
+    private static CompiledRecipeGraph minimalGraph(ComponentStackKey... producible) {
+        Set<ComponentStackKey> resources = Set.of(producible);
         return new CompiledRecipeGraph() {
             @Override
             public long catalogVersion() {
@@ -499,22 +505,22 @@ class WorkbenchLayoutAndMotionContractTest {
             }
 
             @Override
-            public SystemAdmission admissionOf(String systemId) {
+            public SystemAdmission admissionOf(Namespace systemId) {
                 return SystemAdmission.enabled;
             }
 
             @Override
-            public List<CompiledRecipe> producersOf(ResourceKey output) {
+            public List<CompiledRecipe> producersOf(ComponentStackKey output) {
                 return List.of();
             }
 
             @Override
-            public List<CompiledRecipe> consumersOf(ResourceKey input) {
+            public List<CompiledRecipe> consumersOf(ComponentStackKey input) {
                 return List.of();
             }
 
             @Override
-            public List<CompiledCycleMacro> cycleMacrosProducing(ResourceKey output) {
+            public List<CompiledCycleMacro> cycleMacrosProducing(ComponentStackKey output) {
                 return List.of();
             }
 
@@ -529,7 +535,7 @@ class WorkbenchLayoutAndMotionContractTest {
             }
 
             @Override
-            public Set<ResourceKey> allProducibleResources() {
+            public Set<ComponentStackKey> allProducibleResources() {
                 return resources;
             }
 
@@ -537,7 +543,7 @@ class WorkbenchLayoutAndMotionContractTest {
             public SccTopology sccTopology() {
                 return new SccTopology() {
                     @Override
-                    public int sccIdOf(ResourceKey resource) {
+                    public int sccIdOf(ComponentStackKey resource) {
                         return 0;
                     }
 
@@ -547,12 +553,12 @@ class WorkbenchLayoutAndMotionContractTest {
                     }
 
                     @Override
-                    public boolean isInNonTrivialScc(ResourceKey resource) {
+                    public boolean isInNonTrivialScc(ComponentStackKey resource) {
                         return false;
                     }
 
                     @Override
-                    public Set<ResourceKey> membersOfScc(int sccId) {
+                    public Set<ComponentStackKey> membersOfScc(int sccId) {
                         return Set.of();
                     }
 
@@ -723,7 +729,7 @@ class WorkbenchLayoutAndMotionContractTest {
         public void onHoverEdge(
             @Nullable String fromStepId,
             @Nullable String toStepId,
-            @Nullable ResourceKey resource
+            @Nullable ComponentStackKey resource
         ) {}
 
         @Override

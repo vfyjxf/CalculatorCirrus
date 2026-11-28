@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.workbench.layout.DagNodeBox;
 import dev.vfyjxf.cirrus.ui.workbench.layout.PlanDagLayoutResult;
 import dev.vfyjxf.cirrus.ui.workbench.state.DagLayoutMode;
@@ -70,7 +71,7 @@ class SpatialDagLodTest {
         assertEquals(List.of(SpatialDagFixtures.ore), visuals.inputs());
         assertEquals(List.of(SpatialDagFixtures.block), visuals.outputs());
         assertEquals(SpatialDagFixtures.block, visuals.primaryOutput());
-        assertEquals("minecraft:furnace", visuals.machineId());
+        assertEquals(OfflineContentTypes.machine("minecraft:furnace"), visuals.machine());
 
         List<DagHitTester.InlineSlot> slots = DagHitTester.inlineSlots(node, visuals.inputs(), visuals.outputs());
         assertEquals(2, slots.size());

@@ -1,13 +1,16 @@
 package dev.vfyjxf.cirrus.ui.workbench.chrome;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.InputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.MachineRequirement;
 import dev.vfyjxf.cirrus.api.planning.graph.OutputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RecipeRole;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
@@ -30,8 +33,8 @@ class RecipeAssistantPopupTest {
         String id,
         String system,
         @Nullable String machine,
-        List<ResourceKey> ins,
-        ResourceKey out
+        List<ComponentStackKey> ins,
+        ComponentStackKey out
     ) {
         List<InputSlot> inputSlots = new ArrayList<>();
         for (int i = 0; i < ins.size(); i++) {
@@ -39,12 +42,12 @@ class RecipeAssistantPopupTest {
         }
         MachineRequirement req = new MachineRequirement(
             Optional.empty(),
-            machine == null ? List.of() : List.of(machine),
+            machine == null ? List.of() : List.of(OfflineContentTypes.machine(machine)),
             false
         );
         return new CompiledRecipe(
             compactId,
-            new CompiledRecipeKey(system, Optional.of(id), 0L),
+            new CompiledRecipeKey(Namespace.parse(system), Optional.of(ResourceLocation.parse(id)), 0L),
             RecipeRole.standardProduction,
             inputSlots,
             List.of(),
@@ -57,8 +60,8 @@ class RecipeAssistantPopupTest {
     @Test
     void recipeAssistantFiltersSearchesSortsAndPinsRecipes() {
         ChromeTestContext ctx = new ChromeTestContext(1280f, 720f, List.of(demand(ironIngot, 8L)));
-        ResourceKey ore = ResourceKey.item("minecraft:iron_ore");
-        ResourceKey block = ResourceKey.item("minecraft:iron_block");
+        ComponentStackKey ore = OfflineContentTypes.item("minecraft:iron_ore");
+        ComponentStackKey block = OfflineContentTypes.item("minecraft:iron_block");
         ctx.graph.add(ironIngot, coal, ore, block);
         ctx.graph.addRecipe(
             recipe(

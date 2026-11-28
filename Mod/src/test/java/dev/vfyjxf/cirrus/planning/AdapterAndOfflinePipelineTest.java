@@ -3,12 +3,11 @@ package dev.vfyjxf.cirrus.planning;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
-import dev.vfyjxf.cirrus.planning.adapter.CanonicalJson;
 import dev.vfyjxf.cirrus.planning.adapter.DropReason;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.adapter.RawRecordMapper;
-import dev.vfyjxf.cirrus.planning.adapter.StackIdentity;
 import dev.vfyjxf.cirrus.planning.offline.ExportJsonCatalogLoader;
 import dev.vfyjxf.cirrus.planning.offline.LoadedCatalog;
 import dev.vfyjxf.cirrus.planning.offline.OfflinePlanBench;
@@ -25,6 +24,7 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.itemTag;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -34,38 +34,50 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AdapterAndOfflinePipelineTest {
 
     @Test
-    void stackIdentityDisambiguatesFluidVsItemTagsMatchStrategiesAndFallback() {
+    void offlineContentTypesDisambiguateContentTypesMatchStrategiesAndComponents() {
         RawRecordMapper.TagTypeRegistry reg = new RawRecordMapper.TagTypeRegistry(
             Set.of("c:honey", "c:water"),
             Set.of("minecraft:logs", "c:honey"),
             true
         );
-        assertEquals(StackIdentity.fluidContentType, reg.resolveTagContentType("c:water", 250L));
-        assertEquals(StackIdentity.itemContentType, reg.resolveTagContentType("minecraft:logs", 1000L));
-        assertEquals(StackIdentity.fluidContentType, reg.resolveTagContentType("c:honey", 1000L));
-        assertEquals(StackIdentity.itemContentType, reg.resolveTagContentType("c:honey", 1L));
+        assertEquals(OfflineContentTypes.fluidContentType, reg.resolveTagContentType("c:water", 250L));
+        assertEquals(OfflineContentTypes.itemContentType, reg.resolveTagContentType("minecraft:logs", 1000L));
+        assertEquals(OfflineContentTypes.fluidContentType, reg.resolveTagContentType("c:honey", 1000L));
+        assertEquals(OfflineContentTypes.itemContentType, reg.resolveTagContentType("c:honey", 1L));
 
         assertEquals(
             SlotMatchMode.identity,
-            StackIdentity.MatchFlags.parse("identity").orElseThrow().toSlotMatchMode().orElseThrow()
+            OfflineContentTypes.parseMatchStrategy("identity").orElseThrow()
         );
         assertEquals(
             SlotMatchMode.identityAndComponent,
-            StackIdentity.MatchFlags.parse("identityAndComponent").orElseThrow().toSlotMatchMode().orElseThrow()
+            OfflineContentTypes.parseMatchStrategy("identityAndComponent").orElseThrow()
         );
-        assertTrue(StackIdentity.MatchFlags.parse("amount").orElseThrow().toSlotMatchMode().isEmpty());
+        assertTrue(OfflineContentTypes.parseMatchStrategy("amount").isEmpty());
 
-        final class PlainNoOverrides {}
-        String t1 = StackIdentity.unencodableFallbackToken("mod:c", new PlainNoOverrides());
-        String t2 = StackIdentity.unencodableFallbackToken("mod:c", new PlainNoOverrides());
-        assertEquals(t1, t2);
-        assertFalse(t1.contains("@"));
+        ComponentStackKey iron = OfflineContentTypes.item("minecraft:iron_ingot");
+        ComponentStackKey water = OfflineContentTypes.fluid("minecraft:water");
+        assertEquals(iron, OfflineContentTypes.item("minecraft:iron_ingot"));
+        assertNotEquals(iron, water);
+        assertEquals("minecraft:iron_ingot", iron.displayId());
+        assertEquals("minecraft:water", water.displayId());
+        assertEquals(itemTag("minecraft:logs"), OfflineContentTypes.tagFor(
+            OfflineContentTypes.itemContentType, "minecraft:logs"));
 
-        JsonElement a = JsonParser.parseString("{\"b\":1.0,\"a\":[2.50,0.0]}");
-        JsonElement b = JsonParser.parseString("{\"a\":[2.5,-0],\"b\":1}");
-        assertEquals(CanonicalJson.canonicalize(a), CanonicalJson.canonicalize(b));
-        assertEquals(CanonicalJson.variantHash(a), CanonicalJson.variantHash(b));
-        assertNotEquals(CanonicalJson.variantHash(a), CanonicalJson.variantHash(JsonParser.parseString("{}")));
+        JsonElement componentsA = JsonParser.parseString("{\"b\":1,\"a\":[2.5,0]}");
+        JsonElement componentsB = JsonParser.parseString("{\"a\":[2.5,0],\"b\":1}");
+        assertEquals(
+            OfflineContentTypes.canonicalizeJson(componentsA),
+            OfflineContentTypes.canonicalizeJson(componentsB)
+        );
+        ComponentStackKey withComponents = OfflineContentTypes.withComponents(
+            OfflineContentTypes.itemContentType, "minecraft:iron_ingot", componentsA);
+        assertNotEquals(iron, withComponents);
+        assertEquals(withComponents, OfflineContentTypes.withComponents(
+            OfflineContentTypes.itemContentType, "minecraft:iron_ingot", componentsB));
+        assertTrue(withComponents.canonicalKey().contains("minecraft:iron_ingot|{\"a\":[2.5,0],\"b\":1}"));
+        assertEquals(iron, OfflineContentTypes.withComponents(
+            OfflineContentTypes.itemContentType, "minecraft:iron_ingot", JsonParser.parseString("{}")));
     }
 
     @Test
@@ -156,7 +168,7 @@ class AdapterAndOfflinePipelineTest {
         );
         assertTrue(fluidRes.isKept());
         var mappedRecord = Objects.requireNonNull(fluidRes.record(), "mapped fluid record");
-        assertEquals(ResourceKey.fluid("minecraft:water"), mappedRecord.inputs().get(0).candidates().get(0));
-        assertEquals(ResourceKey.fluid("mod:brine"), mappedRecord.outputs().get(0).resource());
+        assertEquals(OfflineContentTypes.fluid("minecraft:water"), mappedRecord.inputs().get(0).candidates().get(0));
+        assertEquals(OfflineContentTypes.fluid("mod:brine"), mappedRecord.outputs().get(0).resource());
     }
 }

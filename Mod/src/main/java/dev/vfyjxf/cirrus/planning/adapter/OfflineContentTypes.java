@@ -15,7 +15,9 @@ import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.planning.model.PlanningTagKeys;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
+import dev.vfyjxf.cirrus.api.recipe.content.constraint.MachineConstraint;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.api.recipe.machine.StackMachineEntry;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponentMap;
@@ -326,7 +328,8 @@ public final class OfflineContentTypes {
     }
 
     public static MachineEntry machine(String resourceId) {
-        return MachineEntry.fromKey(item(resourceId));
+        // Offline keys must never touch real ItemType/registry initialization: plain JVMs and chain export run without bootstrap.
+        return new StackMachineEntry(item(resourceId).stack(), MachineConstraint.empty);
     }
 
     public static TagKey<?> tagFor(Namespace contentTypeId, String rawTagId) {

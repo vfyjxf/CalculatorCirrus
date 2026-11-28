@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
@@ -18,7 +19,6 @@ import dev.vfyjxf.cirrus.api.planning.human.DecisionPrompt;
 import dev.vfyjxf.cirrus.api.planning.human.DecisionPromptKind;
 import dev.vfyjxf.cirrus.api.planning.human.HumanFeedback;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PreparationSummary;
@@ -29,6 +29,7 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningSession;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.ui.workbench.chrome.ChromeSink;
 import dev.vfyjxf.cirrus.ui.workbench.copilot.PromptCardWidget;
@@ -42,6 +43,7 @@ import dev.vfyjxf.cloudlib.api.ui.base.SceneContext;
 import dev.vfyjxf.cloudlib.api.ui.base.SceneHost;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.client.gui.Font;
 import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -63,8 +65,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WorkbenchSurfacesTest {
 
-    private static final ResourceKey iron = ResourceKey.item("minecraft:iron_ingot");
-    private static final ResourceKey coal = ResourceKey.item("minecraft:coal");
+    private static final ComponentStackKey iron = OfflineContentTypes.item("minecraft:iron_ingot");
+    private static final ComponentStackKey coal = OfflineContentTypes.item("minecraft:coal");
 
     @Test
     void previewKindMapsEverySubjectKindExplicitly() {
@@ -246,22 +248,22 @@ class WorkbenchSurfacesTest {
         }
 
         @Override
-        public SystemAdmission admissionOf(String systemId) {
+        public SystemAdmission admissionOf(Namespace systemId) {
             return SystemAdmission.enabled;
         }
 
         @Override
-        public List<CompiledRecipe> producersOf(ResourceKey output) {
+        public List<CompiledRecipe> producersOf(ComponentStackKey output) {
             return List.of();
         }
 
         @Override
-        public List<CompiledRecipe> consumersOf(ResourceKey input) {
+        public List<CompiledRecipe> consumersOf(ComponentStackKey input) {
             return List.of();
         }
 
         @Override
-        public List<CompiledCycleMacro> cycleMacrosProducing(ResourceKey output) {
+        public List<CompiledCycleMacro> cycleMacrosProducing(ComponentStackKey output) {
             return List.of();
         }
 
@@ -276,7 +278,7 @@ class WorkbenchSurfacesTest {
         }
 
         @Override
-        public Set<ResourceKey> allProducibleResources() {
+        public Set<ComponentStackKey> allProducibleResources() {
             return Set.of(iron);
         }
 
@@ -284,7 +286,7 @@ class WorkbenchSurfacesTest {
         public SccTopology sccTopology() {
             return new SccTopology() {
                 @Override
-                public int sccIdOf(ResourceKey resource) {
+                public int sccIdOf(ComponentStackKey resource) {
                     return 0;
                 }
 
@@ -294,12 +296,12 @@ class WorkbenchSurfacesTest {
                 }
 
                 @Override
-                public boolean isInNonTrivialScc(ResourceKey resource) {
+                public boolean isInNonTrivialScc(ComponentStackKey resource) {
                     return false;
                 }
 
                 @Override
-                public Set<ResourceKey> membersOfScc(int sccId) {
+                public Set<ComponentStackKey> membersOfScc(int sccId) {
                     return Set.of();
                 }
 

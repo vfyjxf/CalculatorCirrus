@@ -1,11 +1,12 @@
 package dev.vfyjxf.cirrus.ui.workbench.layout;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.plan.ByproductEntry;
 import dev.vfyjxf.cirrus.api.planning.plan.PreparationSummary;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.workbench.layout.PreparationLedgerModel.AcquireRow;
 import dev.vfyjxf.cirrus.ui.workbench.layout.PreparationLedgerModel.LedgerSortKey;
 import dev.vfyjxf.cirrus.ui.workbench.layout.PreparationLedgerModel.MachinePrepRow;
@@ -70,7 +71,7 @@ class PreparationLedgerModelTest {
 
         assertEquals(1, model.machinesToProvision().size());
         MachinePrepRow machine = model.machinesToProvision().get(0);
-        assertEquals("minecraft:furnace", machine.machineId());
+        assertEquals(OfflineContentTypes.machine("minecraft:furnace"), machine.machine());
         assertEquals(2, machine.countToBuild());
         assertEquals(List.of("s003"), machine.stepIds());
 
@@ -201,7 +202,7 @@ class PreparationLedgerModelTest {
         assertTrue(model.stockCoverageRatio() <= 1.0);
     }
 
-    private static void assertFirst(LedgerSortKey key, boolean ascending, ResourceKey expected) {
+    private static void assertFirst(LedgerSortKey key, boolean ascending, ComponentStackKey expected) {
         PreparationLedgerModel model = build(key, ascending, "");
         AcquireRow first = model.acquireRows().get(0);
         assertNotNull(first);

@@ -3,7 +3,6 @@ package dev.vfyjxf.cirrus.ui.execution;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PreparationSummary;
@@ -31,6 +30,7 @@ import dev.vfyjxf.cirrus.content.ContentApiImpl;
 import dev.vfyjxf.cirrus.content.ContentRegistryBuilder;
 import dev.vfyjxf.cirrus.internal.InternalPlugin;
 import dev.vfyjxf.cirrus.internal.performance.CalculatorSyntheticScenario;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cirrus.recipe.content.RecipeContentRendererTestBootstrap;
 import dev.vfyjxf.cirrus.recipe.execution.ExecutionAuditLog;
@@ -59,6 +59,7 @@ import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -408,8 +409,16 @@ class ExecutionCockpitModelAndControlTest {
     void executionUpdateTimesPreservesMultiStagePinnedPlanAndUpdatesQueueInPlace() {
         CalculatorSyntheticScenario.Scenario scenario = CalculatorSyntheticScenario.createWorkbenchLike(2);
         RecipeEntry<?> targetRecipe = scenario.target();
-        CompiledRecipeKey step1Key = new CompiledRecipeKey("minecraft:crafting", Optional.of("test:step_1"), 0L);
-        CompiledRecipeKey step2Key = new CompiledRecipeKey("minecraft:crafting", Optional.of("test:final_item"), 0L);
+        CompiledRecipeKey step1Key = new CompiledRecipeKey(
+            Namespace.parse("minecraft:crafting"),
+            Optional.of(ResourceLocation.parse("test:step_1")),
+            0L
+        );
+        CompiledRecipeKey step2Key = new CompiledRecipeKey(
+            Namespace.parse("minecraft:crafting"),
+            Optional.of(ResourceLocation.parse("test:final_item")),
+            0L
+        );
         ProductionPlan multiStage = new ProductionPlan(
             "plan-multi",
             "balanced",
@@ -417,7 +426,7 @@ class ExecutionCockpitModelAndControlTest {
                 new AcquireStep(
                     "a1",
                     List.of(),
-                    ResourceKey.item("minecraft:oak_log"),
+                    OfflineContentTypes.item("minecraft:oak_log"),
                     2L,
                     AcquisitionKind.manualGather,
                     CostVector.zero
@@ -490,7 +499,11 @@ class ExecutionCockpitModelAndControlTest {
                     new CraftStep(
                         "c1",
                         List.of(),
-                        new CompiledRecipeKey("minecraft:crafting", Optional.of("test:step_1"), 0L),
+                        new CompiledRecipeKey(
+                            Namespace.parse("minecraft:crafting"),
+                            Optional.of(ResourceLocation.parse("test:step_1")),
+                            0L
+                        ),
                         2L,
                         Optional.empty(),
                         false,
@@ -501,7 +514,11 @@ class ExecutionCockpitModelAndControlTest {
                     new CraftStep(
                         "c2",
                         List.of("c1"),
-                        new CompiledRecipeKey("minecraft:crafting", Optional.of("test:final_item"), 0L),
+                        new CompiledRecipeKey(
+                            Namespace.parse("minecraft:crafting"),
+                            Optional.of(ResourceLocation.parse("test:final_item")),
+                            0L
+                        ),
                         1L,
                         Optional.empty(),
                         false,

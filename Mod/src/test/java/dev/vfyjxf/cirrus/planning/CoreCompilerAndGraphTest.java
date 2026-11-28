@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.planning;
 
 import com.google.gson.JsonParser;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.GraphCompilationStats;
@@ -9,12 +10,15 @@ import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeRecord;
 import dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory;
 import dev.vfyjxf.cirrus.api.planning.graph.RecipeRole;
 import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.adapter.DropReason;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.adapter.RawRecordMapper;
 import dev.vfyjxf.cirrus.planning.core.graph.DefaultRecipeGraphCompiler;
 import dev.vfyjxf.cirrus.planning.core.graph.DefaultSystemAdmissionPolicy;
 import dev.vfyjxf.cirrus.planning.core.graph.MachineCapabilityGroups;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -25,6 +29,7 @@ import java.util.Optional;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.compile;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.exactSlot;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.item;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.machines;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.out;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.rec;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.slot;
@@ -36,8 +41,8 @@ class CoreCompilerAndGraphTest {
 
     @Test
     void tc01_deterministicFilteringAtCompilerAndAdapter() {
-        ResourceKey a = item("minecraft:stone");
-        ResourceKey b = item("mod:good");
+        ComponentStackKey a = item("minecraft:stone");
+        ComponentStackKey b = item("mod:good");
         RawRecipeRecord valid = rec(
             "minecraft:crafting",
             "mod:ok",
@@ -53,19 +58,19 @@ class CoreCompilerAndGraphTest {
             List.of(out(b, 1))
         );
         RawRecipeRecord noInputs = new RawRecipeRecord(
-            "minecraft:crafting",
+            Namespace.parse("minecraft:crafting"),
             "vanilla",
-            Optional.of("mod:no_in"),
-            List.of("minecraft:crafting_table"),
+            Optional.of(ResourceLocation.parse("mod:no_in")),
+            machines("minecraft:crafting_table"),
             List.of(),
             List.of(out(b, 1)),
             Map.of()
         );
         RawRecipeRecord noOutputs = new RawRecipeRecord(
-            "minecraft:crafting",
+            Namespace.parse("minecraft:crafting"),
             "vanilla",
-            Optional.of("mod:no_out"),
-            List.of("minecraft:crafting_table"),
+            Optional.of(ResourceLocation.parse("mod:no_out")),
+            machines("minecraft:crafting_table"),
             List.of(slot(a, 1)),
             List.of(),
             Map.of()
@@ -79,7 +84,7 @@ class CoreCompilerAndGraphTest {
         );
 
         DefaultSystemAdmissionPolicy policy = DefaultSystemAdmissionPolicy.defaults()
-                .withSystemOverride("jei:category/minecraft/crafting", SystemAdmission.excludedDisplay);
+                .withSystemOverride(Namespace.parse("jei:category/minecraft/crafting"), SystemAdmission.excludedDisplay);
         CompiledRecipeGraph g = compile(List.of(valid, insane, noInputs, noOutputs, excludedDisplay), policy);
         GraphCompilationStats stats = g.stats();
         assertEquals(5, stats.totalRawRecipes());
@@ -143,35 +148,35 @@ class CoreCompilerAndGraphTest {
 
     @Test
     void tc02_emptyIdStableKeyDeduplicationAndFiveRunDeterminism() {
-        ResourceKey a = item("minecraft:stick");
-        ResourceKey b = item("mod:empty_prod_1");
-        ResourceKey c = item("mod:empty_prod_2");
+        ComponentStackKey a = item("minecraft:stick");
+        ComponentStackKey b = item("mod:empty_prod_1");
+        ComponentStackKey c = item("mod:empty_prod_2");
         List<RawRecipeRecord> recs = List.of(
             new RawRecipeRecord(
-                "minecraft:crafting",
+                Namespace.parse("minecraft:crafting"),
                 "vanilla",
                 Optional.empty(),
-                List.of("minecraft:crafting_table"),
+                machines("minecraft:crafting_table"),
                 List.of(slot(a, 2)),
                 List.of(out(b, 1)),
                 Map.of(),
                 101L
             ),
             new RawRecipeRecord(
-                "minecraft:crafting",
+                Namespace.parse("minecraft:crafting"),
                 "vanilla",
                 Optional.empty(),
-                List.of("minecraft:crafting_table"),
+                machines("minecraft:crafting_table"),
                 List.of(slot(a, 2)),
                 List.of(out(b, 1)),
                 Map.of(),
                 102L
             ),
             new RawRecipeRecord(
-                "minecraft:crafting",
+                Namespace.parse("minecraft:crafting"),
                 "vanilla",
                 Optional.empty(),
-                List.of("minecraft:crafting_table"),
+                machines("minecraft:crafting_table"),
                 List.of(slot(a, 3)),
                 List.of(out(c, 1)),
                 Map.of(),
@@ -194,13 +199,15 @@ class CoreCompilerAndGraphTest {
 
     @Test
     void tc03_strictCatalystPromotionRespectsVariantHashAndNetDelta() {
-        ResourceKey plainMold = item("mod:mold");
-        ResourceKey hotMold = new ResourceKey("minecraft:item", "mod:mold", Optional.of("0123456789abcdef"));
-        ResourceKey coldMold = new ResourceKey("minecraft:item", "mod:mold", Optional.of("fedcba9876543210"));
-        ResourceKey ingot = item("minecraft:iron_ingot");
-        ResourceKey plate = item("mod:plate");
-        ResourceKey seed = item("mod:seed");
-        ResourceKey part = item("mod:part");
+        ComponentStackKey plainMold = item("mod:mold");
+        ComponentStackKey hotMold = OfflineContentTypes.withComponents(
+            OfflineContentTypes.itemContentType, "mod:mold", JsonParser.parseString("{\"variant\":\"0123456789abcdef\"}"));
+        ComponentStackKey coldMold = OfflineContentTypes.withComponents(
+            OfflineContentTypes.itemContentType, "mod:mold", JsonParser.parseString("{\"variant\":\"fedcba9876543210\"}"));
+        ComponentStackKey ingot = item("minecraft:iron_ingot");
+        ComponentStackKey plate = item("mod:plate");
+        ComponentStackKey seed = item("mod:seed");
+        ComponentStackKey part = item("mod:part");
 
         // Exact equal key -> promoted to catalyst.
         RawRecipeRecord equalCat = rec(
@@ -248,7 +255,7 @@ class CoreCompilerAndGraphTest {
 
     @Test
     void jeiFourPlusOutputsSplitIntoDiscouragedSingleOutputRecipes() {
-        ResourceKey in = item("minecraft:book");
+        ComponentStackKey in = item("minecraft:book");
         List<RawOutputSlot> fiveOuts = List.of(
             out(item("mod:eb_1"), 1),
             out(item("mod:eb_2"), 1),
@@ -274,9 +281,10 @@ class CoreCompilerAndGraphTest {
         CompiledRecipeGraph g = compile(List.of(jeiMulti, vanillaMulti));
         List<CompiledRecipe> prods1 = g.producersOf(item("mod:eb_1"));
         assertEquals(2, prods1.size());
-        CompiledRecipe jeiSplit = prods1.stream().filter(r -> r.key().systemId().startsWith("jei:")).findFirst()
+        CompiledRecipe jeiSplit = prods1.stream().filter(r -> "jei".equals(r.key().systemId().root())).findFirst()
                 .orElseThrow();
-        CompiledRecipe vanKept = prods1.stream().filter(r -> r.key().systemId().equals("minecraft:crafting"))
+        CompiledRecipe vanKept = prods1.stream()
+                .filter(r -> r.key().systemId().equals(Namespace.parse("minecraft:crafting")))
                 .findFirst().orElseThrow();
         assertEquals(1, jeiSplit.outputs().size());
         assertEquals(RecipeAdvisory.discouraged, jeiSplit.advisory());
@@ -286,10 +294,10 @@ class CoreCompilerAndGraphTest {
 
     @Test
     void crossSystemOneToOneSmeltCrushStaysStandardWhilePackingIsReversible() {
-        ResourceKey cobble = item("minecraft:cobblestone");
-        ResourceKey stone = item("minecraft:stone");
-        ResourceKey ingot = item("minecraft:iron_ingot");
-        ResourceKey block = item("minecraft:iron_block");
+        ComponentStackKey cobble = item("minecraft:cobblestone");
+        ComponentStackKey stone = item("minecraft:stone");
+        ComponentStackKey ingot = item("minecraft:iron_ingot");
+        ComponentStackKey block = item("minecraft:iron_block");
 
         CompiledRecipeGraph g = compile(
             List.of(
@@ -336,23 +344,27 @@ class CoreCompilerAndGraphTest {
     @Test
     void systemPolicyAndNativeMachineOrdering() {
         DefaultSystemAdmissionPolicy policy = DefaultSystemAdmissionPolicy.defaults()
-                .withSystemOverride("jei:category/minecraft/crafting", SystemAdmission.excludedDisplay)
-                .withSystemOverride("jei:category/gregtech/assembler", SystemAdmission.optInOnly);
-        assertEquals(SystemAdmission.excludedDisplay, policy.classify("jei:category/minecraft/crafting", "jei"));
-        assertEquals(SystemAdmission.optInOnly, policy.classify("jei:category/gregtech/assembler", "jei"));
-        assertEquals(SystemAdmission.enabled, policy.classify("minecraft:smelting", "vanilla"));
+                .withSystemOverride(Namespace.parse("jei:category/minecraft/crafting"), SystemAdmission.excludedDisplay)
+                .withSystemOverride(Namespace.parse("jei:category/gregtech/assembler"), SystemAdmission.optInOnly);
+        assertEquals(
+            SystemAdmission.excludedDisplay,
+            policy.classify(Namespace.parse("jei:category/minecraft/crafting"), "jei"));
+        assertEquals(
+            SystemAdmission.optInOnly,
+            policy.classify(Namespace.parse("jei:category/gregtech/assembler"), "jei"));
+        assertEquals(SystemAdmission.enabled, policy.classify(Namespace.parse("minecraft:smelting"), "vanilla"));
 
-        List<String> stonecutters = MachineCapabilityGroups.orderMachines(
-            "minecraft:stonecutting",
-            List.of("sophisticatedbackpacks:stonecutter_upgrade", "minecraft:stonecutter")
+        List<MachineEntry> stonecutters = MachineCapabilityGroups.orderMachines(
+            Namespace.parse("minecraft:stonecutting"),
+            machines("sophisticatedbackpacks:stonecutter_upgrade", "minecraft:stonecutter")
         );
-        assertEquals("minecraft:stonecutter", stonecutters.get(0));
+        assertEquals(item("minecraft:stonecutter"), stonecutters.get(0).contentKey().orElseThrow());
 
-        List<String> inscribers = MachineCapabilityGroups.orderMachines(
-            "jei:category/ae2/inscriber",
-            List.of("extendedae:ex_inscriber", "ae2:inscriber", "aa_addon:super_inscriber")
+        List<MachineEntry> inscribers = MachineCapabilityGroups.orderMachines(
+            Namespace.parse("jei:category/ae2/inscriber"),
+            machines("extendedae:ex_inscriber", "ae2:inscriber", "aa_addon:super_inscriber")
         );
-        assertEquals("ae2:inscriber", inscribers.get(0));
+        assertEquals(item("ae2:inscriber"), inscribers.get(0).contentKey().orElseThrow());
     }
 
     private static List<String> snapshotKeys(CompiledRecipeGraph graph) {

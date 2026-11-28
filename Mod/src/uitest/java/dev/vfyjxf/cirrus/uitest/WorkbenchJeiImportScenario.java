@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.uitest;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.internal.integration.jei.CirrusJeiPlugin;
@@ -70,10 +70,10 @@ public final class WorkbenchJeiImportScenario {
                     }).awaitScreen(CalculatorScreen.class).action("capture shell and dag", this::capture)
                             .waitUntil(
                                 "campfire plan finishes with non-empty DAG",
-                                () -> hasNonEmptyPlanAndDag(ResourceKey.item("minecraft:campfire"))
+                                () -> hasNonEmptyPlanAndDag(ComponentStackKey.ofItem(Items.CAMPFIRE))
                             ).frames(2).check(
                                 "campfire plan has crafting steps and DAG nodes",
-                                () -> hasNonEmptyPlanAndDag(ResourceKey.item("minecraft:campfire"))
+                                () -> hasNonEmptyPlanAndDag(ComponentStackKey.ofItem(Items.CAMPFIRE))
                             )
                 )
                 .group(
@@ -87,10 +87,10 @@ public final class WorkbenchJeiImportScenario {
                     }).awaitScreen(CalculatorScreen.class).action("capture shell and dag", this::capture)
                             .waitUntil(
                                 "stocked campfire import still produces crafting steps and DAG nodes",
-                                () -> hasNonEmptyPlanAndDag(ResourceKey.item("minecraft:campfire"))
+                                () -> hasNonEmptyPlanAndDag(ComponentStackKey.ofItem(Items.CAMPFIRE))
                             ).frames(2).check(
                                 "stocked campfire import does not collapse to 0 steps",
-                                () -> hasNonEmptyPlanAndDag(ResourceKey.item("minecraft:campfire"))
+                                () -> hasNonEmptyPlanAndDag(ComponentStackKey.ofItem(Items.CAMPFIRE))
                             )
                 )
                 .group(
@@ -110,10 +110,10 @@ public final class WorkbenchJeiImportScenario {
                             .awaitScreen(CalculatorScreen.class).action("capture shell and dag", this::capture)
                             .waitUntil(
                                 "chest plan finishes with non-empty DAG",
-                                () -> hasNonEmptyPlanAndDag(ResourceKey.item("minecraft:chest"))
+                                () -> hasNonEmptyPlanAndDag(ComponentStackKey.ofItem(Items.CHEST))
                             ).frames(2).check(
                                 "chest plan has crafting steps and DAG nodes",
-                                () -> hasNonEmptyPlanAndDag(ResourceKey.item("minecraft:chest"))
+                                () -> hasNonEmptyPlanAndDag(ComponentStackKey.ofItem(Items.CHEST))
                             )
                 ).action("cleanup", context -> {
                     clearPlayerInventory();
@@ -127,7 +127,7 @@ public final class WorkbenchJeiImportScenario {
         dag = WorkbenchTestKit.first(SpatialDagCanvasWidget.class);
     }
 
-    private boolean hasNonEmptyPlanAndDag(ResourceKey expectedTarget) {
+    private boolean hasNonEmptyPlanAndDag(ComponentStackKey expectedTarget) {
         WorkbenchShellWidget currentShell = shell;
         SpatialDagCanvasWidget currentDag = dag;
         if (currentShell == null || currentDag == null) {

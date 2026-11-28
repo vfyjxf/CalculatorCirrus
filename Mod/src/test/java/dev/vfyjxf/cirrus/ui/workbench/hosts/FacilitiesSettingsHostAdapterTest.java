@@ -21,6 +21,7 @@ import dev.vfyjxf.cirrus.ui.workbench.settings.ProgressionPreset;
 import dev.vfyjxf.cirrus.ui.workbench.settings.SettingsHost;
 import dev.vfyjxf.cirrus.ui.workbench.state.DagLayoutMode;
 import dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchUiSnapshot;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.Test;
 
@@ -233,7 +234,7 @@ class FacilitiesSettingsHostAdapterTest {
         }
 
         @Override
-        public List<String> systemIds() {
+        public List<Namespace> systemIds() {
             return List.of();
         }
 

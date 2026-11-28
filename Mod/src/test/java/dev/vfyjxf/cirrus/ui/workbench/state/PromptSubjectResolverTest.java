@@ -12,7 +12,10 @@ import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.tags.TagKey;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -40,40 +43,44 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PromptSubjectResolverTest {
 
+    private static final MachineEntry furnace = OfflineContentTypes.machine("minecraft:furnace");
+    private static final MachineEntry mechanicalPress = OfflineContentTypes.machine("create:mechanical_press");
+    private static final MachineEntry charger = OfflineContentTypes.machine("ae2:charger");
+    private static final TagKey<?> logsTag = OfflineContentTypes
+            .tagFor(OfflineContentTypes.itemContentType, "minecraft:logs");
+
     @Test
     void machineForkStripsPrefixAndAnchorsMachineSteps() {
         DecisionPrompt fork = prompt(
-            "prompt:machine_fork:minecraft:furnace",
+            "prompt:machine:" + furnace.canonicalKey(),
             DecisionPromptKind.machineAvailability,
             0.9,
             option(
                 "accept_build",
                 cost(0.5, 1.0),
-                List.of(
-                    new MachineRule("mr", GuidanceScope.session, RuleStrength.softPrefer, "minecraft:furnace", true)
-                )
+                List.of(new MachineRule("mr", GuidanceScope.session, RuleStrength.softPrefer, furnace, true))
             ),
             optionWithFollowUp(
                 "already_owned",
                 cost(0.1, 0.0),
                 List.of(),
-                new DeclareOwnedMachineFeedback("minecraft:furnace", 2, false)
+                new DeclareOwnedMachineFeedback(furnace, 2, false)
             )
         );
 
         ResolvedPrompt resolved = PromptSubjectResolver.resolveAll(List.of(fork), sevenTypePlan(), graph()).get(0);
 
         assertSame(fork, resolved.raw());
-        assertEquals("minecraft:furnace", resolved.primaryMachineId());
+        assertEquals(furnace, resolved.primaryMachine());
         assertNull(resolved.primaryResource());
-        assertNull(resolved.tagId());
+        assertNull(resolved.tag());
         assertNull(resolved.recipeKey());
         assertNull(resolved.systemId());
         assertEquals(Set.of("s003", "s004"), resolved.anchoredStepIds());
         assertEquals(2, resolved.options().size());
 
         ResolvedPromptOption accept = resolved.options().get(0);
-        assertEquals("minecraft:furnace", accept.machineId());
+        assertEquals(furnace, accept.machine());
         assertSame(fork.options().get(0).estimatedDelta(), accept.delta());
         assertFalse(accept.hasFollowUp());
 
@@ -91,20 +98,12 @@ class PromptSubjectResolverTest {
             option(
                 "a",
                 cost(0.0, 0.0),
-                List.of(
-                    new MachineRule(
-                        "mr",
-                        GuidanceScope.session,
-                        RuleStrength.softPrefer,
-                        "create:mechanical_press",
-                        true
-                    )
-                )
+                List.of(new MachineRule("mr", GuidanceScope.session, RuleStrength.softPrefer, mechanicalPress, true))
             ),
             option("b", cost(0.0, 0.0), List.of())
         );
         ResolvedPrompt resolved = PromptSubjectResolver.resolveAll(List.of(fromRule), sevenTypePlan(), graph()).get(0);
-        assertEquals("create:mechanical_press", resolved.primaryMachineId());
+        assertEquals(mechanicalPress, resolved.primaryMachine());
         assertEquals(Set.of("s007"), resolved.anchoredStepIds());
 
         DecisionPrompt fromFollowUp = prompt(
@@ -112,11 +111,11 @@ class PromptSubjectResolverTest {
             DecisionPromptKind.machineAvailability,
             0.4,
             option("a", cost(0.0, 0.0), List.of()),
-            optionWithFollowUp("b", cost(0.0, 0.0), List.of(), new DeclareOwnedMachineFeedback("ae2:charger", 1, false))
+            optionWithFollowUp("b", cost(0.0, 0.0), List.of(), new DeclareOwnedMachineFeedback(charger, 1, false))
         );
         ResolvedPrompt followUpResolved = PromptSubjectResolver
                 .resolveAll(List.of(fromFollowUp), sevenTypePlan(), graph()).get(0);
-        assertEquals("ae2:charger", followUpResolved.primaryMachineId());
+        assertEquals(charger, followUpResolved.primaryMachine());
         assertTrue(followUpResolved.anchoredStepIds().isEmpty());
     }
 
@@ -126,11 +125,11 @@ class PromptSubjectResolverTest {
             "tag-rule",
             GuidanceScope.session,
             RuleStrength.hardPin,
-            "minecraft:logs",
+            logsTag,
             oakLog
         );
         DecisionPrompt choice = prompt(
-            "prompt:tag_choice:minecraft:logs",
+            "prompt:tag:minecraft:logs",
             DecisionPromptKind.materialFamilyAnchor,
             0.7,
             option("use_log", cost(1.0, 0.0), List.of(tagRule)),
@@ -139,13 +138,13 @@ class PromptSubjectResolverTest {
 
         ResolvedPrompt resolved = PromptSubjectResolver.resolveAll(List.of(choice), taggedPlan(), graph()).get(0);
 
-        assertEquals("minecraft:logs", resolved.tagId());
+        assertEquals(logsTag, resolved.tag());
         assertNull(resolved.primaryResource());
-        assertNull(resolved.primaryMachineId());
+        assertNull(resolved.primaryMachine());
         assertEquals(Set.of("c001"), resolved.anchoredStepIds());
         assertEquals(oakLog, resolved.options().get(0).variantResource());
         assertNull(resolved.options().get(1).variantResource());
-        assertNull(resolved.options().get(0).machineId());
+        assertNull(resolved.options().get(0).machine());
     }
 
     @Test
@@ -157,22 +156,14 @@ class PromptSubjectResolverTest {
             option(
                 "a",
                 cost(0.0, 0.0),
-                List.of(
-                    new TagDefaultRule(
-                        "tag-rule",
-                        GuidanceScope.session,
-                        RuleStrength.hardPin,
-                        "minecraft:logs",
-                        oakLog
-                    )
-                )
+                List.of(new TagDefaultRule("tag-rule", GuidanceScope.session, RuleStrength.hardPin, logsTag, oakLog))
             ),
             option("b", cost(0.0, 0.0), List.of())
         );
 
         ResolvedPrompt resolved = PromptSubjectResolver.resolveAll(List.of(choice), taggedPlan(), graph()).get(0);
 
-        assertEquals("minecraft:logs", resolved.tagId());
+        assertEquals(logsTag, resolved.tag());
         assertEquals(oakLog, resolved.options().get(0).variantResource());
         assertEquals(Set.of("c001"), resolved.anchoredStepIds());
     }
@@ -180,7 +171,7 @@ class PromptSubjectResolverTest {
     @Test
     void expensiveLeafParsesResourceKeyAndAnchorsGatheringSteps() {
         DecisionPrompt leaf = prompt(
-            "prompt:expensive_leaf:minecraft:iron_ore",
+            "prompt:supply:minecraft:iron_ore",
             DecisionPromptKind.baseOrSupplyBoundary,
             0.8,
             option(
@@ -194,27 +185,36 @@ class PromptSubjectResolverTest {
         ResolvedPrompt resolved = PromptSubjectResolver.resolveAll(List.of(leaf), sevenTypePlan(), graph()).get(0);
 
         assertEquals(ironOre, resolved.primaryResource());
-        assertNull(resolved.primaryMachineId());
+        assertNull(resolved.primaryMachine());
         assertEquals(Set.of("s001"), resolved.anchoredStepIds());
         assertSame(leaf.options().get(1).estimatedDelta(), resolved.options().get(1).delta());
     }
 
     @Test
-    void expensiveLeafHonoursContentTypeAndVariantHash() {
+    void fluidResourceRuleKeepsContentType() {
         DecisionPrompt fluid = prompt(
-            "prompt:expensive_leaf:[minecraft:fluid]minecraft:water#abc123",
+            "prompt:supply:[minecraft:fluid]minecraft:water#abc123",
             DecisionPromptKind.baseOrSupplyBoundary,
             0.3,
-            option("a", cost(0.0, 0.0), List.of()),
+            option(
+                "a",
+                cost(0.0, 0.0),
+                List.of(
+                    new ResourceRule(
+                        "rr",
+                        GuidanceScope.session,
+                        RuleStrength.hardPin,
+                        OfflineContentTypes.fluid("minecraft:water"),
+                        true
+                    )
+                )
+            ),
             option("b", cost(0.0, 0.0), List.of())
         );
 
         ResolvedPrompt resolved = PromptSubjectResolver.resolveAll(List.of(fluid), sevenTypePlan(), graph()).get(0);
 
-        assertEquals(
-            new ResourceKey("minecraft:fluid", "minecraft:water", Optional.empty()),
-            resolved.primaryResource()
-        );
+        assertEquals(OfflineContentTypes.fluid("minecraft:water"), resolved.primaryResource());
         assertTrue(resolved.anchoredStepIds().isEmpty());
     }
 
@@ -241,7 +241,7 @@ class PromptSubjectResolverTest {
     @Test
     void suspiciousRecipeParsesRecipeKeyAndSystemAndAnchors() {
         DecisionPrompt smelt = prompt(
-            "prompt:suspicious:minecraft:smelting::minecraft:iron_ingot_from_smelting",
+            "prompt:unverified:minecraft:smelting::minecraft:iron_ingot_from_smelting",
             DecisionPromptKind.suspiciousJeiVerify,
             0.6,
             option(
@@ -255,7 +255,7 @@ class PromptSubjectResolverTest {
         ResolvedPrompt resolved = PromptSubjectResolver.resolveAll(List.of(smelt), sevenTypePlan(), graph()).get(0);
 
         assertEquals(smeltIron, resolved.recipeKey());
-        assertEquals("minecraft:smelting", resolved.systemId());
+        assertEquals(Namespace.parse("minecraft:smelting"), resolved.systemId());
         assertNull(resolved.primaryResource());
         assertEquals(Set.of("s004"), resolved.anchoredStepIds());
         assertEquals(
@@ -264,7 +264,7 @@ class PromptSubjectResolverTest {
         );
 
         DecisionPrompt convert = prompt(
-            "prompt:suspicious:minecraft:crafting::minecraft:iron_ingot_from_iron_block",
+            "prompt:unverified:minecraft:crafting::minecraft:iron_ingot_from_iron_block",
             DecisionPromptKind.suspiciousJeiVerify,
             0.5,
             option("a", cost(0.0, 0.0), List.of()),
@@ -276,7 +276,7 @@ class PromptSubjectResolverTest {
         );
 
         DecisionPrompt loop = prompt(
-            "prompt:suspicious:minecraft:crafting::loop/shaft",
+            "prompt:unverified:minecraft:crafting::loop/shaft",
             DecisionPromptKind.suspiciousJeiVerify,
             0.5,
             option("a", cost(0.0, 0.0), List.of()),
@@ -291,7 +291,7 @@ class PromptSubjectResolverTest {
     @Test
     void suspiciousStructuralHashKeyIsParsed() {
         DecisionPrompt hashed = prompt(
-            "prompt:suspicious:minecraft:smelting::#deadbeef",
+            "prompt:unverified:minecraft:smelting::#deadbeef",
             DecisionPromptKind.suspiciousJeiVerify,
             0.4,
             option("a", cost(0.0, 0.0), List.of()),
@@ -300,8 +300,11 @@ class PromptSubjectResolverTest {
 
         ResolvedPrompt resolved = PromptSubjectResolver.resolveAll(List.of(hashed), sevenTypePlan(), graph()).get(0);
 
-        assertEquals(new CompiledRecipeKey("minecraft:smelting", Optional.empty(), 0xdeadbeefL), resolved.recipeKey());
-        assertEquals("minecraft:smelting", resolved.systemId());
+        assertEquals(
+            new CompiledRecipeKey(Namespace.parse("minecraft:smelting"), Optional.empty(), 0xdeadbeefL),
+            resolved.recipeKey()
+        );
+        assertEquals(Namespace.parse("minecraft:smelting"), resolved.systemId());
         assertTrue(resolved.anchoredStepIds().isEmpty());
     }
 
@@ -316,18 +319,26 @@ class PromptSubjectResolverTest {
             option(
                 "ban_system",
                 cost(0.0, 0.0),
-                List.of(new SystemRule("sr", GuidanceScope.session, RuleStrength.hardBan, "create:pressing", false))
+                List.of(
+                    new SystemRule(
+                        "sr",
+                        GuidanceScope.session,
+                        RuleStrength.hardBan,
+                        Namespace.parse("create:pressing"),
+                        false
+                    )
+                )
             ),
             option("allow", cost(0.0, 0.0), List.of())
         );
 
         ResolvedPrompt onPlan = PromptSubjectResolver.resolveAll(List.of(prompt), sevenTypePlan(), graph()).get(0);
         assertNull(onPlan.recipeKey());
-        assertEquals("create:pressing", onPlan.systemId());
+        assertEquals(Namespace.parse("create:pressing"), onPlan.systemId());
         assertTrue(onPlan.anchoredStepIds().isEmpty());
 
         ResolvedPrompt withoutPlan = PromptSubjectResolver.resolveAll(List.of(prompt), null, graph()).get(0);
-        assertEquals("create:pressing", withoutPlan.systemId());
+        assertEquals(Namespace.parse("create:pressing"), withoutPlan.systemId());
         assertTrue(withoutPlan.anchoredStepIds().isEmpty());
 
         assertThrows(NullPointerException.class, () -> PromptSubjectResolver.resolveAll(List.of(prompt), null, null));
@@ -336,17 +347,25 @@ class PromptSubjectResolverTest {
     @Test
     void resolveAllSkipsNullEntriesAndPreservesOrder() {
         DecisionPrompt first = prompt(
-            "prompt:expensive_leaf:minecraft:iron_ore",
+            "prompt:supply:minecraft:iron_ore",
             DecisionPromptKind.baseOrSupplyBoundary,
             0.2,
-            option("a", cost(0.0, 0.0), List.of()),
+            option(
+                "a",
+                cost(0.0, 0.0),
+                List.of(new ResourceRule("rr", GuidanceScope.session, RuleStrength.softPenalize, ironOre, false))
+            ),
             option("b", cost(0.0, 0.0), List.of())
         );
         DecisionPrompt second = prompt(
-            "prompt:expensive_leaf:minecraft:diamond",
+            "prompt:supply:minecraft:diamond",
             DecisionPromptKind.baseOrSupplyBoundary,
             0.1,
-            option("a", cost(0.0, 0.0), List.of()),
+            option(
+                "a",
+                cost(0.0, 0.0),
+                List.of(new ResourceRule("rr", GuidanceScope.session, RuleStrength.softPenalize, diamond, false))
+            ),
             option("b", cost(0.0, 0.0), List.of())
         );
 

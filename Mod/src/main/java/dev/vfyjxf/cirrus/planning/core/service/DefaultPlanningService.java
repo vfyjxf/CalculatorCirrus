@@ -352,7 +352,7 @@ public final class DefaultPlanningService implements PlanningService {
                 );
 
         List<ProductionPlan> feasibleAnnotated = new ArrayList<>();
-        List<ProductionPlan> conditionalDrafts = new ArrayList<>();
+        List<ProductionPlan> conditionalPlans = new ArrayList<>();
         HumanGuidanceView guidance = request.context().guidance();
 
         for (ProductionPlan raw : rawCandidates) {
@@ -396,7 +396,7 @@ public final class DefaultPlanningService implements PlanningService {
             if (missingEvidence.isEmpty()) {
                 feasibleAnnotated.add(stamped);
             } else {
-                conditionalDrafts.add(stamped);
+                conditionalPlans.add(stamped);
             }
         }
 
@@ -405,9 +405,9 @@ public final class DefaultPlanningService implements PlanningService {
                 ? List.of()
                 : selectWithConditionedFrontier(feasibleAnnotated, baselineScaleA, request);
 
-        List<ProductionPlan> selectedConditional = conditionalDrafts.isEmpty()
+        List<ProductionPlan> selectedConditional = conditionalPlans.isEmpty()
                 ? List.of()
-                : selectWithConditionedFrontier(conditionalDrafts, baselineScaleA, request);
+                : selectWithConditionedFrontier(conditionalPlans, baselineScaleA, request);
 
         if (selectedFeasible.isEmpty() && selectedConditional.isEmpty()) {
             if (unmetReasons.isEmpty()) {

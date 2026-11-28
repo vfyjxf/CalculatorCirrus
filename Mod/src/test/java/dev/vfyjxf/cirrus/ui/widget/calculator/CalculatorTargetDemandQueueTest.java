@@ -1,9 +1,9 @@
 package dev.vfyjxf.cirrus.ui.widget.calculator;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.resources.ResourceLocation;
 import org.eclipse.collections.api.RichIterable;
@@ -46,8 +46,8 @@ class CalculatorTargetDemandQueueTest {
     @Test
     void setDemandsPublishesQueueWithoutPrimaryRecipe() {
         List<TargetDemand> demands = List.of(
-            new TargetDemand(ResourceKey.item("minecraft:cobblestone"), 32L),
-            new TargetDemand(ResourceKey.item("minecraft:iron_ingot"), 8L)
+            new TargetDemand(OfflineContentTypes.item("minecraft:cobblestone"), 32L),
+            new TargetDemand(OfflineContentTypes.item("minecraft:iron_ingot"), 8L)
         );
         CalculatorTargetRecipeState.Selection selection = CalculatorTargetRecipeState.setDemands(demands, null);
 
@@ -59,7 +59,7 @@ class CalculatorTargetDemandQueueTest {
 
     @Test
     void setDemandsAcceptsPrimaryRecipeAndEmptyQueue() {
-        List<TargetDemand> demands = List.of(new TargetDemand(ResourceKey.item("minecraft:stone"), 12L));
+        List<TargetDemand> demands = List.of(new TargetDemand(OfflineContentTypes.item("minecraft:stone"), 12L));
         CalculatorTargetRecipeState.Selection withPrimary = CalculatorTargetRecipeState.setDemands(demands, entry);
         assertEquals(entry, withPrimary.recipe());
         assertEquals(demands, CalculatorTargetRecipeState.currentDemands());
@@ -71,7 +71,10 @@ class CalculatorTargetDemandQueueTest {
 
     @Test
     void clearDropsSelectionAndDemands() {
-        CalculatorTargetRecipeState.setDemands(List.of(new TargetDemand(ResourceKey.item("minecraft:dirt"), 1L)), null);
+        CalculatorTargetRecipeState.setDemands(
+            List.of(new TargetDemand(OfflineContentTypes.item("minecraft:dirt"), 1L)),
+            null
+        );
         CalculatorTargetRecipeState.clear();
 
         assertNull(CalculatorTargetRecipeState.current());
@@ -97,7 +100,7 @@ class CalculatorTargetDemandQueueTest {
         assertSame(selection, CalculatorTargetRecipeState.current());
 
         CalculatorTargetRecipeState
-                .setDemands(List.of(new TargetDemand(ResourceKey.item("minecraft:stone"), 4L)), entry);
+                .setDemands(List.of(new TargetDemand(OfflineContentTypes.item("minecraft:stone"), 4L)), entry);
         assertTrue(CalculatorTargetRecipeState.hasPending());
         CalculatorTargetRecipeState.markConsumed();
         assertFalse(CalculatorTargetRecipeState.hasPending());
@@ -106,7 +109,7 @@ class CalculatorTargetDemandQueueTest {
 
     @Test
     void setWithFallbackDemandsUsesFallbackWhenRecipeOutputsUnavailable() {
-        List<TargetDemand> fallback = List.of(new TargetDemand(ResourceKey.item("minecraft:diamond"), 3L));
+        List<TargetDemand> fallback = List.of(new TargetDemand(OfflineContentTypes.item("minecraft:diamond"), 3L));
         CalculatorTargetRecipeState.Selection selection = CalculatorTargetRecipeState.set(entry, 1, fallback);
 
         assertEquals(entry, selection.recipe());

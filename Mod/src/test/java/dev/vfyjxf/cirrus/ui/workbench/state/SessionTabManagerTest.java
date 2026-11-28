@@ -7,6 +7,7 @@ import dev.vfyjxf.cirrus.api.planning.human.MachineRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -183,7 +184,13 @@ class SessionTabManagerTest {
     }
 
     private static MachineRule machineRule(String ruleId) {
-        return new MachineRule(ruleId, GuidanceScope.session, RuleStrength.softPrefer, "minecraft:furnace", true);
+        return new MachineRule(
+            ruleId,
+            GuidanceScope.session,
+            RuleStrength.softPrefer,
+            OfflineContentTypes.machine("minecraft:furnace"),
+            true
+        );
     }
 
     private static List<String> ruleIds(PlannerWorkbenchController controller) {

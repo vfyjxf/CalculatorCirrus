@@ -14,8 +14,10 @@ import dev.vfyjxf.cirrus.api.planning.human.RecipeRule;
 import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.bridge.WorldFacilityRegistry;
 import dev.vfyjxf.cirrus.ui.workbench.state.ResolvedPrompt;
+import net.minecraft.tags.TagKey;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -32,7 +34,6 @@ import static dev.vfyjxf.cirrus.ui.workbench.copilot.CoPilotTestFixtures.option;
 import static dev.vfyjxf.cirrus.ui.workbench.copilot.CoPilotTestFixtures.prompt;
 import static dev.vfyjxf.cirrus.ui.workbench.copilot.CoPilotTestFixtures.resolved;
 import static dev.vfyjxf.cirrus.ui.workbench.copilot.CoPilotTestFixtures.smeltIron;
-import static dev.vfyjxf.cirrus.ui.workbench.copilot.CoPilotTestFixtures.smelting;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -42,10 +43,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** UI-TC-27: dispatch of the four decision card kinds, the already_owned follow-up feedback and a persistToWorld round trip. */
 class PromptDispatchTest {
 
+    private static final TagKey<?> logs = OfflineContentTypes.tagFor(OfflineContentTypes.itemContentType, "minecraft:logs");
+
     private static ResolvedPrompt promptOf(DecisionPromptKind kind) {
         DecisionPrompt raw = switch (kind) {
             case machineAvailability -> prompt(
-                "prompt:machine_fork:" + furnace,
+                "prompt:machine:" + furnace.canonicalKey(),
                 kind,
                 0.82,
                 option(
@@ -56,20 +59,20 @@ class PromptDispatchTest {
                 option("reject_build", cost(0.0, 0.0, 0.0, 0.0, 0.0), List.of())
             );
             case materialFamilyAnchor -> prompt(
-                "prompt:tag_choice:minecraft:logs",
+                "prompt:tag:minecraft:logs",
                 kind,
                 0.44,
                 option(
                     "pick_oak",
                     cost(0.0, 0.0, 0.0, 12.0, 0.0),
                     List.of(
-                        new TagDefaultRule("r2", GuidanceScope.session, RuleStrength.hardPin, "minecraft:logs", coal)
+                        new TagDefaultRule("r2", GuidanceScope.session, RuleStrength.hardPin, logs, coal)
                     )
                 ),
                 option("pick_spruce", cost(0.0, 0.0, 0.0, 9.0, 0.0), List.of())
             );
             case baseOrSupplyBoundary, reusableCatalystCheck, fieldTripConfirm -> prompt(
-                "prompt:expensive_leaf:[minecraft:item]" + ironOre.resourceId(),
+                "prompt:supply:[minecraft:item]" + ironOre.displayId(),
                 kind,
                 0.61,
                 option(
@@ -80,7 +83,7 @@ class PromptDispatchTest {
                 option("keep_gather", cost(0.0, 0.0, 0.0, 0.0, 0.0), List.of())
             );
             case suspiciousJeiVerify, ruleConflictResolution -> prompt(
-                "prompt:suspicious:" + smelting + "::minecraft:iron_ingot_from_smelting",
+                "prompt:unverified:" + smeltIron.shortString(),
                 kind,
                 0.55,
                 option(
@@ -93,11 +96,11 @@ class PromptDispatchTest {
         };
         return switch (kind) {
             case machineAvailability -> resolved(raw, null, furnace, null, null, null, Set.of("s-prov"));
-            case materialFamilyAnchor -> resolved(raw, coal, null, "minecraft:logs", null, null, Set.of("s-craft"));
+            case materialFamilyAnchor -> resolved(raw, coal, null, logs, null, null, Set.of("s-craft"));
             case baseOrSupplyBoundary, reusableCatalystCheck, fieldTripConfirm ->
                 resolved(raw, ironOre, null, null, null, null, Set.of("s-acq"));
             case suspiciousJeiVerify, ruleConflictResolution ->
-                resolved(raw, null, null, null, smeltIron, smelting, Set.of("s-craft"));
+                resolved(raw, null, null, null, smeltIron, smeltIron.systemId(), Set.of("s-craft"));
         };
     }
 
@@ -131,7 +134,7 @@ class PromptDispatchTest {
             new DeclareOwnedMachineFeedback(furnace, 1, false)
         );
         DecisionPrompt raw = prompt(
-            "prompt:machine_fork:" + furnace,
+            "prompt:machine:" + furnace.canonicalKey(),
             DecisionPromptKind.machineAvailability,
             0.9,
             option(
@@ -151,7 +154,7 @@ class PromptDispatchTest {
         assertEquals(1, host.feedbacks.size());
         assertTrue(host.feedbacks.get(0) instanceof DeclareOwnedMachineFeedback);
         DeclareOwnedMachineFeedback declare = (DeclareOwnedMachineFeedback) host.feedbacks.get(0);
-        assertEquals(furnace, declare.machineId());
+        assertEquals(furnace, declare.machine());
         assertEquals(1, declare.ownedCount());
         assertFalse(declare.persistToWorld());
 
@@ -187,8 +190,20 @@ class PromptDispatchTest {
         JsonElement encoded = registry.encodeToJson().orElseThrow();
         WorldFacilityRegistry reloaded = WorldFacilityRegistry.loadFromJson(encoded);
 
-        assertEquals(registry.worldSaveRules(), reloaded.worldSaveRules());
-        assertEquals(2, reloaded.worldSaveRules().size());
+        List<GuidanceRule> saved = registry.worldSaveRules();
+        List<GuidanceRule> restored = reloaded.worldSaveRules();
+        assertEquals(List.of(freeRule.ruleId(), banRule.ruleId()), saved.stream().map(GuidanceRule::ruleId).toList());
+        assertEquals(saved.size(), restored.size());
+        for (int index = 0; index < saved.size(); index++) {
+            ResourceRule before = (ResourceRule) saved.get(index);
+            ResourceRule after = (ResourceRule) restored.get(index);
+            assertEquals(before.ruleId(), after.ruleId());
+            assertEquals(before.scope(), after.scope());
+            assertEquals(before.strength(), after.strength());
+            assertEquals(before.treatAsFreeBaseSource(), after.treatAsFreeBaseSource());
+            assertEquals(before.resource().canonicalKey(), after.resource().canonicalKey());
+        }
+        assertEquals(2, restored.size());
     }
 
     @Test

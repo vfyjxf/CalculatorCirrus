@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.uitest;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
 import dev.vfyjxf.cirrus.ui.widget.calculator.page.DatabasePage;
@@ -31,6 +31,7 @@ import dev.vfyjxf.cloudlib.ui.widget.RingWidget;
 import dev.vfyjxf.cloudlib.uitest.api.ClientScenario;
 import dev.vfyjxf.cloudlib.uitest.api.ScenarioBuilder;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.item.Items;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Set;
@@ -321,7 +322,7 @@ public final class WorkbenchThemeVisualScenario {
 
             build.action("open recipe selection assistant popup for iron ingot", ctx -> {
                 sh().closeTransientOverlays(null);
-                sh().openRecipeAssistant(ResourceKey.item("minecraft:iron_ingot"));
+                sh().openRecipeAssistant(ComponentStackKey.ofItem(Items.IRON_INGOT));
             }).frames(6).check("recipe assistant open", () -> WorkbenchTestKit.shown(RecipeAssistantPopupWidget.class))
                     .screenshot("visual-" + tag + "-06b-recipe-assistant");
 

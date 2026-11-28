@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.copilot;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningBudget;
 import dev.vfyjxf.cirrus.api.planning.context.ProgressionState;
@@ -26,7 +27,6 @@ import dev.vfyjxf.cirrus.api.planning.human.HumanFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.MachineRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
@@ -42,6 +42,8 @@ import dev.vfyjxf.cirrus.api.planning.plan.VerificationCertificate;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningDiagnostics;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.state.DagLayoutMode;
 import dev.vfyjxf.cirrus.ui.workbench.state.FlowViewMode;
@@ -50,7 +52,9 @@ import dev.vfyjxf.cirrus.ui.workbench.state.ResolvedPrompt;
 import dev.vfyjxf.cirrus.ui.workbench.state.ResolvedPromptOption;
 import dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchPhase;
 import dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchUiSnapshot;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
+import net.minecraft.tags.TagKey;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -63,35 +67,39 @@ import java.util.TreeSet;
 
 final class CoPilotTestFixtures {
 
-    static final ResourceKey ironOre = ResourceKey.item("minecraft:iron_ore");
-    static final ResourceKey ironIngot = ResourceKey.item("minecraft:iron_ingot");
-    static final ResourceKey coal = ResourceKey.item("minecraft:coal");
-    static final ResourceKey certus = ResourceKey.item("ae2:certus_quartz_crystal");
-    static final String smelting = "minecraft:smelting";
-    static final String charging = "ae2:charger";
+    static final ComponentStackKey ironOre = OfflineContentTypes.item("minecraft:iron_ore");
+    static final ComponentStackKey ironIngot = OfflineContentTypes.item("minecraft:iron_ingot");
+    static final ComponentStackKey coal = OfflineContentTypes.item("minecraft:coal");
+    static final ComponentStackKey certus = OfflineContentTypes.item("ae2:certus_quartz_crystal");
+    static final Namespace smelting = Namespace.parse("minecraft:smelting");
+    static final Namespace charging = Namespace.parse("ae2:charger");
     static final CompiledRecipeKey smeltIron = key(smelting, "minecraft:iron_ingot_from_smelting");
     static final CompiledRecipeKey chargeCertus = key(charging, "ae2:certus_quartz_crystal");
-    static final String furnace = "minecraft:furnace";
+    static final MachineEntry furnace = OfflineContentTypes.machine("minecraft:furnace");
 
     private CoPilotTestFixtures() {}
 
     static CompiledRecipeKey key(String systemId, String recipeId) {
-        return new CompiledRecipeKey(systemId, Optional.of(recipeId), 0L);
+        return key(Namespace.parse(systemId), recipeId);
+    }
+
+    static CompiledRecipeKey key(Namespace systemId, String recipeId) {
+        return new CompiledRecipeKey(systemId, OfflineContentTypes.tryParseLocation(recipeId), 0L);
     }
 
     static CostVector cost(double human, double passive, double capital, double scarcity, double cognitive) {
         return new CostVector(human, passive, capital, scarcity, cognitive);
     }
 
-    static InputSlot input(int slotIndex, long amount, ResourceKey resource) {
+    static InputSlot input(int slotIndex, long amount, ComponentStackKey resource) {
         return new InputSlot(slotIndex, amount, Optional.empty(), List.of(resource), SlotMatchMode.identity);
     }
 
-    static SlotBinding binding(ResourceKey resource, ResourceKey... alternatives) {
+    static SlotBinding binding(ComponentStackKey resource, ComponentStackKey... alternatives) {
         return new SlotBinding(resource, List.of(alternatives));
     }
 
-    static AcquireStep acquire(String stepId, ResourceKey resource, long amount) {
+    static AcquireStep acquire(String stepId, ComponentStackKey resource, long amount) {
         return new AcquireStep(
             stepId,
             List.of(),
@@ -107,17 +115,17 @@ final class CoPilotTestFixtures {
         CompiledRecipeKey recipeKey,
         List<String> dependsOn,
         Map<Integer, SlotBinding> bindings,
-        Optional<String> machineId,
+        Optional<MachineEntry> machine,
         CostVector cost
     ) {
-        return new CraftStep(stepId, dependsOn, recipeKey, 1L, machineId, false, bindings, Map.of(), cost);
+        return new CraftStep(stepId, dependsOn, recipeKey, 1L, machine, false, bindings, Map.of(), cost);
     }
 
-    static ProvisionMachineStep provision(String stepId, String machineId, int count) {
+    static ProvisionMachineStep provision(String stepId, MachineEntry machine, int count) {
         return new ProvisionMachineStep(
             stepId,
             List.of(),
-            machineId,
+            machine,
             Optional.empty(),
             count,
             false,
@@ -125,11 +133,11 @@ final class CoPilotTestFixtures {
         );
     }
 
-    static PreparationSummary preparation(String machineId, int count) {
+    static PreparationSummary preparation(MachineEntry machine, int count) {
         return new PreparationSummary(
             StockLedger.empty,
             new StockLedger(Map.of(ironOre, 8L)),
-            machineId == null ? Map.of() : Map.of(machineId, count),
+            machine == null ? Map.<MachineEntry, Integer>of() : Map.of(machine, count),
             List.of(),
             List.of()
         );
@@ -182,31 +190,31 @@ final class CoPilotTestFixtures {
 
     static ResolvedPrompt resolved(
         DecisionPrompt prompt,
-        @Nullable ResourceKey resource,
-        @Nullable String machineId,
-        @Nullable String tagId,
+        @Nullable ComponentStackKey resource,
+        @Nullable MachineEntry machine,
+        @Nullable TagKey<?> tag,
         @Nullable CompiledRecipeKey recipeKey,
-        @Nullable String systemId,
+        @Nullable Namespace systemId,
         Set<String> anchors
     ) {
         List<ResolvedPromptOption> options = new ArrayList<>();
         for (DecisionOption option : prompt.options()) {
-            ResourceKey variant = tagId == null ? null : resource;
+            ComponentStackKey variant = tag == null ? null : resource;
             options.add(
                 new ResolvedPromptOption(
                     option,
                     variant,
-                    machineId,
+                    machine,
                     option.estimatedDelta(),
                     option.followUp().isPresent()
                 )
             );
         }
-        return new ResolvedPrompt(prompt, resource, machineId, tagId, recipeKey, systemId, anchors, options);
+        return new ResolvedPrompt(prompt, resource, machine, tag, recipeKey, systemId, anchors, options);
     }
 
-    static MachineRule machineRule(String ruleId, String machineId, RuleStrength strength, boolean willingToBuild) {
-        return new MachineRule(ruleId, GuidanceScope.session, strength, machineId, willingToBuild);
+    static MachineRule machineRule(String ruleId, MachineEntry machine, RuleStrength strength, boolean willingToBuild) {
+        return new MachineRule(ruleId, GuidanceScope.session, strength, machine, willingToBuild);
     }
 
     static WorkbenchUiSnapshot snapshot(
@@ -349,7 +357,7 @@ final class CoPilotTestFixtures {
                 List.of(input(0, 1, ironIngot)),
                 List.<CatalystSlot>of(),
                 List.of(new OutputSlot(certus, 1)),
-                new MachineRequirement(Optional.empty(), List.of("ae2:charger"), false),
+                new MachineRequirement(Optional.empty(), List.of(OfflineContentTypes.machine("ae2:charger")), false),
                 Map.of()
             )
         );
@@ -389,7 +397,7 @@ final class CoPilotTestFixtures {
         final List<String> comparedPlans = new ArrayList<>();
         final List<Set<String>> selectedSteps = new ArrayList<>();
         final List<String> focusedSteps = new ArrayList<>();
-        final List<ResourceKey> alternativeRequests = new ArrayList<>();
+        final List<ComponentStackKey> alternativeRequests = new ArrayList<>();
         final List<LangEntry> toasts = new ArrayList<>();
         boolean reducedMotion;
 
@@ -448,7 +456,7 @@ final class CoPilotTestFixtures {
         }
 
         @Override
-        public void openAlternativesFor(ResourceKey resource) {
+        public void openAlternativesFor(ComponentStackKey resource) {
             alternativeRequests.add(resource);
         }
 
@@ -479,13 +487,13 @@ final class CoPilotTestFixtures {
     static final class FakeGraph implements CompiledRecipeGraph {
 
         private final Map<CompiledRecipeKey, CompiledRecipe> recipes = new TreeMap<>();
-        private final Set<ResourceKey> producible = new TreeSet<>();
+        private final Set<ComponentStackKey> producible = new TreeSet<>();
 
         void put(CompiledRecipe recipe) {
             recipes.put(recipe.key(), recipe);
         }
 
-        void producible(ResourceKey... resources) {
+        void producible(ComponentStackKey... resources) {
             producible.addAll(List.of(resources));
         }
 
@@ -495,12 +503,12 @@ final class CoPilotTestFixtures {
         }
 
         @Override
-        public SystemAdmission admissionOf(String systemId) {
+        public SystemAdmission admissionOf(Namespace systemId) {
             return SystemAdmission.enabled;
         }
 
         @Override
-        public List<CompiledRecipe> producersOf(ResourceKey output) {
+        public List<CompiledRecipe> producersOf(ComponentStackKey output) {
             List<CompiledRecipe> producers = new ArrayList<>();
             for (CompiledRecipe recipe : recipes.values()) {
                 for (OutputSlot slot : recipe.outputs()) {
@@ -514,7 +522,7 @@ final class CoPilotTestFixtures {
         }
 
         @Override
-        public List<CompiledRecipe> consumersOf(ResourceKey input) {
+        public List<CompiledRecipe> consumersOf(ComponentStackKey input) {
             List<CompiledRecipe> consumers = new ArrayList<>();
             for (CompiledRecipe recipe : recipes.values()) {
                 for (InputSlot slot : recipe.inputs()) {
@@ -528,7 +536,7 @@ final class CoPilotTestFixtures {
         }
 
         @Override
-        public List<CompiledCycleMacro> cycleMacrosProducing(ResourceKey output) {
+        public List<CompiledCycleMacro> cycleMacrosProducing(ComponentStackKey output) {
             return List.of();
         }
 
@@ -548,7 +556,7 @@ final class CoPilotTestFixtures {
         }
 
         @Override
-        public Set<ResourceKey> allProducibleResources() {
+        public Set<ComponentStackKey> allProducibleResources() {
             return Set.copyOf(producible);
         }
 
@@ -556,7 +564,7 @@ final class CoPilotTestFixtures {
         public SccTopology sccTopology() {
             return new SccTopology() {
                 @Override
-                public int sccIdOf(ResourceKey resource) {
+                public int sccIdOf(ComponentStackKey resource) {
                     return 0;
                 }
 
@@ -566,12 +574,12 @@ final class CoPilotTestFixtures {
                 }
 
                 @Override
-                public boolean isInNonTrivialScc(ResourceKey resource) {
+                public boolean isInNonTrivialScc(ComponentStackKey resource) {
                     return false;
                 }
 
                 @Override
-                public Set<ResourceKey> membersOfScc(int sccId) {
+                public Set<ComponentStackKey> membersOfScc(int sccId) {
                     return Set.of();
                 }
 

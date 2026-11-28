@@ -1,11 +1,11 @@
 package dev.vfyjxf.cirrus.ui.workbench.layout;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledCycleMacroKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -16,7 +16,9 @@ import dev.vfyjxf.cirrus.api.planning.plan.PreparationSummary;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.workbench.state.DagLayoutMode;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -36,7 +38,7 @@ class PlanDagLayoutStressTest {
     private static final int stepCount = 80;
     private static final long seed = 42L;
 
-    private static final ResourceKey[] pool = {WorkbenchLayoutFixtures.ironOre, WorkbenchLayoutFixtures.coal,
+    private static final ComponentStackKey[] pool = {WorkbenchLayoutFixtures.ironOre, WorkbenchLayoutFixtures.coal,
             WorkbenchLayoutFixtures.ironIngot, WorkbenchLayoutFixtures.ironBlock, WorkbenchLayoutFixtures.ironSheet,
             WorkbenchLayoutFixtures.diamond, WorkbenchLayoutFixtures.cogwheel, WorkbenchLayoutFixtures.shaft,
             WorkbenchLayoutFixtures.piston};
@@ -140,7 +142,7 @@ class PlanDagLayoutStressTest {
     }
 
     private static PlanStep stepFor(int index, String stepId, List<String> deps, Random random) {
-        ResourceKey resource = pool[random.nextInt(pool.length)];
+        ComponentStackKey resource = pool[random.nextInt(pool.length)];
         String system = systems[random.nextInt(systems.length)];
         CostVector cost = WorkbenchLayoutFixtures.cost(random.nextInt(12) * 0.5, random.nextInt(30) * 2.0);
         return switch (index % 7) {
@@ -151,7 +153,7 @@ class PlanDagLayoutStressTest {
                 deps,
                 WorkbenchLayoutFixtures.smeltIron,
                 1L + random.nextInt(4),
-                Optional.of("minecraft:furnace"),
+                Optional.of(OfflineContentTypes.machine("minecraft:furnace")),
                 false,
                 Map.of(0, WorkbenchLayoutFixtures.binding(resource)),
                 Map.of(),
@@ -168,13 +170,20 @@ class PlanDagLayoutStressTest {
             case 4 -> new ProvisionMachineStep(
                 stepId,
                 deps,
-                "minecraft:furnace",
+                OfflineContentTypes.machine("minecraft:furnace"),
                 Optional.empty(),
                 1 + random.nextInt(3),
                 false,
                 cost
             );
-            case 5 -> new SetupLineStep(stepId, deps, system, "create:mechanical_press", resource, cost);
+            case 5 -> new SetupLineStep(
+                stepId,
+                deps,
+                Namespace.parse(system),
+                OfflineContentTypes.machine("create:mechanical_press"),
+                resource,
+                cost
+            );
             case 6 -> new LinePullStep(stepId, deps, "line:" + system, resource, 4L + random.nextInt(16), cost);
             default -> new CycleLoopStep(
                 stepId,
@@ -189,7 +198,7 @@ class PlanDagLayoutStressTest {
         };
     }
 
-    private static CraftStep loopCard(String stepId, ResourceKey resource) {
+    private static CraftStep loopCard(String stepId, ComponentStackKey resource) {
         CompiledRecipeKey key = "t1".equals(stepId)
                 ? WorkbenchLayoutFixtures.loopCogwheel
                 : WorkbenchLayoutFixtures.loopShaft;

@@ -9,6 +9,7 @@ import dev.vfyjxf.cirrus.ui.workbench.WorkbenchShellContext;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchShellWidget;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchSurfaces;
 import dev.vfyjxf.cirrus.ui.workbench.WorkspaceProvider;
+import dev.vfyjxf.cirrus.ui.workbench.state.CommandPaletteEngine;
 import dev.vfyjxf.cirrus.ui.workbench.state.PaletteAction;
 import dev.vfyjxf.cirrus.ui.workbench.state.PaletteItem;
 import dev.vfyjxf.cirrus.ui.workbench.state.PlannerWorkbenchController;
@@ -130,7 +131,7 @@ class ChromePopoverTest {
 
         List<PaletteItem> results = basket.setSearchQuery("gold");
         assertFalse(results.isEmpty());
-        assertEquals("res:minecraft:gold_ingot", results.get(0).id());
+        assertEquals(CommandPaletteEngine.resourceItemPrefix + goldIngot.canonicalKey(), results.get(0).id());
         assertTrue(results.get(0).primaryAction() instanceof PaletteAction.SetTarget);
         assertTrue(basket.searchResults().size() == results.size());
 
@@ -313,7 +314,7 @@ class ChromePopoverTest {
 
         List<PaletteItem> results = basket.setSearchQuery("iron ingot");
         assertFalse(results.isEmpty());
-        assertEquals("res:minecraft:iron_ingot", results.get(0).id());
+        assertEquals(CommandPaletteEngine.resourceItemPrefix + ironIngot.canonicalKey(), results.get(0).id());
         assertTrue(basket.addSearchResult(0));
         assertTrue(basket.pendingReplan());
 

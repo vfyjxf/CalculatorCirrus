@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionEstimate;
 import dev.vfyjxf.cirrus.api.planning.context.BaseBoundarySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.ContextAttributeView;
@@ -13,15 +14,17 @@ import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.RawIngredientSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeRecord;
-import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
-import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.human.DecisionPrompt;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
+import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
+import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.api.planning.spi.AcquisitionEstimatorSpi;
 import dev.vfyjxf.cirrus.api.planning.spi.BaseBoundaryProvider;
 import dev.vfyjxf.cirrus.api.planning.spi.ContextContributor;
+import dev.vfyjxf.cirrus.api.planning.spi.DecisionDetectorExtension;
 import dev.vfyjxf.cirrus.api.planning.spi.PlanningTelemetrySink;
 import dev.vfyjxf.cirrus.api.planning.spi.RecipeMetadataEnricher;
+import dev.vfyjxf.cirrus.api.planning.spi.ScoringContributor;
 import dev.vfyjxf.cirrus.api.planning.tag.CanonicalRecipeTag;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeEvidenceTier;
 import dev.vfyjxf.cirrus.api.planning.telemetry.ExecutionFailureCategory;
@@ -34,7 +37,6 @@ import dev.vfyjxf.cirrus.planning.bridge.PlanningExtensionRegistry;
 import dev.vfyjxf.cirrus.planning.core.cost.DefaultAcquisitionOracle;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.planning.core.learn.ExecutionFailureTracker;
-import dev.vfyjxf.cirrus.planning.governance.UnifiedBatchGovernance;
 import dev.vfyjxf.cirrus.planning.normalize.DualTagClassifier;
 import dev.vfyjxf.cirrus.planning.normalize.JeiNormalizationPatch;
 import dev.vfyjxf.cirrus.planning.normalize.JeiRecipeNormalizer;
@@ -42,6 +44,8 @@ import dev.vfyjxf.cirrus.planning.telemetry.ExecutionTelemetryBridge;
 import dev.vfyjxf.cirrus.planning.telemetry.LocalAnalyticsAdvisor;
 import dev.vfyjxf.cirrus.planning.telemetry.PlanningTelemetryBus;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Items;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -52,6 +56,8 @@ import java.util.Set;
 
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.compile;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.item;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.machine;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.ns;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.out;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.rec;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.slot;
@@ -61,37 +67,41 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Integration tests for Planning v3:
- * - Dual-layer RecipeSystemTags & 10 CanonicalRecipeTags
- * - 4-stage JeiRecipeNormalizer (J1-J4, mirror dedup, fidelity, patches)
- * - UnifiedBatchGovernance (all 5 batch filtering & orphan-protection tools)
- * - 7 SPI extensibility points via PlanningExtensionRegistry
- * - PlanningTelemetryBus, LocalAnalyticsAdvisor, ExecutionTelemetryBridge, DefaultDomainProfileProvider
+ * Covers the dual-layer canonical tagging pipeline, the 4-stage JEI normalizer,
+ * the telemetry bus/advisor/execution bridge, and all seven planning SPI extension points.
  */
-class PlanningV3GovernanceAndTelemetryTest {
+class PlanningTelemetryAndExtensionTest {
 
     @Test
     void dualTagClassifierDetectsCanonicalRolesWithoutWordlists() {
-        ResourceKey ingot = item("test:ingot");
-        ResourceKey block = item("test:block");
-        ResourceKey seed = item("test:seed");
-        ResourceKey dust = item("test:dust");
+        ComponentStackKey ingot = item("test:ingot");
+        ComponentStackKey block = item("test:block");
+        ComponentStackKey seed = item("test:seed");
+        ComponentStackKey dust = item("test:dust");
 
         RawRecipeRecord pack = rec("minecraft:crafting", "pack", List.of(), List.of(slot(ingot, 9)), List.of(out(block, 1)));
+        RawRecipeRecord planks = rec("minecraft:crafting", "planks_from_log", List.of(), List.of(slot(item("test:log"), 1)), List.of(out(item("test:plank"), 4)));
         RawRecipeRecord loop = rec("mod:grow", "grow", List.of("mod:chamber"), List.of(slot(seed, 1)), List.of(out(seed, 2)));
         RawRecipeRecord gen = new RawRecipeRecord(
-            "mod:void_miner", "mod_native", Optional.of("gen_1"), List.of("mod:miner"),
+            ns("mod:void_miner"), "mod_native", Optional.of(ResourceLocation.parse("gen_1")),
+            List.of(machine("mod:miner")),
             List.of(new RawIngredientSlot(Optional.empty(), List.of(item("mod:lens")), 0L, SlotMatchMode.identity, 0, 1)),
-            List.of(out(dust, 1)), Map.of(), 0L, Set.of(RecipeSystemTags.resourceGen.toString()), Set.of(), RecipeEvidenceTier.tierA, 1.0, Optional.empty(), false
+            List.of(out(dust, 1)), Map.of(), 0L,
+            Set.of(RecipeSystemTags.resourceGen), Set.of(),
+            RecipeEvidenceTier.tierA, 1.0, Optional.empty(), false
         );
 
-        Set<CanonicalRecipeTag> packTags = DualTagClassifier.tagSet(DualTagClassifier.classify(pack, false, false));
+        Set<CanonicalRecipeTag> packTags = DualTagClassifier.tagSet(DualTagClassifier.classify(pack, false, false, true));
+        Set<CanonicalRecipeTag> isolatedPackTags = DualTagClassifier.tagSet(DualTagClassifier.classify(pack, false, false, false));
+        Set<CanonicalRecipeTag> planksTags = DualTagClassifier.tagSet(DualTagClassifier.classify(planks, false, false, false));
         Set<CanonicalRecipeTag> loopTags = DualTagClassifier.tagSet(DualTagClassifier.classify(loop, false, false));
         Set<CanonicalRecipeTag> genTags = DualTagClassifier.tagSet(DualTagClassifier.classify(gen, false, false));
-        Set<CanonicalRecipeTag> mirrorTags = DualTagClassifier.tagSet(DualTagClassifier.classify(pack, true, false));
-        Set<CanonicalRecipeTag> suspectTags = DualTagClassifier.tagSet(DualTagClassifier.classify(pack, false, true));
+        Set<CanonicalRecipeTag> mirrorTags = DualTagClassifier.tagSet(DualTagClassifier.classify(pack, true, false, true));
+        Set<CanonicalRecipeTag> suspectTags = DualTagClassifier.tagSet(DualTagClassifier.classify(pack, false, true, true));
 
         assertTrue(packTags.contains(CanonicalRecipeTag.packingUnpacking));
+        assertFalse(isolatedPackTags.contains(CanonicalRecipeTag.packingUnpacking), "9:1 scaling alone must not be packing without a reverse recipe");
+        assertFalse(planksTags.contains(CanonicalRecipeTag.packingUnpacking), "1 log -> 4 planks must not be misclassified as unpacking");
         assertTrue(loopTags.contains(CanonicalRecipeTag.catalyticLoop));
         assertTrue(genTags.contains(CanonicalRecipeTag.resourceGeneration));
         assertTrue(mirrorTags.contains(CanonicalRecipeTag.junkOrDuplicate));
@@ -100,36 +110,39 @@ class PlanningV3GovernanceAndTelemetryTest {
 
     @Test
     void jeiNormalizerDedupesMirrorsAppliesJ4PatchesAndComputesFidelity() {
-        ResourceKey ore = item("test:ore");
-        ResourceKey ingot = item("test:ingot");
-        ResourceKey catalyst = item("test:press_mold");
-        ResourceKey plate = item("test:plate");
+        ComponentStackKey ore = item("test:ore");
+        ComponentStackKey ingot = item("test:ingot");
+        ComponentStackKey catalyst = item("test:press_mold");
+        ComponentStackKey plate = item("test:plate");
 
         RawRecipeRecord nativeSmelt = new RawRecipeRecord(
-            "minecraft:smelting", "vanilla", Optional.of("vanilla:smelt_ingot"), List.of("minecraft:furnace"),
+            ns("minecraft:smelting"), "vanilla", Optional.of(ResourceLocation.parse("vanilla:smelt_ingot")),
+            List.of(machine("minecraft:furnace")),
             List.of(slot(ore, 1)), List.of(out(ingot, 1)), Map.of(),
-            1L, Set.of(RecipeSystemTags.vanilla.toString()), Set.of(CanonicalRecipeTag.normalProduction),
+            1L, Set.of(RecipeSystemTags.vanilla), Set.of(CanonicalRecipeTag.normalProduction),
             RecipeEvidenceTier.tierA, 1.0, Optional.empty(), false
         );
         RawRecipeRecord jeiMirror = new RawRecipeRecord(
-            "jei:category/minecraft/furnace", "jei_fallback", Optional.empty(), List.of("minecraft:furnace"),
+            ns("jei:category/minecraft/furnace"), "jei_fallback", Optional.empty(),
+            List.of(machine("minecraft:furnace")),
             List.of(slot(ore, 1)), List.of(out(ingot, 1)), Map.of(),
-            2L, Set.of(RecipeSystemTags.jeiFallback.toString()), Set.of(CanonicalRecipeTag.normalProduction),
+            2L, Set.of(RecipeSystemTags.jeiFallback), Set.of(CanonicalRecipeTag.normalProduction),
             RecipeEvidenceTier.tierC, 1.0, Optional.empty(), false
         );
         RawRecipeRecord jeiMoldRecipe = new RawRecipeRecord(
-            "jei:category/mod/inscriber", "jei_fallback", Optional.of("mod:press_plate"), List.of(),
+            ns("jei:category/mod/inscriber"), "jei_fallback", Optional.of(ResourceLocation.parse("mod:press_plate")),
+            List.of(),
             List.of(slot(catalyst, 1), slot(ingot, 1)), List.of(out(plate, 1)), Map.of(),
-            3L, Set.of(RecipeSystemTags.jeiFallback.toString()), Set.of(CanonicalRecipeTag.normalProduction),
+            3L, Set.of(RecipeSystemTags.jeiFallback), Set.of(CanonicalRecipeTag.normalProduction),
             RecipeEvidenceTier.tierC, 1.0, Optional.empty(), false
         );
 
         JeiNormalizationPatch patch = new JeiNormalizationPatch(
             "patch:inscriber_mold",
-            Set.of("jei:category/mod/inscriber"),
+            Set.of(ns("jei:category/mod/inscriber")),
             "press_plate",
             Set.of(),
-            List.of("mod:inscriber"),
+            List.of(machine("mod:inscriber")),
             Set.of(0),
             Set.of(),
             Set.of(),
@@ -145,72 +158,11 @@ class PlanningV3GovernanceAndTelemetryTest {
         assertTrue(outMirror.canonicalTags().contains(CanonicalRecipeTag.junkOrDuplicate));
 
         RawRecipeRecord outPatched = norm.normalizedRecords().get(2);
-        assertTrue(outPatched.machineIds().contains("mod:inscriber"));
+        assertTrue(outPatched.machines().contains(machine("mod:inscriber")));
         assertTrue(outPatched.inputs().get(0).catalyst(), "J4 patch must promote slot 0 to catalyst");
         assertEquals(RecipeEvidenceTier.tierB, outPatched.evidenceTier());
         assertEquals(0.92, outPatched.structuralFidelity(), 1e-9);
         assertTrue(outPatched.semanticKey().isPresent());
-    }
-
-    @Test
-    void unifiedBatchGovernanceAllFiveToolsAndOrphanGuard() {
-        ResourceKey a = item("test:a");
-        ResourceKey sharedOut = item("test:shared_out");
-        ResourceKey uniqueOut = item("test:unique_out");
-
-        RawRecipeRecord goodProd = new RawRecipeRecord(
-            "minecraft:crafting", "vanilla", Optional.of("good:shared"), List.of("minecraft:crafting_table"),
-            List.of(slot(a, 2)), List.of(out(sharedOut, 1)), Map.of(),
-            1L, Set.of(RecipeSystemTags.vanilla.toString()), Set.of(CanonicalRecipeTag.normalProduction),
-            RecipeEvidenceTier.tierA, 1.0, Optional.empty(), false
-        );
-        RawRecipeRecord badShared = new RawRecipeRecord(
-            "jei:category/junk/altar", "jei_fallback", Optional.of("junk:shared"), List.of(),
-            List.of(slot(a, 1)), List.of(out(sharedOut, 1)), Map.of(),
-            2L, Set.of(RecipeSystemTags.jeiFallback.toString()), Set.of(CanonicalRecipeTag.suspiciousJei),
-            RecipeEvidenceTier.tierC, 0.30, Optional.empty(), true
-        );
-        RawRecipeRecord badUnique = new RawRecipeRecord(
-            "jei:category/junk/altar", "jei_fallback", Optional.of("junk:unique"), List.of(),
-            List.of(slot(a, 1)), List.of(out(uniqueOut, 1)), Map.of(),
-            3L, Set.of(RecipeSystemTags.jeiFallback.toString()), Set.of(CanonicalRecipeTag.suspiciousJei),
-            RecipeEvidenceTier.tierC, 0.30, Optional.empty(), true
-        );
-        CompiledRecipeGraph g = compile(List.of(goodProd, badShared, badUnique));
-
-        // Tool 1: System Triage Board
-        var board = UnifiedBatchGovernance.buildSystemTriageBoard(g);
-        assertEquals(2, board.size());
-        assertEquals("jei:category/junk/altar", board.get(0).systemId());
-        assertEquals(1, board.get(0).uniqueOutputCountIfDisabled());
-
-        // Tool 2: No-Regex Composable Faceted Filter
-        var filter = new UnifiedBatchGovernance.FacetedFilterSpec(
-            Set.of(), Set.of(), Set.of(), Set.of(CanonicalRecipeTag.suspiciousJei),
-            null, null, null, null, null, 0.50, null, "junk"
-        );
-        List<CompiledRecipe> matched = UnifiedBatchGovernance.filterRecipes(g, filter);
-        assertEquals(2, matched.size());
-
-        // Tool 3: 4-Tier Find Similar
-        var buckets = UnifiedBatchGovernance.findSimilarBuckets(g, matched.get(0));
-        assertEquals(4, buckets.size());
-        assertEquals(2, buckets.get(3).matchCount());
-
-        // Tool 4: Orphan Protection Guard
-        var orphanReport = UnifiedBatchGovernance.previewOrphanImpact(g, matched);
-        assertEquals(Set.of(uniqueOut), orphanReport.orphanedResourcesIfUnprotected());
-        assertEquals(1, orphanReport.exemptedUniqueProducerCount());
-        assertEquals(1, orphanReport.safeRecipesWithExemption().size());
-
-        List<GuidanceRule> safeBanRules = UnifiedBatchGovernance.compileBulkBanRules(
-            g, matched, true, GuidanceScope.modpackDefault, "bulk_ban"
-        );
-        assertEquals(1, safeBanRules.size());
-
-        // Tool 5: Pack Curation Bundle
-        var bundle = new UnifiedBatchGovernance.PackCurationBundle("3.0", "pack:test", safeBanRules, List.of());
-        assertEquals(1, bundle.rules().size());
     }
 
     @Test
@@ -231,7 +183,7 @@ class PlanningV3GovernanceAndTelemetryTest {
                 }
             });
 
-            ResourceKey gear = item("test:gear");
+            ComponentStackKey gear = item("test:gear");
             for (int i = 0; i < 4; i++) {
                 bus.publish(new PlanningTelemetryEvent.PlanInteractionEvent(
                     "pi-" + i, 1000L + i, "w1", "p1", gear, 8L, ObjectivePreset.autoSmart,
@@ -241,18 +193,18 @@ class PlanningV3GovernanceAndTelemetryTest {
                 ));
             }
             bus.publish(new PlanningTelemetryEvent.CraftingExecutionEvent(
-                "ce-1", 2000L, "w1", "p1", "sem:press", "mod:press", "c1", "v1", 4L, 2.5, true, ExecutionFailureCategory.other
+                "ce-1", 2000L, "w1", "p1", "sem:press", ns("mod:press"), "c1", "v1", 4L, 2.5, true, ExecutionFailureCategory.other
             ));
             bus.publish(new PlanningTelemetryEvent.CraftingExecutionEvent(
-                "ce-2", 2001L, "w1", "p1", "sem:press", "mod:press", "c1", "v1", 4L, 4.5, true, ExecutionFailureCategory.other
+                "ce-2", 2001L, "w1", "p1", "sem:press", ns("mod:press"), "c1", "v1", 4L, 4.5, true, ExecutionFailureCategory.other
             ));
             bus.publish(new PlanningTelemetryEvent.CraftingExecutionEvent(
-                "ce-cancel", 2002L, "w1", "p1", "sem:press", "mod:press", "c1", "v1", 0L, 0.0, false, ExecutionFailureCategory.userCancel
+                "ce-cancel", 2002L, "w1", "p1", "sem:press", ns("mod:press"), "c1", "v1", 0L, 0.0, false, ExecutionFailureCategory.userCancel
             ));
 
             assertEquals(7, seen.size());
             assertEquals(List.of(gear), advisor.suggestFrequentBaseCandidates(3L, 5));
-            Double ema = advisor.calibratedSecondsPerBatchOrNull("mod:press");
+            Double ema = advisor.calibratedSecondsPerBatchOrNull(ns("mod:press"));
             assertNotNull(ema);
             assertEquals(2.5 * 0.85 + 4.5 * 0.15, ema, 1e-9);
             assertEquals(
@@ -285,18 +237,22 @@ class PlanningV3GovernanceAndTelemetryTest {
 
     @Test
     void spiRegistryAndDomainProfileProviderAreComposableAndDeterministic() {
-        CompiledRecipeGraph emptyGraph = compile(List.of());
+        ComponentStackKey ore = item("test:ore");
+        ComponentStackKey gear = item("test:gear");
+        CompiledRecipeGraph graph = compile(
+            List.of(rec("minecraft:crafting", "test:gear", List.of("minecraft:crafting_table"), List.of(slot(ore, 1)), List.of(out(gear, 1))))
+        );
         PlanningContext baseCtx = new PlanningContext(
             InventorySnapshot.empty,
             FacilitySnapshot.empty,
-            new DefaultAcquisitionOracle(emptyGraph),
+            new DefaultAcquisitionOracle(graph),
             DefaultHumanGuidanceView.empty(),
             ProgressionState.overworldDefault
         );
 
         PlanningExtensionRegistry reg = new PlanningExtensionRegistry();
         ContextKey<String> customKey = new ContextKey<>("test:tier", String.class);
-        reg.registerContextContributor(new ContextContributor() {
+        ContextContributor contributor = new ContextContributor() {
             @Override
             public String contributorId() {
                 return "test:ctx";
@@ -306,7 +262,8 @@ class PlanningV3GovernanceAndTelemetryTest {
             public void contribute(ContextAttributeView.Builder target, PlanningContext baseContext) {
                 target.put(customKey, "lv");
             }
-        });
+        };
+        reg.registerContextContributor(contributor);
         reg.registerBaseBoundaryProvider(new BaseBoundaryProvider() {
             @Override
             public String providerId() {
@@ -330,7 +287,7 @@ class PlanningV3GovernanceAndTelemetryTest {
             }
 
             @Override
-            public Optional<AcquisitionEstimate> estimate(ResourceKey resource, long quantity, PlanningContext context) {
+            public Optional<AcquisitionEstimate> estimate(ComponentStackKey resource, long quantity, PlanningContext context) {
                 return Optional.empty();
             }
         });
@@ -342,18 +299,67 @@ class PlanningV3GovernanceAndTelemetryTest {
 
             @Override
             public EnrichmentDelta enrich(RawRecipeRecord record) {
-                return EnrichmentDelta.none;
+                return RecipeMetadataEnricher.EnrichmentDelta.none;
             }
+        });
+        ScoringContributor scoring = new ScoringContributor() {
+            @Override
+            public String contributorId() {
+                return "test:scoring";
+            }
+
+            @Override
+            public double recipeSoftBiasSeconds(CompiledRecipe recipe, PlanningContext context) {
+                return 1.5;
+            }
+
+            @Override
+            public double resourceSoftBiasSeconds(ComponentStackKey resource, PlanningContext context) {
+                return 2.0;
+            }
+        };
+        reg.registerScoringContributor(scoring);
+        reg.registerDecisionDetector(new DecisionDetectorExtension() {
+            @Override
+            public String detectorId() {
+                return "test:detector";
+            }
+
+            @Override
+            public List<DecisionPrompt> detect(PlanningRequest request, List<ProductionPlan> plans, CompiledRecipeGraph graph) {
+                return List.of();
+            }
+        });
+        reg.registerTelemetrySink(new PlanningTelemetrySink() {
+            @Override
+            public String sinkId() {
+                return "test:sink";
+            }
+
+            @Override
+            public void onEvent(PlanningTelemetryEvent event) {}
         });
 
         assertEquals(1, reg.contextContributors().size());
         assertEquals(1, reg.baseProviders().size());
         assertEquals(1, reg.acquisitionEstimators().size());
         assertEquals(1, reg.recipeEnrichers().size());
+        assertEquals(1, reg.scoringContributors().size());
+        assertEquals(1, reg.decisionDetectors().size());
+        assertEquals(1, reg.telemetrySinks().size());
 
-        BaseBoundarySnapshot defaultMc = DefaultDomainProfileProvider.instance.provide(emptyGraph, baseCtx);
-        assertTrue(defaultMc.isProtectedRare(item("minecraft:diamond")));
-        assertTrue(defaultMc.isCertifiedNatural(item("minecraft:cobblestone")));
+        ContextAttributeView.Builder attributes = ContextAttributeView.builder();
+        contributor.contribute(attributes, baseCtx);
+        assertEquals(Optional.of("lv"), attributes.build().get(customKey));
+
+        CompiledRecipe recipe = graph.producersOf(gear).get(0);
+        assertEquals(1.5, scoring.recipeSoftBiasSeconds(recipe, baseCtx), 1e-12);
+        assertEquals(2.0, scoring.resourceSoftBiasSeconds(ore, baseCtx), 1e-12);
+
+        BaseBoundarySnapshot defaultMc = DefaultDomainProfileProvider.instance.provide(graph, baseCtx);
+        assertTrue(defaultMc.isProtectedRare(ComponentStackKey.ofItem(Items.DIAMOND)));
+        assertTrue(defaultMc.isCertifiedNatural(ComponentStackKey.ofItem(Items.COBBLESTONE)));
         assertFalse(defaultMc.pricePartialOrders().isEmpty());
+        assertEquals(3, defaultMc.pricePartialOrders().size());
     }
 }

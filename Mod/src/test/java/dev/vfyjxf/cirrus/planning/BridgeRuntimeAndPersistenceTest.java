@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.planning;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
@@ -35,7 +36,6 @@ import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledCycleMacroKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
@@ -53,6 +53,7 @@ import dev.vfyjxf.cirrus.api.planning.plan.VerificationCertificate;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningSession;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
@@ -108,9 +109,13 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.capability;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.compile;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.generousBudget;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.item;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.itemTag;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.machine;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.machines;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.out;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.rec;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.request;
@@ -131,21 +136,26 @@ class BridgeRuntimeAndPersistenceTest {
     @Test
     void worldFacilityRegistryPersistsAllEightRuleTypesAndHandlesUnknownKindGracefully() {
         WorldFacilityRegistry reg = WorldFacilityRegistry.createDetached();
-        CompiledRecipeKey rk = new CompiledRecipeKey("minecraft:crafting", Optional.of("test:r1"), 12345L);
-        ResourceKey iron = item("minecraft:iron_ingot");
-        ResourceKey oak = item("minecraft:oak_planks");
+        CompiledRecipeKey rk = new CompiledRecipeKey(
+            Namespace.parse("minecraft:crafting"), Optional.of(ResourceLocation.parse("test:r1")), 12345L);
+        ComponentStackKey iron = item("minecraft:iron_ingot");
+        ComponentStackKey oak = item("minecraft:oak_planks");
+        MachineEntry persistedFurnace = MachineEntry.fromItemStack(new ItemStack(Items.FURNACE));
 
-        reg.declareOwnedMachine("minecraft:furnace", MachineCapabilityGroups.capabilityOf("minecraft:smelting"), 2, 1.5, true);
+        reg.declareOwnedMachine(machine("minecraft:furnace"), capability("minecraft:smelting"), 2, 1.5, true);
         reg.putAutomatedLine(new AutomatedLine("line:iron", iron, 60.0, 0.5, 128L, true));
         reg.putAutomatedRecipe(new AutomatedRecipeCapability(rk, 2.0, 4));
-        reg.unlockSystem("jei:category/gregtech/bender");
+        reg.unlockSystem(Namespace.parse("jei:category/gregtech/bender"));
 
         List<GuidanceRule> allRules = List.of(
             new RecipeRule("r1", GuidanceScope.worldSave, RuleStrength.hardBan, rk),
-            new SystemRule("r2", GuidanceScope.worldSave, RuleStrength.hardPin, "jei:category/gregtech/bender", true),
-            new MachineRule("r3", GuidanceScope.worldSave, RuleStrength.softPrefer, "minecraft:furnace", true),
+            new SystemRule(
+                "r2", GuidanceScope.worldSave, RuleStrength.hardPin, Namespace.parse("jei:category/gregtech/bender"), true),
+            new MachineRule(
+                "r3", GuidanceScope.worldSave, RuleStrength.softPrefer, machine("minecraft:furnace"), true),
             new ResourceRule("r4", GuidanceScope.worldSave, RuleStrength.hardPin, iron, true),
-            new TagDefaultRule("r5", GuidanceScope.worldSave, RuleStrength.hardPin, "minecraft:planks", oak),
+            new TagDefaultRule(
+                "r5", GuidanceScope.worldSave, RuleStrength.hardPin, itemTag("minecraft:planks"), oak),
             new CycleBreakRule("r6", GuidanceScope.worldSave, RuleStrength.hardBan, iron, rk),
             new CostOverrideRule(
                 "r7",
@@ -162,10 +172,11 @@ class BridgeRuntimeAndPersistenceTest {
 
         JsonElement encoded = reg.encodeToJson().orElseThrow();
         WorldFacilityRegistry reloaded = WorldFacilityRegistry.loadFromJson(encoded);
-        assertEquals(2, reloaded.facilitySnapshot().ownedCountOf("minecraft:furnace"));
+        assertEquals(2, reloaded.facilitySnapshot().ownedCountOf(persistedFurnace));
         assertEquals(1, reloaded.facilitySnapshot().automatedLines().size());
         assertEquals(1, reloaded.facilitySnapshot().automatedRecipes().size());
-        assertTrue(reloaded.facilitySnapshot().unlockedSystems().contains("jei:category/gregtech/bender"));
+        assertTrue(reloaded.facilitySnapshot().unlockedSystems()
+                .contains(Namespace.parse("jei:category/gregtech/bender")));
         assertEquals(8, reloaded.worldSaveRules().size());
 
         JsonElement bad = JsonParser.parseString(
@@ -178,16 +189,16 @@ class BridgeRuntimeAndPersistenceTest {
 
     @Test
     void sessionPersistToWorldWritesDirectlyToWorldFacilityRegistry() {
-        ResourceKey ore = item("minecraft:cobblestone");
-        ResourceKey p1 = item("mod:p1");
+        ComponentStackKey ore = item("minecraft:cobblestone");
+        ComponentStackKey p1 = item("mod:p1");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec("mod:s1", "r_a", List.of("mod:m1"), List.of(slot(ore, 1)), List.of(out(p1, 1))),
                 rec("mod:s2", "r_b", List.of("mod:m2"), List.of(slot(ore, 1)), List.of(out(p1, 1)))
             )
         );
-        CompiledRecipe rB = g.producersOf(p1).stream().filter(r -> r.key().systemId().equals("mod:s2")).findFirst()
-                .orElseThrow();
+        CompiledRecipe rB = g.producersOf(p1).stream()
+                .filter(r -> r.key().systemId().equals(Namespace.parse("mod:s2"))).findFirst().orElseThrow();
 
         WorldFacilityRegistry reg = WorldFacilityRegistry.createDetached();
         LayeredHumanGuidanceStore store = new LayeredHumanGuidanceStore(reg.worldSaveListener());
@@ -212,7 +223,7 @@ class BridgeRuntimeAndPersistenceTest {
                 DecisionPrompt prompt = session.currentResult().decisionPrompts().get(0);
                 session.refine(new AnswerPromptFeedback(prompt.promptId(), prompt.options().get(0).optionId(), true));
             }
-            session.refine(new DeclareOwnedMachineFeedback("mod:m1", 2, true));
+            session.refine(new DeclareOwnedMachineFeedback(machine("mod:m1"), 2, true));
             session.refine(
                 new ApplyRulesFeedback(
                     List.of(new ResourceRule("free_ore", GuidanceScope.worldSave, RuleStrength.hardPin, ore, true)),
@@ -226,7 +237,7 @@ class BridgeRuntimeAndPersistenceTest {
             session.refine(new RejectStepFeedback(cur.planId(), cs.stepId(), false, true));
         }
 
-        assertEquals(2, reg.facilitySnapshot().ownedCountOf("mod:m1"));
+        assertEquals(2, reg.facilitySnapshot().ownedCountOf(machine("mod:m1")));
         assertTrue(reg.worldSaveRules().size() >= 3);
     }
 
@@ -235,13 +246,13 @@ class BridgeRuntimeAndPersistenceTest {
         CalculatorSyntheticScenario.Scenario scenario = CalculatorSyntheticScenario.create(0);
         RecipeEntry<?> targetEntry = scenario.target();
 
-        ResourceKey a = item("minecraft:cobblestone");
-        ResourceKey b = item("mod:empty_id_out");
+        ComponentStackKey a = item("minecraft:cobblestone");
+        ComponentStackKey b = item("mod:empty_id_out");
         RawRecipeRecord emptyIdRec = new RawRecipeRecord(
-            "minecraft:crafting",
+            Namespace.parse("minecraft:crafting"),
             "vanilla",
             Optional.empty(),
-            List.of("minecraft:crafting_table"),
+            machines("minecraft:crafting_table"),
             List.of(slot(a, 1)),
             List.of(out(b, 1)),
             Map.of(),
@@ -259,15 +270,17 @@ class BridgeRuntimeAndPersistenceTest {
         // Build outline containing CraftStep + all 4 task kinds -> ExecutionTranslator.translate succeeds.
         List<PlanStep> steps = List.of(
             new AcquireStep("s001", List.of(), a, 2, AcquisitionKind.manualGather, StepCosts.freeBaseCost),
-            new ProvisionMachineStep("s002", List.of(), "mod:m1", Optional.empty(), 1, false, StepCosts.freeBaseCost),
-            new SetupLineStep("s003", List.of(), "mod:sys", "mod:m1", b, StepCosts.freeBaseCost),
+            new ProvisionMachineStep(
+                "s002", List.of(), machine("mod:m1"), Optional.empty(), 1, false, StepCosts.freeBaseCost),
+            new SetupLineStep(
+                "s003", List.of(), Namespace.parse("mod:sys"), machine("mod:m1"), b, StepCosts.freeBaseCost),
             new LinePullStep("s004", List.of(), "line:a", a, 1, StepCosts.freeBaseCost),
             new CraftStep(
                 "s005",
                 List.of("s001"),
                 compiled.key(),
                 2,
-                Optional.of("minecraft:crafting_table"),
+                Optional.of(machine("minecraft:crafting_table")),
                 false,
                 Map.of(0, new SlotBinding(a, List.of())),
                 Map.of(),
@@ -369,7 +382,7 @@ class BridgeRuntimeAndPersistenceTest {
                 new CirrusCatalogAdapter.SystemSnapshot(
                     excludedSys,
                     List.of(),
-                    Set.of(RecipeSystemTags.displayOnly.toString())
+                    Set.of(RecipeSystemTags.displayOnly)
                 )
             )
         );
@@ -393,30 +406,30 @@ class BridgeRuntimeAndPersistenceTest {
             )
         );
         RawRecipeRecord r10 = new RawRecipeRecord(
-            "mod:s",
+            Namespace.parse("mod:s"),
             "custom",
-            Optional.of("r10"),
-            List.of(),
+            Optional.of(ResourceLocation.parse("r10")),
+            machines(),
             List.of(slot(item("minecraft:stone"), 1)),
             List.of(out(item("mod:x"), 1)),
             Map.of(),
             10L
         );
         RawRecipeRecord r20 = new RawRecipeRecord(
-            "mod:s",
+            Namespace.parse("mod:s"),
             "custom",
-            Optional.of("r20"),
-            List.of(),
+            Optional.of(ResourceLocation.parse("r20")),
+            machines(),
             List.of(slot(item("minecraft:stone"), 1)),
             List.of(out(item("mod:x"), 1)),
             Map.of(),
             20L
         );
         RawRecipeRecord r30 = new RawRecipeRecord(
-            "mod:s",
+            Namespace.parse("mod:s"),
             "custom",
-            Optional.of("r30"),
-            List.of(),
+            Optional.of(ResourceLocation.parse("r30")),
+            machines(),
             List.of(slot(item("minecraft:stone"), 1)),
             List.of(out(item("mod:x"), 1)),
             Map.of(),
@@ -481,7 +494,7 @@ class BridgeRuntimeAndPersistenceTest {
                 return false;
             }
         };
-        ResourceKey stone = item("minecraft:stone");
+        ComponentStackKey stone = item("minecraft:stone");
         InventorySnapshot inv = StorageInventorySnapshotAdapter
                 .fromSources(List.of(), List.of(emptyNonProviding), new StockLedger(Map.of(stone, 5L)));
         assertEquals(0L, inv.usableAmount(stone));
@@ -569,7 +582,7 @@ class BridgeRuntimeAndPersistenceTest {
             long epoch = RecipeApiImpl.attachEpoch();
             CirrusCatalogAdapter.SystemCapturePlan capPlan = new CirrusCatalogAdapter.SystemCapturePlan(
                 epoch,
-                List.of(new CirrusCatalogAdapter.SystemSnapshot(sys, List.of("minecraft:crafting_table")))
+                List.of(new CirrusCatalogAdapter.SystemSnapshot(sys, machines("minecraft:crafting_table")))
             );
             CirrusCatalogAdapter.CapturedCatalog captured = adapter.capture(capPlan, 1L, () -> false).orElseThrow();
             assertEquals(1, captured.snapshot().recipes().size());
@@ -581,9 +594,11 @@ class BridgeRuntimeAndPersistenceTest {
             assertTrue(adapter.capture(stalePlan, 2L, () -> false).isEmpty(), "Stale attachEpoch must be discarded");
 
             RecipeEntry<String> entry = RecipeEntry.of(sys, "planks_to_sticks");
-            CompiledRecipeKey rk = new CompiledRecipeKey("test:bridge", Optional.of("test:planks_to_sticks"), 1L);
-            ResourceKey birchKey = item("minecraft:birch_planks");
-            ResourceKey stickKey = item("minecraft:stick");
+            CompiledRecipeKey rk = new CompiledRecipeKey(
+                Namespace.parse("test:bridge"), Optional.of(ResourceLocation.parse("test:planks_to_sticks")), 1L);
+            ComponentStackKey birchKey = ComponentStackKey.fromItemStack(new ItemStack(Items.BIRCH_PLANKS))
+                    .orElseThrow();
+            ComponentStackKey stickKey = item("minecraft:stick");
 
             CraftStep craftStep = new CraftStep(
                 "s001",
@@ -660,10 +675,11 @@ class BridgeRuntimeAndPersistenceTest {
 
             ExecutionPlanBridge.ExecutionOutline outline = ExecutionPlanBridge
                     .buildOutline(dummyPlan, k -> Optional.of(entry));
-            // 1 craft + 1 convert + (3 * 2 unrolled smallLoop) + (2 collapsed largeLoop) = 10 batches.
-            assertEquals(10, outline.batches().size());
-            assertEquals(70, outline.batches().get(8).times());
-            assertEquals(70, outline.batches().get(9).times());
+            // 1 craft + 1 convert + (3 * 2 unrolled smallLoop) + (64 waves * 2 largeLoop) = 136 batches.
+            assertEquals(136, outline.batches().size());
+            assertEquals(2, outline.batches().get(8).times());
+            assertEquals(2, outline.batches().get(9).times());
+            assertEquals(1, outline.batches().get(20).times());
 
             InputContent boundInput = outline.batches().get(0).inputs().get(0).input();
             assertTrue(
@@ -697,7 +713,8 @@ class BridgeRuntimeAndPersistenceTest {
                     return true;
                 }
             };
-            ResourceKey cobbleKey = item("minecraft:cobblestone");
+            ComponentStackKey cobbleKey = ComponentStackKey.fromItemStack(new ItemStack(Items.COBBLESTONE))
+                    .orElseThrow();
             InventorySnapshot inv = StorageInventorySnapshotAdapter.fromSources(
                 List.of(new ItemStack(Items.COBBLESTONE, 5)),
                 List.of(accessibleSource),

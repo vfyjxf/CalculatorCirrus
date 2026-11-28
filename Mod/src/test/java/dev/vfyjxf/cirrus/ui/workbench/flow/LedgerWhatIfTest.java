@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
 import dev.vfyjxf.cirrus.api.planning.human.ApplyRulesFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.DeclareOwnedMachineFeedback;
@@ -36,13 +37,13 @@ class LedgerWhatIfTest {
         return widget;
     }
 
-    private static AcquireRow row(PreparationLedgerModel model, String resourceId) {
+    private static AcquireRow row(PreparationLedgerModel model, ComponentStackKey resource) {
         for (AcquireRow candidate : model.acquireRows()) {
-            if (candidate.resource().resourceId().equals(resourceId)) {
+            if (candidate.resource().equals(resource)) {
                 return candidate;
             }
         }
-        throw new AssertionError("missing acquire row for " + resourceId);
+        throw new AssertionError("missing acquire row for " + resource);
     }
 
     @Test
@@ -55,7 +56,7 @@ class LedgerWhatIfTest {
         PreparationLedgerModel model = Objects.requireNonNull(widget.model());
         assertNotNull(model);
 
-        AcquireRow iron = row(model, "minecraft:iron_ore");
+        AcquireRow iron = row(model, FlowTestFixtures.ironOre);
         assertEquals(64L, iron.neededAmount());
         assertEquals(16L, iron.availableStock());
         assertEquals(4L, iron.reservedStock());
@@ -120,21 +121,25 @@ class LedgerWhatIfTest {
             new FlowTestFixtures.FakeHost(plan),
             FlowTestFixtures.ledgerInventory()
         );
-        AcquireRow baseRow = row(Objects.requireNonNull(widget.model()), "minecraft:iron_ore");
+        AcquireRow baseRow = row(Objects.requireNonNull(widget.model()), FlowTestFixtures.ironOre);
         assertEquals(52L, baseRow.shortfall());
 
         widget.simulateStock(FlowTestFixtures.ironOre, 64L);
 
         InventorySnapshot simulated = widget.simulatedInventory();
         assertEquals(64L, simulated.available().amountOf(FlowTestFixtures.ironOre));
-        assertEquals(60L, simulated.usableAmount(FlowTestFixtures.ironOre), "4 reserved units stay reserved");
-        assertEquals(4L, LedgerSorting.effectiveShortfall(baseRow, simulated));
+        assertEquals(
+            64L,
+            simulated.usableAmount(FlowTestFixtures.ironOre),
+            "override is absolute: it replaces the resource's reservation"
+        );
+        assertEquals(0L, LedgerSorting.effectiveShortfall(baseRow, simulated), "the cleared reservation is not re-counted");
 
         PreparationLedgerModel overlaid = PreparationLedgerModel
                 .build(plan, simulated, LedgerSortKey.missingFirst, true, null);
-        AcquireRow iron = row(overlaid, "minecraft:iron_ore");
+        AcquireRow iron = row(overlaid, FlowTestFixtures.ironOre);
         assertEquals(64L, iron.availableStock());
-        assertEquals(4L, iron.shortfall(), "the world acquire row shrinks from 52 to 4");
+        assertEquals(0L, iron.shortfall(), "the world acquire row shrinks from 52 to 0");
         assertTrue(overlaid.stockCoverageRatio() > 0.6, "coverage rises with simulated stock");
     }
 
@@ -196,10 +201,7 @@ class LedgerWhatIfTest {
 
         widget.setQuery("coal");
         assertEquals(1, Objects.requireNonNull(widget.model()).acquireRows().size());
-        assertEquals(
-            "minecraft:coal",
-            Objects.requireNonNull(widget.model()).acquireRows().get(0).resource().resourceId()
-        );
+        assertEquals(FlowTestFixtures.coal, Objects.requireNonNull(widget.model()).acquireRows().get(0).resource());
         widget.setQuery("");
         assertEquals(2, Objects.requireNonNull(widget.model()).acquireRows().size());
     }
@@ -210,10 +212,10 @@ class LedgerWhatIfTest {
             new FlowTestFixtures.FakeHost(FlowTestFixtures.ledgerPlan()),
             FlowTestFixtures.ledgerInventory()
         );
-        List<String> modelOrder = Objects.requireNonNull(widget.model()).acquireRows().stream()
-                .map(row -> row.resource().resourceId()).toList();
+        List<ComponentStackKey> modelOrder = Objects.requireNonNull(widget.model()).acquireRows().stream()
+                .map(AcquireRow::resource).toList();
         assertEquals(
-            List.of("minecraft:iron_ore", "minecraft:coal"),
+            List.of(FlowTestFixtures.ironOre, FlowTestFixtures.coal),
             modelOrder,
             "missing-first keeps the largest shortfall on top"
         );
@@ -225,7 +227,7 @@ class LedgerWhatIfTest {
             true,
             null
         );
-        assertEquals(modelOrder.get(0), rebuilt.acquireRows().get(0).resource().resourceId());
+        assertEquals(modelOrder.get(0), rebuilt.acquireRows().get(0).resource());
     }
 
     @Test
@@ -251,7 +253,7 @@ class LedgerWhatIfTest {
         assertEquals(3, host.dispatched().size());
         assertTrue(host.dispatched().get(0) instanceof DeclareOwnedMachineFeedback);
         DeclareOwnedMachineFeedback owned = (DeclareOwnedMachineFeedback) host.dispatched().get(0);
-        assertEquals(FlowTestFixtures.furnace, owned.machineId());
+        assertEquals(FlowTestFixtures.furnace, owned.machine());
         assertEquals(1, owned.ownedCount());
         assertFalse(owned.persistToWorld());
 
@@ -260,7 +262,7 @@ class LedgerWhatIfTest {
         assertTrue(banned.rules().get(0) instanceof MachineRule);
         MachineRule machineRule = (MachineRule) banned.rules().get(0);
         assertEquals(RuleStrength.hardBan, machineRule.strength());
-        assertEquals(FlowTestFixtures.furnace, machineRule.machineId());
+        assertEquals(FlowTestFixtures.furnace, machineRule.machine());
         assertFalse(machineRule.willingToBuildNew());
 
         assertTrue(host.dispatched().get(2) instanceof ApplyRulesFeedback);
@@ -281,7 +283,7 @@ class LedgerWhatIfTest {
                 widget(new FlowTestFixtures.FakeHost(FlowTestFixtures.ledgerPlan()), FlowTestFixtures.ledgerInventory())
                         .model()
             ),
-            "minecraft:iron_ore"
+            FlowTestFixtures.ironOre
         );
         assertEquals(128L, LedgerSorting.sliderMax(row));
         assertEquals(0.0, LedgerSorting.costShare(null));

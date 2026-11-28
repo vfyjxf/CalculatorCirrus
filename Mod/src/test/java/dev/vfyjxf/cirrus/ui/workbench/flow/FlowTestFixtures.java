@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningBudget;
@@ -8,7 +9,6 @@ import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.cost.PlanningProfile;
 import dev.vfyjxf.cirrus.api.planning.human.HumanFeedback;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ByproductEntry;
@@ -23,11 +23,14 @@ import dev.vfyjxf.cirrus.api.planning.plan.VerificationCertificate;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningDiagnostics;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.state.DagLayoutMode;
 import dev.vfyjxf.cirrus.ui.workbench.state.FlowViewMode;
 import dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchPhase;
 import dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchUiSnapshot;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
 
 import java.util.ArrayList;
@@ -38,16 +41,16 @@ import java.util.Set;
 
 final class FlowTestFixtures {
 
-    static final ResourceKey ironOre = ResourceKey.item("minecraft:iron_ore");
-    static final ResourceKey coal = ResourceKey.item("minecraft:coal");
-    static final ResourceKey ironIngot = ResourceKey.item("minecraft:iron_ingot");
-    static final ResourceKey cogwheel = ResourceKey.item("create:cogwheel");
-    static final ResourceKey diamond = ResourceKey.item("minecraft:diamond");
-    static final ResourceKey piston = ResourceKey.item("minecraft:piston");
+    static final ComponentStackKey ironOre = OfflineContentTypes.item("minecraft:iron_ore");
+    static final ComponentStackKey coal = OfflineContentTypes.item("minecraft:coal");
+    static final ComponentStackKey ironIngot = OfflineContentTypes.item("minecraft:iron_ingot");
+    static final ComponentStackKey cogwheel = OfflineContentTypes.item("create:cogwheel");
+    static final ComponentStackKey diamond = OfflineContentTypes.item("minecraft:diamond");
+    static final ComponentStackKey piston = OfflineContentTypes.item("minecraft:piston");
 
     static final String smelting = "minecraft:smelting";
     static final String crafting = "minecraft:crafting";
-    static final String furnace = "minecraft:furnace";
+    static final MachineEntry furnace = OfflineContentTypes.machine("minecraft:furnace");
 
     static final CompiledRecipeKey smeltIron = key(smelting, "minecraft:iron_ingot_from_smelting");
     static final CompiledRecipeKey craftPiston = key(crafting, "minecraft:piston");
@@ -55,14 +58,14 @@ final class FlowTestFixtures {
     private FlowTestFixtures() {}
 
     static CompiledRecipeKey key(String systemId, String recipeId) {
-        return new CompiledRecipeKey(systemId, Optional.of(recipeId), 0L);
+        return new CompiledRecipeKey(Namespace.parse(systemId), OfflineContentTypes.tryParseLocation(recipeId), 0L);
     }
 
     static CostVector cost(double human, double passive) {
         return new CostVector(human, passive, 0.0, 0.0, 0.0);
     }
 
-    static SlotBinding binding(ResourceKey resource) {
+    static SlotBinding binding(ComponentStackKey resource) {
         return new SlotBinding(resource, List.of());
     }
 

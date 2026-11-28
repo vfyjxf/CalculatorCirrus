@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningBudget;
@@ -9,7 +10,6 @@ import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.RawIngredientSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawOutputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeRecord;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
@@ -24,6 +24,8 @@ import dev.vfyjxf.cirrus.planning.core.service.DefaultPlanningService;
 import dev.vfyjxf.cirrus.planning.core.verify.DefaultPlanVerifier;
 import dev.vfyjxf.cirrus.planning.offline.ExportJsonCatalogLoader;
 import dev.vfyjxf.cirrus.planning.offline.LoadedCatalog;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -38,6 +40,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.SplittableRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -47,6 +50,7 @@ import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.compile;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.fac;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.generousBudget;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.item;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.machines;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.out;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.ownedCraftingTable;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.ownedFurnace;
@@ -60,8 +64,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SystemInvariantsAndPropertyTest {
 
-    private static final Pattern forbiddenImports = Pattern.compile(
-        "import\\s+(net\\.minecraft|net\\.neoforged|com\\.google\\.gson|com\\.mojang|dev\\.vfyjxf\\.cloudlib|org\\.eclipse\\.collections|mezz\\.jei)\\."
+    private static final Pattern forbiddenImportPackages = Pattern.compile(
+        "(net\\.minecraft|net\\.neoforged|com\\.google\\.gson|com\\.mojang|dev\\.vfyjxf\\.cloudlib|org\\.eclipse\\.collections|mezz\\.jei)\\."
+    );
+    // New strong-typed planning keys intentionally expose these cross-layer value types to pure core.
+    private static final Set<String> allowedExternalValueImports = Set.of(
+        "dev.vfyjxf.cloudlib.api.util.Namespace",
+        "net.minecraft.tags.TagKey",
+        "net.minecraft.resources.ResourceLocation",
+        "net.minecraft.core.Registry",
+        "net.minecraft.core.registries.Registries",
+        "com.mojang.serialization.Codec",
+        "com.mojang.serialization.DataResult"
     );
     private static final Pattern forbiddenProbability = Pattern
             .compile("chance|probability|probabilistic", Pattern.CASE_INSENSITIVE);
@@ -95,11 +109,37 @@ public class SystemInvariantsAndPropertyTest {
                 for (Path file : walk.filter(p -> p.toString().endsWith(".java")).toList()) {
                     filesScanned++;
                     String text = Files.readString(file, StandardCharsets.UTF_8);
-                    assertFalse(forbiddenImports.matcher(text).find(), "Forbidden import in " + file);
+                    List<String> forbiddenImports = forbiddenImportsIn(text);
+                    assertTrue(
+                        forbiddenImports.isEmpty(),
+                        () -> "Forbidden imports in " + file + ": " + forbiddenImports
+                    );
                     assertFalse(forbiddenProbability.matcher(text).find(), "Probability leak in " + file);
                 }
             }
         }
+    }
+
+    private static List<String> forbiddenImportsIn(String text) {
+        List<String> forbidden = new ArrayList<>();
+        for (String line : text.lines().toList()) {
+            if (!line.startsWith("import ")) {
+                continue;
+            }
+            int end = line.indexOf(';');
+            if (end < 0) {
+                continue;
+            }
+            String imported = line.substring("import ".length(), end).trim();
+            if (imported.startsWith("static ")) {
+                imported = imported.substring("static ".length()).trim();
+            }
+            if (forbiddenImportPackages.matcher(imported).find()
+                    && !allowedExternalValueImports.contains(imported)) {
+                forbidden.add(imported);
+            }
+        }
+        return forbidden;
     }
 
     @Test
@@ -122,8 +162,8 @@ public class SystemInvariantsAndPropertyTest {
     @Test
     @Timeout(30)
     void inv03_inv04_inv05_hundredRunDeterminismCertifiedAndParetoNonDominated() {
-        ResourceKey stone = item("minecraft:stone");
-        ResourceKey bricks = item("minecraft:stone_bricks");
+        ComponentStackKey stone = item("minecraft:stone");
+        ComponentStackKey bricks = item("minecraft:stone_bricks");
         List<RawRecipeRecord> recs = List.of(
             rec(
                 "minecraft:crafting",
@@ -182,8 +222,8 @@ public class SystemInvariantsAndPropertyTest {
     void inv06_tightTimeAndNodeBudgetsTerminateCleanly() {
         List<RawRecipeRecord> recs = new ArrayList<>();
         for (int i = 0; i < 80; i++) {
-            ResourceKey in = item("mod:node_" + i);
-            ResourceKey out = item("mod:node_" + (i + 1));
+            ComponentStackKey in = item("mod:node_" + i);
+            ComponentStackKey out = item("mod:node_" + (i + 1));
             recs.add(
                 rec(
                     "minecraft:crafting",
@@ -260,7 +300,7 @@ public class SystemInvariantsAndPropertyTest {
     @Timeout(60)
     void propertyBased_220RandomGraphsAlwaysCertifiedAndNonDominated() {
         SplittableRandom rng = new SplittableRandom(0xC1AA55_2026L);
-        ResourceKey[] bases = {item("minecraft:cobblestone"), item("minecraft:oak_log"), item("minecraft:raw_iron"),
+        ComponentStackKey[] bases = {item("minecraft:cobblestone"), item("minecraft:oak_log"), item("minecraft:raw_iron"),
                 item("minecraft:sand"), item("minecraft:coal")};
         String[] systems = {"minecraft:crafting", "minecraft:smelting", "mod:press", "mod:mixer"};
         String[] machines = {"minecraft:crafting_table", "minecraft:furnace", "mod:presser", "mod:mixer_m"};
@@ -268,7 +308,7 @@ public class SystemInvariantsAndPropertyTest {
         int plansVerified = 0;
         for (int trial = 0; trial < 220; trial++) {
             int intermediates = 4 + rng.nextInt(7);
-            ResourceKey[] nodes = new ResourceKey[bases.length + intermediates];
+            ComponentStackKey[] nodes = new ComponentStackKey[bases.length + intermediates];
             System.arraycopy(bases, 0, nodes, 0, bases.length);
             for (int i = 0; i < intermediates; i++) {
                 nodes[bases.length + i] = item("pbt:item_" + i);
@@ -299,10 +339,10 @@ public class SystemInvariantsAndPropertyTest {
                 }
                 recs.add(
                     new RawRecipeRecord(
-                        systems[sysIdx],
+                        Namespace.parse(systems[sysIdx]),
                         "custom",
-                        Optional.of("pbt:r_" + trial + "_" + r),
-                        List.of(machines[sysIdx]),
+                        Optional.of(ResourceLocation.parse("pbt:r_" + trial + "_" + r)),
+                        machines(machines[sysIdx]),
                         ins,
                         outs,
                         Map.of()
@@ -310,7 +350,7 @@ public class SystemInvariantsAndPropertyTest {
                 );
             }
             CompiledRecipeGraph g = compile(recs);
-            Map<ResourceKey, Long> stockMap = new HashMap<>();
+            Map<ComponentStackKey, Long> stockMap = new HashMap<>();
             if (rng.nextBoolean()) {
                 stockMap.put(nodes[rng.nextInt(nodes.length)], 1L + rng.nextInt(10));
             }
@@ -318,7 +358,7 @@ public class SystemInvariantsAndPropertyTest {
                     ? InventorySnapshot.empty
                     : new InventorySnapshot(new StockLedger(stockMap), StockLedger.empty);
             FacilitySnapshot f = fac(ownedCraftingTable(), ownedFurnace(), ownedStonecutter());
-            ResourceKey target = nodes[bases.length + rng.nextInt(intermediates)];
+            ComponentStackKey target = nodes[bases.length + rng.nextInt(intermediates)];
             long qty = 1L + rng.nextInt(6);
 
             PlanningRequest req = request(

@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.ui.workbench.facilities;
 
 import com.google.gson.JsonElement;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AutomatedLine;
 import dev.vfyjxf.cirrus.api.planning.context.AutomatedRecipeCapability;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
@@ -10,8 +11,14 @@ import dev.vfyjxf.cirrus.api.planning.human.RecipeRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.bridge.WorldFacilityRegistry;
+import dev.vfyjxf.cirrus.planning.core.graph.MachineCapabilityGroups;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -28,18 +35,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class FacilitiesCrudTest {
 
-    private static final MachineCapabilityId smelting = new MachineCapabilityId("minecraft:smelting");
-    private static final MachineCapabilityId crafting = new MachineCapabilityId("minecraft:crafting");
-    private static final ResourceKey ironIngot = ResourceKey.item("minecraft:iron_ingot");
-    private static final ResourceKey ironBlock = ResourceKey.item("minecraft:iron_block");
+    private static final Namespace smeltingSystem = Namespace.parse("minecraft:smelting");
+    private static final Namespace craftingSystem = Namespace.parse("minecraft:crafting");
+    private static final Namespace ae2Charger = Namespace.parse("ae2:charger");
+    private static final Namespace createPressing = Namespace.parse("create:pressing");
+    private static final MachineCapabilityId smelting = MachineCapabilityGroups.capabilityOf(smeltingSystem);
+    private static final MachineCapabilityId crafting = MachineCapabilityGroups.capabilityOf(craftingSystem);
+    private static final MachineEntry furnace = OfflineContentTypes.machine("minecraft:furnace");
+    private static final MachineEntry craftingTable = OfflineContentTypes.machine("minecraft:crafting_table");
+    private static final ComponentStackKey ironIngot = OfflineContentTypes.item("minecraft:iron_ingot");
     private static final CompiledRecipeKey packIron = new CompiledRecipeKey(
-        "minecraft:crafting",
-        Optional.of("minecraft:iron_block"),
+        craftingSystem,
+        Optional.of(ResourceLocation.parse("minecraft:iron_block")),
         11L
     );
     private static final CompiledRecipeKey smeltIron = new CompiledRecipeKey(
-        "minecraft:smelting",
-        Optional.of("minecraft:iron_ingot_from_smelting"),
+        smeltingSystem,
+        Optional.of(ResourceLocation.parse("minecraft:iron_ingot_from_smelting")),
         23L
     );
 
@@ -47,24 +59,24 @@ class FacilitiesCrudTest {
     void ownedMachinesSupportCreateUpdateAndDelete() {
         WorldFacilityRegistry registry = WorldFacilityRegistry.createDetached();
 
-        registry.declareOwnedMachine("minecraft:furnace", smelting, 2, 1.0, false);
+        registry.declareOwnedMachine(furnace, smelting, 2, 1.0, false);
         FacilitySnapshot created = registry.facilitySnapshot();
         assertEquals(1, created.ownedMachines().size());
-        assertEquals(2, created.ownedCountOf("minecraft:furnace"));
+        assertEquals(2, created.ownedCountOf(furnace));
         assertEquals(1, created.ownedMachinesFor(smelting).size());
 
-        registry.declareOwnedMachine("minecraft:furnace", smelting, 5, 2.5, true);
+        registry.declareOwnedMachine(furnace, smelting, 5, 2.5, true);
         OwnedMachineGroup updated = registry.facilitySnapshot().ownedMachines().getFirst();
         assertEquals(5, updated.count());
         assertEquals(2.5, updated.passiveSpeedMultiplier(), 1e-9);
         assertTrue(updated.automatedFeeding());
         assertEquals(1, registry.facilitySnapshot().ownedMachines().size());
 
-        registry.declareOwnedMachine("minecraft:crafting_table", crafting, 1, 1.0, false);
+        registry.declareOwnedMachine(craftingTable, crafting, 1, 1.0, false);
         assertEquals(1, registry.facilitySnapshot().ownedMachinesFor(crafting).size());
         assertEquals(2, registry.toPersistedState().ownedMachines().size());
 
-        registry.declareOwnedMachine("minecraft:furnace", smelting, 0, 1.0, false);
+        registry.declareOwnedMachine(furnace, smelting, 0, 1.0, false);
         assertTrue(registry.facilitySnapshot().ownedMachinesFor(smelting).isEmpty());
         assertEquals(1, registry.toPersistedState().ownedMachines().size());
     }
@@ -110,38 +122,78 @@ class FacilitiesCrudTest {
     void optInUnlocksAreTrackedAndRevoked() {
         WorldFacilityRegistry registry = WorldFacilityRegistry.createDetached();
 
-        registry.unlockSystem("ae2:charger");
-        registry.unlockSystem("create:pressing");
-        assertEquals(Set.of("ae2:charger", "create:pressing"), registry.facilitySnapshot().unlockedSystems());
-        assertEquals(List.of("ae2:charger", "create:pressing"), registry.toPersistedState().unlockedSystems());
+        registry.unlockSystem(ae2Charger);
+        registry.unlockSystem(createPressing);
+        assertEquals(Set.of(ae2Charger, createPressing), registry.facilitySnapshot().unlockedSystems());
+        assertEquals(List.of(ae2Charger, createPressing), registry.toPersistedState().unlockedSystems());
 
-        registry.lockSystem("ae2:charger");
-        assertEquals(Set.of("create:pressing"), registry.facilitySnapshot().unlockedSystems());
-        registry.lockSystem("create:pressing");
+        registry.lockSystem(ae2Charger);
+        assertEquals(Set.of(createPressing), registry.facilitySnapshot().unlockedSystems());
+        registry.lockSystem(createPressing);
         assertTrue(registry.facilitySnapshot().unlockedSystems().isEmpty());
     }
 
     @Test
     void persistedStateSurvivesJsonRoundTrip() {
         WorldFacilityRegistry registry = WorldFacilityRegistry.createDetached();
-        registry.declareOwnedMachine("minecraft:furnace", smelting, 3, 1.75, true);
-        registry.declareOwnedMachine("minecraft:crafting_table", crafting, 1, 1.0, false);
+        registry.declareOwnedMachine(furnace, smelting, 3, 1.75, true);
+        registry.declareOwnedMachine(craftingTable, crafting, 1, 1.0, false);
         registry.putAutomatedLine(new AutomatedLine("line:iron", ironIngot, 60.0, 2.0, 128L, true));
         registry.putAutomatedRecipe(new AutomatedRecipeCapability(packIron, 3.0, 2));
         registry.putAutomatedRecipe(new AutomatedRecipeCapability(smeltIron, 8.0, 1));
-        registry.unlockSystem("ae2:charger");
+        registry.unlockSystem(ae2Charger);
         registry.putWorldSaveRule(new RecipeRule("rule:pack", GuidanceScope.worldSave, RuleStrength.hardPin, packIron));
 
         JsonElement encoded = registry.encodeToJson().orElseThrow();
         WorldFacilityRegistry reloaded = WorldFacilityRegistry.loadFromJson(encoded);
 
         assertNotNull(reloaded);
-        assertEquals(registry.toPersistedState(), reloaded.toPersistedState());
-        assertEquals(2, reloaded.toPersistedState().ownedMachines().size());
-        assertEquals(1, reloaded.toPersistedState().automatedLines().size());
-        assertEquals(2, reloaded.toPersistedState().automatedRecipes().size());
-        assertEquals(List.of("ae2:charger"), reloaded.toPersistedState().unlockedSystems());
-        assertEquals(1, reloaded.worldSaveRules().size());
+        WorldFacilityRegistry.PersistedState reloadedState = reloaded.toPersistedState();
+
+        assertEquals(
+            List.of(
+                new OwnedMachineGroup(
+                    MachineEntry.fromItemStack(new ItemStack(Items.FURNACE)),
+                    smelting,
+                    3,
+                    1.75,
+                    true
+                ),
+                new OwnedMachineGroup(
+                    MachineEntry.fromItemStack(new ItemStack(Items.CRAFTING_TABLE)),
+                    crafting,
+                    1,
+                    1.0,
+                    false
+                )
+            ),
+            reloadedState.ownedMachines()
+        );
+        assertEquals(
+            List.of(
+                new AutomatedLine(
+                    "line:iron",
+                    ComponentStackKey.ofItem(Items.IRON_INGOT),
+                    60.0,
+                    2.0,
+                    128L,
+                    true
+                )
+            ),
+            reloadedState.automatedLines()
+        );
+        assertEquals(
+            List.of(
+                new AutomatedRecipeCapability(packIron, 3.0, 2),
+                new AutomatedRecipeCapability(smeltIron, 8.0, 1)
+            ),
+            reloadedState.automatedRecipes()
+        );
+        assertEquals(List.of(ae2Charger), reloadedState.unlockedSystems());
+        assertEquals(
+            List.of(new RecipeRule("rule:pack", GuidanceScope.worldSave, RuleStrength.hardPin, packIron)),
+            reloadedState.worldSaveRules()
+        );
     }
 
     @Test

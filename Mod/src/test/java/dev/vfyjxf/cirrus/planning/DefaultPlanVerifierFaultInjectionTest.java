@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
@@ -18,8 +19,6 @@ import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledCycleMacroKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
@@ -40,6 +39,8 @@ import dev.vfyjxf.cirrus.planning.core.cost.StepCosts;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.planning.core.verify.DefaultPlanVerifier;
 import dev.vfyjxf.cirrus.planning.core.verify.ErrorCodes;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -50,10 +51,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.capability;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.compile;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.fac;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.generousBudget;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.item;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.machine;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.out;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.owned;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.ownedCraftingTable;
@@ -80,17 +83,17 @@ class DefaultPlanVerifierFaultInjectionTest {
     @Test
     @SuppressWarnings("NullAway")
     void tc11_allThirtyFourErrorCodesTriggeredAndRejected() throws Exception {
-        ResourceKey cobble = item("minecraft:cobblestone");
-        ResourceKey stone = item("minecraft:stone");
-        ResourceKey bricks = item("minecraft:stone_bricks");
-        ResourceKey hammer = item("mod:hammer");
-        ResourceKey plate = item("mod:plate");
-        ResourceKey fresh = item("mod:fresh");
-        ResourceKey spent = item("mod:spent");
-        ResourceKey reagent = item("mod:reagent");
-        ResourceKey loopOut = item("mod:loop_out");
-        ResourceKey ingot = item("minecraft:iron_ingot");
-        ResourceKey block = item("minecraft:iron_block");
+        ComponentStackKey cobble = item("minecraft:cobblestone");
+        ComponentStackKey stone = item("minecraft:stone");
+        ComponentStackKey bricks = item("minecraft:stone_bricks");
+        ComponentStackKey hammer = item("mod:hammer");
+        ComponentStackKey plate = item("mod:plate");
+        ComponentStackKey fresh = item("mod:fresh");
+        ComponentStackKey spent = item("mod:spent");
+        ComponentStackKey reagent = item("mod:reagent");
+        ComponentStackKey loopOut = item("mod:loop_out");
+        ComponentStackKey ingot = item("minecraft:iron_ingot");
+        ComponentStackKey block = item("minecraft:iron_block");
 
         CompiledRecipeGraph g = compile(
             List.of(
@@ -150,7 +153,7 @@ class DefaultPlanVerifierFaultInjectionTest {
         FacilitySnapshot fullFac = fac(
             ownedCraftingTable(),
             ownedFurnace(),
-            owned("mod:reactor", new MachineCapabilityId("cirrus:capability/system/mod/chem"), 1)
+            owned("mod:reactor", capability("mod:chem"), 1)
         );
         Set<String> covered = new HashSet<>();
 
@@ -332,7 +335,7 @@ class DefaultPlanVerifierFaultInjectionTest {
         ProvisionMachineStep zeroMach = new ProvisionMachineStep(
             "s1",
             List.of(),
-            "minecraft:furnace",
+            machine("minecraft:furnace"),
             Optional.empty(),
             0,
             false,
@@ -349,7 +352,7 @@ class DefaultPlanVerifierFaultInjectionTest {
         ProvisionMachineStep banMach = new ProvisionMachineStep(
             "s1",
             List.of(),
-            "minecraft:furnace",
+            machine("minecraft:furnace"),
             Optional.empty(),
             1,
             false,
@@ -369,7 +372,7 @@ class DefaultPlanVerifierFaultInjectionTest {
                             "m_ban",
                             GuidanceScope.session,
                             RuleStrength.hardBan,
-                            "minecraft:furnace",
+                            machine("minecraft:furnace"),
                             false
                         )
                     )
@@ -381,7 +384,7 @@ class DefaultPlanVerifierFaultInjectionTest {
         ProvisionMachineStep noMachItem = new ProvisionMachineStep(
             "s1",
             List.of(),
-            "minecraft:furnace",
+            machine("minecraft:furnace"),
             Optional.empty(),
             1,
             true,
@@ -402,7 +405,7 @@ class DefaultPlanVerifierFaultInjectionTest {
             List.of(),
             smeltRec.key(),
             0,
-            Optional.of("minecraft:furnace"),
+            Optional.of(machine("minecraft:furnace")),
             false,
             Map.of(0, new SlotBinding(cobble, List.of())),
             Map.of(),
@@ -418,7 +421,8 @@ class DefaultPlanVerifierFaultInjectionTest {
         );
 
         // 14. ERR_UNKNOWN_RECIPE
-        CompiledRecipeKey ghostKey = new CompiledRecipeKey("minecraft:crafting", Optional.of("ghost"), 42L);
+        CompiledRecipeKey ghostKey = new CompiledRecipeKey(
+            Namespace.parse("minecraft:crafting"), Optional.of(ResourceLocation.parse("ghost")), 42L);
         CraftStep ghostStep = new CraftStep(
             "s1",
             List.of(),
@@ -445,7 +449,7 @@ class DefaultPlanVerifierFaultInjectionTest {
             List.of(),
             smeltRec.key(),
             1,
-            Optional.of("minecraft:furnace"),
+            Optional.of(machine("minecraft:furnace")),
             false,
             Map.of(0, new SlotBinding(cobble, List.of())),
             Map.of(),
@@ -503,7 +507,7 @@ class DefaultPlanVerifierFaultInjectionTest {
                             "ban_sys",
                             GuidanceScope.session,
                             RuleStrength.hardBan,
-                            "minecraft:smelting",
+                            Namespace.parse("minecraft:smelting"),
                             false
                         )
                     )
@@ -527,7 +531,7 @@ class DefaultPlanVerifierFaultInjectionTest {
             List.of(),
             smeltRec.key(),
             1,
-            Optional.of("minecraft:furnace"),
+            Optional.of(machine("minecraft:furnace")),
             true,
             Map.of(0, new SlotBinding(cobble, List.of())),
             Map.of(),
@@ -548,7 +552,7 @@ class DefaultPlanVerifierFaultInjectionTest {
             List.of(),
             plateRec.key(),
             1,
-            Optional.of("minecraft:crafting_table"),
+            Optional.of(machine("minecraft:crafting_table")),
             false,
             Map.of(0, new SlotBinding(cobble, List.of())),
             Map.of(),
@@ -569,7 +573,7 @@ class DefaultPlanVerifierFaultInjectionTest {
             List.of(),
             smeltRec.key(),
             1,
-            Optional.of("minecraft:furnace"),
+            Optional.of(machine("minecraft:furnace")),
             false,
             Map.of(0, new SlotBinding(stone, List.of())),
             Map.of(),
@@ -724,7 +728,7 @@ class DefaultPlanVerifierFaultInjectionTest {
             List.of(),
             bricksRec.key(),
             1,
-            Optional.of("minecraft:crafting_table"),
+            Optional.of(machine("minecraft:crafting_table")),
             false,
             Map.of(0, new SlotBinding(stone, List.of())),
             Map.of(),
@@ -778,7 +782,7 @@ class DefaultPlanVerifierFaultInjectionTest {
             List.of(),
             packRec.key(),
             1,
-            Optional.of("minecraft:crafting_table"),
+            Optional.of(machine("minecraft:crafting_table")),
             false,
             Map.of(0, new SlotBinding(ingot, List.of())),
             Map.of(),
@@ -789,7 +793,7 @@ class DefaultPlanVerifierFaultInjectionTest {
             List.of("s1"),
             unpackRec.key(),
             1,
-            Optional.of("minecraft:crafting_table"),
+            Optional.of(machine("minecraft:crafting_table")),
             false,
             Map.of(0, new SlotBinding(block, List.of())),
             Map.of(),
@@ -840,7 +844,7 @@ class DefaultPlanVerifierFaultInjectionTest {
                 List.of(),
                 macro.innerRecipes().get(0).key(),
                 macro.innerMultipliers().get(0),
-                Optional.of("mod:reactor"),
+                Optional.of(machine("mod:reactor")),
                 false,
                 Map.of(
                     macro.innerRecipes().get(0).inputs().get(0).slotIndex(),
@@ -856,7 +860,7 @@ class DefaultPlanVerifierFaultInjectionTest {
                 List.of(),
                 macro.innerRecipes().get(1).key(),
                 macro.innerMultipliers().get(1),
-                Optional.of("mod:reactor"),
+                Optional.of(machine("mod:reactor")),
                 false,
                 Map.of(
                     macro.innerRecipes().get(1).inputs().get(0).slotIndex(),
@@ -883,7 +887,7 @@ class DefaultPlanVerifierFaultInjectionTest {
 
     private static PlanningRequest req(
         CompiledRecipeGraph g,
-        ResourceKey target,
+        ComponentStackKey target,
         long amount,
         InventorySnapshot inv,
         FacilitySnapshot fac,
@@ -900,11 +904,11 @@ class DefaultPlanVerifierFaultInjectionTest {
         );
     }
 
-    private static InventorySnapshot invOf(ResourceKey k1, long a1) {
+    private static InventorySnapshot invOf(ComponentStackKey k1, long a1) {
         return new InventorySnapshot(new StockLedger(Map.of(k1, a1)), StockLedger.empty);
     }
 
-    private static InventorySnapshot invOf(ResourceKey k1, long a1, ResourceKey k2, long a2) {
+    private static InventorySnapshot invOf(ComponentStackKey k1, long a1, ComponentStackKey k2, long a2) {
         return new InventorySnapshot(new StockLedger(Map.of(k1, a1, k2, a2)), StockLedger.empty);
     }
 

@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOption;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
@@ -18,7 +19,6 @@ import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
@@ -29,9 +29,10 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
 import dev.vfyjxf.cirrus.planning.core.graph.DefaultSystemAdmissionPolicy;
-import dev.vfyjxf.cirrus.planning.core.graph.MachineCapabilityGroups;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.planning.core.service.DefaultPlanningService;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -40,10 +41,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.capability;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.compile;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.fac;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.generousBudget;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.item;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.machine;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.machines;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.out;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.owned;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.ownedCraftingTable;
@@ -62,9 +66,9 @@ class CorePlanningScenariosTest {
 
     @Test
     void tc04_reversiblePackingConvertFromStockNoRoundTripAndDirectBlockCraft() {
-        ResourceKey ingot = item("minecraft:iron_ingot");
-        ResourceKey block = item("minecraft:iron_block");
-        ResourceKey rawIron = item("minecraft:raw_iron");
+        ComponentStackKey ingot = item("minecraft:iron_ingot");
+        ComponentStackKey block = item("minecraft:iron_block");
+        ComponentStackKey rawIron = item("minecraft:raw_iron");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec(
@@ -116,10 +120,10 @@ class CorePlanningScenariosTest {
 
     @Test
     void tc05_openWorldAcquireAndRecursiveFurnaceProvision() {
-        ResourceKey cobble = item("minecraft:cobblestone");
-        ResourceKey furnace = item("minecraft:furnace");
-        ResourceKey rawIron = item("minecraft:raw_iron");
-        ResourceKey ingot = item("minecraft:iron_ingot");
+        ComponentStackKey cobble = item("minecraft:cobblestone");
+        ComponentStackKey furnace = item("minecraft:furnace");
+        ComponentStackKey rawIron = item("minecraft:raw_iron");
+        ComponentStackKey ingot = item("minecraft:iron_ingot");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec(
@@ -145,7 +149,7 @@ class CorePlanningScenariosTest {
         assertTrue(best.certificate().valid());
         ProvisionMachineStep prov = best.steps().stream().filter(ProvisionMachineStep.class::isInstance)
                 .map(ProvisionMachineStep.class::cast).findFirst().orElseThrow();
-        assertEquals("minecraft:furnace", prov.machineId());
+        assertEquals(item("minecraft:furnace"), prov.machine().contentKey().orElseThrow());
         assertTrue(prov.craftedByPredecessorSteps());
         assertEquals(8L, best.preparation().toAcquireFromWorld().amountOf(cobble));
         assertEquals(8L, best.preparation().toAcquireFromWorld().amountOf(rawIron));
@@ -153,8 +157,8 @@ class CorePlanningScenariosTest {
 
     @Test
     void tc06_automatedLinePreferredWithLowHumanAttention() {
-        ResourceKey ingot = item("minecraft:iron_ingot");
-        ResourceKey rawIron = item("minecraft:raw_iron");
+        ComponentStackKey ingot = item("minecraft:iron_ingot");
+        ComponentStackKey rawIron = item("minecraft:raw_iron");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec(
@@ -181,8 +185,8 @@ class CorePlanningScenariosTest {
 
     @Test
     void tc07_machineCapabilityEquivalenceRunsSmeltingWithZeroCapital() {
-        ResourceKey rawIron = item("minecraft:raw_iron");
-        ResourceKey ingot = item("minecraft:iron_ingot");
+        ComponentStackKey rawIron = item("minecraft:raw_iron");
+        ComponentStackKey ingot = item("minecraft:iron_ingot");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec(
@@ -194,7 +198,7 @@ class CorePlanningScenariosTest {
                 )
             )
         );
-        FacilitySnapshot f = fac(owned("ironfurnaces:diamond_furnace", MachineCapabilityGroups.capabilityOf("minecraft:smelting"), 1));
+        FacilitySnapshot f = fac(owned("ironfurnaces:diamond_furnace", capability("minecraft:smelting"), 1));
 
         PlanningResult res = plan(g, ingot, 4L, InventorySnapshot.empty, f, List.of());
         ProductionPlan best = res.paretoPlans().get(0);
@@ -205,9 +209,9 @@ class CorePlanningScenariosTest {
 
     @Test
     void tc08_a12_intermediateProductMixedBatchSavesStone() {
-        ResourceKey stone = item("minecraft:stone");
-        ResourceKey bricks = item("minecraft:stone_bricks");
-        ResourceKey wall = item("mod:monument");
+        ComponentStackKey stone = item("minecraft:stone");
+        ComponentStackKey bricks = item("minecraft:stone_bricks");
+        ComponentStackKey wall = item("mod:monument");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec(
@@ -265,8 +269,8 @@ class CorePlanningScenariosTest {
 
     @Test
     void tc09_setCoverPicksSingleSharedMachineOverTwoCheaperLocalOnes() {
-        ResourceKey ore = item("minecraft:cobblestone");
-        ResourceKey a = item("mod:a"), b = item("mod:b"), c = item("mod:c"), d = item("mod:d");
+        ComponentStackKey ore = item("minecraft:cobblestone");
+        ComponentStackKey a = item("mod:a"), b = item("mod:b"), c = item("mod:c"), d = item("mod:d");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec("mod:s1", "ra", List.of("mod:m1", "mod:m3"), List.of(slot(ore, 1)), List.of(out(a, 1))),
@@ -287,14 +291,14 @@ class CorePlanningScenariosTest {
         PlanningResult res = new DefaultPlanningService(g).planOnce(req);
         ProductionPlan best = res.paretoPlans().get(0);
         assertTrue(best.certificate().valid());
-        assertEquals(Set.of("mod:m3"), best.preparation().machinesToProvision().keySet());
+        assertEquals(Set.of(machine("mod:m3")), best.preparation().machinesToProvision().keySet());
     }
 
     @Test
     void tc10_selfCyclicMachineGracefullyDetachedWithoutStackOverflow() {
-        ResourceKey cobble = item("minecraft:cobblestone");
-        ResourceKey mach = item("mod:self_mach");
-        ResourceKey part = item("mod:part");
+        ComponentStackKey cobble = item("minecraft:cobblestone");
+        ComponentStackKey mach = item("mod:self_mach");
+        ComponentStackKey part = item("mod:part");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec("mod:sys", "make_mach", List.of("mod:self_mach"), List.of(slot(cobble, 4)), List.of(out(mach, 1))),
@@ -311,15 +315,15 @@ class CorePlanningScenariosTest {
 
     @Test
     void a11_highFanoutTagRelaxesUntilReachableMemberFound() {
-        ResourceKey cobble = item("minecraft:cobblestone");
-        ResourceKey goal = item("mod:tag_goal");
-        List<ResourceKey> members = new ArrayList<>();
+        ComponentStackKey cobble = item("minecraft:cobblestone");
+        ComponentStackKey goal = item("mod:tag_goal");
+        List<ComponentStackKey> members = new ArrayList<>();
         List<RawRecipeRecord> recs = new ArrayList<>();
         for (int i = 0; i < 40; i++) {
             members.add(item("mod:cand_" + String.format("%02d", i)));
         }
         // Only member #30 is producible; other 39 are unproducible intermediates via banned/dead paths.
-        ResourceKey validCand = members.get(30);
+        ComponentStackKey validCand = members.get(30);
         recs.add(
             rec(
                 "minecraft:crafting",
@@ -362,23 +366,26 @@ class CorePlanningScenariosTest {
 
     @Test
     void optInSystemsBlockedByDefaultAndUnlockableViaFacilityOrRule() {
-        ResourceKey cobble = item("minecraft:cobblestone");
-        ResourceKey gtOut = item("mod:gt_plate");
+        ComponentStackKey cobble = item("minecraft:cobblestone");
+        ComponentStackKey gtOut = item("mod:gt_plate");
         String gtSys = "jei:category/gregtech/bender";
         CompiledRecipeGraph g = compile(
             List.of(rec(gtSys, "gt:bend", List.of("gregtech:bender"), List.of(slot(cobble, 1)), List.of(out(gtOut, 1)))),
-            DefaultSystemAdmissionPolicy.defaults().withSystemOverride(gtSys, SystemAdmission.optInOnly)
+            DefaultSystemAdmissionPolicy.defaults()
+                .withSystemOverride(Namespace.parse(gtSys), SystemAdmission.optInOnly)
         );
 
         PlanningResult blocked = plan(g, gtOut, 1L, InventorySnapshot.empty, FacilitySnapshot.empty, List.of());
         assertEquals(PlanningStatus.provenInfeasible, blocked.status());
 
-        FacilitySnapshot unlockedFac = new FacilitySnapshot(List.of(), List.of(), List.of(), Set.of(gtSys));
+        FacilitySnapshot unlockedFac = new FacilitySnapshot(
+            List.of(), List.of(), List.of(), Set.of(Namespace.parse(gtSys)));
         PlanningResult unlockedByFac = plan(g, gtOut, 1L, InventorySnapshot.empty, unlockedFac, List.of());
         assertEquals(PlanningStatus.feasible, unlockedByFac.status());
         assertTrue(unlockedByFac.paretoPlans().get(0).certificate().valid());
 
-        SystemRule unlockRule = new SystemRule("optin_gt", GuidanceScope.session, RuleStrength.hardPin, gtSys, true);
+        SystemRule unlockRule = new SystemRule(
+            "optin_gt", GuidanceScope.session, RuleStrength.hardPin, Namespace.parse(gtSys), true);
         PlanningResult unlockedByRule = plan(
             g,
             gtOut,
@@ -393,26 +400,26 @@ class CorePlanningScenariosTest {
 
     @Test
     void lastResortAndDiscouragedRoutesStrictlyRankedBehindStandardRoute() {
-        ResourceKey cobble = item("minecraft:cobblestone");
-        ResourceKey ingot = item("minecraft:iron_ingot");
-        ResourceKey sword = item("minecraft:iron_sword");
+        ComponentStackKey cobble = item("minecraft:cobblestone");
+        ComponentStackKey ingot = item("minecraft:iron_ingot");
+        ComponentStackKey sword = item("minecraft:iron_sword");
         DefaultSystemAdmissionPolicy policy = DefaultSystemAdmissionPolicy.defaults()
                 .withExternalVerdicts(Map.of(), Map.of(2L, RecipeAdvisory.lastResort));
         RawRecipeRecord normal = new RawRecipeRecord(
-            "minecraft:smelting",
+            Namespace.parse("minecraft:smelting"),
             "vanilla",
-            Optional.of("normal_smelt"),
-            List.of("minecraft:furnace"),
+            Optional.of(ResourceLocation.parse("normal_smelt")),
+            machines("minecraft:furnace"),
             List.of(slot(item("minecraft:raw_iron"), 1)),
             List.of(out(ingot, 1)),
             Map.of(),
             1L
         );
         RawRecipeRecord salvage = new RawRecipeRecord(
-            "mod:salvaging",
+            Namespace.parse("mod:salvaging"),
             "custom",
-            Optional.of("salvage_iron"),
-            List.of(),
+            Optional.of(ResourceLocation.parse("salvage_iron")),
+            machines(),
             List.of(slot(cobble, 1)),
             List.of(out(ingot, 1)),
             Map.of(),

@@ -4,8 +4,8 @@ import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
 import org.junit.jupiter.api.Test;
@@ -66,24 +66,24 @@ class CirrusPaletteContractTest {
     @Test
     void atelierStoneMatchesTheSpecTable() {
         CirrusPalette palette = CirrusPalette.atelierStone;
-        assertEquals(0x7A1C2028, palette.backdropScrim());
-        assertEquals(0xFFDFE2E7, palette.canvasVoid());
-        assertEquals(0x164A5260, palette.canvasGridMinor());
-        assertEquals(0x304A5260, palette.canvasGridMajor());
-        assertEquals(0xFAE8EAEE, palette.dockSurface());
-        assertEquals(0xFFF5F6F8, palette.cardSurface());
-        assertEquals(0xFFFFFFFF, palette.cardSurfaceHover());
-        assertEquals(0xFFFFFFFF, palette.cardSurfaceSelected());
-        assertEquals(0xFFFAFAFC, palette.recessedSurface());
-        assertEquals(0xFAF0F1F4, palette.popoverSurface());
-        assertEquals(0xFFA4AAB5, palette.hairlineBorder());
-        assertEquals(0xF2FFFFFF, palette.hairlineHighlight());
-        assertEquals(0xFF3A6B7E, palette.focusRing());
-        assertEquals(0x2B000000, palette.dropShadow());
-        assertEquals(0xFF22262E, palette.textPrimary());
-        assertEquals(0xFF454C57, palette.textSecondary());
-        assertEquals(0xFF666E7C, palette.textMuted());
-        assertEquals(0xFF949CA8, palette.textDisabled());
+        assertEquals(0x7A181C24, palette.backdropScrim());
+        assertEquals(0xFFB2B7C0, palette.canvasVoid());
+        assertEquals(0x1A3E4552, palette.canvasGridMinor());
+        assertEquals(0x343E4552, palette.canvasGridMajor());
+        assertEquals(0xFAC2C6CE, palette.dockSurface());
+        assertEquals(0xFFCFD3DA, palette.cardSurface());
+        assertEquals(0xFFD9DDE4, palette.cardSurfaceHover());
+        assertEquals(0xFFCFDCE6, palette.cardSurfaceSelected());
+        assertEquals(0xFFA7ACB6, palette.recessedSurface());
+        assertEquals(0xFAC9CDD5, palette.popoverSurface());
+        assertEquals(0xFF7D8390, palette.hairlineBorder());
+        assertEquals(0xD8ECEFF4, palette.hairlineHighlight());
+        assertEquals(0xFF2B6584, palette.focusRing());
+        assertEquals(0x36000000, palette.dropShadow());
+        assertEquals(0xFF1A1E26, palette.textPrimary());
+        assertEquals(0xFF363D49, palette.textSecondary());
+        assertEquals(0xFF505866, palette.textMuted());
+        assertEquals(0xFF747C8A, palette.textDisabled());
         assertEquals(0xFFFFFFFF, palette.textOnAccent());
         assertEquals(0xFFF2F5FA, palette.textOnDark());
     }
@@ -131,13 +131,13 @@ class CirrusPaletteContractTest {
             assertEquals(7, distinctTints.size(), mode + " step tints must be pairwise distinguishable");
             assertEquals(7, distinctAccents.size(), mode + " step accents must be pairwise distinguishable");
         }
-        assertEquals(0xFF1D7340, CirrusPalette.atelierStone.acquireStep().accent());
-        assertEquals(0xFF235A6B, CirrusPalette.atelierStone.craftStep().accent());
-        assertEquals(0xFF166778, CirrusPalette.atelierStone.convertStep().accent());
-        assertEquals(0xFF644791, CirrusPalette.atelierStone.cycleLoopStep().accent());
-        assertEquals(0xFFB04910, CirrusPalette.atelierStone.provisionMachineStep().accent());
-        assertEquals(0xFF945B00, CirrusPalette.atelierStone.setupLineStep().accent());
-        assertEquals(0xFF1D7364, CirrusPalette.atelierStone.linePullStep().accent());
+        assertEquals(0xFF196839, CirrusPalette.atelierStone.acquireStep().accent());
+        assertEquals(0xFF1F5468, CirrusPalette.atelierStone.craftStep().accent());
+        assertEquals(0xFF145E6E, CirrusPalette.atelierStone.convertStep().accent());
+        assertEquals(0xFF5C3E8A, CirrusPalette.atelierStone.cycleLoopStep().accent());
+        assertEquals(0xFFA6430D, CirrusPalette.atelierStone.provisionMachineStep().accent());
+        assertEquals(0xFF8C5300, CirrusPalette.atelierStone.setupLineStep().accent());
+        assertEquals(0xFF19685A, CirrusPalette.atelierStone.linePullStep().accent());
     }
 
     @Test
@@ -147,7 +147,7 @@ class CirrusPaletteContractTest {
         AcquireStep step = new AcquireStep(
             "acquire-1",
             List.of(),
-            ResourceKey.item("minecraft:stone"),
+            OfflineContentTypes.item("minecraft:stone"),
             4L,
             AcquisitionKind.manualGather,
             CostVector.zero

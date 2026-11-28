@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.hosts;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
@@ -10,7 +11,6 @@ import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.cost.PlanningProfile;
 import dev.vfyjxf.cirrus.api.planning.human.HumanFeedback;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -25,6 +25,8 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningSession;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
@@ -41,6 +43,7 @@ import dev.vfyjxf.cirrus.ui.workbench.state.SessionTabState;
 import dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchPhase;
 import dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchUiSnapshot;
 import dev.vfyjxf.cloudlib.api.math.FloatPos;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -56,8 +59,8 @@ import java.util.Set;
  */
 final class HostsTestFixtures {
 
-    static final ResourceKey ironOre = ResourceKey.item("minecraft:iron_ore");
-    static final ResourceKey ironIngot = ResourceKey.item("minecraft:iron_ingot");
+    static final ComponentStackKey ironOre = OfflineContentTypes.item("minecraft:iron_ore");
+    static final ComponentStackKey ironIngot = OfflineContentTypes.item("minecraft:iron_ingot");
     static final String tabId = "tab-hosts";
     static final String planId = "plan-alpha";
 
@@ -86,7 +89,7 @@ final class HostsTestFixtures {
     }
 
     static CompiledRecipeKey recipeKey(String systemId, String recipeId) {
-        return new CompiledRecipeKey(systemId, Optional.of(recipeId), 0L);
+        return new CompiledRecipeKey(Namespace.parse(systemId), OfflineContentTypes.tryParseLocation(recipeId), 0L);
     }
 
     static CostVector cost() {
@@ -99,7 +102,7 @@ final class HostsTestFixtures {
             List.of(),
             recipeKey("minecraft:crafting", "minecraft:iron_ingot"),
             1L,
-            Optional.of("minecraft:crafting_table"),
+            Optional.of(OfflineContentTypes.machine("minecraft:crafting_table")),
             false,
             Map.of(0, new SlotBinding(ironOre, List.of())),
             Map.of(),

@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.uitest;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cirrus.ui.widget.calculator.CalculatorScreen;
@@ -15,6 +15,7 @@ import dev.vfyjxf.cloudlib.uitest.api.ClientScenario;
 import dev.vfyjxf.cloudlib.uitest.api.ScenarioBuilder;
 import dev.vfyjxf.cloudlib.uitest.api.TestContext;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.item.Items;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -81,7 +82,7 @@ public final class WorkbenchDragScenario {
                             .action(
                                 "ask the workbench to plan four crafting tables",
                                 context -> sh().setTargets(
-                                    List.of(new TargetDemand(ResourceKey.item("minecraft:crafting_table"), 4)),
+                                    List.of(new TargetDemand(ComponentStackKey.ofItem(Items.CRAFTING_TABLE), 4)),
                                     null
                                 )
                             )

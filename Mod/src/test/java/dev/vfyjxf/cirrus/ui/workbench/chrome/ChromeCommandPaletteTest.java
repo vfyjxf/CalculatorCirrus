@@ -11,6 +11,7 @@ import dev.vfyjxf.cirrus.api.planning.human.ModNamespaceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
 import dev.vfyjxf.cirrus.ui.widget.NumberInputWidget;
@@ -120,7 +121,7 @@ class ChromeCommandPaletteTest {
         palette.open();
 
         PaletteItem first = palette.results().get(0);
-        assertEquals("res:minecraft:iron_ingot", first.id());
+        assertEquals(CommandPaletteEngine.resourceItemPrefix + ironIngot.canonicalKey(), first.id());
         assertTrue(first.primaryAction() instanceof PaletteAction.SetTarget);
         assertTrue(first.shiftAction() instanceof PaletteAction.AddToBasket);
         assertSame(first, palette.highlightedItem());
@@ -156,7 +157,7 @@ class ChromeCommandPaletteTest {
                         "rule-history",
                         GuidanceScope.session,
                         RuleStrength.softPrefer,
-                        "minecraft:furnace",
+                        OfflineContentTypes.machine("minecraft:furnace"),
                         true
                     )
                 ),
@@ -257,9 +258,9 @@ class ChromeCommandPaletteTest {
         ChromeSink.install(sink);
 
         ctx.setMode(WorkbenchMode.facilities);
-        assertTrue(palette.executeCommand("copilot.focus:prompt:machine_fork:minecraft:furnace"));
-        assertEquals("prompt:machine_fork:minecraft:furnace", palette.pendingPromptId());
-        assertEquals(List.of("prompt:machine_fork:minecraft:furnace"), sink.focusedPrompts);
+        assertTrue(palette.executeCommand("copilot.focus:prompt:machine:minecraft:furnace"));
+        assertEquals("prompt:machine:minecraft:furnace", palette.pendingPromptId());
+        assertEquals(List.of("prompt:machine:minecraft:furnace"), sink.focusedPrompts);
         assertEquals(WorkbenchMode.planner, ctx.mode());
         assertTrue(ctx.toasts.contains(CirrusLangs.Workbench.Palette.categoryPrompt.key()));
 
@@ -309,8 +310,8 @@ class ChromeCommandPaletteTest {
             ),
             items.stream().map(PaletteItem::categoryKey).distinct().toList()
         );
-        assertEquals("res:minecraft:iron_ingot", items.get(0).id());
-        assertEquals("res:minecraft:coal", items.get(1).id());
+        assertEquals(CommandPaletteEngine.resourceItemPrefix + ironIngot.canonicalKey(), items.get(0).id());
+        assertEquals(CommandPaletteEngine.resourceItemPrefix + coal.canonicalKey(), items.get(1).id());
         assertEquals("cmd:" + CommandPaletteEngine.promptFocusPrefix + "prompt:a", items.get(2).id());
         assertEquals("cmd:" + CommandPaletteEngine.promptFocusPrefix + "prompt:b", items.get(3).id());
         assertEquals(

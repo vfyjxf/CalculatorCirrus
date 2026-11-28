@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.ui.workbench.facilities;
 
 import com.google.gson.JsonElement;
 import com.mojang.serialization.JsonOps;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.human.CostOverrideRule;
 import dev.vfyjxf.cirrus.api.planning.human.CycleBreakRule;
@@ -15,12 +16,17 @@ import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.model.PlanningTagKeys;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.bridge.WorldFacilityRegistry;
 import dev.vfyjxf.cirrus.ui.workbench.facilities.RuleSentenceBuilder.Field;
 import dev.vfyjxf.cirrus.ui.workbench.facilities.RuleSentenceBuilder.RuleKind;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.contents.TranslatableContents;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -38,16 +44,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class GuidanceRuleBuilderTest {
 
-    private static final ResourceKey ironIngot = ResourceKey.item("minecraft:iron_ingot");
-    private static final ResourceKey oakLog = ResourceKey.item("minecraft:oak_log");
+    private static final ComponentStackKey ironIngot = OfflineContentTypes.item("minecraft:iron_ingot");
+    private static final ComponentStackKey oakLog = OfflineContentTypes.item("minecraft:oak_log");
+    private static final MachineEntry furnace = OfflineContentTypes.machine("minecraft:furnace");
+    private static final Namespace craftingSystem = Namespace.parse("minecraft:crafting");
+    private static final Namespace smeltingSystem = Namespace.parse("minecraft:smelting");
+    private static final Namespace ae2Charger = Namespace.parse("ae2:charger");
+    private static final TagKey<?> logsTag = PlanningTagKeys.itemTag(ResourceLocation.parse("minecraft:logs"));
     private static final CompiledRecipeKey packIron = new CompiledRecipeKey(
-        "minecraft:crafting",
-        Optional.of("minecraft:iron_block"),
+        craftingSystem,
+        Optional.of(ResourceLocation.parse("minecraft:iron_block")),
         11L
     );
     private static final CompiledRecipeKey smeltIron = new CompiledRecipeKey(
-        "minecraft:smelting",
-        Optional.of("minecraft:iron_ingot_from_smelting"),
+        smeltingSystem,
+        Optional.of(ResourceLocation.parse("minecraft:iron_ingot_from_smelting")),
         23L
     );
     private static final CostVector unitCost = new CostVector(1.5, 2.5, 3.5, 4.5, 5.5);
@@ -106,22 +117,22 @@ class GuidanceRuleBuilderTest {
 
     private void assertSystem() {
         RuleSentenceBuilder draft = RuleSentenceBuilder.of(RuleKind.system).strength(RuleStrength.softPrefer)
-                .system("ae2:charger").flag(RuleSentenceBuilder.fieldOptIn, true);
+                .system(ae2Charger).flag(RuleSentenceBuilder.fieldOptIn, true);
         assertEquals(
-            new SystemRule("rule:system", GuidanceScope.session, RuleStrength.softPrefer, "ae2:charger", true),
+            new SystemRule("rule:system", GuidanceScope.session, RuleStrength.softPrefer, ae2Charger, true),
             draft.build("rule:system")
         );
     }
 
     private void assertMachine() {
         RuleSentenceBuilder draft = RuleSentenceBuilder.of(RuleKind.machine).strength(RuleStrength.softPenalize)
-                .machine("minecraft:furnace").flag(RuleSentenceBuilder.fieldAllowBuild, false);
+                .machine(furnace).flag(RuleSentenceBuilder.fieldAllowBuild, false);
         assertEquals(
             new MachineRule(
                 "rule:machine",
                 GuidanceScope.session,
                 RuleStrength.softPenalize,
-                "minecraft:furnace",
+                furnace,
                 false
             ),
             draft.build("rule:machine")
@@ -138,10 +149,10 @@ class GuidanceRuleBuilderTest {
     }
 
     private void assertTagDefault() {
-        RuleSentenceBuilder draft = RuleSentenceBuilder.of(RuleKind.tagDefault).tag("minecraft:logs")
+        RuleSentenceBuilder draft = RuleSentenceBuilder.of(RuleKind.tagDefault).tag(logsTag)
                 .preferredMember(oakLog).strength(RuleStrength.softPrefer);
         assertEquals(
-            new TagDefaultRule("rule:tag", GuidanceScope.session, RuleStrength.softPrefer, "minecraft:logs", oakLog),
+            new TagDefaultRule("rule:tag", GuidanceScope.session, RuleStrength.softPrefer, logsTag, oakLog),
             draft.build("rule:tag")
         );
     }
@@ -176,12 +187,15 @@ class GuidanceRuleBuilderTest {
     @Test
     void everyRuleKindRoundTripsThroughTheRuleCodecInBothScopes() {
         for (GuidanceScope scope : List.of(GuidanceScope.session, GuidanceScope.worldSave)) {
-            for (GuidanceRule rule : sampleRules(scope)) {
+            List<GuidanceRule> rules = sampleRules(scope);
+            List<GuidanceRule> expected = decodedRules(scope);
+            for (int index = 0; index < rules.size(); index++) {
+                GuidanceRule rule = rules.get(index);
                 JsonElement json = WorldFacilityRegistry.guidanceRuleCodec.encodeStart(JsonOps.INSTANCE, rule)
                         .getOrThrow();
                 GuidanceRule decoded = WorldFacilityRegistry.guidanceRuleCodec.parse(JsonOps.INSTANCE, json)
                         .getOrThrow();
-                assertEquals(rule, decoded, "codec round trip lost fields for " + rule.ruleId());
+                assertEquals(expected.get(index), decoded, "codec round trip lost fields for " + rule.ruleId());
                 assertEquals(scope, decoded.scope());
             }
         }
@@ -198,8 +212,7 @@ class GuidanceRuleBuilderTest {
         JsonElement encoded = registry.encodeToJson().orElseThrow();
         WorldFacilityRegistry reloaded = WorldFacilityRegistry.loadFromJson(encoded);
 
-        assertEquals(rules, reloaded.worldSaveRules());
-        assertEquals(registry.toPersistedState(), reloaded.toPersistedState());
+        assertEquals(decodedRules(GuidanceScope.worldSave), reloaded.worldSaveRules());
         assertEquals(8, reloaded.worldSaveRules().size());
     }
 
@@ -211,21 +224,52 @@ class GuidanceRuleBuilderTest {
         }
     }
 
-    private static String translationKey(Component component) {
-        return component.getContents() instanceof TranslatableContents contents
-                ? contents.getKey()
-                : component.getString();
-    }
-
     private static List<GuidanceRule> sampleRules(GuidanceScope scope) {
         List<GuidanceRule> rules = new ArrayList<>();
         rules.add(new RecipeRule("ui/recipe", scope, RuleStrength.hardBan, packIron));
-        rules.add(new SystemRule("ui/system", scope, RuleStrength.softPrefer, "ae2:charger", true));
-        rules.add(new MachineRule("ui/machine", scope, RuleStrength.softPenalize, "minecraft:furnace", false));
+        rules.add(new SystemRule("ui/system", scope, RuleStrength.softPrefer, ae2Charger, true));
+        rules.add(new MachineRule("ui/machine", scope, RuleStrength.softPenalize, furnace, false));
         rules.add(new ResourceRule("ui/resource", scope, RuleStrength.hardPin, ironIngot, true));
-        rules.add(new TagDefaultRule("ui/tag", scope, RuleStrength.softPrefer, "minecraft:logs", oakLog));
+        rules.add(new TagDefaultRule("ui/tag", scope, RuleStrength.softPrefer, logsTag, oakLog));
         rules.add(new CycleBreakRule("ui/cycle", scope, RuleStrength.hardBan, ironIngot, smeltIron));
         rules.add(new CostOverrideRule("ui/cost", scope, RuleStrength.softPenalize, ironIngot, unitCost));
+        rules.add(new ModNamespaceRule("ui/mod", scope, RuleStrength.hardBan, "create"));
+        return rules;
+    }
+
+    private static List<GuidanceRule> decodedRules(GuidanceScope scope) {
+        List<GuidanceRule> rules = new ArrayList<>();
+        rules.add(new RecipeRule("ui/recipe", scope, RuleStrength.hardBan, packIron));
+        rules.add(new SystemRule("ui/system", scope, RuleStrength.softPrefer, ae2Charger, true));
+        rules.add(new MachineRule(
+            "ui/machine",
+            scope,
+            RuleStrength.softPenalize,
+            MachineEntry.fromItemStack(new ItemStack(Items.FURNACE)),
+            false
+        ));
+        rules.add(new ResourceRule("ui/resource", scope, RuleStrength.hardPin, ComponentStackKey.ofItem(Items.IRON_INGOT), true));
+        rules.add(new TagDefaultRule(
+            "ui/tag",
+            scope,
+            RuleStrength.softPrefer,
+            logsTag,
+            ComponentStackKey.ofItem(Items.OAK_LOG)
+        ));
+        rules.add(new CycleBreakRule(
+            "ui/cycle",
+            scope,
+            RuleStrength.hardBan,
+            ComponentStackKey.ofItem(Items.IRON_INGOT),
+            smeltIron
+        ));
+        rules.add(new CostOverrideRule(
+            "ui/cost",
+            scope,
+            RuleStrength.softPenalize,
+            ComponentStackKey.ofItem(Items.IRON_INGOT),
+            unitCost
+        ));
         rules.add(new ModNamespaceRule("ui/mod", scope, RuleStrength.hardBan, "create"));
         return rules;
     }

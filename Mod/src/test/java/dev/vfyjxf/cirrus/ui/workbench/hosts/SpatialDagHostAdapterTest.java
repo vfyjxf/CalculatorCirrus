@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.ui.workbench.hosts;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.state.DagLayoutMode;
@@ -171,7 +172,7 @@ class SpatialDagHostAdapterTest {
         HostsTestFixtures.FakeShellContext context = HostsTestFixtures.fixture().context();
         List<String> targets = new ArrayList<>();
         ShellSpatialDagHost host = new ShellSpatialDagHost(context);
-        DragPayload payload = new DragPayload.MachineDrag("minecraft:furnace", 2);
+        DragPayload payload = new DragPayload.MachineDrag(OfflineContentTypes.machine("minecraft:furnace"), 2);
 
         host.dropSink((dropped, targetStepId) -> targets.add(targetStepId));
         host.onDrop(payload, "s006");
@@ -193,7 +194,7 @@ class SpatialDagHostAdapterTest {
     void hostsWithoutAnActiveControllerStaySilent() {
         HostsTestFixtures.FakeShellContext context = new HostsTestFixtures.FakeShellContext(null);
         ShellSpatialDagHost host = new ShellSpatialDagHost(context);
-        ResourceKey resource = HostsTestFixtures.ironOre;
+        ComponentStackKey resource = HostsTestFixtures.ironOre;
 
         assertDoesNotThrow(() -> {
             host.onSelectSteps(Set.of("s001"));

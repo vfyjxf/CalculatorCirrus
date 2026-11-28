@@ -8,8 +8,8 @@ import dev.vfyjxf.cirrus.api.planning.human.DeclareOwnedMachineFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
 import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
@@ -23,6 +23,7 @@ import static dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchStateFixtures.cost;
 import static dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchStateFixtures.demand;
 import static dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchStateFixtures.diamond;
 import static dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchStateFixtures.graph;
+import static dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchStateFixtures.inscriber;
 import static dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchStateFixtures.ironIngot;
 import static dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchStateFixtures.oakLog;
 import static dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchStateFixtures.option;
@@ -107,6 +108,22 @@ class CommandPaletteEngineTest {
         return as(item.primaryAction(), PaletteAction.RunCommand.class).commandId();
     }
 
+    private static String resourceId(String resourceId) {
+        return "res:minecraft:item|" + resourceId;
+    }
+
+    private static String byproductId(String resourceId) {
+        return "byproduct:minecraft:item|" + resourceId;
+    }
+
+    private static String ownedMachineId(String resourceId) {
+        return "fb:own:minecraft:item|" + resourceId;
+    }
+
+    private static String freeResourceId(String resourceId) {
+        return "fb:free:minecraft:item|" + resourceId;
+    }
+
     @Test
     void noPrefixRanksPlanStepsBeforeResourcesAndCommands() {
         List<PaletteItem> items = query("iron", plannedSnapshot(), graph, 50);
@@ -116,10 +133,10 @@ class CommandPaletteEngineTest {
         assertEquals(expectedSteps, Set.copyOf(ids(withAction(items, PaletteAction.FocusStep.class))));
 
         Set<String> expectedResources = Set.of(
-            "res:minecraft:iron_ore",
-            "res:minecraft:iron_block",
-            "res:minecraft:iron_ingot",
-            "res:create:iron_sheet"
+            resourceId("minecraft:iron_ore"),
+            resourceId("minecraft:iron_block"),
+            resourceId("minecraft:iron_ingot"),
+            resourceId("create:iron_sheet")
         );
         assertEquals(expectedResources, Set.copyOf(ids(withAction(items, PaletteAction.SetTarget.class))));
         assertEquals(10, items.size(), "six plan steps plus four producible iron resources");
@@ -156,7 +173,7 @@ class CommandPaletteEngineTest {
             PaletteAction.SetTarget.class
         );
 
-        assertEquals(List.of("res:minecraft:iron_ingot"), ids(resources));
+        assertEquals(List.of(resourceId("minecraft:iron_ingot")), ids(resources));
         PaletteItem item = resources.get(0);
         assertEquals(CommandPaletteEngine.categoryResource, item.categoryKey());
         assertEquals(ironIngot, item.iconResource());
@@ -173,7 +190,7 @@ class CommandPaletteEngineTest {
         assertEquals(CommandPaletteEngine.categoryStep, items.get(0).categoryKey());
 
         List<PaletteItem> cogwheel = query("#cogwheel", plannedSnapshot(), graph, 50);
-        assertEquals(List.of("step:s009", "byproduct:create:cogwheel"), ids(cogwheel));
+        assertEquals(List.of("step:s009", byproductId("create:cogwheel")), ids(cogwheel));
         PaletteItem byproduct = cogwheel.get(1);
         assertEquals(new PaletteAction.FocusStep("s009"), byproduct.primaryAction());
         assertEquals(CommandPaletteEngine.categoryStep, byproduct.categoryKey());
@@ -196,8 +213,8 @@ class CommandPaletteEngineTest {
                 "cmd:mod.prefer:ae2",
                 "cmd:mod.penalize:ae2",
                 "cmd:mod.ban:ae2",
-                "res:ae2:certus_quartz_crystal",
-                "res:ae2:inscriber"
+                resourceId("ae2:certus_quartz_crystal"),
+                resourceId("ae2:inscriber")
             ),
             ids(items)
         );
@@ -210,8 +227,7 @@ class CommandPaletteEngineTest {
         for (PaletteItem resource : items.subList(3, items.size())) {
             as(resource.primaryAction(), PaletteAction.SetTarget.class);
             as(Objects.requireNonNull(resource.shiftAction()), PaletteAction.AddToBasket.class);
-            String resourceId = Objects.requireNonNull(resource.iconResource()).resourceId();
-            assertEquals("ae2", resourceId.substring(0, resourceId.indexOf(':')));
+            assertEquals("ae2", Objects.requireNonNull(resource.iconResource()).namespace());
         }
     }
 
@@ -223,9 +239,9 @@ class CommandPaletteEngineTest {
                 "cmd:mod.prefer:cr",
                 "cmd:mod.penalize:cr",
                 "cmd:mod.ban:cr",
-                "res:create:cogwheel",
-                "res:create:iron_sheet",
-                "res:create:shaft"
+                resourceId("create:cogwheel"),
+                resourceId("create:iron_sheet"),
+                resourceId("create:shaft")
             ),
             ids(items)
         );
@@ -293,17 +309,17 @@ class CommandPaletteEngineTest {
     void bangPrefixParsesHumanFeedbackPreviews() {
         List<PaletteItem> own = query("!own ae2:inscriber", plannedSnapshot(), graph, 10);
         assertEquals(1, own.size());
-        assertEquals("fb:own:ae2:inscriber", own.get(0).id());
+        assertEquals(ownedMachineId("ae2:inscriber"), own.get(0).id());
         assertEquals("own 1× ae2:inscriber", own.get(0).displayText());
         PaletteAction.ApplyFeedback ownAction = as(own.get(0).primaryAction(), PaletteAction.ApplyFeedback.class);
         DeclareOwnedMachineFeedback declare = as(ownAction.feedback(), DeclareOwnedMachineFeedback.class);
-        assertEquals("ae2:inscriber", declare.machineId());
+        assertEquals(MachineEntry.fromKey(inscriber), declare.machine());
         assertEquals(1, declare.ownedCount());
         assertFalse(declare.persistToWorld());
 
         List<PaletteItem> free = query("!free cobble", plannedSnapshot(), graph, 10);
         assertEquals(1, free.size());
-        assertEquals("fb:free:minecraft:cobble", free.get(0).id());
+        assertEquals(freeResourceId("minecraft:cobble"), free.get(0).id());
         assertEquals(cobble, free.get(0).iconResource());
         PaletteAction.ApplyFeedback freeAction = as(free.get(0).primaryAction(), PaletteAction.ApplyFeedback.class);
         ApplyRulesFeedback rules = as(freeAction.feedback(), ApplyRulesFeedback.class);
@@ -316,11 +332,11 @@ class CommandPaletteEngineTest {
         assertTrue(freeRule.treatAsFreeBaseSource());
 
         assertEquals(
-            "fb:free:minecraft:iron_ingot",
+            freeResourceId("minecraft:iron_ingot"),
             query("!free minecraft:iron_ingot", plannedSnapshot(), graph, 10).get(0).id()
         );
-        assertEquals("fb:own:ae2:charger", query("!拥有 ae2:charger", plannedSnapshot(), graph, 10).get(0).id()); // NOPMD - Chinese palette input under test
-        assertEquals("fb:free:minecraft:cobble", query("! 免费 cobble", plannedSnapshot(), graph, 10).get(0).id()); // NOPMD - Chinese palette input under test
+        assertEquals(ownedMachineId("ae2:inscriber"), query("!拥有 ae2:inscriber", plannedSnapshot(), graph, 10).get(0).id()); // NOPMD - Chinese palette input under test
+        assertEquals(freeResourceId("minecraft:cobble"), query("! 免费 cobble", plannedSnapshot(), graph, 10).get(0).id()); // NOPMD - Chinese palette input under test
     }
 
     @Test
@@ -350,10 +366,10 @@ class CommandPaletteEngineTest {
 
         assertEquals(
             List.of(
-                "res:minecraft:iron_ingot",
-                "res:minecraft:coal",
-                "res:minecraft:diamond",
-                "res:minecraft:paper",
+                resourceId("minecraft:iron_ingot"),
+                resourceId("minecraft:coal"),
+                resourceId("minecraft:diamond"),
+                resourceId("minecraft:paper"),
                 "cmd:copilot.focus:p1",
                 "cmd:copilot.focus:p2",
                 "cmd:copilot.focus:p3",
@@ -417,10 +433,10 @@ class CommandPaletteEngineTest {
             ids(query("", empty, null, 100))
         );
 
-        List<PaletteItem> free = query("!free cobble", empty, null, 10);
+        List<PaletteItem> free = query("!free cobble", empty, graph, 10);
         PaletteAction.ApplyFeedback action = as(free.get(0).primaryAction(), PaletteAction.ApplyFeedback.class);
         ApplyRulesFeedback feedback = as(action.feedback(), ApplyRulesFeedback.class);
-        assertEquals(ResourceKey.item("minecraft:cobble"), as(feedback.rules().get(0), ResourceRule.class).resource());
+        assertEquals(cobble, as(feedback.rules().get(0), ResourceRule.class).resource());
     }
 
 }

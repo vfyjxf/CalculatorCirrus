@@ -9,6 +9,7 @@ import dev.vfyjxf.cirrus.api.planning.human.MachineRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.workbench.state.PaletteAction;
 import dev.vfyjxf.cirrus.ui.workbench.state.PaletteItem;
@@ -26,7 +27,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ChromeTopDockTest {
 
     private static MachineRule machineRule(String ruleId) {
-        return new MachineRule(ruleId, GuidanceScope.session, RuleStrength.softPrefer, "minecraft:furnace", true);
+        return new MachineRule(
+            ruleId,
+            GuidanceScope.session,
+            RuleStrength.softPrefer,
+            OfflineContentTypes.machine("minecraft:furnace"),
+            true
+        );
     }
 
     @Test

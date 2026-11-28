@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.value;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledCycleMacro;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
@@ -12,7 +13,6 @@ import dev.vfyjxf.cirrus.api.planning.graph.RecipeRole;
 import dev.vfyjxf.cirrus.api.planning.graph.SccTopology;
 import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SlotBinding;
@@ -23,6 +23,7 @@ import dev.vfyjxf.cirrus.api.recipe.value.EnergyValue;
 import dev.vfyjxf.cirrus.api.recipe.value.TimeValue;
 import dev.vfyjxf.cirrus.api.recipe.value.TimeValueType;
 import dev.vfyjxf.cirrus.content.type.BasicValueType;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionRecipePreviewLayout;
 import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
@@ -30,6 +31,7 @@ import dev.vfyjxf.cirrus.ui.process.ProcessNode.MaterialSlot;
 import dev.vfyjxf.cirrus.ui.workbench.flow.StepNodeCardRenderer;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -77,11 +79,12 @@ class ValueTypePresentationTest {
         assertEquals(CirrusPalette.obsidianBlueprint.costC(), plasma.accentColor(CirrusPalette.obsidianBlueprint));
 
         assertTrue(
-            ValueTypeVisualRegistry
-                    .isValueResourceKey(new ResourceKey("calculator_cirrus:energy", "fe", Optional.empty()))
+            ValueTypeVisualRegistry.isValueResourceKey(
+                OfflineContentTypes.bare(Namespace.parse("calculator_cirrus:energy"), "fe")
+            )
         );
-        assertFalse(ValueTypeVisualRegistry.isValueResourceKey(ResourceKey.item("minecraft:iron_ingot")));
-        assertFalse(ValueTypeVisualRegistry.isValueResourceKey(ResourceKey.fluid("minecraft:water")));
+        assertFalse(ValueTypeVisualRegistry.isValueResourceKey(OfflineContentTypes.item("minecraft:iron_ingot")));
+        assertFalse(ValueTypeVisualRegistry.isValueResourceKey(OfflineContentTypes.fluid("minecraft:water")));
     }
 
     @Test
@@ -155,9 +158,13 @@ class ValueTypePresentationTest {
 
     @Test
     void dagStepVisualsExtractsAndScalesRecipeValues() {
-        ResourceKey ore = ResourceKey.item("minecraft:iron_ore");
-        ResourceKey ingot = ResourceKey.item("minecraft:iron_ingot");
-        CompiledRecipeKey key = new CompiledRecipeKey("test:smelter", Optional.of("smelt_iron"), 0L);
+        ComponentStackKey ore = OfflineContentTypes.item("minecraft:iron_ore");
+        ComponentStackKey ingot = OfflineContentTypes.item("minecraft:iron_ingot");
+        CompiledRecipeKey key = new CompiledRecipeKey(
+            Namespace.parse("test:smelter"),
+            Optional.of(ResourceLocation.parse("smelt_iron")),
+            0L
+        );
         CompiledRecipe recipe = new CompiledRecipe(
             0,
             key,
@@ -165,8 +172,8 @@ class ValueTypePresentationTest {
             List.of(new InputSlot(0, 1L, Optional.empty(), List.of(ore), SlotMatchMode.identity)),
             List.of(),
             List.of(new OutputSlot(ingot, 1L)),
-            new MachineRequirement(Optional.empty(), List.of("minecraft:furnace"), false),
-            Map.of("calculator_cirrus:energy", 128.0, "calculator_cirrus:time", 20.0)
+            new MachineRequirement(Optional.empty(), List.of(OfflineContentTypes.machine("minecraft:furnace")), false),
+            Map.of(Namespace.parse("calculator_cirrus:energy"), 128.0, Namespace.parse("calculator_cirrus:time"), 20.0)
         );
         CompiledRecipeGraph graph = singleRecipeGraph(recipe);
         CraftStep step = new CraftStep(
@@ -174,7 +181,7 @@ class ValueTypePresentationTest {
             List.of(),
             key,
             4L,
-            Optional.of("minecraft:furnace"),
+            Optional.of(OfflineContentTypes.machine("minecraft:furnace")),
             false,
             Map.of(0, new SlotBinding(ore, List.of())),
             Map.of(),
@@ -184,11 +191,11 @@ class ValueTypePresentationTest {
         StepNodeCardRenderer.StepVisuals visuals = StepNodeCardRenderer.resolve(step, graph, ingot, false);
         assertEquals(2, visuals.recipeValues().size());
         StepNodeCardRenderer.ValueTelemetry energy = visuals.recipeValues().stream()
-                .filter(v -> v.typeId().equals("calculator_cirrus:energy")).findFirst().orElseThrow();
+                .filter(v -> v.typeId().equals(Namespace.parse("calculator_cirrus:energy"))).findFirst().orElseThrow();
         assertEquals(128L, energy.perBatchAmount());
         assertEquals(512L, energy.totalAmount());
         StepNodeCardRenderer.ValueTelemetry time = visuals.recipeValues().stream()
-                .filter(v -> v.typeId().equals("calculator_cirrus:time")).findFirst().orElseThrow();
+                .filter(v -> v.typeId().equals(Namespace.parse("calculator_cirrus:time"))).findFirst().orElseThrow();
         assertEquals(20L, time.perBatchAmount());
         assertEquals(80L, time.totalAmount());
     }
@@ -201,22 +208,22 @@ class ValueTypePresentationTest {
             }
 
             @Override
-            public SystemAdmission admissionOf(String systemId) {
+            public SystemAdmission admissionOf(Namespace systemId) {
                 return SystemAdmission.enabled;
             }
 
             @Override
-            public List<CompiledRecipe> producersOf(ResourceKey output) {
+            public List<CompiledRecipe> producersOf(ComponentStackKey output) {
                 return List.of(recipe);
             }
 
             @Override
-            public List<CompiledRecipe> consumersOf(ResourceKey input) {
+            public List<CompiledRecipe> consumersOf(ComponentStackKey input) {
                 return List.of(recipe);
             }
 
             @Override
-            public List<CompiledCycleMacro> cycleMacrosProducing(ResourceKey output) {
+            public List<CompiledCycleMacro> cycleMacrosProducing(ComponentStackKey output) {
                 return List.of();
             }
 
@@ -231,7 +238,7 @@ class ValueTypePresentationTest {
             }
 
             @Override
-            public Set<ResourceKey> allProducibleResources() {
+            public Set<ComponentStackKey> allProducibleResources() {
                 return Set.of();
             }
 
@@ -239,7 +246,7 @@ class ValueTypePresentationTest {
             public SccTopology sccTopology() {
                 return new SccTopology() {
                     @Override
-                    public int sccIdOf(ResourceKey resource) {
+                    public int sccIdOf(ComponentStackKey resource) {
                         return 0;
                     }
 
@@ -249,12 +256,12 @@ class ValueTypePresentationTest {
                     }
 
                     @Override
-                    public boolean isInNonTrivialScc(ResourceKey resource) {
+                    public boolean isInNonTrivialScc(ComponentStackKey resource) {
                         return false;
                     }
 
                     @Override
-                    public Set<ResourceKey> membersOfScc(int sccId) {
+                    public Set<ComponentStackKey> membersOfScc(int sccId) {
                         return Set.of();
                     }
 

@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.chrome;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
@@ -19,7 +20,6 @@ import dev.vfyjxf.cirrus.api.planning.human.DecisionPrompt;
 import dev.vfyjxf.cirrus.api.planning.human.DecisionPromptKind;
 import dev.vfyjxf.cirrus.api.planning.human.HumanFeedback;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
@@ -32,6 +32,7 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningSession;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
@@ -50,6 +51,7 @@ import dev.vfyjxf.cloudlib.api.ui.base.SceneContext;
 import dev.vfyjxf.cloudlib.api.ui.base.SceneHost;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
@@ -71,10 +73,10 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeFull;
  */
 final class ChromeTestContext implements WorkbenchShellContext {
 
-    static final ResourceKey ironIngot = ResourceKey.item("minecraft:iron_ingot");
-    static final ResourceKey coal = ResourceKey.item("minecraft:coal");
-    static final ResourceKey ironOre = ResourceKey.item("minecraft:iron_ore");
-    static final ResourceKey goldIngot = ResourceKey.item("minecraft:gold_ingot");
+    static final ComponentStackKey ironIngot = OfflineContentTypes.item("minecraft:iron_ingot");
+    static final ComponentStackKey coal = OfflineContentTypes.item("minecraft:coal");
+    static final ComponentStackKey ironOre = OfflineContentTypes.item("minecraft:iron_ore");
+    static final ComponentStackKey goldIngot = OfflineContentTypes.item("minecraft:gold_ingot");
 
     record TargetCall(List<TargetDemand> targets, @Nullable RecipeEntry<?> primaryRecipe) {}
 
@@ -131,7 +133,7 @@ final class ChromeTestContext implements WorkbenchShellContext {
 
     //region fixtures
 
-    static TargetDemand demand(ResourceKey resource, long amount) {
+    static TargetDemand demand(ComponentStackKey resource, long amount) {
         return new TargetDemand(resource, amount);
     }
 
@@ -582,10 +584,10 @@ final class ChromeTestContext implements WorkbenchShellContext {
 
     static final class FakeGraph implements CompiledRecipeGraph {
 
-        private final Set<ResourceKey> producible = new TreeSet<>();
+        private final Set<ComponentStackKey> producible = new TreeSet<>();
         private final List<CompiledRecipe> recipes = new ArrayList<>();
 
-        FakeGraph add(ResourceKey... resources) {
+        FakeGraph add(ComponentStackKey... resources) {
             producible.addAll(List.of(resources));
             return this;
         }
@@ -604,12 +606,12 @@ final class ChromeTestContext implements WorkbenchShellContext {
         }
 
         @Override
-        public SystemAdmission admissionOf(String systemId) {
+        public SystemAdmission admissionOf(Namespace systemId) {
             return SystemAdmission.enabled;
         }
 
         @Override
-        public List<CompiledRecipe> producersOf(ResourceKey output) {
+        public List<CompiledRecipe> producersOf(ComponentStackKey output) {
             List<CompiledRecipe> out = new ArrayList<>();
             for (CompiledRecipe recipe : recipes) {
                 for (OutputSlot slot : recipe.outputs()) {
@@ -623,12 +625,12 @@ final class ChromeTestContext implements WorkbenchShellContext {
         }
 
         @Override
-        public List<CompiledRecipe> consumersOf(ResourceKey input) {
+        public List<CompiledRecipe> consumersOf(ComponentStackKey input) {
             return List.of();
         }
 
         @Override
-        public List<CompiledCycleMacro> cycleMacrosProducing(ResourceKey output) {
+        public List<CompiledCycleMacro> cycleMacrosProducing(ComponentStackKey output) {
             return List.of();
         }
 
@@ -643,7 +645,7 @@ final class ChromeTestContext implements WorkbenchShellContext {
         }
 
         @Override
-        public Set<ResourceKey> allProducibleResources() {
+        public Set<ComponentStackKey> allProducibleResources() {
             return Set.copyOf(producible);
         }
 
@@ -651,7 +653,7 @@ final class ChromeTestContext implements WorkbenchShellContext {
         public SccTopology sccTopology() {
             return new SccTopology() {
                 @Override
-                public int sccIdOf(ResourceKey resource) {
+                public int sccIdOf(ComponentStackKey resource) {
                     return 0;
                 }
 
@@ -661,12 +663,12 @@ final class ChromeTestContext implements WorkbenchShellContext {
                 }
 
                 @Override
-                public boolean isInNonTrivialScc(ResourceKey resource) {
+                public boolean isInNonTrivialScc(ComponentStackKey resource) {
                     return false;
                 }
 
                 @Override
-                public Set<ResourceKey> membersOfScc(int sccId) {
+                public Set<ComponentStackKey> membersOfScc(int sccId) {
                     return Set.of();
                 }
 

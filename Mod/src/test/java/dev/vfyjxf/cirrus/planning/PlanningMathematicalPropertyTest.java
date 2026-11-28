@@ -1,9 +1,8 @@
 package dev.vfyjxf.cirrus.planning;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionEstimate;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
-import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOption;
-import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
 import dev.vfyjxf.cirrus.api.planning.context.BaseBoundarySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.BaseContract;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
@@ -29,7 +28,6 @@ import dev.vfyjxf.cirrus.api.planning.human.QuestionKey;
 import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.VoIEstimate;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.PreparationSummary;
@@ -44,13 +42,10 @@ import dev.vfyjxf.cirrus.api.planning.tag.CanonicalRecipeTag;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeEvidenceTier;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeSemanticKey;
 import dev.vfyjxf.cirrus.api.planning.telemetry.ExecutionFailureCategory;
-import dev.vfyjxf.cirrus.planning.core.cone.FiveBucketTagPager;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
 import dev.vfyjxf.cirrus.planning.core.cost.DefaultAcquisitionOracle;
-import dev.vfyjxf.cirrus.planning.core.cost.DualBoundCertifier;
 import dev.vfyjxf.cirrus.planning.core.cost.PassBInventoryModel;
 import dev.vfyjxf.cirrus.planning.core.cost.StageAndCapitalModel;
-import dev.vfyjxf.cirrus.planning.core.cost.V3AcquisitionOracle;
-import dev.vfyjxf.cirrus.planning.core.graph.TagHomomorphismAnalyzer;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.planning.core.human.VoICounterfactualEngine;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
@@ -58,17 +53,10 @@ import dev.vfyjxf.cirrus.planning.core.learn.ExecutionFailureTracker;
 import dev.vfyjxf.cirrus.planning.core.learn.OnlinePreferenceLearner;
 import dev.vfyjxf.cirrus.planning.core.select.ConditionedFrontierSelector;
 import dev.vfyjxf.cirrus.planning.core.service.DefaultPlanningService;
-import dev.vfyjxf.cirrus.planning.core.solve.DeterministicAlnsScheduler;
-import dev.vfyjxf.cirrus.planning.core.solve.PassABaselinePotentials;
-import dev.vfyjxf.cirrus.planning.core.solve.TransactionalLedger;
 import dev.vfyjxf.cirrus.planning.core.trust.FidelityScorer;
 import dev.vfyjxf.cirrus.planning.core.trust.RecipeSemanticKeyBuilder;
-import dev.vfyjxf.cirrus.planning.core.verify.MacroSeedCertifier;
-import dev.vfyjxf.cirrus.planning.core.verify.NonLossyCertificateVerifier;
-import dev.vfyjxf.cirrus.planning.core.verify.TwoPoolReplayVerifier;
 import org.junit.jupiter.api.Test;
 
-import java.math.BigInteger;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -83,288 +71,44 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.function.Function;
 
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.compile;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.fac;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.generousBudget;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.item;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.machine;
+import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.ns;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.out;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.ownedCraftingTable;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.rec;
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.slot;
-import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.tagSlot;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Exhaustive JUnit 5 verification of all 46 mathematical properties & counterexamples
- * defined in the Planning v3 Mathematical Specification (M1-M9, Table 2 #1-#46).
+ * Mathematical invariant and counterexample checks for the surviving planning core models:
+ * Pass B inventory economics, stage/capital amortization, conditioned frontier selection,
+ * end-to-end planning service, trust/fidelity scoring, VoI, bounded online learning,
+ * semantic keys, and saturating arithmetic.
  */
-class PlanningV3MathematicalPropertyTest {
+class PlanningMathematicalPropertyTest {
 
-    private static InventorySnapshot invTiers(Map<InventoryTier, StockLedger> avail, Map<InventoryTier, StockLedger> res, Set<ResourceKey> prot) {
+    private static InventorySnapshot invTiers(Map<InventoryTier, StockLedger> avail, Map<InventoryTier, StockLedger> res, Set<ComponentStackKey> prot) {
         return InventorySnapshot.fromTiers(avail, res, Set.of(), prot);
     }
 
-    private static BaseContract contract(ResourceKey rk, double unitSec) {
+    private static BaseContract contract(ComponentStackKey rk, double unitSec) {
         return new BaseContract(rk, unitSec, 0.1, 0.0, 0.0, 1_000_000L, false, "test");
     }
 
-    // #1
-    @Test
-    void conservesEveryPrefix() {
-        ResourceKey ore = item("test:ore");
-        ResourceKey ingot = item("test:ingot");
-        ResourceKey gear = item("test:gear");
-        InventorySnapshot inv = invTiers(Map.of(InventoryTier.hand, new StockLedger(Map.of(ore, 2L))), Map.of(), Set.of());
-        List<TwoPoolReplayVerifier.ReplayEvent> validEvents = List.of(
-            new TwoPoolReplayVerifier.PullStockEvent(InventoryTier.hand, ore, 2L),
-            new TwoPoolReplayVerifier.ExternalSupplyEvent(ore, 2L, false),
-            new TwoPoolReplayVerifier.CraftActionEvent(
-                "smelt",
-                4L,
-                null,
-                true,
-                List.of(new TwoPoolReplayVerifier.BatchSlotBinding(0, 1L, true, Map.of(ore, 4L), List.of())),
-                Map.of(),
-                Map.of(ingot, 4L),
-                Map.of()
-            ),
-            new TwoPoolReplayVerifier.CraftActionEvent(
-                "press",
-                1L,
-                null,
-                true,
-                List.of(new TwoPoolReplayVerifier.BatchSlotBinding(0, 4L, true, Map.of(ingot, 4L), List.of())),
-                Map.of(),
-                Map.of(gear, 1L),
-                Map.of()
-            ),
-            new TwoPoolReplayVerifier.DeliverTargetEvent(gear, 1L)
-        );
-        var ok = TwoPoolReplayVerifier.replay(inv, Set.of(), Map.of(gear, 1L), validEvents, true);
-        assertTrue(ok.valid(), () -> "Expected valid replay: " + ok.violations());
-        assertTrue(ok.nonLossyCertified());
-
-        // Prefix violation: craft before pulling stock must fail even though total sum matches!
-        List<TwoPoolReplayVerifier.ReplayEvent> badOrder = List.of(
-            validEvents.get(2),
-            validEvents.get(0),
-            validEvents.get(1),
-            validEvents.get(3),
-            validEvents.get(4)
-        );
-        var bad = TwoPoolReplayVerifier.replay(inv, Set.of(), Map.of(gear, 1L), badOrder, true);
-        assertFalse(bad.valid());
-    }
-
-    // #2
-    @Test
-    void mixedSlotHasPhysicalLots() {
-        ResourceKey oak = item("test:oak_planks");
-        ResourceKey birch = item("test:birch_planks");
-        ResourceKey stick = item("test:stick");
-        InventorySnapshot inv = invTiers(
-            Map.of(
-                InventoryTier.hand,
-                new StockLedger(Map.of(oak, 2L)),
-                InventoryTier.network,
-                new StockLedger(Map.of(birch, 2L))
-            ),
-            Map.of(),
-            Set.of()
-        );
-        List<TwoPoolReplayVerifier.ReplayEvent> events = List.of(
-            new TwoPoolReplayVerifier.PullStockEvent(InventoryTier.hand, oak, 2L),
-            new TwoPoolReplayVerifier.PullStockEvent(InventoryTier.network, birch, 2L),
-            new TwoPoolReplayVerifier.CraftActionEvent(
-                "sticks",
-                2L,
-                null,
-                true,
-                List.of(
-                    new TwoPoolReplayVerifier.BatchSlotBinding(
-                        0,
-                        2L,
-                        false,
-                        Map.of(oak, 2L, birch, 2L),
-                        List.of(Map.of(oak, 2L), Map.of(birch, 2L))
-                    )
-                ),
-                Map.of(),
-                Map.of(stick, 8L),
-                Map.of()
-            ),
-            new TwoPoolReplayVerifier.DeliverTargetEvent(stick, 8L)
-        );
-        var res = TwoPoolReplayVerifier.replay(inv, Set.of(), Map.of(stick, 8L), events, true);
-        assertTrue(res.valid(), () -> "Mixed slot lots must pass: " + res.violations());
-
-        List<TwoPoolReplayVerifier.ReplayEvent> overspend = List.of(
-            new TwoPoolReplayVerifier.PullStockEvent(InventoryTier.hand, oak, 3L)
-        );
-        assertFalse(TwoPoolReplayVerifier.replay(inv, Set.of(), Map.of(), overspend, false).valid());
-    }
-
-    // #3
-    @Test
-    void enforcesPerBatchVariant() {
-        ResourceKey red = item("test:red_wool");
-        ResourceKey blue = item("test:blue_wool");
-        ResourceKey bed = item("test:bed");
-        InventorySnapshot inv = invTiers(Map.of(InventoryTier.hand, new StockLedger(Map.of(red, 2L, blue, 2L))), Map.of(), Set.of());
-        List<TwoPoolReplayVerifier.ReplayEvent> mixedOneBatch = List.of(
-            new TwoPoolReplayVerifier.PullStockEvent(InventoryTier.hand, red, 2L),
-            new TwoPoolReplayVerifier.PullStockEvent(InventoryTier.hand, blue, 2L),
-            new TwoPoolReplayVerifier.CraftActionEvent(
-                "bed_craft",
-                1L,
-                null,
-                true,
-                List.of(new TwoPoolReplayVerifier.BatchSlotBinding(0, 4L, true, Map.of(red, 2L, blue, 2L), List.of())),
-                Map.of(),
-                Map.of(bed, 1L),
-                Map.of()
-            ),
-            new TwoPoolReplayVerifier.DeliverTargetEvent(bed, 1L)
-        );
-        assertFalse(TwoPoolReplayVerifier.replay(inv, Set.of(), Map.of(bed, 1L), mixedOneBatch, false).valid());
-
-        InventorySnapshot inv2 = invTiers(Map.of(InventoryTier.hand, new StockLedger(Map.of(red, 4L, blue, 4L))), Map.of(), Set.of());
-        List<TwoPoolReplayVerifier.ReplayEvent> twoHomogeneousBatches = List.of(
-            new TwoPoolReplayVerifier.PullStockEvent(InventoryTier.hand, red, 4L),
-            new TwoPoolReplayVerifier.PullStockEvent(InventoryTier.hand, blue, 4L),
-            new TwoPoolReplayVerifier.CraftActionEvent(
-                "bed_craft",
-                2L,
-                null,
-                true,
-                List.of(
-                    new TwoPoolReplayVerifier.BatchSlotBinding(
-                        0,
-                        4L,
-                        true,
-                        Map.of(red, 4L, blue, 4L),
-                        List.of(Map.of(red, 4L), Map.of(blue, 4L))
-                    )
-                ),
-                Map.of(),
-                Map.of(bed, 2L),
-                Map.of()
-            ),
-            new TwoPoolReplayVerifier.DeliverTargetEvent(bed, 2L)
-        );
-        var ok = TwoPoolReplayVerifier.replay(inv2, Set.of(), Map.of(bed, 2L), twoHomogeneousBatches, true);
-        assertTrue(ok.valid(), () -> "Per-batch homogeneous must pass: " + ok.violations());
-    }
-
-    // #4
-    @Test
-    void probabilisticSurplusNeverPaysDebt() {
-        ResourceKey ore = item("test:ore");
-        ResourceKey luckyGem = item("test:lucky_gem");
-        List<TwoPoolReplayVerifier.ReplayEvent> events = List.of(
-            new TwoPoolReplayVerifier.ExternalSupplyEvent(ore, 100L, false),
-            new TwoPoolReplayVerifier.CraftActionEvent(
-                "crush_prob",
-                100L,
-                null,
-                true,
-                List.of(new TwoPoolReplayVerifier.BatchSlotBinding(0, 1L, true, Map.of(ore, 100L), List.of())),
-                Map.of(),
-                Map.of(),
-                Map.of()
-            ),
-            new TwoPoolReplayVerifier.DeliverTargetEvent(luckyGem, 1L)
-        );
-        assertFalse(TwoPoolReplayVerifier.replay(InventorySnapshot.empty, Set.of(), Map.of(luckyGem, 1L), events, false).valid());
-    }
-
-    // #5
-    @Test
-    void fifoPoolsPublishOnlyFinishedLots() {
-        ResourceKey dust = item("test:dust");
-        TransactionalLedger ledger = new TransactionalLedger(InventorySnapshot.empty, Set.of());
-        ledger.publishLot(TransactionalLedger.PoolKind.byproduct, dust, 1, 0, 3L);
-        ledger.publishLot(TransactionalLedger.PoolKind.byproduct, dust, 3, 0, 5L);
-
-        List<TransactionalLedger.LotSlice> taken = ledger.consumeFifo(dust, 3L, 2);
-        assertEquals(1, taken.size());
-        assertEquals(1, taken.get(0).sourceEventIndex());
-        assertEquals(3L, taken.get(0).quantity());
-
-        assertThrows(IllegalStateException.class, () -> ledger.consumeFifo(dust, 1L, 3));
-
-        List<TransactionalLedger.LotSlice> taken2 = ledger.consumeFifo(dust, 2L, 4);
-        assertEquals(3, taken2.get(0).sourceEventIndex());
-        assertEquals(2L, taken2.get(0).quantity());
-    }
-
-    // #6
-    @Test
-    void holdsNonconsumableAndMachine() {
-        ResourceKey mold = item("test:mold");
-        ResourceKey plate = item("test:plate");
-        InventorySnapshot inv = invTiers(Map.of(InventoryTier.hand, new StockLedger(Map.of(mold, 1L))), Map.of(), Set.of());
-        List<TwoPoolReplayVerifier.ReplayEvent> dualUse = List.of(
-            new TwoPoolReplayVerifier.PullStockEvent(InventoryTier.hand, mold, 1L),
-            new TwoPoolReplayVerifier.CraftActionEvent(
-                "press",
-                1L,
-                null,
-                true,
-                List.of(new TwoPoolReplayVerifier.BatchSlotBinding(0, 1L, true, Map.of(mold, 1L), List.of())),
-                Map.of(mold, 1L),
-                Map.of(plate, 1L),
-                Map.of()
-            )
-        );
-        assertFalse(TwoPoolReplayVerifier.replay(inv, Set.of(), Map.of(plate, 1L), dualUse, false).valid());
-
-        List<TwoPoolReplayVerifier.ReplayEvent> badMachine = List.of(
-            new TwoPoolReplayVerifier.PullStockEvent(InventoryTier.hand, mold, 1L),
-            new TwoPoolReplayVerifier.CraftActionEvent(
-                "press",
-                1L,
-                "mod:press_mk1",
-                false,
-                List.of(),
-                Map.of(mold, 1L),
-                Map.of(plate, 1L),
-                Map.of()
-            )
-        );
-        assertFalse(TwoPoolReplayVerifier.replay(inv, Set.of("mod:press_mk2_incompatible"), Map.of(plate, 1L), badMachine, false).valid());
-
-        List<TwoPoolReplayVerifier.ReplayEvent> installFirst = List.of(
-            new TwoPoolReplayVerifier.PullStockEvent(InventoryTier.hand, mold, 1L),
-            new TwoPoolReplayVerifier.InstallMachineEvent("mod:press_mk1", Map.of(), null),
-            new TwoPoolReplayVerifier.CraftActionEvent(
-                "press",
-                1L,
-                "mod:press_mk1",
-                true,
-                List.of(),
-                Map.of(mold, 1L),
-                Map.of(plate, 1L),
-                Map.of()
-            ),
-            new TwoPoolReplayVerifier.DeliverTargetEvent(plate, 1L)
-        );
-        assertTrue(TwoPoolReplayVerifier.replay(inv, Set.of(), Map.of(plate, 1L), installFirst, true).valid());
-    }
-
-    // #7
     @Test
     void sharedMachineBuiltOnce() {
-        ResourceKey ore = item("test:ore");
-        ResourceKey plate = item("test:plate");
-        ResourceKey rod = item("test:rod");
-        ResourceKey frame = item("test:frame");
+        ComponentStackKey ore = item("test:ore");
+        ComponentStackKey plate = item("test:plate");
+        ComponentStackKey rod = item("test:rod");
+        ComponentStackKey frame = item("test:frame");
         CompiledRecipeGraph g = compile(
             List.of(
                 rec("mod:press", "r_plate", List.of("mod:press_machine"), List.of(slot(ore, 1)), List.of(out(plate, 1))),
@@ -394,33 +138,32 @@ class PlanningV3MathematicalPropertyTest {
         assertEquals(PlanningStatus.feasible, res.status());
         ProductionPlan best = res.paretoPlans().get(0);
         long pressBuilds = best.steps().stream()
-                .filter(s -> s instanceof ProvisionMachineStep pm && pm.machineId().equals("mod:press_machine"))
+                .filter(s -> s instanceof ProvisionMachineStep pm && pm.machine().matches(machine("mod:press_machine")))
                 .count();
         assertEquals(1L, pressBuilds, "Shared machine across two sub-branches must be provisioned exactly once");
     }
 
-    // #8
     @Test
     void layersAndReservesAreFinite() {
-        ResourceKey iron = item("test:iron");
+        ComponentStackKey iron = item("test:iron");
         InventorySnapshot inv = invTiers(
             Map.of(InventoryTier.hand, new StockLedger(Map.of(iron, 10L))),
             Map.of(InventoryTier.hand, new StockLedger(Map.of(iron, 7L))),
             Set.of()
         );
         assertEquals(3L, inv.usableAmount(iron));
-        TransactionalLedger ledger = new TransactionalLedger(inv, Set.of());
-        assertEquals(3L, ledger.remainingTierStock(InventoryTier.hand, iron));
-        ledger.pullFromTier(InventoryTier.hand, iron, 2L, 0);
-        ledger.pullFromTier(InventoryTier.hand, iron, 1L, 1);
-        assertThrows(IllegalStateException.class, () -> ledger.pullFromTier(InventoryTier.hand, iron, 1L, 2));
+        assertEquals(3L, inv.usableAmountInTier(iron, InventoryTier.hand));
+        assertEquals(0L, inv.usableAmountInTier(iron, InventoryTier.remote));
+
+        InventorySnapshot overridden = inv.withOverriddenStock(iron, 2L);
+        assertEquals(2L, overridden.usableAmount(iron));
+        assertEquals(0L, overridden.withoutResources(Set.of(iron)).usableAmount(iron));
     }
 
-    // #9
     @Test
     void noSourceFromRawCount() {
-        ResourceKey uncertified = item("mod:mysterious_crystal");
-        ResourceKey bannedNat = item("mod:banned_herb");
+        ComponentStackKey uncertified = item("mod:mysterious_crystal");
+        ComponentStackKey bannedNat = item("mod:banned_herb");
         CompiledRecipeGraph g = compile(List.of());
         BaseBoundarySnapshot boundary = new BaseBoundarySnapshot(
             Map.of(),
@@ -432,18 +175,17 @@ class PlanningV3MathematicalPropertyTest {
         HumanGuidanceView guidance = DefaultHumanGuidanceView.of(
             List.of(new ResourceRule("ban_herb", GuidanceScope.worldSave, RuleStrength.hardBan, bannedNat, false))
         );
-        V3AcquisitionOracle oracle = new V3AcquisitionOracle(g, boundary, guidance, List.of(), null);
-        assertEquals(V3AcquisitionOracle.LeafDiagnosis.dataGapUncertifiedLeaf, oracle.diagnose(uncertified));
+        DefaultAcquisitionOracle oracle = new DefaultAcquisitionOracle(g, boundary, guidance, false);
+        assertEquals("no_base_contract_or_natural_source", oracle.diagnose(uncertified, 1L, ProgressionState.overworldDefault));
         assertTrue(oracle.assess(uncertified, 1L, ProgressionState.overworldDefault).isEmpty());
-        assertEquals(V3AcquisitionOracle.LeafDiagnosis.forbiddenByUser, oracle.diagnose(bannedNat));
+        assertEquals("banned_by_guidance", oracle.diagnose(bannedNat, 1L, ProgressionState.overworldDefault));
         assertTrue(oracle.assess(bannedNat, 1L, ProgressionState.overworldDefault).isEmpty());
     }
 
-    // #10
     @Test
     void baseOrderFromEvidence() {
-        ResourceKey cheap = item("opaque:alpha_001");
-        ResourceKey expensive = item("opaque:beta_002");
+        ComponentStackKey cheap = item("opaque:alpha_001");
+        ComponentStackKey expensive = item("opaque:beta_002");
         BaseBoundarySnapshot boundary = new BaseBoundarySnapshot(
             Map.of(cheap, contract(cheap, 10.0), expensive, contract(expensive, 3.0)),
             Set.of(),
@@ -451,13 +193,13 @@ class PlanningV3MathematicalPropertyTest {
             Set.of(),
             List.of(new BaseBoundarySnapshot.PartialOrderConstraint(cheap, expensive, 5.0))
         );
-        Map<ResourceKey, Double> enforced = boundary.enforcePartialOrder(Map.of(cheap, 10.0, expensive, 3.0));
+        Map<ComponentStackKey, Double> enforced = boundary.enforcePartialOrder(Map.of(cheap, 10.0, expensive, 3.0));
         double pExp = Objects.requireNonNull(enforced.get(expensive));
         double pCheap = Objects.requireNonNull(enforced.get(cheap));
         assertTrue(pExp >= pCheap + 5.0 - 1e-9);
 
-        ResourceKey cheap2 = item("opaque:zeta_999");
-        ResourceKey expensive2 = item("opaque:aaa_000");
+        ComponentStackKey cheap2 = item("opaque:zeta_999");
+        ComponentStackKey expensive2 = item("opaque:aaa_000");
         BaseBoundarySnapshot swapped = new BaseBoundarySnapshot(
             Map.of(cheap2, contract(cheap2, 10.0), expensive2, contract(expensive2, 3.0)),
             Set.of(),
@@ -465,85 +207,10 @@ class PlanningV3MathematicalPropertyTest {
             Set.of(),
             List.of(new BaseBoundarySnapshot.PartialOrderConstraint(cheap2, expensive2, 5.0))
         );
-        Map<ResourceKey, Double> enforced2 = swapped.enforcePartialOrder(Map.of(cheap2, 10.0, expensive2, 3.0));
+        Map<ComponentStackKey, Double> enforced2 = swapped.enforcePartialOrder(Map.of(cheap2, 10.0, expensive2, 3.0));
         assertEquals(pExp, Objects.requireNonNull(enforced2.get(expensive2)), 1e-9);
     }
 
-    // #11
-    @Test
-    void unseededCycleCannotStart() {
-        ResourceKey a = item("test:a");
-        ResourceKey b = item("test:b");
-        CompiledRecipeGraph g = compile(
-            List.of(
-                rec("mod:conv", "a2b", List.of(), List.of(slot(a, 1)), List.of(out(b, 1))),
-                rec("mod:conv", "b2a", List.of(), List.of(slot(b, 1)), List.of(out(a, 1)))
-            )
-        );
-        AcquisitionOracle none = (k, m, p) -> Optional.empty();
-        var baseline = PassABaselinePotentials.solve(g, none, ProgressionState.overworldDefault, Map.of(), 12);
-        assertFalse(baseline.bootableResources().contains(a));
-        assertFalse(baseline.bootableResources().contains(b));
-        assertEquals(Double.POSITIVE_INFINITY, baseline.priceOf(a));
-
-        MacroSeedCertifier.MacroCertificate cert = MacroSeedCertifier.certify(
-            List.of(new MacroSeedCertifier.MicroStep(Map.of(a, 1L), Map.of(a, 2L))),
-            Set.of(a)
-        );
-        assertTrue(cert.validPositiveMacro());
-        assertEquals(1L, cert.singleIterationSeeds().get(a));
-        assertEquals(1L, cert.netDeltaPerIteration().get(a));
-    }
-
-    // #12
-    @Test
-    void closedPriceNeverPullsDownExternalSource() {
-        ResourceKey a = item("opaque:rare_777");
-        ResourceKey b = item("opaque:rare_888");
-        ResourceKey anchor = item("opaque:cobble_like");
-        CompiledRecipeGraph g = compile(
-            List.of(
-                rec("mod:pack", "pack", List.of(), List.of(slot(a, 9)), List.of(out(b, 1))),
-                rec("mod:pack", "unpack", List.of(), List.of(slot(b, 1)), List.of(out(a, 9)))
-            )
-        );
-        AcquisitionOracle onlyAnchor = (k, m, p) -> k.equals(anchor)
-                ? Optional.of(new AcquisitionOption(AcquisitionKind.baseSupply, 1.0, 0.0, 0.0, 0.1, "t"))
-                : Optional.empty();
-        var baseline = PassABaselinePotentials.solve(
-            g,
-            onlyAnchor,
-            ProgressionState.overworldDefault,
-            Map.of(a, 50.0),
-            12
-        );
-        assertEquals(50.0, baseline.reserveOrPriceOf(a), 1e-6);
-        assertEquals(450.0, baseline.reserveOrPriceOf(b), 1e-6);
-        assertFalse(baseline.bootableResources().contains(a));
-    }
-
-    // #13
-    @Test
-    void unitPriceMayUnderbidItsParent() {
-        ResourceKey parent = item("test:log");
-        ResourceKey child = item("test:plank");
-        CompiledRecipeGraph g = compile(
-            List.of(rec("mod:saw", "saw_log", List.of(), List.of(slot(parent, 1)), List.of(out(child, 4))))
-        );
-        AcquisitionOracle oracle = (k, m, p) -> {
-            if (k.equals(parent)) return Optional.of(new AcquisitionOption(AcquisitionKind.baseSupply, 10.0, 0.0, 0.0, 0.0, "t"));
-            if (k.equals(child)) return Optional.of(new AcquisitionOption(AcquisitionKind.baseSupply, 3.0, 0.0, 0.0, 0.0, "t"));
-            return Optional.empty();
-        };
-        var res = PassABaselinePotentials.solve(g, oracle, ProgressionState.overworldDefault, Map.of(), 8);
-        assertTrue(res.priceOf(child) < 3.0, "4-output craft must underbid 3.0 alternative, got " + res.priceOf(child));
-        assertTrue(
-            Objects.requireNonNull(res.witnesses().get(parent)).layerDepth()
-                    < Objects.requireNonNull(res.witnesses().get(child)).layerDepth()
-        );
-    }
-
-    // #14
     @Test
     void inventoryAnalyticMatchesEnumeration() {
         Random rng = new Random(20260401L);
@@ -574,7 +241,6 @@ class PlanningV3MathematicalPropertyTest {
         }
     }
 
-    // #15
     @Test
     void stockCoverageHasNoFakeCliff() {
         long d = 32L;
@@ -593,7 +259,6 @@ class PlanningV3MathematicalPropertyTest {
         }
     }
 
-    // #16
     @Test
     void ignoreScrapsAndBlendWhenWorthwhile() {
         long d = 32L;
@@ -624,14 +289,12 @@ class PlanningV3MathematicalPropertyTest {
         assertEquals(2L, openContainer.totalQuantity());
     }
 
-    // #17
     @Test
     void batchBreakpointsBeatLinearEndpoint() {
         var dec = PassBInventoryModel.solveSingleChannelBatch(10L, 5L, 8L, 10.0, 2.0, 0.5, 0.1, 0.2, 4.0, 0.0, 100.0);
         assertEquals(2L, dec.chosenQuantity(), "Batch breakpoint q=2 must strictly beat q=0 and q=5");
     }
 
-    // #18
     @Test
     void fourLayersMatchBruteForce() {
         long d = 10L;
@@ -670,14 +333,13 @@ class PlanningV3MathematicalPropertyTest {
         assertEquals(bruteMin, exact.totalComparableCost(), 1e-9);
     }
 
-    // #19
     @Test
     void rareStockProtectedUnderItsInequality() {
         assertTrue(PassBInventoryModel.isRareSubstitutionStrictlyInferior(18.0, 2.0, 5.0, 0.0, 100.0));
         assertFalse(PassBInventoryModel.isRareSubstitutionStrictlyInferior(8.0, 2.0, 10.0, 0.0, 100.0));
 
-        ResourceKey rare = item("test:rare_gem");
-        ResourceKey common = item("test:common_stone");
+        ComponentStackKey rare = item("test:rare_gem");
+        ComponentStackKey common = item("test:common_stone");
         InventorySnapshot inv = invTiers(
             Map.of(InventoryTier.hand, new StockLedger(Map.of(rare, 10L, common, 10L))),
             Map.of(),
@@ -688,70 +350,6 @@ class PlanningV3MathematicalPropertyTest {
         assertTrue(PassBInventoryModel.isForbiddenForGenericTag(common, inv, PreferenceModifiers.StockReferenceMode.ignore));
     }
 
-    // #20
-    @Test
-    void homomorphismDoesNotMergeConvergingRoots() {
-        ResourceKey oakLog = item("test:oak_log");
-        ResourceKey oakPlank = item("test:oak_plank");
-        ResourceKey spruceLog = item("test:spruce_log");
-        ResourceKey sprucePlank = item("test:spruce_plank");
-        ResourceKey birchLog = item("test:birch_log");
-        ResourceKey birchPlank = item("test:birch_plank");
-        ResourceKey sharedStick = item("test:stick");
-        ResourceKey charcoal = item("test:charcoal");
-
-        CompiledRecipeGraph g = compile(
-            List.of(
-                rec("minecraft:crafting", "oak_p", List.of(), List.of(slot(oakLog, 1)), List.of(out(oakPlank, 4))),
-                rec("minecraft:crafting", "spruce_p", List.of(), List.of(slot(spruceLog, 1)), List.of(out(sprucePlank, 4))),
-                rec("minecraft:crafting", "birch_p", List.of(), List.of(slot(birchLog, 1)), List.of(out(birchPlank, 4))),
-                rec("minecraft:smelting", "logs_charcoal", List.of(), List.of(tagSlot("test:logs", List.of(oakLog, spruceLog, birchLog), 1)), List.of(out(charcoal, 1))),
-                rec("minecraft:crafting", "oak_s", List.of(), List.of(slot(oakPlank, 2)), List.of(out(sharedStick, 4))),
-                rec("minecraft:crafting", "spruce_s", List.of(), List.of(slot(sprucePlank, 2)), List.of(out(sharedStick, 4))),
-                rec(
-                    "minecraft:crafting",
-                    "any_stick",
-                    List.of(),
-                    List.of(tagSlot("test:planks", List.of(oakPlank, sprucePlank, birchPlank), 2)),
-                    List.of(out(sharedStick, 4))
-                )
-            )
-        );
-        var idx = TagHomomorphismAnalyzer.analyze(g);
-        assertEquals(idx.familyOf(oakLog), idx.familyOf(oakPlank));
-        assertEquals(idx.familyOf(spruceLog), idx.familyOf(sprucePlank));
-        assertNotEquals(idx.familyOf(oakLog), idx.familyOf(spruceLog), "Converging roots must NEVER merge distinct families");
-        assertEquals(TagHomomorphismAnalyzer.ambiguousFamily, idx.familyOf(sharedStick), "Converging target must be AMBIGUOUS");
-    }
-
-    // #21
-    @Test
-    void lazyTagPagingHasCoverageFlags() {
-        List<FiveBucketTagPager.MemberSignals> members = new ArrayList<>();
-        for (int i = 0; i < 30; i++) {
-            ResourceKey k = item(String.format("test:plank_%02d", i));
-            boolean isSoleUsable = (i == 29);
-            members.add(
-                new FiveBucketTagPager.MemberSignals(
-                    k, "fam_" + i, "clus_" + (i % 3),
-                    false, 0.0, false, 0.0, true, isSoleUsable ? 500.0 : (1.0 + i),
-                    false, Double.POSITIVE_INFINITY
-                )
-            );
-        }
-        ResourceKey target = item("test:plank_29");
-        var page0 = FiveBucketTagPager.selectPage(members, 0, 0);
-        assertTrue(page0.truncated());
-        assertTrue(page0.hasMorePages());
-        assertFalse(page0.selectedMembers().contains(target));
-
-        var page2 = FiveBucketTagPager.selectPage(members, 0, 2);
-        assertFalse(page2.truncated());
-        assertFalse(page2.hasMorePages());
-        assertTrue(page2.selectedMembers().contains(target));
-    }
-
-    // #22
     @Test
     void familyBreaksAtSavingsBoundary() {
         double a = 40.0;
@@ -763,7 +361,6 @@ class PlanningV3MathematicalPropertyTest {
         assertEquals(ScoreBreakdown.cappedSoft(2.0 + 1.0, cap), ScoreBreakdown.cappedSoft(1.0 + 2.0, cap), 1e-12);
     }
 
-    // #23
     @Test
     void riskZeroCVReducesExactly() {
         AcquisitionEstimate det = new AcquisitionEstimate(
@@ -781,7 +378,6 @@ class PlanningV3MathematicalPropertyTest {
         assertEquals(4L, noisy.guaranteedQuantity());
     }
 
-    // #24
     @Test
     void stageAndCapitalAreMonotone() {
         for (int i = 0; i <= 20; i++) {
@@ -805,7 +401,6 @@ class PlanningV3MathematicalPropertyTest {
         }
     }
 
-    // #25
     @Test
     void tripSliderMonotoneOnFrozenSet() {
         List<CostVector> frozen = List.of(
@@ -826,7 +421,6 @@ class PlanningV3MathematicalPropertyTest {
         }
     }
 
-    // #26
     @Test
     void conditionedFrontierIsAcyclic() {
         ProductionPlan p1 = synthPlan("p1", new CostVector(10.0, 0.0, 10.4, 0.0, 10.8, 0.0), RegimeSignature.baseline, 1.0);
@@ -847,11 +441,10 @@ class PlanningV3MathematicalPropertyTest {
         }
     }
 
-    // #27
     @Test
     void incompatibleTechSurvives() {
-        RegimeSignature regX = new RegimeSignature(Set.of("mod:mach_x"), Set.of("clus_x"), false, Set.of("build:x"));
-        RegimeSignature regY = new RegimeSignature(Set.of("mod:mach_y"), Set.of("clus_y"), false, Set.of("build:y"));
+        RegimeSignature regX = new RegimeSignature(Set.of(machine("mod:mach_x")), Set.of("clus_x"), false, Set.of("build:x"));
+        RegimeSignature regY = new RegimeSignature(Set.of(machine("mod:mach_y")), Set.of("clus_y"), false, Set.of("build:y"));
         assertFalse(regX.entails(regY));
         assertFalse(regY.entails(regX));
         ProductionPlan planA = synthPlan("plan_x", new CostVector(10.0, 0.0, 5.0, 20.0, 1.0, 1.0), regX, 1.0);
@@ -860,11 +453,10 @@ class PlanningV3MathematicalPropertyTest {
         assertEquals(2, out.selectedTopK().size());
     }
 
-    // #28
     @Test
     void tabuCannotTurnUnknownIntoExecutable() {
-        ResourceKey ore = item("test:ore");
-        ResourceKey widget = item("test:widget");
+        ComponentStackKey ore = item("test:ore");
+        ComponentStackKey widget = item("test:widget");
         CompiledRecipeGraph g = compile(
             List.of(rec("minecraft:crafting", "only_route", List.of("minecraft:crafting_table"), List.of(slot(ore, 1)), List.of(out(widget, 1))))
         );
@@ -885,137 +477,6 @@ class PlanningV3MathematicalPropertyTest {
         assertEquals(1, res.paretoPlans().size());
     }
 
-    // #29
-    @Test
-    void lossCertificateExcludesAllNonpositiveCycles() {
-        var lossy = List.of(
-            new NonLossyCertificateVerifier.NetColumn("m1", Map.of("A", -2L, "B", 1L)),
-            new NonLossyCertificateVerifier.NetColumn("m2", Map.of("B", -1L, "A", 1L))
-        );
-        assertFalse(NonLossyCertificateVerifier.certify(lossy).certified());
-
-        var zeroNet = List.of(
-            new NonLossyCertificateVerifier.NetColumn("pack", Map.of("A", -9L, "B", 1L)),
-            new NonLossyCertificateVerifier.NetColumn("unpack", Map.of("B", -1L, "A", 9L))
-        );
-        assertFalse(NonLossyCertificateVerifier.certify(zeroNet).certified());
-
-        var good = List.of(
-            new NonLossyCertificateVerifier.NetColumn("smelt", Map.of("ore", -1L, "ingot", 1L)),
-            new NonLossyCertificateVerifier.NetColumn("press", Map.of("ingot", -2L, "plate", 1L))
-        );
-        var ok = NonLossyCertificateVerifier.certify(good);
-        assertTrue(ok.certified());
-        assertTrue(NonLossyCertificateVerifier.verifyWeights(good, ok.weightsW()));
-        for (BigInteger wi : ok.weightsW().values()) {
-            assertTrue(wi.signum() >= 0);
-        }
-    }
-
-    // #30
-    @Test
-    void usefulCoproductAndLossDiffer() {
-        ResourceKey a = item("test:a");
-        ResourceKey b = item("test:b");
-        ResourceKey c = item("test:c");
-        var useful = MacroSeedCertifier.certify(
-            List.of(
-                new MacroSeedCertifier.MicroStep(Map.of(a, 1L), Map.of(b, 1L, c, 1L)),
-                new MacroSeedCertifier.MicroStep(Map.of(b, 1L), Map.of(a, 1L))
-            ),
-            Set.of(a, b)
-        );
-        assertTrue(useful.validPositiveMacro());
-        assertEquals(1L, useful.netDeltaPerIteration().get(c));
-        assertEquals(1L, useful.singleIterationSeeds().get(a));
-
-        var roundTrip = MacroSeedCertifier.certify(
-            List.of(
-                new MacroSeedCertifier.MicroStep(Map.of(a, 9L), Map.of(b, 1L)),
-                new MacroSeedCertifier.MicroStep(Map.of(b, 1L), Map.of(a, 9L))
-            ),
-            Set.of(a, b)
-        );
-        assertFalse(roundTrip.validPositiveMacro());
-    }
-
-    // #31
-    @Test
-    void resolvedMemberCannotFundItsAncestor() {
-        ResourceKey itemA = item("test:item_a");
-        List<TwoPoolReplayVerifier.ReplayEvent> selfLoop = List.of(
-            new TwoPoolReplayVerifier.CraftActionEvent(
-                "self_a", 1L, null, true,
-                List.of(new TwoPoolReplayVerifier.BatchSlotBinding(0, 1L, true, Map.of(itemA, 1L), List.of())),
-                Map.of(), Map.of(itemA, 1L), Map.of()
-            ),
-            new TwoPoolReplayVerifier.DeliverTargetEvent(itemA, 1L)
-        );
-        assertFalse(TwoPoolReplayVerifier.replay(InventorySnapshot.empty, Set.of(), Map.of(itemA, 1L), selfLoop, false).valid());
-
-        ResourceKey raw = item("test:raw");
-        List<TwoPoolReplayVerifier.ReplayEvent> earlierByprod = List.of(
-            new TwoPoolReplayVerifier.ExternalSupplyEvent(raw, 1L, false),
-            new TwoPoolReplayVerifier.CraftActionEvent(
-                "byprod_maker", 1L, null, true,
-                List.of(new TwoPoolReplayVerifier.BatchSlotBinding(0, 1L, true, Map.of(raw, 1L), List.of())),
-                Map.of(), Map.of(), Map.of(itemA, 1L)
-            ),
-            new TwoPoolReplayVerifier.DeliverTargetEvent(itemA, 1L)
-        );
-        assertTrue(TwoPoolReplayVerifier.replay(InventorySnapshot.empty, Set.of(), Map.of(itemA, 1L), earlierByprod, true).valid());
-    }
-
-    // #32
-    @Test
-    void rollbackIsByteEquivalent() {
-        ResourceKey ore = item("test:ore");
-        ResourceKey mold = item("test:mold");
-        InventorySnapshot inv = invTiers(Map.of(InventoryTier.hand, new StockLedger(Map.of(ore, 5L, mold, 1L))), Map.of(), Set.of());
-        TransactionalLedger ledger = new TransactionalLedger(inv, Set.of("mod:base_mach"));
-        ledger.pullFromTier(InventoryTier.hand, ore, 2L, 0);
-        String before = ledger.canonicalStateSignature();
-        TransactionalLedger.SnapshotCheckpoint cp = ledger.checkpoint();
-
-        ledger.pullFromTier(InventoryTier.hand, ore, 2L, 1);
-        ledger.pullFromTier(InventoryTier.hand, mold, 1L, 2);
-        ledger.lockCatalyst(mold, 1L);
-        ledger.installMachine("mod:temp_mach");
-        ledger.publishLot(TransactionalLedger.PoolKind.byproduct, ore, 3, 0, 7L);
-        assertNotEquals(before, ledger.canonicalStateSignature());
-
-        ledger.rollback(cp);
-        assertEquals(before, ledger.canonicalStateSignature());
-        assertFalse(ledger.hasMachine("mod:temp_mach"));
-        assertEquals(3L, ledger.remainingTierStock(InventoryTier.hand, ore));
-    }
-
-    // #33
-    @Test
-    void alnsDescendsAndStops() {
-        var init = new DeterministicAlnsScheduler.CandidateState<>("s0", 1000L, 10.0, "s0");
-        List<Function<DeterministicAlnsScheduler.CandidateState<String>, DeterministicAlnsScheduler.MoveAttempt<String>>> ops = List.of(
-            cur -> new DeterministicAlnsScheduler.MoveAttempt<>(
-                cur.quantizedObjectiveJ() > 400L
-                        ? new DeterministicAlnsScheduler.CandidateState<>("s_" + (cur.quantizedObjectiveJ() - 150L), cur.quantizedObjectiveJ() - 150L, cur.stepFrictionF(), "k" + cur.quantizedObjectiveJ())
-                        : null,
-                10L
-            ),
-            cur -> new DeterministicAlnsScheduler.MoveAttempt<>(null, 5L),
-            cur -> new DeterministicAlnsScheduler.MoveAttempt<>(
-                new DeterministicAlnsScheduler.CandidateState<>("worse", cur.quantizedObjectiveJ() + 50L, 20.0, "w"),
-                5L
-            ),
-            cur -> new DeterministicAlnsScheduler.MoveAttempt<>(null, 5L),
-            cur -> new DeterministicAlnsScheduler.MoveAttempt<>(null, 5L)
-        );
-        var out = DeterministicAlnsScheduler.refine(init, ops, 200L);
-        assertTrue(out.incumbent().quantizedObjectiveJ() <= 400L);
-        assertTrue(out.acceptedMoves() >= 4);
-        assertTrue(out.totalWorkConsumed() <= 200L);
-    }
-
-    // #34
     @Test
     void oneNativeOutvotesTwoHundredDisplays() {
         List<FidelityScorer.SiblingSample> base = List.of(
@@ -1042,13 +503,12 @@ class PlanningV3MathematicalPropertyTest {
         assertTrue(assess.liftedGuidanceUnitCost() >= 20.0 * 0.99);
     }
 
-    // #35
     @Test
     void uniqueSuspiciousRecipeRemainsInspectable() {
-        ResourceKey dirt = item("test:dirt");
-        ResourceKey unicorn = item("test:unicorn");
+        ComponentStackKey dirt = item("test:dirt");
+        ComponentStackKey unicorn = item("test:unicorn");
         RawRecipeRecord suspicious = new RawRecipeRecord(
-            "jei:category/mystery/altar",
+            ns("jei:category/mystery/altar"),
             "jei_fallback",
             Optional.empty(),
             List.of(),
@@ -1056,7 +516,7 @@ class PlanningV3MathematicalPropertyTest {
             List.of(out(unicorn, 1)),
             Map.of(),
             0L,
-            Set.of("calculator_cirrus:system/jei_fallback"),
+            Set.of(RecipeSystemTags.jeiFallback),
             Set.of(CanonicalRecipeTag.suspiciousJei),
             RecipeEvidenceTier.tierC,
             0.35,
@@ -1083,7 +543,6 @@ class PlanningV3MathematicalPropertyTest {
         assertTrue(res.conditionalPlans().get(0).conditionalDraft());
     }
 
-    // #36
     @Test
     void softCostsDoNotLeak() {
         CostVector phys = new CostVector(12.0, 8.0, 5.0, 30.0, 2.0, 1.5);
@@ -1097,31 +556,6 @@ class PlanningV3MathematicalPropertyTest {
         assertTrue(penalized.habitSoftCapped() <= ScoreBreakdown.defaultBHabit * 50.0 + 1e-9);
     }
 
-    // #37
-    @Test
-    void boundIsAdmissibleOnTinyOracle() {
-        ResourceKey ore = item("test:ore");
-        ResourceKey ingot = item("test:ingot");
-        List<DualBoundCertifier.ActionBoundConstraint> actions = List.of(
-            new DualBoundCertifier.ActionBoundConstraint("acq_ore", Map.of(ore, 1L), List.of(), 4.0),
-            new DualBoundCertifier.ActionBoundConstraint(
-                "smelt",
-                Map.of(ingot, 1L),
-                List.of(new DualBoundCertifier.SlotMinDemand(2L, List.of(ore))),
-                2.0
-            )
-        );
-        var cert = DualBoundCertifier.certify(Map.of(ore, 4.0, ingot, 10.0), actions, Map.of(ingot, 3L), Map.of(), 30.0);
-        assertTrue(cert.isNontrivial());
-        assertEquals(1.0, cert.lowerBoundL(), 1e-9);
-
-        List<DualBoundCertifier.ActionBoundConstraint> withFree = new ArrayList<>(actions);
-        withFree.add(new DualBoundCertifier.ActionBoundConstraint("free_ingot", Map.of(ingot, 1L), List.of(), 0.0));
-        var certFree = DualBoundCertifier.certify(Map.of(ore, 4.0, ingot, 10.0), withFree, Map.of(ingot, 3L), Map.of(), 30.0);
-        assertEquals(0.0, certFree.lowerBoundL(), 1e-9);
-    }
-
-    // #38
     @Test
     void voiZeroWhenActionNeverChanges() {
         VoIEstimate zero = VoICounterfactualEngine.evaluateExact(
@@ -1138,7 +572,6 @@ class PlanningV3MathematicalPropertyTest {
         assertTrue(m9.netEvsiSeconds() > 0.0);
     }
 
-    // #39
     @Test
     void idempotentQuestionsAndFeedback() {
         PromptSuppressionLedger ledger = new PromptSuppressionLedger();
@@ -1164,7 +597,6 @@ class PlanningV3MathematicalPropertyTest {
         assertEquals(b1, tracker.currentFailureBurden(key, 1L), 1e-12);
     }
 
-    // #40
     @Test
     void boundedLearningAndRecovery() {
         OnlinePreferenceLearner learner = new OnlinePreferenceLearner();
@@ -1191,12 +623,11 @@ class PlanningV3MathematicalPropertyTest {
         assertTrue(tracker.currentFailureBurden(key, 10L) < failedBurden);
     }
 
-    // #41
     @Test
     void coldWarmParallelDeterminism() throws Exception {
-        ResourceKey ore = item("test:ore");
-        ResourceKey dust = item("test:dust");
-        ResourceKey ingot = item("test:ingot");
+        ComponentStackKey ore = item("test:ore");
+        ComponentStackKey dust = item("test:dust");
+        ComponentStackKey ingot = item("test:ingot");
         List<RawRecipeRecord> recs = List.of(
             rec("minecraft:smelting", "s1", List.of("minecraft:furnace"), List.of(slot(ore, 1)), List.of(out(ingot, 1))),
             rec("mod:crush", "c1", List.of("mod:crusher"), List.of(slot(ore, 1)), List.of(out(dust, 2))),
@@ -1241,11 +672,10 @@ class PlanningV3MathematicalPropertyTest {
         }
     }
 
-    // #42
     @Test
     void deadlineNeverPublishesSpeedDependentWinner() {
-        ResourceKey ore = item("test:ore");
-        ResourceKey ingot = item("test:ingot");
+        ComponentStackKey ore = item("test:ore");
+        ComponentStackKey ingot = item("test:ingot");
         CompiledRecipeGraph g = compile(
             List.of(rec("minecraft:smelting", "s1", List.of("minecraft:furnace"), List.of(slot(ore, 1)), List.of(out(ingot, 1))))
         );
@@ -1265,18 +695,17 @@ class PlanningV3MathematicalPropertyTest {
         assertEquals(r1.paretoPlans().get(0).planId(), r2.paretoPlans().get(0).planId());
     }
 
-    // #43
     @Test
     void stableIdentityWithMissingId() {
-        ResourceKey a = item("test:a");
-        ResourceKey b = item("test:b");
-        ResourceKey outItem = item("test:out");
+        ComponentStackKey a = item("test:a");
+        ComponentStackKey b = item("test:b");
+        ComponentStackKey outItem = item("test:out");
         RawRecipeRecord r1 = new RawRecipeRecord(
-            "jei:category/mod/mixer", "jei_fallback", Optional.empty(), List.of("mod:mixer"),
+            ns("jei:category/mod/mixer"), "jei_fallback", Optional.empty(), List.of(machine("mod:mixer")),
             List.of(slot(a, 1), slot(b, 2)), List.of(out(outItem, 1)), Map.of()
         );
         RawRecipeRecord r2 = new RawRecipeRecord(
-            "jei:category/mod/mixer", "jei_fallback", Optional.empty(), List.of("mod:mixer"),
+            ns("jei:category/mod/mixer"), "jei_fallback", Optional.empty(), List.of(machine("mod:mixer")),
             List.of(slot(b, 2), slot(a, 1)), List.of(out(outItem, 1)), Map.of()
         );
         RecipeSemanticKey k1 = RecipeSemanticKeyBuilder.build(r1, true);
@@ -1284,7 +713,7 @@ class PlanningV3MathematicalPropertyTest {
         assertEquals(k1.sha256Hex(), k2.sha256Hex(), "Commutative slot permutation must yield identical semantic key");
 
         RawRecipeRecord rOpaque = new RawRecipeRecord(
-            "jei:category/mod/mixer", "jei_fallback", Optional.empty(), List.of("mod:mixer"),
+            ns("jei:category/mod/mixer"), "jei_fallback", Optional.empty(), List.of(machine("mod:mixer")),
             List.of(slot(a, 1), slot(b, 2)), List.of(out(outItem, 1)), Map.of(),
             0L, Set.of(), Set.of(CanonicalRecipeTag.normalProduction), RecipeEvidenceTier.tierC, 1.0, Optional.empty(), true
         );
@@ -1295,67 +724,23 @@ class PlanningV3MathematicalPropertyTest {
         );
     }
 
-    // #44
     @Test
     void overflowCannotCreateFreeMaterials() {
         long huge = SafeMath.saturationLimit - 5L;
         assertEquals(SafeMath.saturationLimit, SafeMath.addSaturating(huge, 100L));
         assertEquals(SafeMath.saturationLimit, SafeMath.mulSaturating(huge, 3L));
         assertTrue(SafeMath.addSaturating(huge, 100L) > 0L);
-
-        ResourceKey x = item("test:x");
-        List<TwoPoolReplayVerifier.ReplayEvent> overflow = List.of(
-            new TwoPoolReplayVerifier.ExternalSupplyEvent(x, Long.MAX_VALUE, false),
-            new TwoPoolReplayVerifier.ExternalSupplyEvent(x, 10L, false)
-        );
-        var res = TwoPoolReplayVerifier.replay(InventorySnapshot.empty, Set.of(), Map.of(), overflow, false);
-        assertFalse(res.valid(), "Overflowing external supply must be rejected cleanly without wrapping negative");
-        assertTrue(res.finalOrdinarySurplus().getOrDefault(x, 0L) >= 0L);
+        assertTrue(SafeMath.willOverflowAdd(huge, 100L));
+        assertTrue(SafeMath.willOverflowMul(huge, 3L));
+        assertEquals(0L, SafeMath.mulSaturating(0L, Long.MAX_VALUE));
     }
 
-    // #45
-    @Test
-    void cacheInvalidatesPriceRisesAndNewEntrants() {
-        ResourceKey cheapA = item("test:cheap_a");
-        ResourceKey midB = item("test:mid_b");
-        ResourceKey newerCheaperC = item("test:new_c");
-        ResourceKey outItem = item("test:plank_out");
-
-        CompiledRecipeGraph gBase = compile(
-            List.of(rec("minecraft:crafting", "make", List.of(), List.of(tagSlot("test:mats", List.of(cheapA, midB), 1)), List.of(out(outItem, 1))))
-        );
-        AcquisitionOracle oracle1 = (k, m, p) -> {
-            if (k.equals(cheapA)) return Optional.of(new AcquisitionOption(AcquisitionKind.baseSupply, 2.0, 0.0, 0.0, 0.0, "t"));
-            if (k.equals(midB)) return Optional.of(new AcquisitionOption(AcquisitionKind.baseSupply, 10.0, 0.0, 0.0, 0.0, "t"));
-            return Optional.empty();
-        };
-        var baseRes = PassABaselinePotentials.solve(gBase, oracle1, ProgressionState.overworldDefault, Map.of(), 8);
-        assertEquals(3.0, baseRes.priceOf(outItem), 1e-6);
-
-        AcquisitionOracle oracleRemoved = (k, m, p) -> k.equals(midB)
-                ? Optional.of(new AcquisitionOption(AcquisitionKind.baseSupply, 10.0, 0.0, 0.0, 0.0, "t"))
-                : Optional.empty();
-        var risenRes = PassABaselinePotentials.solve(gBase, oracleRemoved, ProgressionState.overworldDefault, Map.of(), 8);
-        assertEquals(11.0, risenRes.priceOf(outItem), 1e-6);
-
-        CompiledRecipeGraph gWithC = compile(
-            List.of(rec("minecraft:crafting", "make", List.of(), List.of(tagSlot("test:mats", List.of(cheapA, midB, newerCheaperC), 1)), List.of(out(outItem, 1))))
-        );
-        AcquisitionOracle oracleWithC = (k, m, p) -> {
-            if (k.equals(newerCheaperC)) return Optional.of(new AcquisitionOption(AcquisitionKind.baseSupply, 0.5, 0.0, 0.0, 0.0, "t"));
-            return oracle1.assess(k, m, p);
-        };
-        var entrantRes = PassABaselinePotentials.solve(gWithC, oracleWithC, ProgressionState.overworldDefault, Map.of(), 8);
-        assertEquals(1.5, entrantRes.priceOf(outItem), 1e-6);
-    }
-
-    // #46
     @Test
     void diversityTieIsCanonical() {
-        RegimeSignature r1 = new RegimeSignature(Set.of("m1"), Set.of("c1"), false, Set.of());
-        RegimeSignature r2 = new RegimeSignature(Set.of("m2"), Set.of("c2"), false, Set.of());
-        RegimeSignature r3 = new RegimeSignature(Set.of("m3"), Set.of("c3"), true, Set.of());
-        RegimeSignature r4 = new RegimeSignature(Set.of("m4"), Set.of("c4"), false, Set.of());
+        RegimeSignature r1 = new RegimeSignature(Set.of(machine("m1")), Set.of("c1"), false, Set.of());
+        RegimeSignature r2 = new RegimeSignature(Set.of(machine("m2")), Set.of("c2"), false, Set.of());
+        RegimeSignature r3 = new RegimeSignature(Set.of(machine("m3")), Set.of("c3"), true, Set.of());
+        RegimeSignature r4 = new RegimeSignature(Set.of(machine("m4")), Set.of("c4"), false, Set.of());
 
         List<ProductionPlan> pool = List.of(
             synthPlan("p1", new CostVector(10.0, 0.0, 5.0, 10.0, 1.0, 1.0), r1, 1.00),

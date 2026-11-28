@@ -9,6 +9,7 @@ import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
 import dev.vfyjxf.cirrus.api.planning.human.MachineRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -78,7 +79,7 @@ class WorkbenchSessionLeakTest {
                     "rule-machine",
                     GuidanceScope.session,
                     RuleStrength.softPrefer,
-                    "minecraft:furnace",
+                    OfflineContentTypes.machine("minecraft:furnace"),
                     true
                 )
             )
@@ -90,7 +91,7 @@ class WorkbenchSessionLeakTest {
                         "rule-refine",
                         GuidanceScope.session,
                         RuleStrength.softPrefer,
-                        "minecraft:furnace",
+                        OfflineContentTypes.machine("minecraft:furnace"),
                         true
                     )
                 ),
