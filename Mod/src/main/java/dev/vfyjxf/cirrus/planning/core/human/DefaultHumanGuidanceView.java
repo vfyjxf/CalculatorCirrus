@@ -328,12 +328,12 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
 
     private static @Nullable String namespaceOfSystem(Namespace systemId) {
         if (systemId == null) return null;
-        if ("jei".equals(systemId.namespace()) && systemId.path().startsWith("category/")) {
+        if ("jei".equals(systemId.root()) && systemId.path().startsWith("category/")) {
             String rest = systemId.path().substring("category/".length());
             int slash = rest.indexOf('/');
             return slash > 0 ? rest.substring(0, slash) : rest;
         }
-        return systemId.namespace();
+        return systemId.root();
     }
 
     private record IndexedRule(GuidanceRule rule, int order) {}

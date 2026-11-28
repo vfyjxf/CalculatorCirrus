@@ -418,7 +418,7 @@ final class PlanningSessionImpl implements PlanningSession {
                 return p;
             }
         }
-        for (ProductionPlan p : current.result().conditionalDrafts()) {
+        for (ProductionPlan p : current.result().conditionalPlans()) {
             if (p.planId().equals(planId)) {
                 return p;
             }

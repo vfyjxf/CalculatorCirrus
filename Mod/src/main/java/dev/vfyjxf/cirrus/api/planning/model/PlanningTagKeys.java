@@ -46,6 +46,11 @@ public final class PlanningTagKeys {
         return "#" + tag.location();
     }
 
+    public static String format(TagKey<?> tag) {
+        Objects.requireNonNull(tag, "tag");
+        return tag.location().toString();
+    }
+
     public static Optional<TagKey<?>> parseCanonical(@Nullable String raw) {
         if (raw == null || raw.isBlank()) {
             return Optional.empty();

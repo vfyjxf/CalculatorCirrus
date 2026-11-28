@@ -604,7 +604,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
             MachineEntry machine = hand ? null : recipe.machineRequirement().compatibleMachines().get(0);
             String machineName = hand ? "Hand / Crafting" : CoPilotPaint.machineName(machine).getString();
             String ns = recipe.key().explicitRecipeId().map(ResourceLocation::getNamespace)
-                    .orElse(recipe.key().systemId().namespace());
+                    .orElse(recipe.key().systemId().root());
             boolean needsMach = machine != null && provisionedMachines.contains(machine);
             boolean active = activeKey != null && activeKey.equals(recipe.key());
             long yield = recipe.outputs().isEmpty() ? 1L : Math.max(1L, recipe.outputs().get(0).amountPerBatch());

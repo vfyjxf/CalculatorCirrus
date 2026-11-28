@@ -148,7 +148,7 @@ public final class OfflineContentTypes {
 
         OfflineStackType(Namespace contentTypeId) {
             this.contentType = new OfflineContentType(contentTypeId);
-            this.stackTypeId = Namespace.of(contentTypeId.namespace(), contentTypeId.path() + "_stack");
+            this.stackTypeId = Namespace.of(contentTypeId.root(), contentTypeId.path() + "_stack");
             this.unitQuantity = fluidContentType.equals(contentTypeId) ? 1000L : 1L;
         }
 
@@ -382,24 +382,19 @@ public final class OfflineContentTypes {
 
     public static Optional<SlotMatchMode> parseMatchStrategy(@Nullable String raw) {
         if (raw == null || raw.isBlank()) {
-            return Optional.of(SlotMatchMode.exactComponent);
+            return Optional.of(SlotMatchMode.identityAndComponent);
         }
         String norm = raw.trim().toLowerCase(Locale.ROOT);
         return switch (norm) {
-            case "identity", "identity_only", "identity_and_amount" -> Optional.of(SlotMatchMode.identityOnly);
-            case "component_subset", "subset", "partial_component" -> Optional.of(SlotMatchMode.componentSubset);
-            case "identity_and_component", "exact_component", "all", "exact", "default" ->
-                Optional.of(SlotMatchMode.exactComponent);
+            case "identity", "identity_only", "identity_and_amount" -> Optional.of(SlotMatchMode.identity);
+            case "component_subset", "subset", "partial_component",
+                 "identity_and_component", "exact_component", "all", "exact", "default" ->
+                Optional.of(SlotMatchMode.identityAndComponent);
             default -> {
                 if (norm.contains("identity")) {
-                    if (norm.contains("component")) {
-                        yield Optional.of(
-                            norm.contains("subset") || norm.contains("partial")
-                                    ? SlotMatchMode.componentSubset
-                                    : SlotMatchMode.exactComponent
-                        );
-                    }
-                    yield Optional.of(SlotMatchMode.identityOnly);
+                    yield Optional.of(
+                        norm.contains("component") ? SlotMatchMode.identityAndComponent : SlotMatchMode.identity
+                    );
                 }
                 yield Optional.empty();
             }
@@ -409,13 +404,13 @@ public final class OfflineContentTypes {
     public static SlotMatchMode listSlotMatchMode(List<ComponentStackKey> candidates) {
         for (ComponentStackKey c : candidates) {
             if (c.hasComponents()) {
-                return SlotMatchMode.exactComponent;
+                return SlotMatchMode.identityAndComponent;
             }
             if (c.stack().content() instanceof OfflineContent oc && oc.canonicalComponents() != null) {
-                return SlotMatchMode.exactComponent;
+                return SlotMatchMode.identityAndComponent;
             }
         }
-        return SlotMatchMode.identityOnly;
+        return SlotMatchMode.identity;
     }
 
     public static String canonicalizeJson(JsonElement element) {

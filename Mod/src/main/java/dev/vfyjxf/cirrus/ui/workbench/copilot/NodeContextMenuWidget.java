@@ -452,12 +452,12 @@ public class NodeContextMenuWidget extends Widget {
             return machine.contentKey().map(ComponentStackKey::namespace).orElse(null);
         }
         if (systemId != null) {
-            return systemId.namespace();
+            return systemId.root();
         }
         if (recipeKey != null) {
             return recipeKey.explicitRecipeId()
                     .map(ResourceLocation::getNamespace)
-                    .orElse(recipeKey.systemId().namespace());
+                    .orElse(recipeKey.systemId().root());
         }
         return null;
     }

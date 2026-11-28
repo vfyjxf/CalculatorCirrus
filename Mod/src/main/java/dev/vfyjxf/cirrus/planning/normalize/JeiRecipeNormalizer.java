@@ -283,7 +283,7 @@ public final class JeiRecipeNormalizer {
         return "jei_fallback".equals(rec.sourceKind())
                 || "jei".equalsIgnoreCase(rec.sourceKind())
                 || rec.systemTags().contains(RecipeSystemTags.jeiFallback)
-                || "jei".equals(rec.systemId().namespace());
+                || "jei".equals(rec.systemId().root());
     }
 
     /** Scale-invariant structural input proxy using each Cirrus StackType's standard unit quantity. */
@@ -322,7 +322,7 @@ public final class JeiRecipeNormalizer {
         for (int i = 0; i < cur.inputs().size(); i++) {
             RawIngredientSlot s = cur.inputs().get(i);
             if (patch.catalystSlotIndices().contains(i) && !s.catalyst()) {
-                inputs.add(new RawIngredientSlot(s.tag(), s.candidates(), 0L, s.matchMode(), 0, 1));
+                inputs.add(new RawIngredientSlot(s.tagKey(), s.candidates(), 0L, s.matchMode(), 0, 1));
             } else {
                 inputs.add(s);
             }

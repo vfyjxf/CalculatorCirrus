@@ -64,6 +64,16 @@ public record FacilitySnapshot(
         return sum;
     }
 
+    public boolean ownsMachineFor(MachineEntry machine) {
+        Objects.requireNonNull(machine, "machine");
+        for (OwnedMachineGroup g : ownedMachines) {
+            if (g.count() > 0 && g.machine().matches(machine)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public List<AutomatedLine> automatedLinesFor(ComponentStackKey output) {
         Objects.requireNonNull(output, "output");
         List<AutomatedLine> out = new ArrayList<>();

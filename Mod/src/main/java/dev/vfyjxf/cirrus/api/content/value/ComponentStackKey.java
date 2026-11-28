@@ -244,7 +244,7 @@ public final class ComponentStackKey implements Comparable<ComponentStackKey> {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (!(o instanceof ComponentStackKey key)) return false;
         if (hash != key.hash || type != key.type) return false;

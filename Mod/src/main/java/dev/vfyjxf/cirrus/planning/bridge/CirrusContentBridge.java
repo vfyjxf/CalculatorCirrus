@@ -140,7 +140,7 @@ public final class CirrusContentBridge {
             if (maxDur > 0 && effectiveCost > 0) {
                 return InputMapping.slot(
                     new RawIngredientSlot(
-                        baseSlot.tag(),
+                        baseSlot.tagKey(),
                         baseSlot.candidates(),
                         amount,
                         baseSlot.matchMode(),
@@ -151,10 +151,10 @@ public final class CirrusContentBridge {
                 );
             }
             if (catalyst) {
-                return buildListInput(baseSlot.tag(), baseSlot.candidates(), amount, true);
+                return buildListInput(baseSlot.tagKey(), baseSlot.candidates(), amount, true);
             }
             return InputMapping.slot(
-                new RawIngredientSlot(baseSlot.tag(), baseSlot.candidates(), amount, baseSlot.matchMode()),
+                new RawIngredientSlot(baseSlot.tagKey(), baseSlot.candidates(), amount, baseSlot.matchMode()),
                 null
             );
         }
@@ -170,7 +170,7 @@ public final class CirrusContentBridge {
             }
             SlotMatchMode mode = modeOpt.get();
             ComponentStackKey key = ComponentStackKey.ofNormalized(rawStack);
-            if (mode == SlotMatchMode.identityOnly) {
+            if (mode == SlotMatchMode.identity) {
                 key = key.withoutComponents();
             }
             if (durabilityCost > 0) {
@@ -329,15 +329,15 @@ public final class CirrusContentBridge {
 
     private static Optional<SlotMatchMode> toSlotMatchMode(@Nullable MatchStrategy strategy) {
         if (strategy == null) {
-            return Optional.of(SlotMatchMode.exactComponent);
+            return Optional.of(SlotMatchMode.identityAndComponent);
         }
         if (!strategy.withIdentity()) {
             return Optional.empty();
         }
         if (!strategy.withComponent()) {
-            return Optional.of(SlotMatchMode.identityOnly);
+            return Optional.of(SlotMatchMode.identity);
         }
-        return Optional.of(strategy.usesExactComponents() ? SlotMatchMode.exactComponent : SlotMatchMode.componentSubset);
+        return Optional.of(SlotMatchMode.identityAndComponent);
     }
 
     @SuppressWarnings("unchecked")
@@ -479,9 +479,9 @@ public final class CirrusContentBridge {
     private static SlotMatchMode listSlotMatchMode(List<ComponentStackKey> candidates) {
         for (ComponentStackKey c : candidates) {
             if (c.hasComponents()) {
-                return SlotMatchMode.exactComponent;
+                return SlotMatchMode.identityAndComponent;
             }
         }
-        return SlotMatchMode.identityOnly;
+        return SlotMatchMode.identity;
     }
 }

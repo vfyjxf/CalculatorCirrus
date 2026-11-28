@@ -690,10 +690,10 @@ final class PlanFlowViewModel {
             if ((machine == null || machine.isEmpty()) && isProvision && step.output() != null) {
                 machine = MachineEntry.fromKey(step.output());
             }
-            boolean handCraft = machine == null || machine.isEmpty();
-            String stationKey = handCraft ? handCraftStationId : machine.canonicalKey();
-            MachineEntry resolvedMachine = handCraft ? null : machine;
-            ComponentStackKey iconKey = handCraft
+            MachineEntry resolvedMachine = (machine == null || machine.isEmpty()) ? null : machine;
+            boolean handCraft = resolvedMachine == null;
+            String stationKey = resolvedMachine == null ? handCraftStationId : resolvedMachine.canonicalKey();
+            ComponentStackKey iconKey = resolvedMachine == null
                     ? craftingTableIcon()
                     : resolvedMachine.contentKey().orElseGet(PlanFlowViewModel::craftingTableIcon);
             Acc acc = groups.computeIfAbsent(stationKey, k -> new Acc(resolvedMachine, handCraft, iconKey));

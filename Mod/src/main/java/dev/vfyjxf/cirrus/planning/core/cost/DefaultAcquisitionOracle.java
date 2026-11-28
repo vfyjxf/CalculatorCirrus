@@ -280,18 +280,7 @@ public final class DefaultAcquisitionOracle implements AcquisitionOracle {
                 if (estOpt.isPresent()) {
                     AcquisitionEstimate est = estOpt.get();
                     if (est.guaranteedQuantity() > 0L) {
-                        return Optional.of(new AcquisitionOption(
-                            est.kind(),
-                            est.meanSecondsPerUnit(),
-                            0.0,
-                            est.fixedTripSeconds(),
-                            est.scarcityPerUnit(),
-                            est.p90SecondsPerUnit(),
-                            est.cv(),
-                            est.guaranteedQuantity(),
-                            est.tripEpisodeId(),
-                            keyEstimatorSpi
-                        ));
+                        return Optional.of(est.toOption(queryQty, keyEstimatorSpi));
                     }
                 }
             }

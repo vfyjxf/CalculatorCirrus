@@ -254,7 +254,7 @@ public final class RawRecordMapper {
                     if (catalyst) {
                         if (candidates.size() == 1) {
                             inputs.add(
-                                new RawIngredientSlot(Optional.empty(), candidates, amount, SlotMatchMode.identityOnly)
+                                new RawIngredientSlot(Optional.empty(), candidates, amount, SlotMatchMode.identity)
                             );
                             if (catalystReturnOutputs == null) {
                                 catalystReturnOutputs = new ArrayList<>(2);
@@ -262,12 +262,12 @@ public final class RawRecordMapper {
                             catalystReturnOutputs.add(new RawOutputSlot(candidates.get(0), amount));
                         } else {
                             inputs.add(
-                                new RawIngredientSlot(Optional.of(tagKey), candidates, 0L, SlotMatchMode.identityOnly, 0, 1)
+                                new RawIngredientSlot(Optional.of(tagKey), candidates, 0L, SlotMatchMode.identity, 0, 1)
                             );
                         }
                     } else {
                         inputs.add(
-                            new RawIngredientSlot(Optional.of(tagKey), candidates, amount, SlotMatchMode.identityOnly)
+                            new RawIngredientSlot(Optional.of(tagKey), candidates, amount, SlotMatchMode.identity)
                         );
                     }
                     classifyInputs.add(ClassifyContent.tag(tagId, pool.internIdSet(idStrings), amount, chance));
@@ -482,7 +482,7 @@ public final class RawRecordMapper {
             return Optional.empty();
         }
         JsonElement components = stackObj.get("components");
-        if (mode == SlotMatchMode.identityOnly
+        if (mode == SlotMatchMode.identity
                 || components == null
                 || components.isJsonNull()
                 || (components.isJsonObject() && components.getAsJsonObject().isEmpty())) {
@@ -492,7 +492,7 @@ public final class RawRecordMapper {
     }
 
     private Optional<ComponentStackKey> mapConcreteStackObject(JsonObject stackObj) {
-        return mapStackObject(stackObj, SlotMatchMode.exactComponent);
+        return mapStackObject(stackObj, SlotMatchMode.identityAndComponent);
     }
 
     private static String extractStackResourceId(JsonObject stackObj, Namespace contentTypeId) {

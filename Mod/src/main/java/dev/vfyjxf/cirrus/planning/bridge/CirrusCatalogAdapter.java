@@ -525,12 +525,12 @@ public final class CirrusCatalogAdapter {
     }
 
     private static ClassifyContent toClassifyInput(RawIngredientSlot slot, float chance) {
-        if (slot.tag().isPresent()) {
+        if (slot.tagKey().isPresent()) {
             Set<String> ids = new LinkedHashSet<>(slot.candidates().size());
             for (ComponentStackKey cand : slot.candidates()) {
                 ids.add(cand.displayId());
             }
-            return ClassifyContent.tag(slot.tag().get().location().toString(), ids, slot.amount(), chance);
+            return ClassifyContent.tag(slot.tagKey().get().location().toString(), ids, slot.amount(), chance);
         }
         if (slot.candidates().size() == 1) {
             return ClassifyContent.stack(slot.candidates().get(0).displayId(), slot.amount(), chance);
@@ -582,7 +582,7 @@ public final class CirrusCatalogAdapter {
         } catch (RuntimeException | LinkageError ignored) {}
         if (system instanceof VanillaRecipeSystem<?>) {
             tags.add(RecipeSystemTags.vanilla);
-        } else if (system instanceof JeiCategoryRecipeSystem<?> || "jei".equals(system.systemId().namespace())) {
+        } else if (system instanceof JeiCategoryRecipeSystem<?> || "jei".equals(system.systemId().root())) {
             tags.add(RecipeSystemTags.jeiFallback);
         } else {
             tags.add(RecipeSystemTags.modNative);

@@ -178,7 +178,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                     parsedCats.add(new TempCat(candTempIds, in.durabilityCostPerBatch(), in.maxDurability()));
                     continue;
                 }
-                parsedInputs.add(new TempInput(in.tag().orElse(null), candTempIds, in.amount(), in.matchMode()));
+                parsedInputs.add(new TempInput(in.tagKey().orElse(null), candTempIds, in.amount(), in.matchMode()));
             }
             if (insane) {
                 excludedInsane++;
@@ -200,7 +200,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
             boolean isJeiSource = raw.systemTags().contains(RecipeSystemTags.jeiFallback)
                     || "jei".equalsIgnoreCase(raw.sourceKind())
                     || "jei_fallback".equalsIgnoreCase(raw.sourceKind())
-                    || "jei".equals(raw.systemId().namespace());
+                    || "jei".equals(raw.systemId().root());
             if (isJeiSource && mergedOuts.size() >= jeiMultiOutputSplitThreshold) {
                 RecipeAdvisory splitAdv = RecipeAdvisory.max(baseAdvisory, RecipeAdvisory.discouraged);
                 for (var outEntry : mergedOuts.entrySet()) {

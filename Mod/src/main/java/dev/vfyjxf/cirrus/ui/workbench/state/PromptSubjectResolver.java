@@ -98,7 +98,7 @@ public final class PromptSubjectResolver {
         if (tag == null) {
             String raw = suffix(prompt.promptId(), promptTagPrefix);
             if (raw != null && !raw.isEmpty()) {
-                tag = PlanningTagKeys.parse(raw).orElse(null);
+                tag = PlanningTagKeys.parseCanonical(raw).orElse(null);
             }
         }
         Set<String> anchors = tag == null || plan == null ? Set.of() : anchoredByTag(plan, graph, tag);
@@ -267,7 +267,7 @@ public final class PromptSubjectResolver {
             return false;
         }
         for (InputSlot slot : recipe.get().inputs()) {
-            if (slot.tag().map(tag::equals).orElse(false)) {
+            if (slot.tagKey().map(tag::equals).orElse(false)) {
                 return true;
             }
         }

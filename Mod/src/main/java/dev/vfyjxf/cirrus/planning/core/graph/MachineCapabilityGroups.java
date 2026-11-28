@@ -26,7 +26,7 @@ public final class MachineCapabilityGroups {
             return new MachineCapabilityId(CirrusNamespaces.ofMod("capability/system/unknown/unknown"));
         }
         return new MachineCapabilityId(
-            CirrusNamespaces.ofMod("capability/system/" + systemId.namespace() + "/" + systemId.path())
+            CirrusNamespaces.ofMod("capability/system/" + systemId.root() + "/" + systemId.path())
         );
     }
 
@@ -77,12 +77,12 @@ public final class MachineCapabilityGroups {
 
     private static @Nullable String extractSystemOwnerMod(@Nullable Namespace systemId) {
         if (systemId == null) return null;
-        if ("jei".equals(systemId.namespace()) && systemId.path().startsWith("category/")) {
+        if ("jei".equals(systemId.root()) && systemId.path().startsWith("category/")) {
             int start = "category/".length();
             int nextSlash = systemId.path().indexOf('/', start);
             return nextSlash > start ? systemId.path().substring(start, nextSlash) : null;
         }
-        return systemId.namespace();
+        return systemId.root();
     }
 
     public static boolean isHandCraftable(

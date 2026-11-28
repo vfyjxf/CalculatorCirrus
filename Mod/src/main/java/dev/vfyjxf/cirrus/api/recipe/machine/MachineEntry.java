@@ -82,4 +82,23 @@ public interface MachineEntry {
                 .map(ComponentStackKey::canonicalKey)
                 .orElseGet(() -> getClass().getName() + ":" + toString());
     }
+
+    default boolean matches(MachineEntry required) {
+        Objects.requireNonNull(required, "required");
+        if (this.equals(required)) {
+            return true;
+        }
+        if (isEmpty() || required.isEmpty()) {
+            return false;
+        }
+        Optional<ComponentStackKey> thisKey = contentKey();
+        Optional<ComponentStackKey> reqKey = required.contentKey();
+        if (thisKey.isEmpty() || reqKey.isEmpty()) {
+            return false;
+        }
+        if (reqKey.get().hasComponents()) {
+            return thisKey.get().equals(reqKey.get()) && constraint().equals(required.constraint());
+        }
+        return thisKey.get().withoutComponents().equals(reqKey.get().withoutComponents());
+    }
 }

@@ -35,7 +35,7 @@ public final class RecipeSemanticKeyBuilder {
                 cands.add(rk.canonicalKey());
             }
             Collections.sort(cands);
-            String tagToken = in.tag().map(PlanningTagKeys::canonicalString).orElse("-");
+            String tagToken = in.tagKey().map(PlanningTagKeys::canonicalString).orElse("-");
             String token = (in.catalyst() ? "CAT:" : "IN:")
                     + in.amount()
                     + ":" + in.matchMode().name()

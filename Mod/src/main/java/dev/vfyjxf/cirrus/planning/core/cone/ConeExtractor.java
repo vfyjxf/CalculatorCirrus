@@ -727,7 +727,7 @@ public final class ConeExtractor {
             int unmet = 0;
             for (InputSlot slot : rec.inputs()) {
                 int[] cands = resolveLocalCandidates(
-                    slot.tag().orElse(null),
+                    slot.tagKey().orElse(null),
                     slot.candidates(),
                     localByKey,
                     bannedRes,
@@ -995,7 +995,7 @@ public final class ConeExtractor {
                 InputSlot slot = rec.inputs().get(i);
                 inSlotIndex[inCur] = slot.slotIndex();
                 inAmount[inCur] = slot.amountPerBatch();
-                inTag[inCur] = slot.tag().orElse(null);
+                inTag[inCur] = slot.tagKey().orElse(null);
                 inMatchMode[inCur] = slot.matchMode();
                 inOrigCandCount[inCur] = slot.candidates().size();
                 inClassStart[inCur] = classRepList.size();
@@ -1632,14 +1632,14 @@ public final class ConeExtractor {
         int childDepth
     ) {
         boolean trunc = false;
-        if (slot.tag().isPresent()) {
-            Optional<ComponentStackKey> pref = guidance.preferredTagMember(slot.tag().get());
+        if (slot.tagKey().isPresent()) {
+            Optional<ComponentStackKey> pref = guidance.preferredTagMember(slot.tagKey().get());
             if (pref.isPresent() && !guidance.isResourceBanned(pref.get())) {
                 if (visitedNodes.add(pref.get())) {
                     nodeDepth.putIfAbsent(pref.get(), childDepth);
                     waveQueue.add(pref.get());
                 }
-                if (guidance.isTagHardPinned(slot.tag().get())) return false;
+                if (guidance.isTagHardPinned(slot.tagKey().get())) return false;
             }
         }
         List<ComponentStackKey> cands = slot.candidates();
@@ -2029,7 +2029,7 @@ public final class ConeExtractor {
             if (r instanceof RecipeRule rr && rr.recipeKey().equals(rk)) {
                 map.computeIfAbsent(target, ignored -> new TreeSet<>()).add(rr.ruleId());
             } else if (r instanceof ModNamespaceRule mnr && matchesMod(mnr.modNamespace(), rk)) {
-                map.computeIfAbsent(target, ignored -> new TreeSet<>()).add(rr.ruleId());
+                map.computeIfAbsent(target, ignored -> new TreeSet<>()).add(mnr.ruleId());
             }
         }
     }
@@ -2075,7 +2075,7 @@ public final class ConeExtractor {
                 if (r instanceof MachineRule mr && mr.machine().equals(machine)) {
                     map.computeIfAbsent(target, ignored -> new TreeSet<>()).add(mr.ruleId());
                 } else if (r instanceof ModNamespaceRule mnr
-                        && machine.contentKey().map(k -> k.namespace().equals(mnr.modNamespace())).orElse(false)) {
+                        && machine.contentKey().map(k -> Objects.equals(k.namespace(), mnr.modNamespace())).orElse(false)) {
                     map.computeIfAbsent(target, ignored -> new TreeSet<>()).add(mnr.ruleId());
                 }
             }
@@ -2102,8 +2102,8 @@ public final class ConeExtractor {
     }
 
     private static boolean sysMatchesMod(String ns, Namespace sysId) {
-        return sysId.namespace().equals(ns)
-                || ("jei".equals(sysId.namespace()) && sysId.path().startsWith("category/" + ns + "/"));
+        return sysId.root().equals(ns)
+                || ("jei".equals(sysId.root()) && sysId.path().startsWith("category/" + ns + "/"));
     }
 
     private static final class IntList {

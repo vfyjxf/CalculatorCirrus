@@ -392,8 +392,8 @@ public final class DecisionPointDetector {
             CompiledRecipe rec = recOpt.get();
             double stepShare = SafeMath.clamp01(request.profile().weights().scalarize(cs.stepCost()) / totalScalar);
             for (InputSlot slot : rec.inputs()) {
-                if (slot.tag().isEmpty() || slot.candidates().size() < 6) continue;
-                TagKey<?> tag = slot.tag().get();
+                if (slot.tagKey().isEmpty() || slot.candidates().size() < 6) continue;
+                TagKey<?> tag = slot.tagKey().get();
                 if (guidance.preferredTagMember(tag).isPresent()) continue;
                 String tagStr = PlanningTagKeys.canonicalString(tag);
                 String promptId = "prompt:tag:" + tagStr;

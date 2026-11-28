@@ -398,7 +398,7 @@ public final class CalculatorSyntheticScenario {
                         ComponentStackKey key = OfflineContentTypes
                                 .bare(syntheticContentType, vc.type().typeId().toString());
                         ins.add(
-                            new RawIngredientSlot(Optional.empty(), List.of(key), vc.amount(), SlotMatchMode.identityOnly)
+                            new RawIngredientSlot(Optional.empty(), List.of(key), vc.amount(), SlotMatchMode.identity)
                         );
                     }
                 }

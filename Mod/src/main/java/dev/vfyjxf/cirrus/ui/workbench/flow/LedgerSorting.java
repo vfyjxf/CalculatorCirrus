@@ -47,7 +47,7 @@ public final class LedgerSorting {
         if (simulated == null || simulated.isEmpty()) {
             return source;
         }
-        TreeMap<ComponentStackKey, Long> available = new TreeMap<>(source.available().entries());
+        InventorySnapshot result = source;
         for (Map.Entry<ComponentStackKey, Long> entry : simulated.entrySet()) {
             ComponentStackKey resource = entry.getKey();
             Long amount = entry.getValue();
@@ -55,18 +55,9 @@ public final class LedgerSorting {
                 continue;
             }
             long clamped = Math.max(minSimulatedAmount, Math.min(maxSimulatedAmount, amount));
-            if (clamped <= 0L) {
-                available.remove(resource);
-            } else {
-                available.put(resource, clamped);
-            }
+            result = result.withOverriddenStock(resource, clamped);
         }
-        return new InventorySnapshot(
-            new StockLedger(available),
-            source.reserved(),
-            source.inChest(),
-            source.inStorageNetwork()
-        );
+        return result;
     }
 
     public static Map<ComponentStackKey, Long> simulate(

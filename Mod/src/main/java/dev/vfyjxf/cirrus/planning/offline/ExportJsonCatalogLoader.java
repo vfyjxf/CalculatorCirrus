@@ -585,7 +585,7 @@ public final class ExportJsonCatalogLoader {
                                         Optional.empty(),
                                         candidates,
                                         slot.exactAmount,
-                                        SlotMatchMode.identityOnly
+                                        SlotMatchMode.identity
                                     )
                                 );
                                 if (catalystReturnOutputs == null) {
@@ -598,7 +598,7 @@ public final class ExportJsonCatalogLoader {
                                         Optional.of(tagKey),
                                         candidates,
                                         0L,
-                                        SlotMatchMode.identityOnly,
+                                        SlotMatchMode.identity,
                                         0,
                                         1
                                     )
@@ -610,7 +610,7 @@ public final class ExportJsonCatalogLoader {
                                     Optional.of(tagKey),
                                     candidates,
                                     slot.exactAmount,
-                                    SlotMatchMode.identityOnly
+                                    SlotMatchMode.identity
                                 )
                             );
                         }
@@ -871,7 +871,7 @@ public final class ExportJsonCatalogLoader {
             if (resId.isEmpty()) {
                 return Optional.empty();
             }
-            if (mode == SlotMatchMode.identityOnly
+            if (mode == SlotMatchMode.identity
                     || ps.components == null
                     || ps.components.isJsonNull()
                     || (ps.components.isJsonObject() && ps.components.getAsJsonObject().isEmpty())) {
@@ -881,7 +881,7 @@ public final class ExportJsonCatalogLoader {
         }
 
         private Optional<ComponentStackKey> mapParsedStackConcrete(ParsedStack ps) {
-            return mapParsedStackInput(ps, SlotMatchMode.exactComponent);
+            return mapParsedStackInput(ps, SlotMatchMode.identityAndComponent);
         }
 
         private static String extractParsedStackResourceId(ParsedStack ps, Namespace contentTypeId) {
