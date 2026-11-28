@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.layout;
 
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
@@ -7,7 +8,7 @@ import java.util.Objects;
 public record SwimlaneBand(
     String laneId,
     String titleKey,
-    @Nullable String iconMachineId,
+    @Nullable MachineEntry iconMachine,
     float y,
     float height,
     int stepCount,

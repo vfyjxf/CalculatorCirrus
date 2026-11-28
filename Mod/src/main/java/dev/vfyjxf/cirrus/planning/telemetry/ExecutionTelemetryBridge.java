@@ -2,9 +2,12 @@ package dev.vfyjxf.cirrus.planning.telemetry;
 
 import dev.vfyjxf.cirrus.api.planning.telemetry.ExecutionFailureCategory;
 import dev.vfyjxf.cirrus.api.planning.telemetry.PlanningTelemetryEvent;
+import dev.vfyjxf.cirrus.util.CirrusNamespaces;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionTelemetrySnapshot;
 import dev.vfyjxf.cirrus.api.recipe.execution.PauseReason;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Locale;
 import java.util.Objects;
@@ -16,17 +19,19 @@ import java.util.UUID;
  */
 public final class ExecutionTelemetryBridge {
 
+    private static final Namespace unknownSystem = CirrusNamespaces.ofMod("unknown");
+
     private ExecutionTelemetryBridge() {}
 
     public static PlanningTelemetryEvent.CraftingExecutionEvent fromSnapshot(
         ExecutionSession session,
         ExecutionTelemetrySnapshot snapshot,
-        String recipeSemanticKey,
-        String systemId,
-        String conditionSignature,
-        String adapterVersion,
-        String worldFingerprint,
-        String packFingerprint
+        @Nullable String recipeSemanticKey,
+        @Nullable Namespace systemId,
+        @Nullable String conditionSignature,
+        @Nullable String adapterVersion,
+        @Nullable String worldFingerprint,
+        @Nullable String packFingerprint
     ) {
         Objects.requireNonNull(session, "session");
         Objects.requireNonNull(snapshot, "snapshot");
@@ -39,9 +44,9 @@ public final class ExecutionTelemetryBridge {
             worldFingerprint == null ? "local" : worldFingerprint,
             packFingerprint == null ? "pack" : packFingerprint,
             recipeSemanticKey == null ? "unknown" : recipeSemanticKey,
-            systemId == null ? "unknown" : systemId,
+            systemId == null ? unknownSystem : systemId,
             conditionSignature == null ? "default" : conditionSignature,
-            adapterVersion == null ? "v3" : adapterVersion,
+            adapterVersion == null ? "cirrus" : adapterVersion,
             Math.max(0, snapshot.completedSteps()),
             secPerBatch,
             succeeded,

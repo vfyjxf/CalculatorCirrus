@@ -58,24 +58,12 @@ final class PlanningRuntimeBridge {
             List.of()
         );
         if (!spec.useLiveStock()) {
-            context = new PlanningContext(
-                InventorySnapshot.empty,
-                context.facilities(),
-                context.acquisitionOracle(),
-                context.guidance(),
-                context.progression()
-            );
+            context = context.withInventory(InventorySnapshot.empty);
         } else {
             InventorySnapshot filteredInventory = PlanningContextFactory
                     .excludeTargetStock(context.inventory(), spec.targets());
             if (filteredInventory != context.inventory()) {
-                context = new PlanningContext(
-                    filteredInventory,
-                    context.facilities(),
-                    context.acquisitionOracle(),
-                    context.guidance(),
-                    context.progression()
-                );
+                context = context.withInventory(filteredInventory);
             }
         }
         return new PlanningRequest(spec.targets(), context, spec.profile(), spec.budget());

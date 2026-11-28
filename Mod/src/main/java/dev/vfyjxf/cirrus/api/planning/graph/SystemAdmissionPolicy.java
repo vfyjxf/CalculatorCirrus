@@ -1,16 +1,18 @@
 package dev.vfyjxf.cirrus.api.planning.graph;
 
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.List;
 
 public interface SystemAdmissionPolicy {
 
-    SystemAdmission classify(String systemId, String sourceKind);
+    SystemAdmission classify(Namespace systemId, String sourceKind);
 
-    MachineCapabilityId capabilityOf(String systemId);
+    MachineCapabilityId capabilityOf(Namespace systemId);
 
-    List<String> orderMachinesForCapability(String systemId, List<String> rawMachines);
+    List<MachineEntry> orderMachinesForCapability(Namespace systemId, List<MachineEntry> rawMachines);
 
     default SystemAdmission classifyRecipe(RawRecipeRecord record) {
         return classify(record.systemId(), record.sourceKind());

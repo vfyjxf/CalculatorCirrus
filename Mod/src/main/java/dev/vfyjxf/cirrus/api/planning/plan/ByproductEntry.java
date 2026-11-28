@@ -1,10 +1,10 @@
 package dev.vfyjxf.cirrus.api.planning.plan;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 
 import java.util.Objects;
 
-public record ByproductEntry(ResourceKey resource, long amount, String producedByStepId) {
+public record ByproductEntry(ComponentStackKey resource, long amount, String producedByStepId) {
 
     public ByproductEntry {
         Objects.requireNonNull(resource, "resource");

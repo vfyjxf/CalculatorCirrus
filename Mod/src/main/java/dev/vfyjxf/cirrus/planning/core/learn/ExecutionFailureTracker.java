@@ -3,18 +3,17 @@ package dev.vfyjxf.cirrus.planning.core.learn;
 import dev.vfyjxf.cirrus.api.planning.telemetry.ExecutionFailureCategory;
 
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /**
- * M9.2 Attributed Execution Failure Tracker & Runtime Fidelity Decay (Pure JDK 21).
+ * Attributed execution failure tracker and runtime fidelity decay.
  *
  * <p>Per (recipeSemanticKey, conditionSignature, adapterVersion):
  * - Exponential forgetting with half-life t_f = 40 logical rounds.
  * - Attributed adapter failure (wrongBinding / hiddenRequirement) adds 1.0 (capped at f_max = 8.0).
- * - USER_CANCEL, MACHINE_BUSY, OUT_OF_STOCK add 0.0 (never unfairly penalize recipes!).
+ * - userCancel, machineBusy, outOfStock add 0.0 (never unfairly penalize recipes).
  * - Observed execution success scales failure burden by (1 - xi) = 0.5.
  * - Runtime fidelity: phi_run = phi_struct * exp(-k_f * f') with k_f = 0.35.
  * - Explicit user verification on the same version/condition resets f = 0.
@@ -25,6 +24,7 @@ public final class ExecutionFailureTracker {
     public static final double defaultDecayKf = 0.35;
     public static final double defaultFMax = 8.0;
     public static final double defaultSuccessRecoveryXi = 0.50;
+    public static final int maxSeenExecutionIds = 8192;
 
     public record Key(String recipeSemanticKey, String conditionSignature, String adapterVersion) {
         public Key {
@@ -47,7 +47,7 @@ public final class ExecutionFailureTracker {
     }
 
     private final Map<Key, BurdenState> states = new HashMap<>();
-    private final Set<String> seenExecutionIds = new HashSet<>();
+    private final LinkedHashSet<String> seenExecutionIds = new LinkedHashSet<>();
 
     public ExecutionFailureTracker() {}
 
@@ -63,6 +63,13 @@ public final class ExecutionFailureTracker {
         Objects.requireNonNull(failureCategory, "failureCategory");
         if (!seenExecutionIds.add(executionEventId)) {
             return false; // Idempotent replay protection.
+        }
+        if (seenExecutionIds.size() > maxSeenExecutionIds) {
+            var it = seenExecutionIds.iterator();
+            if (it.hasNext()) {
+                it.next();
+                it.remove();
+            }
         }
         BurdenState st = states.computeIfAbsent(key, k -> new BurdenState(0.0, logicTime));
         double fMinus = decayedBurden(st, logicTime);

@@ -19,14 +19,23 @@ public final class LayeredHumanGuidanceStore implements HumanGuidanceStore {
         GuidanceScope.class
     );
     private final @Nullable Consumer<GuidanceRule> worldSaveListener;
+    private final @Nullable Consumer<String> worldSaveRemoveListener;
     private long seq;
 
     public LayeredHumanGuidanceStore() {
-        this(null);
+        this(null, null);
     }
 
     public LayeredHumanGuidanceStore(@Nullable Consumer<GuidanceRule> worldSaveListener) {
+        this(worldSaveListener, null);
+    }
+
+    public LayeredHumanGuidanceStore(
+        @Nullable Consumer<GuidanceRule> worldSaveListener,
+        @Nullable Consumer<String> worldSaveRemoveListener
+    ) {
         this.worldSaveListener = worldSaveListener;
+        this.worldSaveRemoveListener = worldSaveRemoveListener;
         for (GuidanceScope scope : GuidanceScope.values()) {
             byScope.put(scope, new LinkedHashMap<>());
         }
@@ -46,8 +55,14 @@ public final class LayeredHumanGuidanceStore implements HumanGuidanceStore {
     @Override
     public synchronized void removeRule(String ruleId) {
         Objects.requireNonNull(ruleId, "ruleId");
-        for (LinkedHashMap<String, StampedRule> scopeMap : byScope.values()) {
-            scopeMap.remove(ruleId);
+        boolean removedWorldSave = false;
+        for (var entry : byScope.entrySet()) {
+            if (entry.getValue().remove(ruleId) != null && entry.getKey() == GuidanceScope.worldSave) {
+                removedWorldSave = true;
+            }
+        }
+        if (removedWorldSave && worldSaveRemoveListener != null) {
+            worldSaveRemoveListener.accept(ruleId);
         }
     }
 

@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.state;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledCycleMacro;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
@@ -14,7 +15,7 @@ import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.model.PlanningTagKeys;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -24,6 +25,11 @@ import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -35,10 +41,12 @@ import java.util.Set;
 
 public final class PromptSubjectResolver {
 
-    public static final String promptMachineForkPrefix = "prompt:machine_fork:";
-    public static final String promptTagChoicePrefix = "prompt:tag_choice:";
-    public static final String promptExpensiveLeafPrefix = "prompt:expensive_leaf:";
-    public static final String promptSuspiciousPrefix = "prompt:suspicious:";
+    public static final String promptMachinePrefix = "prompt:machine:";
+    public static final String promptSupplyPrefix = "prompt:supply:";
+    public static final String promptCatalystPrefix = "prompt:catalyst:";
+    public static final String promptTagPrefix = "prompt:tag:";
+    public static final String promptUnverifiedPrefix = "prompt:unverified:";
+    public static final String promptTripPrefix = "prompt:trip:";
 
     private PromptSubjectResolver() {}
 
@@ -66,21 +74,19 @@ public final class PromptSubjectResolver {
         return switch (prompt.kind()) {
             case machineAvailability -> resolveMachineFork(prompt, plan);
             case materialFamilyAnchor -> resolveTagChoice(prompt, plan, graph);
-            case baseOrSupplyBoundary, reusableCatalystCheck, fieldTripConfirm -> resolveExpensiveLeaf(prompt, plan);
-            case suspiciousJeiVerify, ruleConflictResolution -> resolveSuspicious(prompt, plan, graph);
+            case baseOrSupplyBoundary, reusableCatalystCheck, fieldTripConfirm -> resolveResourcePrompt(prompt, plan);
+            case suspiciousJeiVerify, ruleConflictResolution -> resolveRecipePrompt(prompt, plan, graph);
         };
     }
 
     private static ResolvedPrompt resolveMachineFork(DecisionPrompt prompt, @Nullable ProductionPlan plan) {
-        String machineId = suffix(prompt.promptId(), promptMachineForkPrefix);
-        if (machineId == null || machineId.isEmpty()) {
-            machineId = suffix(prompt.promptId(), "prompt:h1_machine:");
+        MachineEntry machine = machineFromRules(prompt);
+        if (machine == null) {
+            String raw = suffix(prompt.promptId(), promptMachinePrefix);
+            machine = parseMachineFallback(raw);
         }
-        if (machineId == null || machineId.isEmpty()) {
-            machineId = machineFromRules(prompt);
-        }
-        Set<String> anchors = machineId == null || plan == null ? Set.of() : anchoredByMachine(plan, machineId);
-        return new ResolvedPrompt(prompt, null, machineId, null, null, null, anchors, resolveOptions(prompt, false));
+        Set<String> anchors = machine == null || plan == null ? Set.of() : anchoredByMachine(plan, machine);
+        return new ResolvedPrompt(prompt, null, machine, null, null, null, anchors, resolveOptions(prompt, false));
     }
 
     private static ResolvedPrompt resolveTagChoice(
@@ -88,48 +94,39 @@ public final class PromptSubjectResolver {
         @Nullable ProductionPlan plan,
         CompiledRecipeGraph graph
     ) {
-        String tagId = suffix(prompt.promptId(), promptTagChoicePrefix);
-        if (tagId == null || tagId.isEmpty()) {
-            tagId = suffix(prompt.promptId(), "prompt:h4_family:");
+        TagKey<?> tag = tagFromRules(prompt);
+        if (tag == null) {
+            String raw = suffix(prompt.promptId(), promptTagPrefix);
+            if (raw != null && !raw.isEmpty()) {
+                tag = PlanningTagKeys.parse(raw).orElse(null);
+            }
         }
-        if (tagId == null || tagId.isEmpty()) {
-            tagId = tagFromRules(prompt);
-        }
-        Set<String> anchors = tagId == null || plan == null ? Set.of() : anchoredByTag(plan, graph, tagId);
-        return new ResolvedPrompt(prompt, null, null, tagId, null, null, anchors, resolveOptions(prompt, true));
+        Set<String> anchors = tag == null || plan == null ? Set.of() : anchoredByTag(plan, graph, tag);
+        return new ResolvedPrompt(prompt, null, null, tag, null, null, anchors, resolveOptions(prompt, true));
     }
 
-    private static ResolvedPrompt resolveExpensiveLeaf(DecisionPrompt prompt, @Nullable ProductionPlan plan) {
-        String raw = suffix(prompt.promptId(), promptExpensiveLeafPrefix);
-        if (raw == null || raw.isEmpty()) raw = suffix(prompt.promptId(), "prompt:h2_base:");
-        if (raw == null || raw.isEmpty()) raw = suffix(prompt.promptId(), "prompt:h3_catalyst:");
-        if (raw == null || raw.isEmpty()) raw = suffix(prompt.promptId(), "prompt:h6_trip:");
-        ResourceKey resource = parseResourceSuffix(raw);
+    private static ResolvedPrompt resolveResourcePrompt(DecisionPrompt prompt, @Nullable ProductionPlan plan) {
+        ComponentStackKey resource = resourceFromRules(prompt);
         if (resource == null) {
-            resource = resourceFromRules(prompt);
+            String raw = suffix(prompt.promptId(), promptSupplyPrefix);
+            if (raw == null || raw.isEmpty()) raw = suffix(prompt.promptId(), promptCatalystPrefix);
+            if (raw == null || raw.isEmpty()) raw = suffix(prompt.promptId(), promptTripPrefix);
+            resource = parseResourceFallback(raw);
         }
         Set<String> anchors = resource == null || plan == null ? Set.of() : anchoredByResource(plan, resource);
         return new ResolvedPrompt(prompt, resource, null, null, null, null, anchors, resolveOptions(prompt, false));
     }
 
-    private static ResolvedPrompt resolveSuspicious(
+    private static ResolvedPrompt resolveRecipePrompt(
         DecisionPrompt prompt,
         @Nullable ProductionPlan plan,
         CompiledRecipeGraph graph
     ) {
-        String raw = suffix(prompt.promptId(), promptSuspiciousPrefix);
-        if (raw == null || raw.isEmpty()) raw = suffix(prompt.promptId(), "prompt:h5_suspicious:");
-        CompiledRecipeKey recipeKey = parseRecipeSuffix(raw);
-        String systemId = recipeKey == null ? null : recipeKey.systemId();
+        CompiledRecipeKey recipeKey = recipeFromRules(prompt);
         if (recipeKey == null) {
-            recipeKey = recipeFromRules(prompt);
-            if (recipeKey != null) {
-                systemId = recipeKey.systemId();
-            }
+            recipeKey = parseRecipeSuffix(suffix(prompt.promptId(), promptUnverifiedPrefix));
         }
-        if (systemId == null) {
-            systemId = systemFromRules(prompt);
-        }
+        Namespace systemId = recipeKey != null ? recipeKey.systemId() : systemFromRules(prompt);
         Set<String> anchors = recipeKey == null || plan == null ? Set.of() : anchoredByRecipe(plan, graph, recipeKey);
         return new ResolvedPrompt(
             prompt,
@@ -146,21 +143,26 @@ public final class PromptSubjectResolver {
     private static List<ResolvedPromptOption> resolveOptions(DecisionPrompt prompt, boolean tagChoice) {
         List<ResolvedPromptOption> options = new ArrayList<>(prompt.options().size());
         for (DecisionOption option : prompt.options()) {
-            ResourceKey variant = null;
-            String machineId = null;
+            ComponentStackKey variant = null;
+            MachineEntry machine = null;
             for (GuidanceRule rule : option.compiledRules()) {
                 if (tagChoice && rule instanceof TagDefaultRule tagDefault) {
                     variant = tagDefault.preferredMember();
                 }
                 if (rule instanceof MachineRule machineRule) {
-                    machineId = machineRule.machineId();
+                    machine = machineRule.machine();
                 }
+            }
+            if (machine == null
+                    && option.followUp().isPresent()
+                    && option.followUp().get() instanceof DeclareOwnedMachineFeedback declare) {
+                machine = declare.machine();
             }
             options.add(
                 new ResolvedPromptOption(
                     option,
                     variant,
-                    machineId,
+                    machine,
                     option.estimatedDelta(),
                     option.followUp().isPresent()
                 )
@@ -169,28 +171,27 @@ public final class PromptSubjectResolver {
         return List.copyOf(options);
     }
 
-    private static Set<String> anchoredByMachine(ProductionPlan plan, String machineId) {
+    private static Set<String> anchoredByMachine(ProductionPlan plan, MachineEntry machine) {
         Set<String> anchors = new LinkedHashSet<>();
         for (PlanStep step : plan.steps()) {
-            if (step instanceof ProvisionMachineStep provision && provision.machineId().equals(machineId)) {
+            if (step instanceof ProvisionMachineStep provision && provision.machine().equals(machine)) {
                 anchors.add(step.stepId());
-            } else
-                if (step instanceof CraftStep craft && craft.chosenMachineId().map(machineId::equals).orElse(false)) {
-                    anchors.add(step.stepId());
-                } else if (step instanceof SetupLineStep setup && setup.primaryMachineId().equals(machineId)) {
-                    anchors.add(step.stepId());
-                }
+            } else if (step instanceof CraftStep craft && craft.chosenMachine().map(machine::equals).orElse(false)) {
+                anchors.add(step.stepId());
+            } else if (step instanceof SetupLineStep setup && setup.primaryMachine().equals(machine)) {
+                anchors.add(step.stepId());
+            }
         }
         return anchors;
     }
 
-    private static Set<String> anchoredByTag(ProductionPlan plan, CompiledRecipeGraph graph, String tagId) {
+    private static Set<String> anchoredByTag(ProductionPlan plan, CompiledRecipeGraph graph, TagKey<?> tag) {
         Set<String> anchors = new LinkedHashSet<>();
         for (PlanStep step : plan.steps()) {
             if (!(step instanceof CraftStep craft)) {
                 continue;
             }
-            if (recipeUsesTag(graph, craft.recipeKey(), tagId)) {
+            if (recipeUsesTag(graph, craft.recipeKey(), tag)) {
                 anchors.add(step.stepId());
                 break;
             }
@@ -199,7 +200,7 @@ public final class PromptSubjectResolver {
             for (PlanStep step : plan.steps()) {
                 if (step instanceof CycleLoopStep loop) {
                     for (CraftStep craft : loop.singleIterationTemplate()) {
-                        if (recipeUsesTag(graph, craft.recipeKey(), tagId)) {
+                        if (recipeUsesTag(graph, craft.recipeKey(), tag)) {
                             anchors.add(step.stepId());
                             break;
                         }
@@ -213,7 +214,7 @@ public final class PromptSubjectResolver {
         return anchors;
     }
 
-    private static Set<String> anchoredByResource(ProductionPlan plan, ResourceKey resource) {
+    private static Set<String> anchoredByResource(ProductionPlan plan, ComponentStackKey resource) {
         Set<String> anchors = new LinkedHashSet<>();
         for (PlanStep step : plan.steps()) {
             if (step instanceof AcquireStep acquire && acquire.resource().equals(resource)) {
@@ -260,46 +261,46 @@ public final class PromptSubjectResolver {
         return false;
     }
 
-    private static boolean recipeUsesTag(CompiledRecipeGraph graph, CompiledRecipeKey recipeKey, String tagId) {
+    private static boolean recipeUsesTag(CompiledRecipeGraph graph, CompiledRecipeKey recipeKey, TagKey<?> tag) {
         Optional<CompiledRecipe> recipe = graph.recipeByKey(recipeKey);
         if (recipe.isEmpty()) {
             return false;
         }
         for (InputSlot slot : recipe.get().inputs()) {
-            if (slot.tagId().map(tagId::equals).orElse(false)) {
+            if (slot.tag().map(tag::equals).orElse(false)) {
                 return true;
             }
         }
         return false;
     }
 
-    private static @Nullable String machineFromRules(DecisionPrompt prompt) {
+    private static @Nullable MachineEntry machineFromRules(DecisionPrompt prompt) {
         for (DecisionOption option : prompt.options()) {
             for (GuidanceRule rule : option.compiledRules()) {
                 if (rule instanceof MachineRule machineRule) {
-                    return machineRule.machineId();
+                    return machineRule.machine();
                 }
             }
             if (option.followUp().isPresent()
                     && option.followUp().get() instanceof DeclareOwnedMachineFeedback declare) {
-                return declare.machineId();
+                return declare.machine();
             }
         }
         return null;
     }
 
-    private static @Nullable String tagFromRules(DecisionPrompt prompt) {
+    private static @Nullable TagKey<?> tagFromRules(DecisionPrompt prompt) {
         for (DecisionOption option : prompt.options()) {
             for (GuidanceRule rule : option.compiledRules()) {
                 if (rule instanceof TagDefaultRule tagDefault) {
-                    return tagDefault.tagId();
+                    return tagDefault.tag();
                 }
             }
         }
         return null;
     }
 
-    private static @Nullable ResourceKey resourceFromRules(DecisionPrompt prompt) {
+    private static @Nullable ComponentStackKey resourceFromRules(DecisionPrompt prompt) {
         for (DecisionOption option : prompt.options()) {
             for (GuidanceRule rule : option.compiledRules()) {
                 if (rule instanceof ResourceRule resourceRule) {
@@ -321,7 +322,7 @@ public final class PromptSubjectResolver {
         return null;
     }
 
-    private static @Nullable String systemFromRules(DecisionPrompt prompt) {
+    private static @Nullable Namespace systemFromRules(DecisionPrompt prompt) {
         for (DecisionOption option : prompt.options()) {
             for (GuidanceRule rule : option.compiledRules()) {
                 if (rule instanceof SystemRule systemRule) {
@@ -336,7 +337,12 @@ public final class PromptSubjectResolver {
         return promptId.startsWith(prefix) ? promptId.substring(prefix.length()) : null;
     }
 
-    static @Nullable ResourceKey parseResourceSuffix(@Nullable String raw) {
+    private static @Nullable MachineEntry parseMachineFallback(@Nullable String raw) {
+        ComponentStackKey key = parseResourceFallback(raw);
+        return key == null ? null : MachineEntry.fromKey(key);
+    }
+
+    private static @Nullable ComponentStackKey parseResourceFallback(@Nullable String raw) {
         if (raw == null || raw.isEmpty()) {
             return null;
         }
@@ -354,10 +360,14 @@ public final class PromptSubjectResolver {
         if (hash >= 0) {
             rest = rest.substring(0, hash);
         }
-        if (rest.isEmpty()) {
+        ResourceLocation loc = ResourceLocation.tryParse(rest);
+        if (loc == null) {
             return null;
         }
-        return new ResourceKey(contentTypeId, rest, Optional.empty());
+        if ("minecraft:fluid".equals(contentTypeId)) {
+            return BuiltInRegistries.FLUID.getOptional(loc).map(ComponentStackKey::ofFluid).orElse(null);
+        }
+        return BuiltInRegistries.ITEM.getOptional(loc).map(ComponentStackKey::ofItem).orElse(null);
     }
 
     static @Nullable CompiledRecipeKey parseRecipeSuffix(@Nullable String raw) {
@@ -368,7 +378,12 @@ public final class PromptSubjectResolver {
         if (separator <= 0) {
             return null;
         }
-        String systemId = raw.substring(0, separator);
+        Namespace systemId;
+        try {
+            systemId = Namespace.parse(raw.substring(0, separator));
+        } catch (RuntimeException malformed) {
+            return null;
+        }
         String tail = raw.substring(separator + 2);
         if (tail.startsWith("#")) {
             try {
@@ -378,9 +393,10 @@ public final class PromptSubjectResolver {
                 return null;
             }
         }
-        if (tail.isEmpty()) {
+        ResourceLocation explicitId = ResourceLocation.tryParse(tail);
+        if (explicitId == null) {
             return null;
         }
-        return new CompiledRecipeKey(systemId, Optional.of(tail), 0L);
+        return new CompiledRecipeKey(systemId, Optional.of(explicitId), 0L);
     }
 }

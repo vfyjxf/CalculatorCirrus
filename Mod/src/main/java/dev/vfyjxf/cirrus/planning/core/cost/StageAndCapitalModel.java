@@ -7,7 +7,7 @@ import dev.vfyjxf.cirrus.api.planning.cost.StageDistribution;
 import java.util.Objects;
 
 /**
- * M5 Bernstein stage evolution and diminishing-returns machine capital amortization (Pure JDK 21).
+ * Bernstein stage evolution and diminishing-returns machine capital amortization.
  *
  * <p>K_eff(Q) = K_m * [eta_K + (1 - eta_K) / (1 + r_m * (1 - 1/Q))].
  * Properties:

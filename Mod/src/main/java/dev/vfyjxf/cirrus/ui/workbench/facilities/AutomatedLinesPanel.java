@@ -1,8 +1,8 @@
 package dev.vfyjxf.cirrus.ui.workbench.facilities;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AutomatedLine;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchFormatters;
@@ -53,7 +53,7 @@ public class AutomatedLinesPanel extends FacilitiesAndRulesWorkspace.Panel {
         }
         int visible = 0;
         for (AutomatedLine line : lines) {
-            if (!matchesAny(filter(), line.lineId(), line.output().resourceId())) {
+            if (!matchesAny(filter(), line.lineId(), line.output().displayId())) {
                 continue;
             }
             content().addWidget(lineCard(line));
@@ -85,20 +85,20 @@ public class AutomatedLinesPanel extends FacilitiesAndRulesWorkspace.Panel {
                 refresh();
             }
         })));
-        List<ResourceKey> outputs = new ArrayList<>();
+        List<ComponentStackKey> outputs = new ArrayList<>();
         host().graph().ifPresent(graph -> outputs.addAll(graph.allProducibleResources()));
-        outputs.sort(ResourceKey::compareTo);
+        outputs.sort(ComponentStackKey::compareTo);
         WidgetGroup<Widget> grid = new WidgetGroup<>();
         grid.useStyle(flexRow(), flexWrap(), gap(2), minWidth(0));
         int shown = 0;
-        for (ResourceKey output : outputs) {
+        for (ComponentStackKey output : outputs) {
             if (shown >= pickerLimit) {
                 break;
             }
-            if (!matchesAny(pickerQuery, output.resourceId())) {
+            if (!matchesAny(pickerQuery, output.displayId())) {
                 continue;
             }
-            grid.addWidget(button(Component.literal(output.shortString()), 96, () -> addLine(output)));
+            grid.addWidget(button(Component.literal(output.displayId()), 96, () -> addLine(output)));
             shown++;
         }
         if (shown == 0) {
@@ -113,7 +113,7 @@ public class AutomatedLinesPanel extends FacilitiesAndRulesWorkspace.Panel {
         PanelCard card = card();
         card.addWidget(
             row(
-                new Glyph(line.output().resourceId(), paletteSupplier(), glyphSize),
+                new Glyph(line.output(), paletteSupplier(), glyphSize),
                 value(Component.literal(line.lineId())),
                 fixed(
                     tr("throughput", WorkbenchFormatters.formatSigned(line.throughputPerMinute(), 1)),
@@ -140,8 +140,8 @@ public class AutomatedLinesPanel extends FacilitiesAndRulesWorkspace.Panel {
         return card;
     }
 
-    private void addLine(ResourceKey output) {
-        String suffix = output.resourceId().replace(':', '/');
+    private void addLine(ComponentStackKey output) {
+        String suffix = output.displayId().replace(':', '/');
         String baseId = "line:" + suffix;
         FacilitySnapshot snapshot = host().facilitySnapshot();
         String lineId = baseId;

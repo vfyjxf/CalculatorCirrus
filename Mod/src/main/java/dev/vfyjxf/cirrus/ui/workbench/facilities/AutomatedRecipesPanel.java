@@ -1,12 +1,12 @@
 package dev.vfyjxf.cirrus.ui.workbench.facilities;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AutomatedRecipeCapability;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.InputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.OutputSlot;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchFormatters;
@@ -49,7 +49,7 @@ public class AutomatedRecipesPanel extends FacilitiesAndRulesWorkspace.Panel {
         int visible = 0;
         for (AutomatedRecipeCapability capability : recipes) {
             CompiledRecipeKey key = capability.recipeKey();
-            if (!matchesAny(filter(), key.shortString(), key.systemId())) {
+            if (!matchesAny(filter(), key.shortString(), key.systemId().toString())) {
                 continue;
             }
             content().addWidget(recipeCard(capability));
@@ -92,8 +92,8 @@ public class AutomatedRecipesPanel extends FacilitiesAndRulesWorkspace.Panel {
     private Widget preview(CompiledRecipeKey key) {
         WidgetGroup<Widget> preview = new WidgetGroup<>();
         preview.useStyle(flexRow(), alignItemsCenter(), gap(2), minWidth(0));
-        List<ResourceKey> inputs = new ArrayList<>();
-        List<ResourceKey> outputs = new ArrayList<>();
+        List<ComponentStackKey> inputs = new ArrayList<>();
+        List<ComponentStackKey> outputs = new ArrayList<>();
         Optional<CompiledRecipe> recipe = host().graph().flatMap(graph -> graph.recipeByKey(key));
         recipe.ifPresent(found -> {
             for (InputSlot slot : found.inputs()) {
@@ -106,11 +106,11 @@ public class AutomatedRecipesPanel extends FacilitiesAndRulesWorkspace.Panel {
             }
         });
         for (int index = 0; index < Math.min(maxPreviewGlyphs, inputs.size()); index++) {
-            preview.addWidget(new Glyph(inputs.get(index).resourceId(), paletteSupplier(), glyphSize));
+            preview.addWidget(new Glyph(inputs.get(index), paletteSupplier(), glyphSize));
         }
         preview.addWidget(fixed(Component.literal("->"), 14, CirrusPalette::textMuted));
         for (int index = 0; index < Math.min(maxPreviewGlyphs, outputs.size()); index++) {
-            preview.addWidget(new Glyph(outputs.get(index).resourceId(), paletteSupplier(), glyphSize));
+            preview.addWidget(new Glyph(outputs.get(index), paletteSupplier(), glyphSize));
         }
         if (inputs.isEmpty() && outputs.isEmpty()) {
             preview.addWidget(muted(le("no_graph").component()));

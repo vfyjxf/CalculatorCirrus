@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.ui.workbench.paint;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.copilot.CoPilotPaint;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
@@ -77,7 +77,7 @@ public final class OreUiSlotAmount {
      */
     public static void drawSlot(
         SceneCanvas canvas,
-        @Nullable ResourceKey resource,
+        @Nullable ComponentStackKey resource,
         long amount,
         int x,
         int y,

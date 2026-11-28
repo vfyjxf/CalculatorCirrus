@@ -143,4 +143,57 @@ class ChromeToastTest {
         assertEquals(1, second.get());
         assertEquals(0, first.get());
     }
+
+    @Test
+    void toastStackIsHitTestableAndDismissesOnClickInScene() {
+        ChromeTestContext ctx = new ChromeTestContext();
+        ToastStackWidget toast = new ToastStackWidget(ctx);
+        toast.push(text("dismissable"));
+
+        dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup<dev.vfyjxf.cloudlib.api.ui.base.Widget> root = new dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup<>();
+        root.useStyle(dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeOf(640, 360));
+        toast.useStyle(
+            dev.vfyjxf.cloudlib.api.ui.style.UIStyles.positionAbsolute(),
+            dev.vfyjxf.cloudlib.api.ui.style.UIStyles.insetLeft(380),
+            dev.vfyjxf.cloudlib.api.ui.style.UIStyles.insetTop(220),
+            dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeOf(240, 120)
+        );
+        root.addWidget(toast);
+        dev.vfyjxf.cloudlib.api.ui.base.Scene scene = new dev.vfyjxf.cloudlib.api.ui.base.Scene(root);
+        scene.init();
+        scene.mount(dev.vfyjxf.cloudlib.api.ui.base.SceneContext.create(new dev.vfyjxf.cloudlib.api.ui.base.SceneHost() {
+            @Override
+            @SuppressWarnings("NullAway")
+            public net.minecraft.client.gui.Font font() {
+                return null;
+            }
+
+            @Override
+            public int width() {
+                return 640;
+            }
+
+            @Override
+            public int height() {
+                return 360;
+            }
+        }));
+        try {
+            scene.setLayoutArea(640, 360);
+            scene.stabilize();
+            scene.layout();
+            root.applyLayout();
+
+            dev.vfyjxf.cloudlib.api.math.Rect bounds = toast.absoluteBounds();
+            double clickX = bounds.right() - 12;
+            double clickY = bounds.y() + 10;
+            assertSame(toast, scene.hitTest(clickX, clickY), "toast must be hit-testable (not on SceneLayer.overlay)");
+            assertTrue(scene.mouseClicked(clickX, clickY, 0));
+            assertTrue(scene.mouseReleased(clickX, clickY, 0));
+            assertEquals(0, toast.messageCount());
+            assertFalse(toast.visible());
+        } finally {
+            scene.destroy();
+        }
+    }
 }

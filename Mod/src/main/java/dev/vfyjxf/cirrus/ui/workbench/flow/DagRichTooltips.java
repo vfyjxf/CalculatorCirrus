@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -116,10 +116,10 @@ public final class DagRichTooltips {
             builder.pills(pills);
         }
 
-        if (visuals.machineId() != null && !visuals.machineId().isBlank()) {
+        if (visuals.machine() != null && !visuals.machine().isEmpty()) {
             builder.keyValue(
                 Component.literal("Machine"),
-                Component.literal(CoPilotPaint.humanizeId(visuals.machineId())),
+                CoPilotPaint.machineName(visuals.machine()),
                 OreUiRichTooltip.Tone.primary
             );
         }
@@ -287,7 +287,7 @@ public final class DagRichTooltips {
         };
     }
 
-    public static @Nullable ResourceKey primaryIconOf(PlanStep step, StepNodeCardRenderer.StepVisuals visuals) {
+    public static @Nullable ComponentStackKey primaryIconOf(PlanStep step, StepNodeCardRenderer.StepVisuals visuals) {
         if (visuals.primaryOutput() != null) {
             return visuals.primaryOutput();
         }
@@ -301,7 +301,7 @@ public final class DagRichTooltips {
             return setup.targetOutput();
         }
         if (step instanceof ProvisionMachineStep provision) {
-            return ResourceKey.item(provision.machineId());
+            return provision.machine().contentKey().orElse(null);
         }
         if (!visuals.outputs().isEmpty()) {
             return visuals.outputs().get(0);
@@ -318,7 +318,9 @@ public final class DagRichTooltips {
         @Nullable PlanVisualResolver resolver
     ) {
         if (step instanceof ProvisionMachineStep provision) {
-            return CoPilotPaint.machineName(ResourceKey.item(provision.machineId()), provision.machineId());
+            return resolver != null
+                    ? resolver.machineNameOf(provision.machine())
+                    : CoPilotPaint.machineName(provision.machine());
         }
         var icon = primaryIconOf(step, visuals);
         Component base = icon == null
@@ -337,14 +339,17 @@ public final class DagRichTooltips {
         @Nullable PlanVisualResolver resolver
     ) {
         String stage = String.format("Stage %02d", node.layer() + 1);
-        if (visuals.machineId() != null && !visuals.machineId().isBlank()) {
-            return stage + " \u00b7 " + CoPilotPaint.humanizeId(visuals.machineId());
+        if (visuals.machine() != null && !visuals.machine().isEmpty()) {
+            Component mName = resolver != null
+                    ? resolver.machineNameOf(visuals.machine())
+                    : CoPilotPaint.machineName(visuals.machine());
+            return stage + " \u00b7 " + mName.getString();
         }
         if (node.step() instanceof AcquireStep acquire) {
             return stage + " \u00b7 " + CoPilotPaint.humanizeId(acquire.acquisitionKind().name());
         }
         if (node.step() instanceof SetupLineStep setup) {
-            return stage + " \u00b7 " + CoPilotPaint.humanizeId(setup.systemId());
+            return stage + " \u00b7 " + CoPilotPaint.humanizeId(setup.systemId().toString());
         }
         return stage + " \u00b7 " + node.stepId();
     }

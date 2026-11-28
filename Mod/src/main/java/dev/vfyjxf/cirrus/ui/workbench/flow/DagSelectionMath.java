@@ -12,6 +12,7 @@ import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.ui.workbench.layout.DagEdgeRoute;
 import dev.vfyjxf.cirrus.ui.workbench.layout.DagNodeBox;
 import dev.vfyjxf.cloudlib.api.math.FloatPos;
@@ -137,20 +138,24 @@ public final class DagSelectionMath {
         if (nodes == null || sink == null) {
             return 0;
         }
-        Set<String> machineIds = new TreeSet<>();
+        Set<MachineEntry> machines = new TreeSet<>(MachineEntry.comparator);
         for (DagNodeBox node : nodes) {
             if (node == null) {
                 continue;
             }
             switch (node.step()) {
-                case ProvisionMachineStep provision -> machineIds.add(provision.machineId());
-                case CraftStep craft -> craft.chosenMachineId().ifPresent(machineIds::add);
+                case ProvisionMachineStep provision -> {
+                    if (!provision.machine().isEmpty()) {
+                        machines.add(provision.machine());
+                    }
+                }
+                case CraftStep craft -> craft.chosenMachine().filter(m -> !m.isEmpty()).ifPresent(machines::add);
                 default -> {}
             }
         }
         int sent = 0;
-        for (String machineId : machineIds) {
-            sink.send(new DeclareOwnedMachineFeedback(machineId, 1, false));
+        for (MachineEntry machine : machines) {
+            sink.send(new DeclareOwnedMachineFeedback(machine, 1, false));
             sent++;
         }
         return sent;

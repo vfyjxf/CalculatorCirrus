@@ -1,10 +1,13 @@
 package dev.vfyjxf.cirrus.planning.core.solve;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledCycleMacro;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledCycleMacroKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -23,23 +26,30 @@ public final class ProductionVector {
     public final long[] line;
     public final int[] chosenSlotBind;
     public final int[] chosenCatBind;
-    public final String[] chosenMachine;
+    public final MachineEntry[] chosenMachine;
     public final Map<CompiledCycleMacroKey, CompiledCycleMacro> usedMacros = new TreeMap<>();
     public final Map<CompiledCycleMacroKey, Long> macroIters = new TreeMap<>();
-    public final Map<String, ProvisionMeta> provisionedMachines = new TreeMap<>();
-    public final Set<String> playerPreparedMachines = new TreeSet<>();
-    public final Map<String, SetupLineMeta> setupLines = new TreeMap<>();
+    public final Map<MachineEntry, ProvisionMeta> provisionedMachines = new TreeMap<>(MachineEntry.comparator);
+    public final Set<MachineEntry> playerPreparedMachines = new TreeSet<>(MachineEntry.comparator);
+    public final Map<Namespace, SetupLineMeta> setupLines = new TreeMap<>(Comparator.comparing(Namespace::toString));
     public final Set<Integer> automatedLocalRecipes = new TreeSet<>();
-    public final Map<ResourceKey, String> unmetReasons = new TreeMap<>();
+    public final Map<ComponentStackKey, String> unmetReasons = new TreeMap<>();
     public final Set<String> hitRuleIds = new TreeSet<>();
     private boolean exploded;
 
-    public record ProvisionMeta(String machineId, String systemId, MachineCapabilityId capability, int count) {}
+    public record ProvisionMeta(
+        MachineEntry machine,
+        Namespace systemId,
+        Set<Namespace> systemTags,
+        MachineCapabilityId capability,
+        int count
+    ) {}
 
     public record SetupLineMeta(
-        String systemId,
-        String primaryMachineId,
-        ResourceKey targetOutput,
+        Namespace systemId,
+        Set<Namespace> systemTags,
+        MachineEntry primaryMachine,
+        ComponentStackKey targetOutput,
         MachineCapabilityId capability
     ) {}
 
@@ -54,7 +64,7 @@ public final class ProductionVector {
         this.line = new long[nodeCount];
         this.chosenSlotBind = new int[totalInSlots];
         this.chosenCatBind = new int[totalCatSlots];
-        this.chosenMachine = new String[recipeCount];
+        this.chosenMachine = new MachineEntry[recipeCount];
     }
 
     public boolean isFeasible() {

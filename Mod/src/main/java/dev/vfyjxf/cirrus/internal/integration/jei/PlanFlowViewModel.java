@@ -1,8 +1,10 @@
 package dev.vfyjxf.cirrus.internal.integration.jei;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchFormatters;
+import net.minecraft.world.item.Items;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -92,7 +94,7 @@ final class PlanFlowViewModel {
         float y1,
         float channelRatio,
         EdgeKind kind,
-        @Nullable ResourceKey resource
+        @Nullable ComponentStackKey resource
     ) {}
 
     record DagLayout(
@@ -105,7 +107,7 @@ final class PlanFlowViewModel {
     ) {}
 
     record MaterialRow(
-        ResourceKey resource,
+        ComponentStackKey resource,
         long needed,
         long have,
         long missing,
@@ -137,16 +139,16 @@ final class PlanFlowViewModel {
     ) {}
 
     record StationGroup(
-        String stationId,
+        @Nullable MachineEntry machine,
         boolean handCraft,
-        ResourceKey iconResource,
+        ComponentStackKey iconResource,
         int stepCount,
         long totalBatches,
         double totalWorkSeconds,
         double totalWaitSeconds,
         int toBuildCount,
         boolean automated,
-        List<ResourceKey> sampleOutputs,
+        List<ComponentStackKey> sampleOutputs,
         List<String> stepIds
     ) {
         double totalSeconds() {
@@ -156,7 +158,7 @@ final class PlanFlowViewModel {
 
     record StationsPrepSummary(
         List<StationGroup> stations,
-        List<ResourceKey> catalysts,
+        List<ComponentStackKey> catalysts,
         List<CirrusPlanBookmarkStore.MaterialLine> surplusByproducts,
         List<String> automatedLines,
         int machinesToBuildTotal
@@ -593,14 +595,14 @@ final class PlanFlowViewModel {
             case missingFirst -> Comparator.comparingLong(MaterialRow::missing).reversed()
                     .thenComparingDouble(MaterialRow::ratio)
                     .thenComparing(Comparator.comparingLong(MaterialRow::needed).reversed())
-                    .thenComparing(r -> r.resource().resourceId());
+                    .thenComparing(MaterialRow::resource);
             case amountDesc -> Comparator.comparingLong(MaterialRow::needed).reversed()
                     .thenComparing(Comparator.comparingLong(MaterialRow::missing).reversed())
-                    .thenComparing(r -> r.resource().resourceId());
+                    .thenComparing(MaterialRow::resource);
             case readyFirst -> Comparator.comparing(MaterialRow::ready).reversed()
                     .thenComparing(Comparator.comparingDouble(MaterialRow::ratio).reversed())
                     .thenComparing(Comparator.comparingLong(MaterialRow::needed).reversed())
-                    .thenComparing(r -> r.resource().resourceId());
+                    .thenComparing(MaterialRow::resource);
         };
         filtered.sort(comparator);
 
@@ -648,30 +650,30 @@ final class PlanFlowViewModel {
         int scaleMultiplier
     ) {
         int mult = Math.max(1, scaleMultiplier);
-        Map<String, Integer> toBuildByMachine = new LinkedHashMap<>();
+        Map<MachineEntry, Integer> toBuildByMachine = new LinkedHashMap<>();
         int totalToBuild = 0;
         for (CirrusPlanBookmarkStore.MachineLine ml : entry.machinesToProvision()) {
-            if (ml.countToBuild() > 0) {
-                toBuildByMachine.merge(ml.machineId(), ml.countToBuild(), Integer::sum);
+            if (ml.countToBuild() > 0 && !ml.machine().isEmpty()) {
+                toBuildByMachine.merge(ml.machine(), ml.countToBuild(), Integer::sum);
                 totalToBuild += ml.countToBuild();
             }
         }
 
         final class Acc {
-            final String stationId;
+            final @Nullable MachineEntry machine;
             final boolean handCraft;
-            final ResourceKey iconResource;
+            final ComponentStackKey iconResource;
             int stepCount;
             long totalBatches;
             double totalWork;
             double totalWait;
             int toBuild;
             boolean automated;
-            final LinkedHashSet<ResourceKey> outputs = new LinkedHashSet<>();
+            final LinkedHashSet<ComponentStackKey> outputs = new LinkedHashSet<>();
             final List<String> stepIds = new ArrayList<>();
 
-            Acc(String stationId, boolean handCraft, ResourceKey iconResource) {
-                this.stationId = stationId;
+            Acc(@Nullable MachineEntry machine, boolean handCraft, ComponentStackKey iconResource) {
+                this.machine = machine;
                 this.handCraft = handCraft;
                 this.iconResource = iconResource;
             }
@@ -684,16 +686,17 @@ final class PlanFlowViewModel {
             }
             boolean isProvision = "ProvisionMachineStep".equals(step.kind());
             boolean isLine = "LinePullStep".equals(step.kind()) || "SetupLineStep".equals(step.kind());
-            String rawMachine = step.machineId();
-            if ((rawMachine == null || rawMachine.isBlank()) && isProvision && step.output() != null) {
-                rawMachine = step.output().resourceId();
+            MachineEntry machine = step.machine();
+            if ((machine == null || machine.isEmpty()) && isProvision && step.output() != null) {
+                machine = MachineEntry.fromKey(step.output());
             }
-            String stationKey = (rawMachine == null || rawMachine.isBlank()) ? handCraftStationId : rawMachine;
-            boolean handCraft = handCraftStationId.equals(stationKey);
-            ResourceKey iconKey = handCraft
-                    ? ResourceKey.item("minecraft:crafting_table")
-                    : ResourceKey.item(stationKey);
-            Acc acc = groups.computeIfAbsent(stationKey, k -> new Acc(stationKey, handCraft, iconKey));
+            boolean handCraft = machine == null || machine.isEmpty();
+            String stationKey = handCraft ? handCraftStationId : machine.canonicalKey();
+            MachineEntry resolvedMachine = handCraft ? null : machine;
+            ComponentStackKey iconKey = handCraft
+                    ? craftingTableIcon()
+                    : resolvedMachine.contentKey().orElseGet(PlanFlowViewModel::craftingTableIcon);
+            Acc acc = groups.computeIfAbsent(stationKey, k -> new Acc(resolvedMachine, handCraft, iconKey));
             acc.stepCount++;
             acc.totalBatches = safeAdd(acc.totalBatches, scaleAmount(step.batches(), mult));
             acc.totalWork += scaleDuration(step.workSeconds(), mult);
@@ -710,10 +713,11 @@ final class PlanFlowViewModel {
             acc.stepIds.add(step.stepId());
         }
 
-        for (Map.Entry<String, Integer> buildEntry : toBuildByMachine.entrySet()) {
-            String mid = buildEntry.getKey();
+        for (Map.Entry<MachineEntry, Integer> buildEntry : toBuildByMachine.entrySet()) {
+            MachineEntry machine = buildEntry.getKey();
             int count = buildEntry.getValue();
-            Acc acc = groups.computeIfAbsent(mid, k -> new Acc(mid, false, ResourceKey.item(mid)));
+            ComponentStackKey iconKey = machine.contentKey().orElseGet(PlanFlowViewModel::craftingTableIcon);
+            Acc acc = groups.computeIfAbsent(machine.canonicalKey(), k -> new Acc(machine, false, iconKey));
             acc.toBuild = Math.max(acc.toBuild, count);
         }
 
@@ -721,7 +725,7 @@ final class PlanFlowViewModel {
         for (Acc acc : groups.values()) {
             stations.add(
                 new StationGroup(
-                    acc.stationId,
+                    acc.machine,
                     acc.handCraft,
                     acc.iconResource,
                     acc.stepCount,
@@ -740,7 +744,7 @@ final class PlanFlowViewModel {
                     .thenComparing(StationGroup::handCraft)
                     .thenComparing(Comparator.comparingDouble(StationGroup::totalSeconds).reversed())
                     .thenComparing(Comparator.comparingLong(StationGroup::totalBatches).reversed())
-                    .thenComparing(StationGroup::stationId)
+                    .thenComparing(StationGroup::machine, Comparator.nullsLast(MachineEntry.comparator))
         );
 
         List<CirrusPlanBookmarkStore.MaterialLine> scaledSurplus = new ArrayList<>(entry.surplusByproducts().size());
@@ -755,6 +759,10 @@ final class PlanFlowViewModel {
             entry.automatedLines(),
             totalToBuild
         );
+    }
+
+    private static ComponentStackKey craftingTableIcon() {
+        return ComponentStackKey.ofItem(Items.CRAFTING_TABLE);
     }
 
     private static Map<String, Integer> computeStageMap(List<CirrusPlanBookmarkStore.StepLine> steps) {

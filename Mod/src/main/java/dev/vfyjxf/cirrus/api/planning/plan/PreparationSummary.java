@@ -1,7 +1,8 @@
 package dev.vfyjxf.cirrus.api.planning.plan;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 
 import java.util.Collections;
 import java.util.List;
@@ -12,9 +13,9 @@ import java.util.TreeMap;
 public record PreparationSummary(
     StockLedger consumedFromInventory,
     StockLedger toAcquireFromWorld,
-    Map<String, Integer> machinesToProvision,
+    Map<MachineEntry, Integer> machinesToProvision,
     List<String> existingLinesUsed,
-    List<ResourceKey> catalystsRequired
+    List<ComponentStackKey> catalystsRequired
 ) {
 
     public static final PreparationSummary empty = new PreparationSummary(
@@ -34,7 +35,7 @@ public record PreparationSummary(
         if (machinesToProvision.isEmpty()) {
             machinesToProvision = Map.of();
         } else {
-            TreeMap<String, Integer> sorted = new TreeMap<>();
+            TreeMap<MachineEntry, Integer> sorted = new TreeMap<>(MachineEntry.comparator);
             for (var e : machinesToProvision.entrySet()) {
                 sorted.put(Objects.requireNonNull(e.getKey()), Objects.requireNonNull(e.getValue()));
             }

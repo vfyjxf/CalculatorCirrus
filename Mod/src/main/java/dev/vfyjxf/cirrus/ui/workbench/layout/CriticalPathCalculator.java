@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.ui.workbench.layout;
 
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -35,7 +36,7 @@ public final class CriticalPathCalculator {
         double latestStart,
         double slack,
         boolean critical,
-        @Nullable String bottleneckMachineId,
+        @Nullable MachineEntry bottleneckMachine,
         int suggestedOwnedCount
     ) {
 
@@ -160,7 +161,7 @@ public final class CriticalPathCalculator {
                     latest,
                     slackValue,
                     criticalIds.contains(stepId),
-                    LayoutGeometry.primaryMachineIdOf(step),
+                    LayoutGeometry.primaryMachineOf(step),
                     step.stepCost().passiveWaitSeconds() > bottleneckPassiveThreshold ? 2 : 1
                 )
             );

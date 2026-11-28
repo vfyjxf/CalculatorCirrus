@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.ui.workbench.value;
 
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchFormatters;
@@ -62,12 +62,16 @@ public final class ValueTypeVisualRegistry {
         return fallbackCache.computeIfAbsent(key, ValueTypeVisualRegistry::buildFallback);
     }
 
-    public static boolean isValueResourceKey(@Nullable ResourceKey key) {
+    public static ValueTypeVisual resolve(@Nullable Namespace typeId) {
+        return typeId == null ? resolve("") : resolve(typeId.toString());
+    }
+
+    public static boolean isValueResourceKey(@Nullable ComponentStackKey key) {
         if (key == null) {
             return false;
         }
-        String type = normalize(key.contentTypeId());
-        return !"minecraft:item".equals(type) && !"minecraft:fluid".equals(type);
+        Namespace type = key.contentTypeId();
+        return !Namespace.ofMc("item").equals(type) && !Namespace.ofMc("fluid").equals(type);
     }
 
     private static void registerBuiltins() {

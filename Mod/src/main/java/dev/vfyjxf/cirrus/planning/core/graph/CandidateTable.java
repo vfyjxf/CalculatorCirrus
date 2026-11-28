@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.planning.core.graph;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.planning.core.lang.Fnv1a64;
 
 import java.util.ArrayList;
@@ -13,13 +13,13 @@ public final class CandidateTable {
 
     private final ResourceDictionary dict;
     private final int[][] lists;
-    private final List<ResourceKey>[] cachedViews;
+    private final List<ComponentStackKey>[] cachedViews;
 
     @SuppressWarnings("unchecked")
     CandidateTable(ResourceDictionary dict, int[][] lists) {
         this.dict = dict;
         this.lists = lists.clone();
-        this.cachedViews = (List<ResourceKey>[]) new List<?>[lists.length];
+        this.cachedViews = (List<ComponentStackKey>[]) new List<?>[lists.length];
     }
 
     public int count() {
@@ -35,17 +35,17 @@ public final class CandidateTable {
         return lists[listId].length;
     }
 
-    public List<ResourceKey> viewOf(int listId) {
-        List<ResourceKey> cached = cachedViews[listId];
+    public List<ComponentStackKey> viewOf(int listId) {
+        List<ComponentStackKey> cached = cachedViews[listId];
         if (cached != null) {
             return cached;
         }
         int[] ids = lists[listId];
-        ResourceKey[] arr = new ResourceKey[ids.length];
+        ComponentStackKey[] arr = new ComponentStackKey[ids.length];
         for (int i = 0; i < ids.length; i++) {
             arr[i] = dict.keyOf(ids[i]);
         }
-        List<ResourceKey> view = List.of(arr);
+        List<ComponentStackKey> view = List.of(arr);
         cachedViews[listId] = view;
         return view;
     }

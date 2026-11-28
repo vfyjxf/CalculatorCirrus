@@ -1,16 +1,17 @@
 package dev.vfyjxf.cirrus.ui.workbench.state;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
 public interface PlanVisualResolver {
 
     @Nullable
-    ContentStack<?, ?> stackOf(ResourceKey resource, long amount);
+    ContentStack<?, ?> stackOf(ComponentStackKey resource, long amount);
 
-    Component nameOf(ResourceKey resource);
+    Component nameOf(ComponentStackKey resource);
 
-    Component machineNameOf(String machineId);
+    Component machineNameOf(MachineEntry machine);
 }

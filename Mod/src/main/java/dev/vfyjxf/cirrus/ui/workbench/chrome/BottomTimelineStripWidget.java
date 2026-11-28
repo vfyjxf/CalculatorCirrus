@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.chrome;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.human.CostOverrideRule;
@@ -10,7 +11,7 @@ import dev.vfyjxf.cirrus.api.planning.human.RecipeRule;
 import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.model.PlanningTagKeys;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningDiagnostics;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
@@ -273,7 +274,7 @@ public class BottomTimelineStripWidget extends Widget implements OreUiTooltipPro
         return Component.translatable(entry.labelKey());
     }
 
-    private @Nullable ResourceKey subjectResourceOf(Node node) {
+    private @Nullable ComponentStackKey subjectResourceOf(Node node) {
         HistoryEntry entry = node.entry();
         if (entry == null || entry.rules().isEmpty()) {
             return null;
@@ -281,7 +282,7 @@ public class BottomTimelineStripWidget extends Widget implements OreUiTooltipPro
         return subjectResourceOfRule(entry.rules().get(0));
     }
 
-    private @Nullable ResourceKey subjectResourceOfRule(GuidanceRule rule) {
+    private @Nullable ComponentStackKey subjectResourceOfRule(GuidanceRule rule) {
         if (rule instanceof TagDefaultRule tr) {
             return tr.preferredMember();
         }
@@ -292,7 +293,7 @@ public class BottomTimelineStripWidget extends Widget implements OreUiTooltipPro
             return cor.resource();
         }
         if (rule instanceof MachineRule mr) {
-            return ResourceKey.item(mr.machineId());
+            return mr.machine().contentKey().orElse(null);
         }
         if (rule instanceof RecipeRule rec) {
             CompiledRecipeGraph graph = CirrusPlanningRuntime.shared().flatMap(CirrusPlanningRuntime::currentGraph)
@@ -319,11 +320,10 @@ public class BottomTimelineStripWidget extends Widget implements OreUiTooltipPro
         }
         if (rule instanceof MachineRule mr) {
             String prefix = mr.strength() == RuleStrength.hardBan ? "\u00d7 " : "\u2713 ";
-            return Component.literal(prefix)
-                    .append(CoPilotPaint.machineName(ResourceKey.item(mr.machineId()), mr.machineId()));
+            return Component.literal(prefix).append(CoPilotPaint.machineName(mr.machine()));
         }
         if (rule instanceof RecipeRule rec) {
-            ResourceKey out = subjectResourceOfRule(rec);
+            ComponentStackKey out = subjectResourceOfRule(rec);
             String prefix = rec.strength() == RuleStrength.hardBan ? "\u00d7 " : "\u2605 ";
             Component name = out != null
                     ? CoPilotPaint.resourceName(out)
@@ -338,7 +338,7 @@ public class BottomTimelineStripWidget extends Widget implements OreUiTooltipPro
 
     private String ruleActionLabel(GuidanceRule rule) {
         if (rule instanceof TagDefaultRule tr) {
-            return "#" + tr.tagId();
+            return "#" + PlanningTagKeys.format(tr.tag());
         }
         if (rule instanceof ResourceRule rr) {
             return rr.strength() == RuleStrength.hardBan
@@ -491,7 +491,7 @@ public class BottomTimelineStripWidget extends Widget implements OreUiTooltipPro
                     false
                 );
             }
-            ResourceKey iconKey = subjectResourceOf(rect.node());
+            ComponentStackKey iconKey = subjectResourceOf(rect.node());
             int textX = rect.x() + nodePad;
             if (iconKey != null) {
                 CoPilotPaint.icon(
@@ -579,7 +579,7 @@ public class BottomTimelineStripWidget extends Widget implements OreUiTooltipPro
                         ? OreUiRichTooltip.Tone.muted
                         : isCurrent ? OreUiRichTooltip.Tone.positive : OreUiRichTooltip.Tone.accent
             );
-            ResourceKey iconKey = subjectResourceOf(node);
+            ComponentStackKey iconKey = subjectResourceOf(node);
             if (iconKey != null) {
                 builder.icon(iconKey);
             }

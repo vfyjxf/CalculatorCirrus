@@ -224,50 +224,50 @@ public final class OreUiTextures {
     }
 
     public static final class Light {
-        public static final int outerInk = 0xFF8A909B;
-        public static final int dockFace = 0xFAE8EAEE;
-        public static final int dockHighlight = 0xFFFFFFFF;
-        public static final int dockLedge = 0xFFC4C8D1;
-        public static final int cardFace = 0xFFF5F6F8;
-        public static final int cardHighlight = 0xFFFFFFFF;
-        public static final int cardLedge = 0xFFC9CDD6;
-        public static final int cardHoverFace = 0xFFFFFFFF;
-        public static final int cardHoverHighlight = 0xFFFFFFFF;
-        public static final int cardHoverLedge = 0xFFD2D6DE;
-        public static final int cardSelectedFace = 0xFFF2F7FC;
-        public static final int cardSelectedHighlight = 0xFFFFFFFF;
-        public static final int cardSelectedLedge = 0xFFBCD0E2;
-        public static final int cardSelectedBorder = 0xFF3E78A8;
-        public static final int cardFooter = 0xFFEBEDF1;
-        public static final int cardDivider = 0xFFD3D7DF;
-        public static final int inputFace = 0xFFFAFAFC;
-        public static final int inputShadow = 0xFFB8BDC7;
-        public static final int inputLip = 0xFFFFFFFF;
-        public static final int inputBorder = 0xFF9BA1AC;
-        public static final int slotCavity = 0xFFC5C8D0;
-        public static final int slotTopShadow = 0xFF8F949F;
-        public static final int slotLeftShadow = 0xFFA3A8B2;
-        public static final int slotRim = 0xFFE5E7EC;
-        public static final int slotDarkCavity = 0xFFD4B7BC;
-        public static final int buttonUpFace = 0xFFEFF0F3;
-        public static final int buttonUpHighlight = 0xFFFFFFFF;
-        public static final int buttonUpLedge = 0xFFC2C7D0;
-        public static final int buttonHoverFace = 0xFFF9FAFB;
-        public static final int buttonHoverHighlight = 0xFFFFFFFF;
-        public static final int buttonHoverLedge = 0xFFCDD1DA;
-        public static final int buttonDownFace = 0xFFDCDEE4;
-        public static final int ctaPrimaryFace = 0xFF367D24;
-        public static final int ctaPrimaryHighlight = 0xFF68BF52;
-        public static final int ctaPrimaryLedge = 0xFF245717;
-        public static final int ctaDangerFace = 0xFFB52B33;
-        public static final int ctaDangerHighlight = 0xFFE0636A;
-        public static final int ctaDangerLedge = 0xFF7A1B21;
-        public static final int meterTrack = 0xFFDDE0E6;
-        public static final int meterBorder = 0xFFB3B8C2;
-        public static final int scrollTrack = 0xFFD8DBE2;
-        public static final int scrollThumb = 0xFFF2F3F6;
-        public static final int scrollThumbHighlight = 0xFFFFFFFF;
-        public static final int scrollThumbLedge = 0xFFB8BDC6;
+        public static final int outerInk = 0xFF5D6370;
+        public static final int dockFace = 0xFAC2C6CE;
+        public static final int dockHighlight = 0xFFE4E7EC;
+        public static final int dockLedge = 0xFF989EA8;
+        public static final int cardFace = 0xFFCFD3DA;
+        public static final int cardHighlight = 0xFFECEFF4;
+        public static final int cardLedge = 0xFFA3A9B4;
+        public static final int cardHoverFace = 0xFFD9DDE4;
+        public static final int cardHoverHighlight = 0xFFF4F6FA;
+        public static final int cardHoverLedge = 0xFFAEB4BF;
+        public static final int cardSelectedFace = 0xFFCFDCE6;
+        public static final int cardSelectedHighlight = 0xFFEBF2F7;
+        public static final int cardSelectedLedge = 0xFF92B0C7;
+        public static final int cardSelectedBorder = 0xFF2B6584;
+        public static final int cardFooter = 0xFFBCC1CA;
+        public static final int cardDivider = 0xFF9DA3AE;
+        public static final int inputFace = 0xFFA7ACB6;
+        public static final int inputShadow = 0xFF7D838E;
+        public static final int inputLip = 0xFFD4D8E0;
+        public static final int inputBorder = 0xFF6F7582;
+        public static final int slotCavity = 0xFF8E939D;
+        public static final int slotTopShadow = 0xFF5B606A;
+        public static final int slotLeftShadow = 0xFF6D737E;
+        public static final int slotRim = 0xFFC4C8D1;
+        public static final int slotDarkCavity = 0xFFA88C92;
+        public static final int buttonUpFace = 0xFFCDD1D9;
+        public static final int buttonUpHighlight = 0xFFEAEDF2;
+        public static final int buttonUpLedge = 0xFF9BA1AC;
+        public static final int buttonHoverFace = 0xFFD8DCE3;
+        public static final int buttonHoverHighlight = 0xFFF2F5F9;
+        public static final int buttonHoverLedge = 0xFFA5ABB6;
+        public static final int buttonDownFace = 0xFFB3B8C2;
+        public static final int ctaPrimaryFace = 0xFF317322;
+        public static final int ctaPrimaryHighlight = 0xFF60B54C;
+        public static final int ctaPrimaryLedge = 0xFF204D15;
+        public static final int ctaDangerFace = 0xFFAC272F;
+        public static final int ctaDangerHighlight = 0xFFD95B62;
+        public static final int ctaDangerLedge = 0xFF72181E;
+        public static final int meterTrack = 0xFFACB1BB;
+        public static final int meterBorder = 0xFF7B818E;
+        public static final int scrollTrack = 0xFFADB2BC;
+        public static final int scrollThumb = 0xFFD1D5DC;
+        public static final int scrollThumbHighlight = 0xFFECEFF4;
+        public static final int scrollThumbLedge = 0xFF979DA8;
 
         public static final VisualTexture dock = raised(dockFace, dockHighlight, dockLedge, outerInk, 2, 1);
         public static final VisualTexture card = raised(cardFace, cardHighlight, cardLedge, outerInk, 2, 1);
@@ -287,11 +287,36 @@ public final class OreUiTextures {
             2,
             1
         );
+        /** Option 2A cobalt-slate active mode tile giving crisp relief contrast for untinted light-stone select icons. */
+        public static final VisualTexture railActive = raised(
+            0xFF3C6E8C,
+            0xFF6BA0BE,
+            0xFF264B62,
+            0xFF1F3D50,
+            2,
+            2
+        );
+        public static final VisualTexture railActiveHover = raised(
+            0xFF457A9A,
+            0xFF76ACC9,
+            0xFF2B546D,
+            0xFF1F3D50,
+            2,
+            2
+        );
+        public static final VisualTexture railHover = raised(
+            0xFF8B929E,
+            0xFFA9B0BC,
+            0xFF6B727E,
+            outerInk,
+            2,
+            1
+        );
         public static final VisualTexture flat = flatBox(cardFace, cardDivider);
-        public static final VisualTexture inset = flatBox(0xFFE6E8ED, cardDivider);
+        public static final VisualTexture inset = flatBox(0xFFBCC1CA, cardDivider);
         public static final VisualTexture recessed = searchField(inputFace, inputShadow, inputLip, inputBorder);
         public static final VisualTexture slotBase = slot(slotCavity, slotTopShadow, slotLeftShadow, slotRim);
-        public static final VisualTexture slotDark = slot(slotDarkCavity, 0xFF9E7076, 0xFFB0848A, slotRim);
+        public static final VisualTexture slotDark = slot(slotDarkCavity, 0xFF74535A, 0xFF88646C, slotRim);
         public static final VisualTexture btnUp = raised(
             buttonUpFace,
             buttonUpHighlight,
@@ -313,7 +338,7 @@ public final class OreUiTextures {
             ctaPrimaryFace,
             ctaPrimaryHighlight,
             ctaPrimaryLedge,
-            0xFF284F20,
+            0xFF22471A,
             2,
             1
         );
@@ -321,7 +346,7 @@ public final class OreUiTextures {
             ctaDangerFace,
             ctaDangerHighlight,
             ctaDangerLedge,
-            0xFF6B2429,
+            0xFF632025,
             2,
             1
         );
@@ -329,44 +354,44 @@ public final class OreUiTextures {
             false,
             false,
             false,
-            0xFFCDD1DA,
+            0xFFA4AAB5,
             ctaPrimaryFace,
-            0xFFF8F9FA,
-            0xFFFFFFFF,
-            0xFFBCC1CB,
+            0xFFD8DCE3,
+            0xFFF2F5F9,
+            0xFF9FA5B0,
             outerInk
         );
         public static final SizedTexture switchOffHover = oreSwitch(
             false,
             false,
             true,
-            0xFFD6DAE2,
-            0xFF42912E,
-            0xFFFFFFFF,
-            0xFFFFFFFF,
-            0xFFC4C9D3,
+            0xFFB0B6C0,
+            0xFF3D8A2B,
+            0xFFE2E6EC,
+            0xFFF8FAFC,
+            0xFFA9AFBA,
             outerInk
         );
         public static final SizedTexture switchOn = oreSwitch(
             true,
             true,
             false,
-            0xFFCDD1DA,
+            0xFFA4AAB5,
             ctaPrimaryFace,
+            0xFFE8ECF2,
             0xFFFFFFFF,
-            0xFFFFFFFF,
-            0xFFBCC1CB,
+            0xFFA4ACB8,
             outerInk
         );
         public static final SizedTexture switchOnHover = oreSwitch(
             true,
             true,
             true,
-            0xFFD6DAE2,
-            0xFF42912E,
+            0xFFB0B6C0,
+            0xFF3D8A2B,
+            0xFFF2F5FA,
             0xFFFFFFFF,
-            0xFFFFFFFF,
-            0xFFC4C9D3,
+            0xFFAEB6C2,
             outerInk
         );
         public static final VisualTexture scrollTrackTex = flatBox(scrollTrack, meterBorder);
@@ -378,7 +403,7 @@ public final class OreUiTextures {
             1,
             1
         );
-        public static final VisualTexture minimapFrame = flatBox(0xF0ECEEF2, outerInk);
+        public static final VisualTexture minimapFrame = flatBox(0xF0C2C6CE, outerInk);
         public static final VisualTexture meterTrackTex = flatBox(meterTrack, meterBorder);
 
         private Light() {}

@@ -3,8 +3,9 @@ package dev.vfyjxf.cirrus.internal.integration.jei;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.serialization.Codec;
 import dev.vfyjxf.cirrus.CirrusConstants;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.bridge.StorageInventorySnapshotAdapter;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
@@ -45,6 +46,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import org.joml.Matrix4f;
 import org.jspecify.annotations.Nullable;
@@ -127,7 +129,16 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
     private static final int gridStartX = dockX + 3;
     private static final int gridStartY = dockViewY + 1;
 
-    private static final ResourceKey craftingTableIcon = ResourceKey.item("minecraft:crafting_table");
+    private static ComponentStackKey craftingTableIcon() {
+        return ComponentStackKey.ofItem(Items.CRAFTING_TABLE);
+    }
+
+    private static @Nullable ComponentStackKey stepLeadIcon(CirrusPlanBookmarkStore.StepLine step) {
+        if (step.output() != null) {
+            return step.output();
+        }
+        return step.machine() == null ? null : step.machine().contentKey().orElse(null);
+    }
 
     private static final long activeTtlMs = 180L;
 
@@ -1047,11 +1058,7 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                 PlanFlowRenderHelper.drawFooterBand(g, dagAreaX, barY, dagAreaW, dagSelectedBarH, p);
                 boolean done = checked.contains(selectedStep.stepId());
                 int curX = dagAreaX + 4;
-                ResourceKey leadIcon = selectedStep.output() != null
-                        ? selectedStep.output()
-                        : (selectedStep.machineId() != null && !selectedStep.machineId().isBlank()
-                                ? ResourceKey.item(selectedStep.machineId())
-                                : null);
+                ComponentStackKey leadIcon = stepLeadIcon(selectedStep);
                 if (leadIcon != null) {
                     PlanFlowRenderHelper.renderContent(g, leadIcon, curX, barY + 4, 12, p, theme);
                     curX += 15;
@@ -1112,7 +1119,7 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                         theme,
                         p
                     );
-                    ResourceKey outRes = leadIcon;
+                    ComponentStackKey outRes = leadIcon;
                     hits.add(
                         new HitAction(
                             recX,
@@ -1211,11 +1218,7 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
             }
 
             long scaledAmt = PlanFlowViewModel.scaleAmount(step.amount(), scale);
-            ResourceKey primaryRes = step.output() != null
-                    ? step.output()
-                    : (step.machineId() != null && !step.machineId().isBlank()
-                            ? ResourceKey.item(step.machineId())
-                            : null);
+            ComponentStackKey primaryRes = stepLeadIcon(step);
 
             if (macro) {
                 int slotDim = 22;
@@ -1262,8 +1265,16 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                     CirrusThemeIcons.resolve(CirrusTextures.Icon.Small.plusSelected, theme)
                             .render(g, nx + nw - 7, ny + 2, 5, 6);
                     g.pose().popPose();
-                } else if (!isMachinePod && step.machineId() != null && !step.machineId().isBlank()) {
-                    PlanFlowRenderHelper.renderContent(g, ResourceKey.item(step.machineId()), nx + 2, ny + 2, 10, p, theme);
+                } else if (!isMachinePod && step.machine() != null && !step.machine().isEmpty()) {
+                    PlanFlowRenderHelper.renderContent(
+                        g,
+                        step.machine().contentKey().orElse(null),
+                        nx + 2,
+                        ny + 2,
+                        10,
+                        p,
+                        theme
+                    );
                 }
                 if (done) {
                     drawNodeDoneOverlay(g, nx + nw - 10, ny + 1, theme);
@@ -1271,7 +1282,7 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                 return;
             }
 
-            List<ResourceKey> inputs = step.inputs();
+            List<ComponentStackKey> inputs = step.inputs();
             int shownCols = Math.min(3, inputs.size());
             boolean overflow = inputs.size() > 3;
             int shownItems = overflow ? 2 : shownCols;
@@ -1280,7 +1291,7 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
             int inX = nx + 5;
             int inY = ny + (nh - inSlotDim) / 2;
             for (int i = 0; i < shownItems; i++) {
-                ResourceKey inKey = inputs.get(i);
+                ComponentStackKey inKey = inputs.get(i);
                 int sx = inX + i * inStep;
                 PlanFlowRenderHelper.drawSlotContent(g, inKey, sx, inY, inSlotDim, false, theme, p);
                 long inAmt = findScaledInputAmount(step, inKey, scale);
@@ -1304,15 +1315,22 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
             int inputMatrixW = inSlotDim + (shownCols - 1) * inStep;
             int bridgeX = inX + inputMatrixW;
             int bridgeW = 20;
-            String rawMachineId = step.machineId();
-            String machineId = (rawMachineId != null && !rawMachineId.isBlank()) ? rawMachineId : null;
+            MachineEntry machine = (step.machine() != null && !step.machine().isEmpty()) ? step.machine() : null;
             boolean accentArrow = selected || hovered || isConvert || isCycle;
 
-            if (machineId != null) {
-                PlanFlowRenderHelper.renderContent(g, ResourceKey.item(machineId), bridgeX + 4, ny + 4, 12, p, theme);
+            if (machine != null) {
+                PlanFlowRenderHelper.renderContent(
+                    g,
+                    machine.contentKey().orElse(null),
+                    bridgeX + 4,
+                    ny + 4,
+                    12,
+                    p,
+                    theme
+                );
                 PlanFlowRenderHelper.drawRecipeArrow(g, bridgeX + 3, bridgeX + bridgeW - 3, ny + 23, p, accent, accentArrow);
             } else if ("CraftStep".equals(kind)) {
-                PlanFlowRenderHelper.renderContent(g, craftingTableIcon, bridgeX + 4, ny + 5, 11, p, theme);
+                PlanFlowRenderHelper.renderContent(g, craftingTableIcon(), bridgeX + 4, ny + 5, 11, p, theme);
                 PlanFlowRenderHelper.drawRecipeArrow(g, bridgeX + 3, bridgeX + bridgeW - 3, ny + 23, p, accent, accentArrow);
             } else {
                 PlanFlowRenderHelper.drawRecipeArrow(g, bridgeX + 3, bridgeX + bridgeW - 3, ny + nh / 2, p, accent, accentArrow);
@@ -1339,7 +1357,7 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
 
         private static long findScaledInputAmount(
             CirrusPlanBookmarkStore.StepLine step,
-            ResourceKey input,
+            ComponentStackKey input,
             int scale
         ) {
             for (CirrusPlanBookmarkStore.MaterialLine line : step.inputAmounts()) {
@@ -1429,7 +1447,7 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                         int hitTop = Math.max(viewY, slotY);
                         int hitBot = Math.min(viewY + viewH, slotY + 20);
                         if (hitBot > hitTop) {
-                            ResourceKey machKey = st.iconResource();
+                            ComponentStackKey machKey = st.iconResource();
                             hits.add(
                                 new HitAction(
                                     slotX,
@@ -1463,7 +1481,7 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
 
                         String stationName = st.handCraft()
                                 ? CirrusLangs.Calculator.Jei.PlanFlow.stationsHandCraft.get().getString()
-                                : CoPilotPaint.machineName(st.iconResource(), st.stationId()).getString();
+                                : CoPilotPaint.machineName(st.machine()).getString();
                         int nameMaxW = Math.max(24, rightEdge - pillW - 6 - infoX);
                         g.drawString(font, PlanFlowRenderHelper.fit(font, stationName, nameMaxW), infoX, curY + 5, p.textPrimary(), false);
 
@@ -1490,10 +1508,10 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                         }
 
                         int availOutW = Math.max(0, rightEdge - rightMetaW - infoX);
-                        List<ResourceKey> outs = st.sampleOutputs();
+                        List<ComponentStackKey> outs = st.sampleOutputs();
                         int shown = computeFittedItemCount(font, outs.size(), miniSlotSize, miniGap, availOutW);
                         for (int oi = 0; oi < shown; oi++) {
-                            ResourceKey outKey = outs.get(oi);
+                            ComponentStackKey outKey = outs.get(oi);
                             int ox = infoX + oi * miniStep;
                             boolean oHov = cardHov && hit(mouseX, mouseY, ox, subY, miniSlotSize, miniSlotSize);
                             PlanFlowRenderHelper.drawSlotContent(g, outKey, ox, subY, miniSlotSize, oHov, theme, p);
@@ -1529,7 +1547,7 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                                 int mTop = Math.max(viewY, subY + 2);
                                 int mBot = Math.min(viewY + viewH, subY + 13);
                                 if (mBot > mTop) {
-                                    List<ResourceKey> overflowItems = outs.subList(shown, outs.size());
+                                    List<ComponentStackKey> overflowItems = outs.subList(shown, outs.size());
                                     tipHits.add(new TipHit(moreX, mTop, moreW, mBot - mTop, tip -> {
                                         int cap = Math.min(12, overflowItems.size());
                                         for (int k = 0; k < cap; k++) {
@@ -2156,7 +2174,7 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                 int hitBot = Math.min(dockViewY + dockViewH, cy + gridTileH);
                 if (hitBot > hitTop) {
                     String sid = st.stepId();
-                    ResourceKey outRes = st.output();
+                    ComponentStackKey outRes = st.output();
                     hits.add(
                         new HitAction(
                             cx,
@@ -2267,7 +2285,7 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                 int hitBot = Math.min(dockViewY + dockViewH, ry + rowH);
                 if (hitBot > hitTop) {
                     String sid = st.stepId();
-                    ResourceKey outRes = st.output();
+                    ComponentStackKey outRes = st.output();
                     hits.add(
                         new HitAction(
                             innerX,
@@ -2349,11 +2367,8 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                         .withStyle(ChatFormatting.AQUA)
             );
             tooltip.add(PlanFlowRenderHelper.stepKindLabel(st.kind()).copy().withStyle(ChatFormatting.WHITE));
-            if (st.machineId() != null && !st.machineId().isBlank()) {
-                tooltip.add(
-                    CoPilotPaint.machineName(ResourceKey.item(st.machineId()), st.machineId()).copy()
-                            .withStyle(ChatFormatting.YELLOW)
-                );
+            if (st.machine() != null && !st.machine().isEmpty()) {
+                tooltip.add(CoPilotPaint.machineName(st.machine()).copy().withStyle(ChatFormatting.YELLOW));
             }
             tooltip.add(CirrusLangs.Calculator.Jei.PlanFlow.dockStepTipToggle.get().copy().withStyle(ChatFormatting.GRAY));
         }
@@ -2904,11 +2919,7 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                     if (hitNode.contains(mouseX, mouseY)) {
                         PlanFlowViewModel.DagNodeLayout node = hitNode.node();
                         CirrusPlanBookmarkStore.StepLine s = node.step();
-                        ResourceKey displayRes = s.output() != null
-                                ? s.output()
-                                : (s.machineId() != null && !s.machineId().isBlank()
-                                        ? ResourceKey.item(s.machineId())
-                                        : null);
+                        ComponentStackKey displayRes = stepLeadIcon(s);
                         String title = displayRes != null
                                 ? CoPilotPaint.resourceName(displayRes).getString()
                                 : s.stepId();
@@ -2918,11 +2929,8 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                                     .withStyle(ChatFormatting.AQUA)
                         );
                         tooltip.add(PlanFlowRenderHelper.stepKindLabel(s.kind()).copy().withStyle(ChatFormatting.WHITE));
-                        if (s.machineId() != null && !s.machineId().isBlank()) {
-                            tooltip.add(
-                                CoPilotPaint.machineName(ResourceKey.item(s.machineId()), s.machineId()).copy()
-                                        .withStyle(ChatFormatting.YELLOW)
-                            );
+                        if (s.machine() != null && !s.machine().isEmpty()) {
+                            tooltip.add(CoPilotPaint.machineName(s.machine()).copy().withStyle(ChatFormatting.YELLOW));
                         }
                         double dur = PlanFlowViewModel
                                 .scaleDuration(s.workSeconds() + s.waitSeconds(), scaleMultiplier);

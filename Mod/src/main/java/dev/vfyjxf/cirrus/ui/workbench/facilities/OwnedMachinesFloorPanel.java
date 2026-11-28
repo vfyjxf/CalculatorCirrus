@@ -1,11 +1,13 @@
 package dev.vfyjxf.cirrus.ui.workbench.facilities;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.OwnedMachineGroup;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.MachineRequirement;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.core.graph.MachineCapabilityGroups;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchFormatters;
@@ -75,17 +77,17 @@ public class OwnedMachinesFloorPanel extends FacilitiesAndRulesWorkspace.Panel {
             content().addWidget(picker());
         }
         int visible = 0;
-        for (Map.Entry<String, List<OwnedMachineGroup>> entry : byCapability(groups).entrySet()) {
+        for (Map.Entry<MachineCapabilityId, List<OwnedMachineGroup>> entry : byCapability(groups).entrySet()) {
             List<OwnedMachineGroup> matched = new ArrayList<>();
             for (OwnedMachineGroup group : entry.getValue()) {
-                if (matchesAny(filter(), group.machineId(), entry.getKey())) {
+                if (matchesAny(filter(), group.machine().canonicalKey(), entry.getKey().id().toString())) {
                     matched.add(group);
                 }
             }
             if (matched.isEmpty()) {
                 continue;
             }
-            content().addWidget(caption(Component.literal(CoPilotPaint.humanizeId(entry.getKey()))));
+            content().addWidget(caption(Component.literal(CoPilotPaint.humanizeId(entry.getKey().id().toString()))));
             WidgetGroup<Widget> grid = new WidgetGroup<>();
             grid.useStyle(flexRow(), flexWrap(), gap(6), minWidth(0));
             for (OwnedMachineGroup group : matched) {
@@ -122,10 +124,10 @@ public class OwnedMachinesFloorPanel extends FacilitiesAndRulesWorkspace.Panel {
             if (shown >= pickerLimit) {
                 break;
             }
-            if (!matchesAny(pickerQuery, candidate.machineId())) {
+            if (!matchesAny(pickerQuery, candidate.machine().canonicalKey(), candidate.shortLabel())) {
                 continue;
             }
-            grid.addWidget(button(Component.literal(candidate.shortId()), 84, () -> declare(candidate)));
+            grid.addWidget(button(Component.literal(candidate.shortLabel()), 84, () -> declare(candidate)));
             shown++;
         }
         if (shown == 0) {
@@ -140,12 +142,12 @@ public class OwnedMachinesFloorPanel extends FacilitiesAndRulesWorkspace.Panel {
         PanelCard card = card();
         card.useStyle(widthOf(machineCardWidth), flexShrink(0));
         card.richTooltip(
-            () -> OreUiRichTooltip.builder(StepNodeCardRenderer.machineNameOf(group.machineId(), null))
-                    .icon(ResourceKey.item(group.machineId()))
+            () -> OreUiRichTooltip.builder(StepNodeCardRenderer.machineNameOf(group.machine(), null))
+                    .icon(group.machine().contentKey().orElse(null))
                     .badge(
                         group.automatedFeeding() ? "AUTO FEED" : "MANUAL",
                         group.automatedFeeding() ? OreUiRichTooltip.Tone.positive : OreUiRichTooltip.Tone.accent
-                    ).subtitle(CoPilotPaint.humanizeId(group.capability().id()))
+                    ).subtitle(CoPilotPaint.humanizeId(group.capability().id().toString()))
                     .meter(
                         "Passive Speed",
                         Math.min(1.0, group.passiveSpeedMultiplier() / speedGaugeCeiling),
@@ -164,14 +166,14 @@ public class OwnedMachinesFloorPanel extends FacilitiesAndRulesWorkspace.Panel {
 
         WidgetGroup<Widget> titleCol = new WidgetGroup<>();
         titleCol.useStyle(flexColumn(), flexGrow(1), heightOf(24), minWidth(0), gap(2));
-        var nameLabel = value(StepNodeCardRenderer.machineNameOf(group.machineId(), null));
+        var nameLabel = value(StepNodeCardRenderer.machineNameOf(group.machine(), null));
         nameLabel.useStyle(heightOf(11), flexShrink(0), flexGrow(0));
         var speedLabel = muted(tr("speed_multiplier", formatMultiplier(group.passiveSpeedMultiplier())));
         speedLabel.useStyle(heightOf(10), flexShrink(0), flexGrow(0));
         titleCol.addWidget(nameLabel);
         titleCol.addWidget(speedLabel);
 
-        WidgetGroup<Widget> topRow = row(new Glyph(group.machineId(), paletteSupplier(), glyphSize), titleCol, gauge);
+        WidgetGroup<Widget> topRow = row(new Glyph(group.machine(), paletteSupplier(), glyphSize), titleCol, gauge);
         topRow.useStyle(heightOf(26));
         card.addWidget(topRow);
 
@@ -190,7 +192,7 @@ public class OwnedMachinesFloorPanel extends FacilitiesAndRulesWorkspace.Panel {
 
     private void setCount(OwnedMachineGroup group, int count) {
         host().registry().declareOwnedMachine(
-            group.machineId(),
+            group.machine(),
             group.capability(),
             Math.max(0, count),
             group.passiveSpeedMultiplier(),
@@ -201,7 +203,7 @@ public class OwnedMachinesFloorPanel extends FacilitiesAndRulesWorkspace.Panel {
 
     private void setFeeding(OwnedMachineGroup group, boolean enabled) {
         host().registry().declareOwnedMachine(
-            group.machineId(),
+            group.machine(),
             group.capability(),
             group.count(),
             group.passiveSpeedMultiplier(),
@@ -211,29 +213,31 @@ public class OwnedMachinesFloorPanel extends FacilitiesAndRulesWorkspace.Panel {
     }
 
     private void remove(OwnedMachineGroup group) {
-        host().registry().declareOwnedMachine(group.machineId(), group.capability(), 0, 1.0, false);
+        host().registry().declareOwnedMachine(group.machine(), group.capability(), 0, 1.0, false);
         refresh();
     }
 
     private void declare(MachineCandidate candidate) {
-        host().registry().declareOwnedMachine(candidate.machineId(), candidate.capability(), 1, 1.0, false);
+        host().registry().declareOwnedMachine(candidate.machine(), candidate.capability(), 1, 1.0, false);
         pickerOpen = false;
         refresh();
     }
 
     private List<MachineCandidate> machineCandidates() {
-        Map<String, MachineCandidate> candidates = new LinkedHashMap<>();
+        Map<MachineEntry, MachineCandidate> candidates = new LinkedHashMap<>();
         host().graph().ifPresent(graph -> {
-            for (ResourceKey resource : graph.allProducibleResources()) {
+            for (ComponentStackKey resource : graph.allProducibleResources()) {
                 for (CompiledRecipe recipe : graph.producersOf(resource)) {
                     MachineRequirement requirement = recipe.machineRequirement();
                     MachineCapabilityId capability = requirement.capabilityId().orElse(null);
-                    for (String machineId : requirement.compatibleMachineIds()) {
-                        if (machineId == null || machineId.isBlank()) {
+                    for (MachineEntry machine : requirement.compatibleMachines()) {
+                        if (machine == null || machine.isEmpty()) {
                             continue;
                         }
-                        MachineCapabilityId resolved = capability == null ? inferredCapability(machineId) : capability;
-                        candidates.putIfAbsent(machineId, new MachineCandidate(machineId, resolved));
+                        MachineCapabilityId resolved = capability == null
+                                ? MachineCapabilityGroups.capabilityOfMachine(machine)
+                                : capability;
+                        candidates.putIfAbsent(machine, new MachineCandidate(machine, resolved));
                     }
                 }
             }
@@ -241,17 +245,13 @@ public class OwnedMachinesFloorPanel extends FacilitiesAndRulesWorkspace.Panel {
         return List.copyOf(candidates.values());
     }
 
-    private static MachineCapabilityId inferredCapability(String machineId) {
-        return new MachineCapabilityId("cirrus:capability/machine/" + machineId.replace(':', '/'));
-    }
-
-    private static Map<String, List<OwnedMachineGroup>> byCapability(List<OwnedMachineGroup> groups) {
-        Map<String, List<OwnedMachineGroup>> grouped = new TreeMap<>();
+    private static Map<MachineCapabilityId, List<OwnedMachineGroup>> byCapability(List<OwnedMachineGroup> groups) {
+        Map<MachineCapabilityId, List<OwnedMachineGroup>> grouped = new TreeMap<>();
         for (OwnedMachineGroup group : groups) {
-            grouped.computeIfAbsent(group.capability().id(), ignored -> new ArrayList<>()).add(group);
+            grouped.computeIfAbsent(group.capability(), ignored -> new ArrayList<>()).add(group);
         }
         for (List<OwnedMachineGroup> value : grouped.values()) {
-            value.sort((left, right) -> left.machineId().compareTo(right.machineId()));
+            value.sort((left, right) -> MachineEntry.comparator.compare(left.machine(), right.machine()));
         }
         return grouped;
     }
@@ -260,10 +260,12 @@ public class OwnedMachinesFloorPanel extends FacilitiesAndRulesWorkspace.Panel {
         return WorkbenchFormatters.formatSigned(multiplier, 2);
     }
 
-    private record MachineCandidate(String machineId, MachineCapabilityId capability) {
-        private String shortId() {
-            int colon = machineId.indexOf(':');
-            return colon < 0 ? machineId : machineId.substring(colon + 1);
+    private record MachineCandidate(MachineEntry machine, MachineCapabilityId capability) {
+        private String shortLabel() {
+            return machine.contentKey().map(ComponentStackKey::displayId).map(id -> {
+                int colon = id.indexOf(':');
+                return colon < 0 ? id : id.substring(colon + 1);
+            }).orElseGet(machine::canonicalKey);
         }
     }
 }

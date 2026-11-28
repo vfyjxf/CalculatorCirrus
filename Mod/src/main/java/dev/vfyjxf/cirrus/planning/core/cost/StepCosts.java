@@ -11,11 +11,14 @@ import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public final class StepCosts {
 
@@ -62,17 +65,18 @@ public final class StepCosts {
     public static CostVector craftCost(
         CompiledRecipe recipe,
         long batches,
-        Optional<String> chosenMachineId,
+        Optional<MachineEntry> chosenMachine,
         boolean executedByAutomation,
         FacilitySnapshot facilities,
         CostMetadataProvider meta
     ) {
-        String systemId = recipe.key().systemId();
+        Namespace systemId = recipe.key().systemId();
+        Set<Namespace> systemTags = recipe.systemTags();
 
         if (executedByAutomation) {
             Optional<AutomatedRecipeCapability> autoCap = facilities.automatedRecipe(recipe.key());
             double passivePerBatch = autoCap.map(AutomatedRecipeCapability::passiveSecondsPerBatch).orElseGet(
-                () -> meta.estimatePassiveSecondsPerBatch(systemId, chosenMachineId, recipe.recipeValues())
+                () -> meta.estimatePassiveSecondsPerBatch(systemId, systemTags, chosenMachine, recipe.recipeValues())
             );
             int parallel = autoCap.map(AutomatedRecipeCapability::parallelCrafters).orElse(4);
             long waves = SafeMath.ceilDiv(batches, Math.max(1, parallel));
@@ -80,14 +84,19 @@ public final class StepCosts {
             return new CostVector(0.5, p, 0.0, 0.0, 0.3);
         }
 
-        OwnedMachineGroup ownedGroup = resolveOwnedGroup(recipe, chosenMachineId, facilities);
+        OwnedMachineGroup ownedGroup = resolveOwnedGroup(recipe, chosenMachine, facilities);
         double hBase;
         double pBase;
-        double passivePerBatch = meta.estimatePassiveSecondsPerBatch(systemId, chosenMachineId, recipe.recipeValues());
+        double passivePerBatch = meta.estimatePassiveSecondsPerBatch(
+            systemId,
+            systemTags,
+            chosenMachine,
+            recipe.recipeValues()
+        );
         if (ownedGroup != null && ownedGroup.automatedFeeding()) {
             hBase = 1.0;
         } else {
-            double hPerBatch = meta.estimateHumanSecondsPerBatch(systemId, chosenMachineId, false);
+            double hPerBatch = meta.estimateHumanSecondsPerBatch(systemId, systemTags, chosenMachine, false);
             long effBatches = Math.min(batches, 64L);
             double factor = effBatches > 1L ? (1.0 + Math.log(effBatches)) / effBatches : 1.0;
             hBase = effBatches * hPerBatch * factor;
@@ -104,21 +113,40 @@ public final class StepCosts {
     }
 
     public static CostVector provisionMachineCost(
-        String machineId,
-        String systemId,
+        MachineEntry machine,
+        Namespace systemId,
+        Set<Namespace> systemTags,
         int countToBuild,
         CostMetadataProvider meta
     ) {
         int c = Math.max(1, countToBuild);
-        double h = c * meta.estimateMachineSetupHumanSeconds(machineId, systemId);
-        double k = c * meta.estimateMachineSetupCapital(machineId, systemId);
+        double h = c * meta.estimateMachineSetupHumanSeconds(machine, systemId, systemTags);
+        double k = c * meta.estimateMachineSetupCapital(machine, systemId, systemTags);
         return new CostVector(h, 0.0, k, 0.0, 3.0 * c);
     }
 
-    public static CostVector setupLineCost(String systemId, MachineCapabilityId capability, CostMetadataProvider meta) {
-        double h = meta.estimateLineSetupHumanSeconds(systemId, capability);
-        double k = meta.estimateLineSetupCapital(systemId, capability);
+    public static CostVector provisionMachineCost(
+        MachineEntry machine,
+        Namespace systemId,
+        int countToBuild,
+        CostMetadataProvider meta
+    ) {
+        return provisionMachineCost(machine, systemId, Set.of(), countToBuild, meta);
+    }
+
+    public static CostVector setupLineCost(
+        Namespace systemId,
+        Set<Namespace> systemTags,
+        MachineCapabilityId capability,
+        CostMetadataProvider meta
+    ) {
+        double h = meta.estimateLineSetupHumanSeconds(systemId, systemTags, capability);
+        double k = meta.estimateLineSetupCapital(systemId, systemTags, capability);
         return new CostVector(h, 0.0, k, 0.0, 3.0);
+    }
+
+    public static CostVector setupLineCost(Namespace systemId, MachineCapabilityId capability, CostMetadataProvider meta) {
+        return setupLineCost(systemId, Set.of(), capability, meta);
     }
 
     public static CostVector cycleLoopCost(List<CraftStep> singleIterationTemplate, long iterations) {
@@ -131,13 +159,13 @@ public final class StepCosts {
 
     private static @Nullable OwnedMachineGroup resolveOwnedGroup(
         CompiledRecipe recipe,
-        Optional<String> chosenMachineId,
+        Optional<MachineEntry> chosenMachine,
         FacilitySnapshot facilities
     ) {
-        if (chosenMachineId.isPresent()) {
-            String mid = chosenMachineId.get();
+        if (chosenMachine.isPresent()) {
+            MachineEntry m = chosenMachine.get();
             for (OwnedMachineGroup g : facilities.ownedMachines()) {
-                if (g.count() > 0 && g.machineId().equals(mid)) {
+                if (g.count() > 0 && (g.machine().equals(m) || g.machine().matches(m))) {
                     return g;
                 }
             }

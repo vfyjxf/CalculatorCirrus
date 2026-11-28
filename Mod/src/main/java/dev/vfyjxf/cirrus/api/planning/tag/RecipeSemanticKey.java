@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.api.planning.tag;
 
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -9,7 +11,7 @@ import java.util.Objects;
  * Deterministic SHA-256 canonical semantic key for recipes (handles missing-ID JEI recipes).
  */
 public record RecipeSemanticKey(
-    String systemId,
+    Namespace systemId,
     String sha256Hex,
     String canonicalDescriptor,
     String lineageGroup
@@ -22,7 +24,7 @@ public record RecipeSemanticKey(
         Objects.requireNonNull(lineageGroup, "lineageGroup");
     }
 
-    public static RecipeSemanticKey of(String systemId, String canonicalDescriptor, String lineageGroup) {
+    public static RecipeSemanticKey of(Namespace systemId, String canonicalDescriptor, String lineageGroup) {
         Objects.requireNonNull(systemId, "systemId");
         Objects.requireNonNull(canonicalDescriptor, "canonicalDescriptor");
         Objects.requireNonNull(lineageGroup, "lineageGroup");
@@ -46,7 +48,7 @@ public record RecipeSemanticKey(
 
     @Override
     public int compareTo(RecipeSemanticKey other) {
-        int c = this.systemId.compareTo(other.systemId);
+        int c = this.systemId.toString().compareTo(other.systemId.toString());
         if (c != 0) return c;
         c = this.sha256Hex.compareTo(other.sha256Hex);
         if (c != 0) return c;

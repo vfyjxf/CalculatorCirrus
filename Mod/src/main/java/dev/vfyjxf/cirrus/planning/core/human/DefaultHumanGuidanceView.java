@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning.core.human;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
 import dev.vfyjxf.cirrus.api.planning.human.CostOverrideRule;
@@ -14,7 +15,9 @@ import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.tags.TagKey;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -36,12 +39,12 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
     private final List<GuidanceRule> allRules;
     private final List<GuidanceRule> hardBans;
     private final Map<CompiledRecipeKey, RecipeRule> recipeRules = new HashMap<>();
-    private final Map<String, SystemRule> systemRules = new HashMap<>();
-    private final Map<String, MachineRule> machineRules = new HashMap<>();
-    private final Map<ResourceKey, ResourceRule> resourceRules = new HashMap<>();
-    private final Map<String, TagDefaultRule> tagRules = new HashMap<>();
+    private final Map<Namespace, SystemRule> systemRules = new HashMap<>();
+    private final Map<MachineEntry, MachineRule> machineRules = new HashMap<>();
+    private final Map<ComponentStackKey, ResourceRule> resourceRules = new HashMap<>();
+    private final Map<TagKey<?>, TagDefaultRule> tagRules = new HashMap<>();
     private final Map<TargetRecipePair, CycleBreakRule> cycleBreakRules = new HashMap<>();
-    private final Map<ResourceKey, CostOverrideRule> costOverrideRules = new HashMap<>();
+    private final Map<ComponentStackKey, CostOverrideRule> costOverrideRules = new HashMap<>();
     private final Map<String, ModNamespaceRule> modNamespaceRules = new HashMap<>();
 
     private DefaultHumanGuidanceView(List<GuidanceRule> rules) {
@@ -62,9 +65,9 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
             switch (r) {
                 case RecipeRule rr -> recipeRules.put(rr.recipeKey(), rr);
                 case SystemRule sr -> systemRules.put(sr.systemId(), sr);
-                case MachineRule mr -> machineRules.put(mr.machineId(), mr);
+                case MachineRule mr -> machineRules.put(mr.machine(), mr);
                 case ResourceRule rr -> resourceRules.put(rr.resource(), rr);
-                case TagDefaultRule tr -> tagRules.put(tr.tagId(), tr);
+                case TagDefaultRule tr -> tagRules.put(tr.tag(), tr);
                 case CycleBreakRule cr ->
                     cycleBreakRules.put(new TargetRecipePair(cr.targetResource(), cr.bannedSourceRecipe()), cr);
                 case CostOverrideRule cor -> costOverrideRules.put(cor.resource(), cor);
@@ -123,7 +126,7 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
     }
 
     @Override
-    public boolean isRecipeBannedForTarget(ResourceKey target, CompiledRecipeKey recipeKey) {
+    public boolean isRecipeBannedForTarget(ComponentStackKey target, CompiledRecipeKey recipeKey) {
         if (isRecipeBanned(recipeKey)) {
             return true;
         }
@@ -138,7 +141,13 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
     }
 
     @Override
-    public boolean isSystemEnabled(String systemId, SystemAdmission admission, boolean unlocked) {
+    public boolean isRecipeTrusted(CompiledRecipeKey recipeKey) {
+        RecipeRule rr = recipeRules.get(recipeKey);
+        return rr != null && (rr.strength() == RuleStrength.softPrefer || rr.strength() == RuleStrength.hardPin);
+    }
+
+    @Override
+    public boolean isSystemEnabled(Namespace systemId, SystemAdmission admission, boolean unlocked) {
         if (admission == SystemAdmission.excludedDisplay) {
             return false;
         }
@@ -163,13 +172,13 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
     }
 
     @Override
-    public boolean isResourceTreatedAsBase(ResourceKey key) {
+    public boolean isResourceTreatedAsBase(ComponentStackKey key) {
         ResourceRule rr = resourceRules.get(key);
         return rr != null && rr.treatAsFreeBaseSource() && rr.strength() != RuleStrength.hardBan;
     }
 
     @Override
-    public boolean isResourceBanned(ResourceKey key) {
+    public boolean isResourceBanned(ComponentStackKey key) {
         ResourceRule rr = resourceRules.get(key);
         if (rr != null) {
             return rr.strength() == RuleStrength.hardBan;
@@ -178,12 +187,12 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
     }
 
     @Override
-    public boolean isWillingToBuild(String machineId) {
-        MachineRule mr = machineRules.get(machineId);
+    public boolean isWillingToBuild(MachineEntry machine) {
+        MachineRule mr = machineRules.get(machine);
         if (mr != null) {
             return mr.willingToBuildNew() && mr.strength() != RuleStrength.hardBan;
         }
-        String ns = namespaceOfId(machineId);
+        String ns = namespaceOfMachine(machine);
         if (ns != null) {
             ModNamespaceRule mnr = modNamespaceRules.get(ns);
             if (mnr != null && mnr.strength() == RuleStrength.hardBan) {
@@ -194,25 +203,25 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
     }
 
     @Override
-    public Optional<ResourceKey> preferredTagMember(String tagId) {
-        TagDefaultRule tr = tagRules.get(tagId);
+    public Optional<ComponentStackKey> preferredTagMember(TagKey<?> tag) {
+        TagDefaultRule tr = tagRules.get(tag);
         return tr == null ? Optional.empty() : Optional.of(tr.preferredMember());
     }
 
     @Override
-    public boolean isTagHardPinned(String tagId) {
-        TagDefaultRule tr = tagRules.get(tagId);
+    public boolean isTagHardPinned(TagKey<?> tag) {
+        TagDefaultRule tr = tagRules.get(tag);
         return tr != null && tr.strength() == RuleStrength.hardPin;
     }
 
     @Override
-    public Optional<CostVector> overriddenUnitCost(ResourceKey key) {
+    public Optional<CostVector> overriddenUnitCost(ComponentStackKey key) {
         CostOverrideRule cor = costOverrideRules.get(key);
         return cor == null ? Optional.empty() : Optional.of(cor.overrideUnitCost());
     }
 
     @Override
-    public double softCostMultiplier(CompiledRecipeKey recipeKey, Optional<String> machineId) {
+    public double softCostMultiplier(CompiledRecipeKey recipeKey, Optional<MachineEntry> machine) {
         double mult = 1.0;
         RecipeRule rr = recipeRules.get(recipeKey);
         if (rr != null) {
@@ -227,13 +236,13 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
         if (sr != null) {
             mult *= strengthMultiplier(sr.strength());
         }
-        if (machineId != null && machineId.isPresent()) {
-            String mid = machineId.get();
-            MachineRule mr = machineRules.get(mid);
+        if (machine != null && machine.isPresent()) {
+            MachineEntry m = machine.get();
+            MachineRule mr = machineRules.get(m);
             if (mr != null) {
                 mult *= strengthMultiplier(mr.strength());
             } else {
-                String mns = namespaceOfId(mid);
+                String mns = namespaceOfMachine(m);
                 if (mns != null) {
                     ModNamespaceRule mnr = modNamespaceRules.get(mns);
                     if (mnr != null) {
@@ -246,7 +255,7 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
     }
 
     @Override
-    public double resourceSoftMultiplier(ResourceKey key) {
+    public double resourceSoftMultiplier(ComponentStackKey key) {
         ResourceRule rr = resourceRules.get(key);
         if (rr != null) {
             return strengthMultiplier(rr.strength());
@@ -255,8 +264,8 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
     }
 
     @Override
-    public double tagSoftMultiplier(String tagId) {
-        TagDefaultRule tr = tagRules.get(tagId);
+    public double tagSoftMultiplier(TagKey<?> tag) {
+        TagDefaultRule tr = tagRules.get(tag);
         if (tr == null) return 1.0;
         return tr.strength() == RuleStrength.softPrefer ? tagSoftPreferMult : 1.0;
     }
@@ -266,11 +275,11 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
         return hardBans;
     }
 
-    public boolean hasMachineRule(String machineId) {
-        return machineRules.containsKey(machineId);
+    public boolean hasMachineRule(MachineEntry machine) {
+        return machineRules.containsKey(machine);
     }
 
-    public boolean hasResourceRule(ResourceKey key) {
+    public boolean hasResourceRule(ComponentStackKey key) {
         return resourceRules.containsKey(key);
     }
 
@@ -278,18 +287,28 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
         return recipeRules.containsKey(key);
     }
 
-    public boolean hasSystemRule(String systemId) {
+    public boolean hasSystemRule(Namespace systemId) {
         return systemRules.containsKey(systemId);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof DefaultHumanGuidanceView that)) return false;
+        return allRules.equals(that.allRules);
+    }
+
+    @Override
+    public int hashCode() {
+        return allRules.hashCode();
     }
 
     private @Nullable ModNamespaceRule modRuleForRecipe(CompiledRecipeKey key) {
         if (modNamespaceRules.isEmpty()) return null;
         if (key.explicitRecipeId().isPresent()) {
-            String ns = namespaceOfId(key.explicitRecipeId().get());
-            if (ns != null) {
-                ModNamespaceRule rule = modNamespaceRules.get(ns);
-                if (rule != null) return rule;
-            }
+            String ns = key.explicitRecipeId().get().getNamespace();
+            ModNamespaceRule rule = modNamespaceRules.get(ns);
+            if (rule != null) return rule;
         }
         String sysNs = namespaceOfSystem(key.systemId());
         return sysNs == null ? null : modNamespaceRules.get(sysNs);
@@ -303,23 +322,21 @@ public final class DefaultHumanGuidanceView implements HumanGuidanceView {
         };
     }
 
-    private static @Nullable String namespaceOfId(String id) {
-        if (id == null) return null;
-        int colon = id.indexOf(':');
-        return colon > 0 ? id.substring(0, colon) : null;
+    private static @Nullable String namespaceOfMachine(MachineEntry machine) {
+        return machine.contentKey().map(ComponentStackKey::namespace).orElse(null);
     }
 
-    private static @Nullable String namespaceOfSystem(String systemId) {
+    private static @Nullable String namespaceOfSystem(Namespace systemId) {
         if (systemId == null) return null;
-        if (systemId.startsWith("jei:category/")) {
-            String rest = systemId.substring("jei:category/".length());
+        if ("jei".equals(systemId.namespace()) && systemId.path().startsWith("category/")) {
+            String rest = systemId.path().substring("category/".length());
             int slash = rest.indexOf('/');
             return slash > 0 ? rest.substring(0, slash) : rest;
         }
-        return namespaceOfId(systemId);
+        return systemId.namespace();
     }
 
     private record IndexedRule(GuidanceRule rule, int order) {}
 
-    private record TargetRecipePair(ResourceKey target, CompiledRecipeKey recipe) {}
+    private record TargetRecipePair(ComponentStackKey target, CompiledRecipeKey recipe) {}
 }

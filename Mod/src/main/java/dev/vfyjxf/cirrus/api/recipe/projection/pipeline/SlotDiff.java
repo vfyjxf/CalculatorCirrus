@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.recipe.projection.pipeline;
 
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.DurabilityContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cirrus.api.recipe.projection.SlotAddress;
 import dev.vfyjxf.cirrus.api.recipe.projection.SlotChannel;
@@ -93,6 +94,10 @@ public record SlotDiff(
                     }
                     long diff = a - b;
                     yield (diff > 0L ? "+" : "") + diff;
+                }
+                if (before instanceof DurabilityContent bdc && after instanceof DurabilityContent adc
+                        && bdc.durabilityCost() != adc.durabilityCost()) {
+                    yield "-" + adc.durabilityCost() + "d";
                 }
                 if (before != null && after != null && Float.compare(before.chance(), after.chance()) != 0) {
                     yield Math.round(after.chance() * 100f) + "%";

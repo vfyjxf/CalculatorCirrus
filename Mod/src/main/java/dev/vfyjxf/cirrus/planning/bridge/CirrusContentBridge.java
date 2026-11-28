@@ -1,22 +1,16 @@
 package dev.vfyjxf.cirrus.planning.bridge;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonNull;
-import com.google.gson.JsonObject;
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.DynamicOps;
-import com.mojang.serialization.JsonOps;
 import dev.vfyjxf.cirrus.api.content.ContentApi;
 import dev.vfyjxf.cirrus.api.content.MatchStrategy;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.TagType;
 import dev.vfyjxf.cirrus.api.content.util.TagLookup;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.planning.graph.RawIngredientSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawOutputSlot;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
 import dev.vfyjxf.cirrus.api.recipe.content.EmptyRecipeContent;
@@ -27,16 +21,13 @@ import dev.vfyjxf.cirrus.api.recipe.content.StackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TagStackContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TypedStackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.DurabilityContent;
 import dev.vfyjxf.cirrus.planning.adapter.DropReason;
-import dev.vfyjxf.cirrus.planning.adapter.StackIdentity;
 import dev.vfyjxf.cloudlib.api.util.Games;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
-import net.minecraft.core.component.DataComponentPatch;
-import net.minecraft.core.component.DataComponentType;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
@@ -48,7 +39,6 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 public final class CirrusContentBridge {
@@ -58,7 +48,7 @@ public final class CirrusContentBridge {
     public record InputMapping(
         @Nullable RawIngredientSlot slot,
         @Nullable RawOutputSlot catalystReturnOutput,
-        @Nullable String valueTypeId,
+        @Nullable Namespace valueTypeId,
         double valueAmount,
         @Nullable DropReason dropReason
     ) {
@@ -70,7 +60,7 @@ public final class CirrusContentBridge {
             return new InputMapping(slot, catalystReturn, null, 0.0, null);
         }
 
-        public static InputMapping value(String valueTypeId, double amount) {
+        public static InputMapping value(Namespace valueTypeId, double amount) {
             return new InputMapping(null, null, valueTypeId, amount, null);
         }
 
@@ -81,7 +71,7 @@ public final class CirrusContentBridge {
 
     public record OutputMapping(
         @Nullable RawOutputSlot slot,
-        @Nullable String valueTypeId,
+        @Nullable Namespace valueTypeId,
         double valueAmount,
         @Nullable DropReason dropReason
     ) {
@@ -93,7 +83,7 @@ public final class CirrusContentBridge {
             return new OutputMapping(slot, null, 0.0, null);
         }
 
-        public static OutputMapping value(String valueTypeId, double amount) {
+        public static OutputMapping value(Namespace valueTypeId, double amount) {
             return new OutputMapping(null, valueTypeId, amount, null);
         }
 
@@ -102,95 +92,19 @@ public final class CirrusContentBridge {
         }
     }
 
-    public static StackIdentity.MatchFlags toMatchFlags(@Nullable MatchStrategy strategy) {
-        if (strategy == null) {
-            return StackIdentity.MatchFlags.identityAndComponent;
-        }
-        return new StackIdentity.MatchFlags(
-            strategy.withIdentity(),
-            strategy.withAmount(),
-            strategy.withComponent(),
-            strategy.usesExactComponents()
-        );
-    }
-
-    public static @Nullable JsonObject encodePatch(@Nullable DataComponentPatch patch) {
-        if (patch == null || patch.isEmpty()) {
-            return null;
-        }
-        DynamicOps<JsonElement> ops = currentJsonOps();
-        JsonObject out = new JsonObject();
-        for (Map.Entry<DataComponentType<?>, Optional<?>> entry : patch.entrySet()) {
-            DataComponentType<?> type = entry.getKey();
-            if (type == null || type.isTransient()) {
-                continue;
-            }
-            ResourceLocation compLoc = BuiltInRegistries.DATA_COMPONENT_TYPE.getKey(type);
-            String compId = compLoc != null ? compLoc.toString() : type.getClass().getName();
-            Optional<?> valueOpt = entry.getValue();
-            if (valueOpt.isEmpty()) {
-                out.add("!" + compId, JsonNull.INSTANCE);
-                continue;
-            }
-            Object value = valueOpt.get();
-            JsonElement encoded = encodeSingleComponent(type, value, ops);
-            if (encoded != null) {
-                out.add(compId, encoded);
-            } else {
-                out.addProperty(compId, StackIdentity.unencodableFallbackToken(compId, value));
-            }
-        }
-        return out.isEmpty() ? null : out;
-    }
-
-    public static Optional<ResourceKey> toConcreteResourceKey(@Nullable ContentStack<?, ?> stack) {
+    public static Optional<ComponentStackKey> toConcreteKey(@Nullable ContentStack<?, ?> stack) {
         if (stack == null || stack.isEmpty()) {
             return Optional.empty();
         }
-        return toConcreteResourceKeyTyped(stack);
+        return Optional.of(ComponentStackKey.ofNormalized(stack));
     }
 
-    public static Optional<ResourceKey> toResourceKey(@Nullable ItemStack stack) {
-        if (stack == null || stack.isEmpty()) {
-            return Optional.empty();
-        }
-        try {
-            return toConcreteResourceKey(ContentStack.fromStack(stack));
-        } catch (RuntimeException | LinkageError ignored) {
-            ResourceLocation loc = BuiltInRegistries.ITEM.getKey(stack.getItem());
-            if (loc == null || loc.equals(BuiltInRegistries.ITEM.getDefaultKey())) {
-                return Optional.empty();
-            }
-            return StackIdentity.mapConcrete(
-                StackIdentity.itemContentType,
-                loc.toString(),
-                encodePatch(stack.getComponentsPatch())
-            );
-        }
+    public static Optional<ComponentStackKey> toKey(@Nullable ItemStack stack) {
+        return ComponentStackKey.fromItemStack(stack);
     }
 
-    public static Optional<ResourceKey> toResourceKey(@Nullable FluidStack stack) {
-        if (stack == null || stack.isEmpty()) {
-            return Optional.empty();
-        }
-        try {
-            return toConcreteResourceKey(ContentStack.fromStack(stack));
-        } catch (RuntimeException | LinkageError ignored) {
-            ResourceLocation loc;
-            try {
-                loc = BuiltInRegistries.FLUID.getKey(stack.getFluid());
-            } catch (RuntimeException e) {
-                return Optional.empty();
-            }
-            if (loc == null || loc.equals(BuiltInRegistries.FLUID.getDefaultKey())) {
-                return Optional.empty();
-            }
-            return StackIdentity.mapConcrete(
-                StackIdentity.fluidContentType,
-                loc.toString(),
-                encodePatch(stack.getComponentsPatch())
-            );
-        }
+    public static Optional<ComponentStackKey> toKey(@Nullable FluidStack stack) {
+        return ComponentStackKey.fromFluidStack(stack);
     }
 
     public static InputMapping mapInput(@Nullable InputContent input, int durabilityCost) {
@@ -203,10 +117,7 @@ public final class CirrusContentBridge {
         boolean catalyst = input.notConsumed();
 
         if (input instanceof ValueContent<?> value) {
-            String valueTypeId = value.type().typeId().toString();
-            if (valueTypeId.isEmpty()) {
-                return InputMapping.dropped(DropReason.invalidAmount);
-            }
+            Namespace valueTypeId = value.type().typeId();
             return catalyst ? InputMapping.empty() : InputMapping.value(valueTypeId, (double) value.amount());
         }
 
@@ -215,20 +126,55 @@ public final class CirrusContentBridge {
             return InputMapping.dropped(DropReason.invalidAmount);
         }
 
+        if (input instanceof DurabilityContent durabilityContent) {
+            int effectiveCost = Math.max(durabilityCost, durabilityContent.durabilityCost());
+            InputMapping base = mapInput(durabilityContent.ingredient(), 0);
+            if (base.dropReason() != null) {
+                return base;
+            }
+            RawIngredientSlot baseSlot = base.slot();
+            if (baseSlot == null) {
+                return InputMapping.dropped(DropReason.complexSlot);
+            }
+            int maxDur = durabilityContent.maxDurability();
+            if (maxDur > 0 && effectiveCost > 0) {
+                return InputMapping.slot(
+                    new RawIngredientSlot(
+                        baseSlot.tag(),
+                        baseSlot.candidates(),
+                        amount,
+                        baseSlot.matchMode(),
+                        effectiveCost,
+                        maxDur
+                    ),
+                    null
+                );
+            }
+            if (catalyst) {
+                return buildListInput(baseSlot.tag(), baseSlot.candidates(), amount, true);
+            }
+            return InputMapping.slot(
+                new RawIngredientSlot(baseSlot.tag(), baseSlot.candidates(), amount, baseSlot.matchMode()),
+                null
+            );
+        }
+
         if (input instanceof StackContent<?, ?> stackContent) {
-            StackIdentity.MatchFlags flags = toMatchFlags(stackContent.matchStrategy());
-            Optional<SlotMatchMode> modeOpt = flags.toSlotMatchMode();
+            Optional<SlotMatchMode> modeOpt = toSlotMatchMode(stackContent.matchStrategy());
             if (modeOpt.isEmpty()) {
                 return InputMapping.dropped(DropReason.unsupportedMatchStrategy);
             }
-            Optional<ResourceKey> keyOpt = mapStackInput(stackContent.content(), flags);
-            if (keyOpt.isEmpty()) {
+            ContentStack<?, ?> rawStack = stackContent.content();
+            if (rawStack == null || rawStack.isEmpty()) {
                 return InputMapping.dropped(DropReason.invalidStack);
             }
-            ResourceKey key = keyOpt.get();
             SlotMatchMode mode = modeOpt.get();
+            ComponentStackKey key = ComponentStackKey.ofNormalized(rawStack);
+            if (mode == SlotMatchMode.identityOnly) {
+                key = key.withoutComponents();
+            }
             if (durabilityCost > 0) {
-                int maxDur = extractMaxDurability(stackContent.content());
+                int maxDur = DurabilityContent.resolveMaxDurability(rawStack);
                 if (maxDur > 0) {
                     return InputMapping.slot(
                         new RawIngredientSlot(
@@ -263,12 +209,12 @@ public final class CirrusContentBridge {
             if (!complex.isEnumerable()) {
                 return InputMapping.dropped(DropReason.complexSlot);
             }
-            LinkedHashSet<ResourceKey> candidates = new LinkedHashSet<>();
+            LinkedHashSet<ComponentStackKey> candidates = new LinkedHashSet<>();
             for (ContentVariant variant : complex.enumerate()) {
                 if (!(variant instanceof ContentStack<?, ?> stack)) {
                     return InputMapping.dropped(DropReason.complexSlot);
                 }
-                Optional<ResourceKey> key = toConcreteResourceKey(stack);
+                Optional<ComponentStackKey> key = toConcreteKey(stack);
                 if (key.isEmpty()) {
                     return InputMapping.dropped(DropReason.invalidStack);
                 }
@@ -287,25 +233,21 @@ public final class CirrusContentBridge {
         if (output == null || output.isEmpty() || output instanceof EmptyRecipeContent) {
             return OutputMapping.empty();
         }
-        if (!output.constantly()) {
-            return OutputMapping.dropped(DropReason.probabilistic);
-        }
         if (output.chance() == 0f) {
             return OutputMapping.empty();
         }
+        if (!output.constantly()) {
+            return OutputMapping.dropped(DropReason.probabilistic);
+        }
         if (output instanceof ValueContent<?> value) {
-            String valueTypeId = value.type().typeId().toString();
-            if (valueTypeId.isEmpty()) {
-                return OutputMapping.dropped(DropReason.invalidAmount);
-            }
-            return OutputMapping.value(valueTypeId, (double) value.amount());
+            return OutputMapping.value(value.type().typeId(), (double) value.amount());
         }
         if (output instanceof StackContent<?, ?> stackContent) {
             long amount = stackContent.amount();
             if (amount <= 0L) {
                 return OutputMapping.dropped(DropReason.invalidAmount);
             }
-            Optional<ResourceKey> keyOpt = toConcreteResourceKey(stackContent.content());
+            Optional<ComponentStackKey> keyOpt = toConcreteKey(stackContent.content());
             if (keyOpt.isEmpty()) {
                 return OutputMapping.dropped(DropReason.invalidStack);
             }
@@ -314,49 +256,15 @@ public final class CirrusContentBridge {
         return OutputMapping.dropped(DropReason.unknownKind);
     }
 
-    public static Optional<ContentStack<?, ?>> toBestEffortContentStack(ResourceKey key, long amount) {
-        if (amount <= 0L) {
-            return Optional.empty();
-        }
-        ResourceLocation loc = ResourceLocation.tryParse(key.resourceId());
-        if (loc == null) {
-            return Optional.empty();
-        }
-        try {
-            ContentApi contentApi = ContentApi.instance();
-            ContentType<?> contentType = contentApi.findContentType(key.contentTypeId());
-            if (contentType != null && contentApi.hasStackType(contentType)) {
-                Optional<ContentStack<?, ?>> resolved = resolveContentStack(contentApi, contentType, loc, amount);
-                if (resolved.isPresent()) {
-                    return resolved;
-                }
-            }
-        } catch (RuntimeException | LinkageError ignored) {}
-        if (StackIdentity.itemContentType.equals(key.contentTypeId())) {
-            Optional<Item> item = BuiltInRegistries.ITEM.getOptional(loc);
-            if (item.isPresent()) {
-                ContentStack<Item, ItemStack> stack = ContentStack.fromContent(item.get(), amount);
-                return stack.isEmpty() ? Optional.empty() : Optional.of(stack);
-            }
-        } else if (StackIdentity.fluidContentType.equals(key.contentTypeId())) {
-            Optional<Fluid> fluid = BuiltInRegistries.FLUID.getOptional(loc);
-            if (fluid.isPresent()) {
-                ContentStack<Fluid, FluidStack> stack = ContentStack.fromContent(fluid.get(), amount);
-                return stack.isEmpty() ? Optional.empty() : Optional.of(stack);
-            }
-        }
-        return Optional.empty();
-    }
-
-    public static List<ResourceKey> enumerateRegisteredResources() {
-        LinkedHashSet<ResourceKey> out = new LinkedHashSet<>();
+    public static List<ComponentStackKey> enumerateRegisteredResources() {
+        LinkedHashSet<ComponentStackKey> out = new LinkedHashSet<>();
         try {
             ContentApi contentApi = ContentApi.instance();
             for (ContentType<?> contentType : contentApi.contentTypes()) {
                 if (!contentType.hasRegistry() || !contentApi.hasStackType(contentType)) {
                     continue;
                 }
-                collectRegistryResources(contentType, out);
+                collectRegistryResources(contentApi, contentType, out);
             }
             if (!out.isEmpty()) {
                 return List.copyOf(out);
@@ -366,51 +274,33 @@ public final class CirrusContentBridge {
             for (ResourceLocation id : BuiltInRegistries.ITEM.keySet()) {
                 Item item = BuiltInRegistries.ITEM.get(id);
                 if (item != null && !item.getDefaultInstance().isEmpty()) {
-                    out.add(ResourceKey.item(id.toString()));
+                    out.add(ComponentStackKey.ofItem(item));
                 }
             }
         } catch (RuntimeException | LinkageError ignored) {}
         return List.copyOf(out);
     }
 
-    private static <T> void collectRegistryResources(ContentType<T> contentType, LinkedHashSet<ResourceKey> out) {
+    @SuppressWarnings("unchecked")
+    private static <T, S> void collectRegistryResources(
+        ContentApi contentApi,
+        ContentType<T> contentType,
+        LinkedHashSet<ComponentStackKey> out
+    ) {
         Registry<T> registry = resolveRegistry(contentType);
         if (registry == null) {
             return;
         }
-        String contentTypeId = StackIdentity.normalizeContentTypeId(contentType.typeId().toString());
-        if (contentTypeId.isEmpty()) {
-            return;
-        }
+        StackType<T, S> stackType = (StackType<T, S>) contentApi.getStackType(contentType);
         for (T value : registry) {
             if (value == null || contentType.isEmpty(value)) {
                 continue;
             }
-            ResourceLocation loc = safeLocation(contentType, value);
-            if (loc != null) {
-                out.add(new ResourceKey(contentTypeId, loc.toString(), Optional.empty()));
+            ContentStack<T, S> stack = ContentStack.fromContent(stackType, value, 1L);
+            if (!stack.isEmpty()) {
+                out.add(ComponentStackKey.ofNormalized(stack));
             }
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T, S> Optional<ContentStack<?, ?>> resolveContentStack(
-        ContentApi contentApi,
-        ContentType<T> contentType,
-        ResourceLocation loc,
-        long amount
-    ) {
-        Registry<T> registry = resolveRegistry(contentType);
-        if (registry == null) {
-            return Optional.empty();
-        }
-        Optional<T> valueOpt = registry.getOptional(loc);
-        if (valueOpt.isEmpty() || contentType.isEmpty(valueOpt.get())) {
-            return Optional.empty();
-        }
-        StackType<T, S> stackType = (StackType<T, S>) contentApi.getStackType(contentType);
-        ContentStack<T, S> stack = ContentStack.fromContent(stackType, valueOpt.get(), amount);
-        return stack.isEmpty() ? Optional.empty() : Optional.of(stack);
     }
 
     @SuppressWarnings("unchecked")
@@ -437,54 +327,51 @@ public final class CirrusContentBridge {
         return null;
     }
 
-    private static <T, S> Optional<ResourceKey> toConcreteResourceKeyTyped(ContentStack<T, S> stack) {
-        String contentTypeId = stack.contentType().typeId().toString();
-        ResourceLocation loc = safeLocation(stack.contentType(), stack.content());
-        if (loc == null) {
+    private static Optional<SlotMatchMode> toSlotMatchMode(@Nullable MatchStrategy strategy) {
+        if (strategy == null) {
+            return Optional.of(SlotMatchMode.exactComponent);
+        }
+        if (!strategy.withIdentity()) {
             return Optional.empty();
         }
-        JsonObject patchJson = encodePatch(stack.componentsPatch());
-        return StackIdentity.mapConcrete(contentTypeId, loc.toString(), patchJson);
+        if (!strategy.withComponent()) {
+            return Optional.of(SlotMatchMode.identityOnly);
+        }
+        return Optional.of(strategy.usesExactComponents() ? SlotMatchMode.exactComponent : SlotMatchMode.componentSubset);
     }
 
-    private static <T, S> Optional<ResourceKey> mapStackInput(
-        ContentStack<T, S> stack,
-        StackIdentity.MatchFlags flags
-    ) {
-        if (stack == null || stack.isEmpty()) {
-            return Optional.empty();
-        }
-        String contentTypeId = stack.contentType().typeId().toString();
-        ResourceLocation loc = safeLocation(stack.contentType(), stack.content());
-        if (loc == null) {
-            return Optional.empty();
-        }
-        JsonObject patchJson = flags.withComponent() ? encodePatch(stack.componentsPatch()) : null;
-        return StackIdentity.mapInput(new StackIdentity.StackSpec(contentTypeId, loc.toString(), patchJson, flags))
-                .key();
-    }
-
-    private static <T> InputMapping mapTagInput(TagStackContent<T> tag, long amount, boolean catalyst) {
-        String tagId = tag.tagKey().location().toString();
+    @SuppressWarnings("unchecked")
+    private static <T, S> InputMapping mapTagInput(TagStackContent<T> tag, long amount, boolean catalyst) {
+        TagKey<T> tagKey = tag.tagKey();
         ContentType<T> contentType = tag.contentType();
-        String contentTypeId = StackIdentity.normalizeContentTypeId(contentType.typeId().toString());
-        if (contentTypeId.isEmpty()) {
-            return InputMapping.dropped(DropReason.invalidStack);
-        }
-        LinkedHashSet<ResourceKey> candidates = new LinkedHashSet<>();
+        @Nullable StackType<T, S> stackType = null;
+        try {
+            ContentApi api = ContentApi.instance();
+            if (api.hasStackType(contentType)) {
+                stackType = (StackType<T, S>) api.getStackType(contentType);
+            }
+        } catch (RuntimeException | LinkageError ignored) {}
+
+        LinkedHashSet<ComponentStackKey> candidates = new LinkedHashSet<>();
         for (T value : tag.values()) {
             if (value == null || contentType.isEmpty(value)) {
                 continue;
             }
-            ResourceLocation loc = safeLocation(contentType, value);
-            if (loc != null) {
-                candidates.add(new ResourceKey(contentTypeId, loc.toString(), Optional.empty()));
+            if (stackType != null) {
+                ContentStack<T, S> stack = ContentStack.fromContent(stackType, value, 1L);
+                if (!stack.isEmpty()) {
+                    candidates.add(ComponentStackKey.ofNormalized(stack));
+                }
+            } else if (value instanceof Item item && !item.getDefaultInstance().isEmpty()) {
+                candidates.add(ComponentStackKey.ofItem(item));
+            } else if (value instanceof Fluid fluid) {
+                candidates.add(ComponentStackKey.ofFluid(fluid));
             }
         }
         if (candidates.isEmpty()) {
             return InputMapping.dropped(DropReason.emptySlotCandidates);
         }
-        return buildListInput(Optional.of(tagId), List.copyOf(candidates), amount, catalyst);
+        return buildListInput(Optional.of(tagKey), List.copyOf(candidates), amount, catalyst);
     }
 
     private static <T, S> InputMapping mapTypedStackListInput(
@@ -492,7 +379,7 @@ public final class CirrusContentBridge {
         long amount,
         boolean catalyst
     ) {
-        Optional<String> matchedTag = resolveTagForStacks(
+        Optional<TagKey<?>> matchedTag = resolveTagForStacks(
             typedList.type().contentType(),
             typedList.stacks().castToList()
         );
@@ -501,7 +388,7 @@ public final class CirrusContentBridge {
 
     @SuppressWarnings("unchecked")
     private static InputMapping mapUntypedStackListInput(StackListContent listContent, long amount, boolean catalyst) {
-        Optional<String> matchedTag = Optional.empty();
+        Optional<TagKey<?>> matchedTag = Optional.empty();
         if (!listContent.stacks().isEmpty()) {
             ContentType<?> firstType = listContent.stacks().get(0).contentType();
             boolean homogeneous = true;
@@ -519,7 +406,7 @@ public final class CirrusContentBridge {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> Optional<String> resolveTagForUntypedStacks(
+    private static <T> Optional<TagKey<?>> resolveTagForUntypedStacks(
         ContentType<T> contentType,
         Iterable<? extends ContentStack<?, ?>> stacks
     ) {
@@ -530,7 +417,7 @@ public final class CirrusContentBridge {
         return resolveTagForStacks(contentType, typed);
     }
 
-    private static <T> Optional<String> resolveTagForStacks(
+    private static <T> Optional<TagKey<?>> resolveTagForStacks(
         ContentType<T> contentType,
         List<? extends ContentStack<T, ?>> stacks
     ) {
@@ -544,21 +431,21 @@ public final class CirrusContentBridge {
             }
             TagType<T> tagType = contentApi.getTagType(contentType);
             TagKey<T> matched = TagLookup.findTagMatchStacks(tagType, stacks);
-            return matched == null ? Optional.empty() : Optional.of(matched.location().toString());
+            return matched == null ? Optional.empty() : Optional.of(matched);
         } catch (RuntimeException ignored) {
             return Optional.empty();
         }
     }
 
     private static InputMapping mapStackListInput(
-        Optional<String> tagId,
+        Optional<TagKey<?>> tag,
         Iterable<? extends ContentStack<?, ?>> stacks,
         long amount,
         boolean catalyst
     ) {
-        LinkedHashSet<ResourceKey> candidates = new LinkedHashSet<>();
+        LinkedHashSet<ComponentStackKey> candidates = new LinkedHashSet<>();
         for (ContentStack<?, ?> stack : stacks) {
-            Optional<ResourceKey> key = toConcreteResourceKey(stack);
+            Optional<ComponentStackKey> key = toConcreteKey(stack);
             if (key.isPresent()) {
                 candidates.add(key.get());
             }
@@ -566,78 +453,35 @@ public final class CirrusContentBridge {
         if (candidates.isEmpty()) {
             return InputMapping.dropped(DropReason.emptySlotCandidates);
         }
-        return buildListInput(tagId, List.copyOf(candidates), amount, catalyst);
+        return buildListInput(tag, List.copyOf(candidates), amount, catalyst);
     }
 
     private static InputMapping buildListInput(
-        Optional<String> tagId,
-        List<ResourceKey> candidates,
+        Optional<TagKey<?>> tag,
+        List<ComponentStackKey> candidates,
         long amount,
         boolean catalyst
     ) {
-        SlotMatchMode mode = StackIdentity.listSlotMatchMode(candidates);
+        SlotMatchMode mode = listSlotMatchMode(candidates);
         if (catalyst) {
             if (candidates.size() == 1) {
-                ResourceKey only = candidates.get(0);
+                ComponentStackKey only = candidates.get(0);
                 return InputMapping.slot(
                     new RawIngredientSlot(Optional.empty(), candidates, amount, mode),
                     new RawOutputSlot(only, amount)
                 );
             }
-            return InputMapping.slot(new RawIngredientSlot(tagId, candidates, 0L, mode, 0, 1), null);
+            return InputMapping.slot(new RawIngredientSlot(tag, candidates, 0L, mode, 0, 1), null);
         }
-        return InputMapping.slot(new RawIngredientSlot(tagId, candidates, amount, mode), null);
+        return InputMapping.slot(new RawIngredientSlot(tag, candidates, amount, mode), null);
     }
 
-    private static int extractMaxDurability(ContentStack<?, ?> stack) {
-        try {
-            if (stack.hasComponent(DataComponents.MAX_DAMAGE)) {
-                Integer max = stack.getComponent(DataComponents.MAX_DAMAGE);
-                return max == null ? 0 : Math.max(0, max);
+    private static SlotMatchMode listSlotMatchMode(List<ComponentStackKey> candidates) {
+        for (ComponentStackKey c : candidates) {
+            if (c.hasComponents()) {
+                return SlotMatchMode.exactComponent;
             }
-        } catch (RuntimeException ignored) {}
-        return 0;
-    }
-
-    private static <T> @Nullable ResourceLocation safeLocation(ContentType<T> type, T content) {
-        try {
-            return type.getLocation(content);
-        } catch (RuntimeException ignored) {
-            return null;
         }
-    }
-
-    private static DynamicOps<JsonElement> currentJsonOps() {
-        try {
-            RegistryAccess access = Games.registryAccess();
-            if (access != null) {
-                return RegistryOps.create(JsonOps.INSTANCE, access);
-            }
-        } catch (RuntimeException ignored) {}
-        return JsonOps.INSTANCE;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <C> @Nullable JsonElement encodeSingleComponent(
-        DataComponentType<C> type,
-        Object rawValue,
-        DynamicOps<JsonElement> ops
-    ) {
-        Codec<C> codec = type.codec();
-        if (codec == null) {
-            return null;
-        }
-        try {
-            return codec.encodeStart(ops, (C) rawValue).result().orElse(null);
-        } catch (RuntimeException ignored) {
-            if (ops != JsonOps.INSTANCE) {
-                try {
-                    return codec.encodeStart(JsonOps.INSTANCE, (C) rawValue).result().orElse(null);
-                } catch (RuntimeException ignoredAgain) {
-                    return null;
-                }
-            }
-            return null;
-        }
+        return SlotMatchMode.identityOnly;
     }
 }

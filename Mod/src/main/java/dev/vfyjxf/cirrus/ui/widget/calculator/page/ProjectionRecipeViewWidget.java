@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.recipe.content.BatchableRecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.DurabilityContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.SlotAddress;
 import dev.vfyjxf.cirrus.api.recipe.projection.SlotChannel;
@@ -311,6 +312,9 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
     }
 
     private void renderAmount(Font font, GuiGraphics graphics, int baseX, int baseY, Slot slot) {
+        if (slot.displayContent() instanceof DurabilityContent) {
+            return;
+        }
         long amount = slot.displayContent().amount();
         String text = OreUiSlotAmount.format(amount);
         if (text.isEmpty()) {
@@ -424,6 +428,21 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
             slot.after() == null ? "(removed)" : contentSummary(slot.after()),
             statusTone(slot.status())
         );
+        if (slot.after() instanceof DurabilityContent durability) {
+            builder.keyValue(
+                "Durability Cost",
+                "-" + durability.durabilityCost() + " / craft",
+                durability.consumesWholeTool() ? OreUiRichTooltip.Tone.danger : OreUiRichTooltip.Tone.warning
+            );
+            int maxDur = durability.maxDurability();
+            if (maxDur > 0) {
+                builder.keyValue(
+                    "Tool Life",
+                    durability.usesPerTool() + " crafts / tool (" + maxDur + " max)",
+                    OreUiRichTooltip.Tone.secondary
+                );
+            }
+        }
         if (slot.movedFrom() != null) {
             builder.keyValue("Moved From", slot.movedFrom().shortLabel(), OreUiRichTooltip.Tone.costP);
         }
@@ -449,6 +468,11 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
     }
 
     private static String contentSummary(RecipeContent content) {
+        if (content instanceof DurabilityContent durability) {
+            String tool = contentDisplayName(durability.ingredient()).getString();
+            String tail = durability.amount() > 1L ? " \u00d7" + durability.amount() : "";
+            return tool + " (-" + durability.durabilityCost() + " dur)" + tail;
+        }
         String name = contentDisplayName(content).getString();
         long amount = content.amount();
         if (content.chance() < RecipeContent.MAX_CHANCE) {

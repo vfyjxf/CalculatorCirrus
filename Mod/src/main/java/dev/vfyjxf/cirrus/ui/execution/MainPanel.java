@@ -57,9 +57,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.boxSizingBorderBox;
+import dev.vfyjxf.taffy.style.Overflow;
+
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.boxSizingBorderBox;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.flexColumn;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.flexShrink;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.heightOf;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minHeight;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minWidth;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.overflow;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.padding;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeFull;
 
@@ -115,7 +121,17 @@ public class MainPanel extends CompositeWidget<Widget> implements ExecutionOverl
         this.traceEnabled = readTraceConfig();
         this.speedRate = readRateConfig();
 
-        useStyle(UIStyle.of(flexColumn(), boxSizingBorderBox(), padding(1), sizeFull(), minWidth(0), minHeight(0)));
+        useStyle(
+            UIStyle.of(
+                flexColumn(),
+                boxSizingBorderBox(),
+                padding(1),
+                sizeFull(),
+                minWidth(0),
+                minHeight(0),
+                overflow(Overflow.HIDDEN)
+            )
+        );
         setTickable(true);
         setFocusable(true);
         onMouseClicked((input, ctx) -> {
@@ -128,6 +144,10 @@ public class MainPanel extends CompositeWidget<Widget> implements ExecutionOverl
         activeRecipeWidget = addWidget(new ExecutionActiveRecipeWidget(this));
         materialsPanel = addWidget(new ExecutionMaterialsPanelWidget(this));
         graphPanel = addWidget(new ExecutionGraphPanelWidget(this));
+        // Reserves the 26px bottom slot for the collapsed drawer while the drawer itself rises upward as a bottom-anchored sheet.
+        Widget drawerSpacer = addWidget(new Widget() {});
+        drawerSpacer.setInteractive(false);
+        drawerSpacer.useStyle(heightOf(ExecutionDiagnosticsDrawerWidget.collapsedHeight), flexShrink(0), minWidth(0));
         diagnosticsDrawer = addWidget(new ExecutionDiagnosticsDrawerWidget(this));
     }
 
@@ -168,6 +188,12 @@ public class MainPanel extends CompositeWidget<Widget> implements ExecutionOverl
 
     public int panelHeightBudget() {
         return height() > 0 ? height() : 320;
+    }
+
+    public int topFixedHeight() {
+        int headerH = headerWidget.height() > 0 ? headerWidget.height() : 46;
+        int deckH = controlDeck.height() > 0 ? controlDeck.height() : 44;
+        return headerH + deckH;
     }
 
     public boolean isCompactHeight() {

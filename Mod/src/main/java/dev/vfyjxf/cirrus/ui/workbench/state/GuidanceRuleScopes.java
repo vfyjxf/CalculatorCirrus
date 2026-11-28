@@ -23,11 +23,11 @@ final class GuidanceRuleScopes {
             case RecipeRule r -> new RecipeRule(r.ruleId(), scope, r.strength(), r.recipeKey());
             case SystemRule r -> new SystemRule(r.ruleId(), scope, r.strength(), r.systemId(), r.optInEnabled());
             case MachineRule r ->
-                new MachineRule(r.ruleId(), scope, r.strength(), r.machineId(), r.willingToBuildNew());
+                new MachineRule(r.ruleId(), scope, r.strength(), r.machine(), r.willingToBuildNew());
             case ResourceRule r ->
                 new ResourceRule(r.ruleId(), scope, r.strength(), r.resource(), r.treatAsFreeBaseSource());
             case TagDefaultRule r ->
-                new TagDefaultRule(r.ruleId(), scope, r.strength(), r.tagId(), r.preferredMember());
+                new TagDefaultRule(r.ruleId(), scope, r.strength(), r.tag(), r.preferredMember());
             case CycleBreakRule r ->
                 new CycleBreakRule(r.ruleId(), scope, r.strength(), r.targetResource(), r.bannedSourceRecipe());
             case CostOverrideRule r ->

@@ -12,6 +12,7 @@ import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.DurabilityContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
 import dev.vfyjxf.cirrus.ui.process.MaterialCategories;
@@ -173,6 +174,9 @@ public final class ExecutionOverlayContentHelper {
     }
 
     public static ItemStack stackFromInputContent(InputContent input) {
+        if (input instanceof DurabilityContent durability) {
+            return stackFromInputContent(durability.ingredient());
+        }
         if (!(input instanceof StackContent<?, ?> stackContent)) {
             return ItemStack.EMPTY;
         }

@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.planning.telemetry;
 
 import dev.vfyjxf.cirrus.api.planning.spi.PlanningTelemetrySink;
 import dev.vfyjxf.cirrus.api.planning.telemetry.PlanningTelemetryEvent;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Objects;
@@ -10,7 +11,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Asynchronous non-blocking telemetry bus dispatching all 5 planning data domains + custom plugin events
+ * Asynchronous non-blocking telemetry bus dispatching planning events
  * to registered {@link PlanningTelemetrySink} subscribers with zero main-thread stutter.
  */
 public final class PlanningTelemetryBus implements AutoCloseable {
@@ -19,17 +20,11 @@ public final class PlanningTelemetryBus implements AutoCloseable {
 
     private final CopyOnWriteArrayList<PlanningTelemetrySink> sinks = new CopyOnWriteArrayList<>();
     private final boolean synchronousMode;
-    private final ExecutorService worker;
+    private volatile @Nullable ExecutorService worker;
+    private volatile boolean closed;
 
     public PlanningTelemetryBus(boolean synchronousMode) {
         this.synchronousMode = synchronousMode;
-        this.worker = synchronousMode
-                ? null
-                : Executors.newSingleThreadExecutor(r -> {
-                    Thread t = new Thread(r, "cirrus-planning-telemetry");
-                    t.setDaemon(true);
-                    return t;
-                });
     }
 
     public static PlanningTelemetryBus shared() {
@@ -50,13 +45,33 @@ public final class PlanningTelemetryBus implements AutoCloseable {
 
     public void publish(PlanningTelemetryEvent event) {
         Objects.requireNonNull(event, "event");
-        if (sinks.isEmpty()) {
+        if (closed || sinks.isEmpty()) {
             return;
         }
-        if (synchronousMode || worker == null) {
+        if (synchronousMode) {
             dispatchAll(event);
         } else {
-            worker.execute(() -> dispatchAll(event));
+            ExecutorService exec = ensureWorker();
+            if (exec != null && !exec.isShutdown()) {
+                exec.execute(() -> dispatchAll(event));
+            }
+        }
+    }
+
+    private @Nullable ExecutorService ensureWorker() {
+        ExecutorService current = worker;
+        if (current != null || closed) {
+            return current;
+        }
+        synchronized (this) {
+            if (worker == null && !closed) {
+                worker = Executors.newSingleThreadExecutor(r -> {
+                    Thread t = new Thread(r, "cirrus-planning-telemetry");
+                    t.setDaemon(true);
+                    return t;
+                });
+            }
+            return worker;
         }
     }
 
@@ -69,7 +84,8 @@ public final class PlanningTelemetryBus implements AutoCloseable {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
+        closed = true;
         if (worker != null) {
             worker.shutdown();
         }

@@ -1,8 +1,9 @@
 package dev.vfyjxf.cirrus.api.planning.graph;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledCycleMacroKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.List;
 import java.util.Optional;
@@ -12,19 +13,19 @@ public interface CompiledRecipeGraph {
 
     long catalogVersion();
 
-    SystemAdmission admissionOf(String systemId);
+    SystemAdmission admissionOf(Namespace systemId);
 
-    List<CompiledRecipe> producersOf(ResourceKey output);
+    List<CompiledRecipe> producersOf(ComponentStackKey output);
 
-    List<CompiledRecipe> consumersOf(ResourceKey input);
+    List<CompiledRecipe> consumersOf(ComponentStackKey input);
 
-    List<CompiledCycleMacro> cycleMacrosProducing(ResourceKey output);
+    List<CompiledCycleMacro> cycleMacrosProducing(ComponentStackKey output);
 
     Optional<CompiledRecipe> recipeByCompactId(int compactId);
 
     Optional<CompiledRecipe> recipeByKey(CompiledRecipeKey key);
 
-    Set<ResourceKey> allProducibleResources();
+    Set<ComponentStackKey> allProducibleResources();
 
     SccTopology sccTopology();
 
@@ -42,7 +43,7 @@ public interface CompiledRecipeGraph {
         return List.of();
     }
 
-    default Set<ResourceKey> unresolvedOutputs() {
+    default Set<ComponentStackKey> unresolvedOutputs() {
         return Set.of();
     }
 }

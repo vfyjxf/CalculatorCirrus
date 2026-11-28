@@ -1,9 +1,9 @@
 package dev.vfyjxf.cirrus.api.planning.service;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningBudget;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningContext;
 import dev.vfyjxf.cirrus.api.planning.cost.PlanningProfile;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 
 import java.util.ArrayList;
@@ -26,7 +26,7 @@ public record PlanningRequest(
         if (targets.isEmpty()) {
             throw new IllegalArgumentException("targets must not be empty");
         }
-        TreeMap<ResourceKey, Long> merged = new TreeMap<>();
+        TreeMap<ComponentStackKey, Long> merged = new TreeMap<>();
         for (TargetDemand td : targets) {
             Objects.requireNonNull(td, "target");
             merged.merge(td.resource(), td.amount(), Math::addExact);

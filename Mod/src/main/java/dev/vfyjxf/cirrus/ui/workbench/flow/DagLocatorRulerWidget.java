@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -1218,7 +1218,7 @@ public class DagLocatorRulerWidget extends Widget implements OreUiTooltipProvide
         boolean iconSelected = selectedStepIds.contains(icon.node().stepId());
         StepNodeCardRenderer.StepVisuals data = visuals
                 .getOrDefault(icon.node().stepId(), StepNodeCardRenderer.StepVisuals.empty());
-        ResourceKey resource = DagRichTooltips.primaryIconOf(icon.node().step(), data);
+        ComponentStackKey resource = DagRichTooltips.primaryIconOf(icon.node().step(), data);
         long amount = data.outputAmount() > 0L ? data.outputAmount() : data.count();
         OreUiSlotAmount.drawSlot(canvas, resource, amount, icon.x(), icon.y(), icon.size(), p);
         if (iconSelected) {

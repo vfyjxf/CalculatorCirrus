@@ -32,7 +32,10 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
 
     TypedContentStack(StackType<T, S> type, long amount, S value) {
         this.type = type;
-        this.variantType = ContentApi.instance().findVariantType(type, type.getContent(value));
+        var api = dev.vfyjxf.cirrus.content.ContentApiImpl.instance();
+        this.variantType = api != null
+                ? api.findVariantType(type, type.getContent(value))
+                : VariantType.fallback(type);
         this.value = value;
         this.amount = amount;
     }

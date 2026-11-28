@@ -1,11 +1,11 @@
 package dev.vfyjxf.cirrus.planning.bridge;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.RawIngredientSlot;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -20,6 +20,7 @@ import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
+import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
 import dev.vfyjxf.cirrus.api.recipe.execution.InputBinding;
 import dev.vfyjxf.cirrus.api.recipe.execution.OutputBinding;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
@@ -133,13 +134,13 @@ public final class ExecutionPlanBridge {
                 );
                 case CycleLoopStep cl -> appendCycleLoop(cl, recipeResolver, batches);
                 case AcquireStep ac ->
-                    tasks.add(new TaskItem(ac.stepId(), TaskKind.acquire, ac.resource().shortString(), ac.amount()));
+                    tasks.add(new TaskItem(ac.stepId(), TaskKind.acquire, ac.resource().displayId(), ac.amount()));
                 case ProvisionMachineStep pm ->
-                    tasks.add(new TaskItem(pm.stepId(), TaskKind.provisionMachine, pm.machineId(), pm.countToBuild()));
+                    tasks.add(new TaskItem(pm.stepId(), TaskKind.provisionMachine, pm.machine().canonicalKey(), pm.countToBuild()));
                 case SetupLineStep sl ->
-                    tasks.add(new TaskItem(sl.stepId(), TaskKind.setupLine, sl.primaryMachineId(), 1L));
+                    tasks.add(new TaskItem(sl.stepId(), TaskKind.setupLine, sl.primaryMachine().canonicalKey(), 1L));
                 case LinePullStep lp ->
-                    tasks.add(new TaskItem(lp.stepId(), TaskKind.linePull, lp.resource().shortString(), lp.amount()));
+                    tasks.add(new TaskItem(lp.stepId(), TaskKind.linePull, lp.resource().displayId(), lp.amount()));
             }
         }
         return new ExecutionOutline(plan.planId(), batches, tasks);
@@ -154,27 +155,48 @@ public final class ExecutionPlanBridge {
         if (template.isEmpty() || cl.iterations() <= 0L) {
             return;
         }
-        if (template.size() == 1 || cl.iterations() > maxUnrollCycleIters) {
-            for (CraftStep ts : template) {
-                long total = SafeMath.mulSaturating(ts.batches(), cl.iterations());
-                appendRecipeBatches(
-                    cl.stepId() + ":" + ts.stepId(),
-                    ts.recipeKey(),
-                    total,
-                    ts.slotBindings(),
-                    ts.catalystBindings(),
-                    recipeResolver,
-                    out
-                );
+        if (template.size() == 1) {
+            CraftStep ts = template.get(0);
+            long total = SafeMath.mulSaturating(ts.batches(), cl.iterations());
+            appendRecipeBatches(
+                cl.stepId() + ":" + ts.stepId(),
+                ts.recipeKey(),
+                total,
+                ts.slotBindings(),
+                ts.catalystBindings(),
+                recipeResolver,
+                out
+            );
+            return;
+        }
+        if (cl.iterations() <= maxUnrollCycleIters) {
+            for (long iter = 0L; iter < cl.iterations(); iter++) {
+                for (CraftStep ts : template) {
+                    appendRecipeBatches(
+                        cl.stepId() + "#" + iter + ":" + ts.stepId(),
+                        ts.recipeKey(),
+                        ts.batches(),
+                        ts.slotBindings(),
+                        ts.catalystBindings(),
+                        recipeResolver,
+                        out
+                    );
+                }
             }
             return;
         }
-        for (long iter = 0L; iter < cl.iterations(); iter++) {
+        // Interleaved chunked waves preserve multi-step cycle dependency ordering while bounding batch count.
+        long baseWaveIters = cl.iterations() / maxUnrollCycleIters;
+        long remainder = cl.iterations() % maxUnrollCycleIters;
+        for (int wave = 0; wave < maxUnrollCycleIters; wave++) {
+            long waveIters = baseWaveIters + (wave < remainder ? 1L : 0L);
+            if (waveIters <= 0L) continue;
             for (CraftStep ts : template) {
+                long waveBatches = SafeMath.mulSaturating(ts.batches(), waveIters);
                 appendRecipeBatches(
-                    cl.stepId() + "#" + iter + ":" + ts.stepId(),
+                    cl.stepId() + "#w" + wave + ":" + ts.stepId(),
                     ts.recipeKey(),
-                    ts.batches(),
+                    waveBatches,
                     ts.slotBindings(),
                     ts.catalystBindings(),
                     recipeResolver,
@@ -189,7 +211,7 @@ public final class ExecutionPlanBridge {
         CompiledRecipeKey key,
         long totalBatches,
         Map<Integer, SlotBinding> slotBindings,
-        Map<Integer, ResourceKey> catalystBindings,
+        Map<Integer, ComponentStackKey> catalystBindings,
         Function<CompiledRecipeKey, Optional<RecipeEntry<?>>> recipeResolver,
         List<RecipeBatch> out
     ) {
@@ -212,7 +234,7 @@ public final class ExecutionPlanBridge {
                 int consumedIdx = 0;
                 int catIdx = 0;
                 for (InputContent in : src.inputs()) {
-                    if (in == null || in.isEmpty()) continue;
+                    if (in == null || in.isEmpty() || in instanceof ValueContent<?>) continue;
                     if (in.notConsumed()) {
                         catList.add(bindCatalystInput(in, catIdx++, catalystBindings, matchedCats));
                     } else if (in.amount() > 0L) {
@@ -257,22 +279,22 @@ public final class ExecutionPlanBridge {
         if (rawSlot == null || rawSlot.candidates().size() <= 1) {
             return rawIn;
         }
-        ResourceKey chosen = matchSlotBinding(preferredSlotIdx, rawSlot.candidates(), slotBindings, matchedSlots);
-        if (chosen == null || chosen.canonicalVariantHash().isPresent()) {
+        ComponentStackKey chosen = matchSlotBinding(preferredSlotIdx, rawSlot.candidates(), slotBindings, matchedSlots);
+        if (chosen == null) {
             return rawIn;
         }
-        Optional<ContentStack<?, ?>> concrete = CirrusContentBridge.toBestEffortContentStack(chosen, rawIn.amount());
+        ContentStack<?, ?> concrete = chosen.toStack(rawIn.amount());
         if (concrete.isEmpty()) {
             return rawIn;
         }
-        InputContent bound = InputContent.fromStack(concrete.get());
+        InputContent bound = InputContent.fromStack(concrete);
         return bound.isEmpty() ? rawIn : bound;
     }
 
     private static InputContent bindCatalystInput(
         InputContent rawIn,
         int preferredCatIdx,
-        Map<Integer, ResourceKey> catalystBindings,
+        Map<Integer, ComponentStackKey> catalystBindings,
         Set<Integer> matchedCats
     ) {
         if (catalystBindings.isEmpty() || rawIn instanceof StackContent<?, ?>) {
@@ -283,22 +305,22 @@ public final class ExecutionPlanBridge {
         if (rawSlot == null || rawSlot.candidates().size() <= 1) {
             return rawIn;
         }
-        ResourceKey chosen = matchCatalystBinding(preferredCatIdx, rawSlot.candidates(), catalystBindings, matchedCats);
-        if (chosen == null || chosen.canonicalVariantHash().isPresent()) {
+        ComponentStackKey chosen = matchCatalystBinding(preferredCatIdx, rawSlot.candidates(), catalystBindings, matchedCats);
+        if (chosen == null) {
             return rawIn;
         }
         long amount = rawIn.amount() > 0L ? rawIn.amount() : 1L;
-        Optional<ContentStack<?, ?>> concrete = CirrusContentBridge.toBestEffortContentStack(chosen, amount);
+        ContentStack<?, ?> concrete = chosen.toStack(amount);
         if (concrete.isEmpty()) {
             return rawIn;
         }
-        InputContent bound = InputContent.fromStack(concrete.get(), InputContent.MIN_CHANCE);
+        InputContent bound = InputContent.fromStack(concrete, InputContent.MIN_CHANCE);
         return bound.isEmpty() ? rawIn : bound;
     }
 
-    private static @Nullable ResourceKey matchSlotBinding(
+    private static @Nullable ComponentStackKey matchSlotBinding(
         int preferredIdx,
-        List<ResourceKey> candidates,
+        List<ComponentStackKey> candidates,
         Map<Integer, SlotBinding> slotBindings,
         Set<Integer> matchedSlots
     ) {
@@ -316,18 +338,18 @@ public final class ExecutionPlanBridge {
         return null;
     }
 
-    private static @Nullable ResourceKey matchCatalystBinding(
+    private static @Nullable ComponentStackKey matchCatalystBinding(
         int preferredIdx,
-        List<ResourceKey> candidates,
-        Map<Integer, ResourceKey> catalystBindings,
+        List<ComponentStackKey> candidates,
+        Map<Integer, ComponentStackKey> catalystBindings,
         Set<Integer> matchedCats
     ) {
-        ResourceKey direct = catalystBindings.get(preferredIdx);
+        ComponentStackKey direct = catalystBindings.get(preferredIdx);
         if (direct != null && !matchedCats.contains(preferredIdx) && candidates.contains(direct)) {
             matchedCats.add(preferredIdx);
             return direct;
         }
-        for (Map.Entry<Integer, ResourceKey> e : catalystBindings.entrySet()) {
+        for (Map.Entry<Integer, ComponentStackKey> e : catalystBindings.entrySet()) {
             if (!matchedCats.contains(e.getKey()) && candidates.contains(e.getValue())) {
                 matchedCats.add(e.getKey());
                 return e.getValue();

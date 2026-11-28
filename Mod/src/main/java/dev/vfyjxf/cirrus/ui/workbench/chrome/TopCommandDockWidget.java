@@ -1,14 +1,15 @@
 package dev.vfyjxf.cirrus.ui.workbench.chrome;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.cost.CostWeights;
 import dev.vfyjxf.cirrus.api.planning.cost.ObjectivePreset;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
 import dev.vfyjxf.cirrus.ui.CirrusThemeIcons;
 import dev.vfyjxf.cirrus.ui.CirrusThemeTextures;
+import dev.vfyjxf.cirrus.ui.CirrusUiSound;
 import dev.vfyjxf.cirrus.ui.widget.NumberInputWidget;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchBreakpoint;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchShellContext;
@@ -119,6 +120,18 @@ public class TopCommandDockWidget extends WidgetGroup<Widget> implements OreUiTo
         search = TextFieldWidget.create().setMaxLength(64)
                 .setPlaceholder(CirrusLangs.Workbench.Topbar.searchPlaceholder.string())
                 .onTextChanged(this::setSearchQuery).onEnterPressed(text -> activatePreview(0));
+        search.onMouseClicked((input, clickCtx) -> {
+            if (!input.isRightClick()) {
+                return EventDispatch.pass;
+            }
+            if (!search.text().isEmpty()) {
+                search.setText("");
+                setSearchQuery("");
+                CirrusUiSound.playClickSound();
+            }
+            clickCtx.consume();
+            return EventDispatch.consumed;
+        });
         search.onFocus(ignored -> updateSearchExpanded(true));
         search.onFocusLost(ignored -> {
             updateSearchExpanded(false);
@@ -726,7 +739,7 @@ public class TopCommandDockWidget extends WidgetGroup<Widget> implements OreUiTo
         updateSearchExpanded(search.focused());
     }
 
-    public boolean applyTarget(@Nullable ResourceKey resource, boolean addToBasket) {
+    public boolean applyTarget(@Nullable ComponentStackKey resource, boolean addToBasket) {
         if (resource == null) {
             return false;
         }

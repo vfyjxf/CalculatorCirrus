@@ -1,10 +1,10 @@
 package dev.vfyjxf.cirrus.api.planning.human;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 
 import java.util.Objects;
 
-public record OverrideStockFeedback(ResourceKey resource, long newAvailableAmount) implements HumanFeedback {
+public record OverrideStockFeedback(ComponentStackKey resource, long newAvailableAmount) implements HumanFeedback {
 
     public OverrideStockFeedback {
         Objects.requireNonNull(resource, "resource");

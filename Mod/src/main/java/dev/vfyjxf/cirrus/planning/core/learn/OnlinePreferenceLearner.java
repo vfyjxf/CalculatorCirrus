@@ -2,7 +2,7 @@ package dev.vfyjxf.cirrus.planning.core.learn;
 
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -10,7 +10,7 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * M9.2 Discounted Diagonal Laplace / Online-Newton Bradley-Terry Preference Learner (Pure JDK 21).
+ * Discounted diagonal Laplace / online-Newton Bradley-Terry preference learner.
  *
  * <p>Guarantees:
  * - Single-step relative update bounded by |Delta h_j| <= d_h (0.10) and |h_j| <= h_max (1.0).
@@ -28,6 +28,7 @@ public final class OnlinePreferenceLearner {
     public static final double defaultHGroupCap = 0.5;
     public static final double defaultMaxSingleStepDh = 0.10;
     public static final double defaultHalfLifeRounds = 100.0;
+    public static final int maxProcessedEventIds = 8192;
 
     private static final class DimState {
         double precisionD;
@@ -45,7 +46,7 @@ public final class OnlinePreferenceLearner {
 
     private final Map<String, DimState> dims = new TreeMap<>();
     private final Map<String, Double> groupPriors = new HashMap<>();
-    private final Set<String> processedEventIds = new HashSet<>();
+    private final LinkedHashSet<String> processedEventIds = new LinkedHashSet<>();
     private long currentLogicTime = 0L;
 
     public OnlinePreferenceLearner() {}
@@ -81,6 +82,13 @@ public final class OnlinePreferenceLearner {
         }
         if (!processedEventIds.add(eventId)) {
             return false; // Idempotent replay protection.
+        }
+        if (processedEventIds.size() > maxProcessedEventIds) {
+            var it = processedEventIds.iterator();
+            if (it.hasNext()) {
+                it.next();
+                it.remove();
+            }
         }
         long t = Math.max(currentLogicTime, logicTimeStep);
         currentLogicTime = t;
@@ -159,7 +167,7 @@ public final class OnlinePreferenceLearner {
     }
 
     /**
-     * Non-negative bounded habit mismatch cost S_habit in [0, bRawSeconds] (M9.2):
+     * Non-negative bounded habit mismatch cost S_habit in [0, bRawSeconds]:
      * S_habit = B_raw * (h_max - x(P)^T h) / (2 * h_max).
      * When all h == 0 (cold start), every candidate receives the exact same score (zero bias).
      */
@@ -180,7 +188,7 @@ public final class OnlinePreferenceLearner {
     }
 
     /**
-     * Deterministic reserved exploration slot rotation (M9.2):
+     * Deterministic reserved exploration slot rotation:
      * ensures among {@code r} eligible alternative regime signatures, each receives exposure
      * at least once every {@code r} queries with a spare display slot.
      */

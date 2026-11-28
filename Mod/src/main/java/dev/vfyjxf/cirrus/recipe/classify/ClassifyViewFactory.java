@@ -14,6 +14,7 @@ import dev.vfyjxf.cirrus.api.recipe.content.StackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TagStackContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TypedStackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.DurabilityContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionSlot;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import net.minecraft.resources.ResourceLocation;
@@ -88,6 +89,7 @@ public final class ClassifyViewFactory {
                 ofList(list.stacks(), ClassifyContent.Kind.typedAny, content.amount(), content.chance());
             case ValueContent<?> value ->
                 new ClassifyContent(ClassifyContent.Kind.value, Set.of(), null, content.amount(), content.chance());
+            case DurabilityContent durability -> of(durability.ingredient());
             case ComplexContent complex ->
                 new ClassifyContent(ClassifyContent.Kind.complex, Set.of(), null, content.amount(), content.chance());
             case EmptyRecipeContent empty -> new ClassifyContent(ClassifyContent.Kind.empty, Set.of(), null, 0, 0);
@@ -155,6 +157,10 @@ public final class ClassifyViewFactory {
             case StackListContent list -> listKey(list.stacks(), "list");
             case TypedStackListContent<?, ?> list -> listKey(list.stacks(), "typedList");
             case ValueContent<?> value -> "value:" + value.content().type().typeId();
+            case DurabilityContent durability -> {
+                String base = demandKey(durability.ingredient());
+                yield base == null ? null : "durability:" + durability.durabilityCost() + ":" + base;
+            }
             default -> null;
         };
     }

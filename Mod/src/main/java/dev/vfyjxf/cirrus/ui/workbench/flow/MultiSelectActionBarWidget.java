@@ -261,7 +261,7 @@ public class MultiSelectActionBarWidget extends Widget {
         for (DagNodeBox node : nodes) {
             PlanStep step = node.step();
             if (step instanceof AcquireStep acquire) {
-                labels.add(Component.literal(acquire.resource().shortString()));
+                labels.add(Component.literal(acquire.resource().displayId()));
             }
         }
         return labels;

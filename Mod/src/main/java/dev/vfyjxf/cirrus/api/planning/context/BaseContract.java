@@ -1,16 +1,15 @@
 package dev.vfyjxf.cirrus.api.planning.context;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 
 import java.util.Objects;
 
 /**
- * Layer-1 certified Base supply contract (M4):
- * represents a proven stable in-base replenishment source with positive calibrated unit price
- * (never zero unless explicitly declared free) and finite/unbounded deliverable capacity.
+ * Certified base-supply contract representing a stable in-base replenishment source with
+ * positive calibrated unit price (never zero unless explicitly declared free) and deliverable capacity.
  */
 public record BaseContract(
-    ResourceKey resource,
+    ComponentStackKey resource,
     double calibratedUnitSeconds,
     double minUnitFloorSeconds,
     double scarcityPremiumPerUnit,
@@ -38,13 +37,18 @@ public record BaseContract(
         }
     }
 
-    /** M4 Base non-zero pricing formula V_base(v, D). */
+    /** Base unit human active time (excluding fixed delivery and scarcity premium). */
+    public double baseUnitSeconds() {
+        return explicitlyFree ? 0.0 : Math.max(minUnitFloorSeconds, calibratedUnitSeconds);
+    }
+
+    /** Total effective unit price for demand D including amortized fixed delivery and scarcity premium. */
     public double unitPriceForDemand(long demand) {
         if (explicitlyFree) {
             return 0.0;
         }
         long d = Math.max(1L, demand);
-        double unit = Math.max(minUnitFloorSeconds, calibratedUnitSeconds) + scarcityPremiumPerUnit;
+        double unit = baseUnitSeconds() + scarcityPremiumPerUnit;
         return (fixedDeliverySeconds + d * unit) / d;
     }
 }

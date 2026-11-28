@@ -32,8 +32,6 @@ import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
-import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -46,17 +44,17 @@ import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningSession;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.core.cost.DefaultAcquisitionOracle;
+import dev.vfyjxf.cirrus.planning.core.graph.MachineCapabilityGroups;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -85,7 +83,7 @@ final class PlanningSessionImpl implements PlanningSession {
         this.machinePersistenceListener = machinePersistenceListener;
         this.baseRules = List.copyOf(initialRequest.context().guidance().allRules());
         PlanningResult initialResult = service.planOnceInternal(initialRequest, Set.of());
-        this.current = new SessionState(initialRequest, List.of(), Set.of(), initialResult);
+        this.current = new SessionState(initialRequest, List.of(), Set.of(), List.of(), initialResult);
     }
 
     @Override
@@ -112,18 +110,16 @@ final class PlanningSessionImpl implements PlanningSession {
         combinedRules.addAll(delta.sessionRules);
         HumanGuidanceView nextGuidance = DefaultHumanGuidanceView.of(combinedRules);
 
-        AcquisitionOracle baseOracle = current.request().context().acquisitionOracle();
+        PlanningContext baseCtx = current.request().context();
+        AcquisitionOracle baseOracle = baseCtx.acquisitionOracle();
         AcquisitionOracle nextOracle = baseOracle instanceof DefaultAcquisitionOracle dao
                 ? dao.withGuidance(nextGuidance)
                 : baseOracle;
 
-        PlanningContext nextCtx = new PlanningContext(
-            delta.inventory,
-            delta.facilities,
-            nextOracle,
-            nextGuidance,
-            current.request().context().progression()
-        );
+        PlanningContext nextCtx = baseCtx
+                .withInventory(delta.inventory)
+                .withFacilities(delta.facilities)
+                .withOracleAndGuidance(nextOracle, nextGuidance);
         PlanningRequest nextReq = new PlanningRequest(
             current.request().targets(),
             nextCtx,
@@ -136,7 +132,13 @@ final class PlanningSessionImpl implements PlanningSession {
 
         undoStack.push(current);
         redoStack.clear();
-        current = new SessionState(nextReq, List.copyOf(delta.sessionRules), nextDismissed, nextResult);
+        current = new SessionState(
+            nextReq,
+            List.copyOf(delta.sessionRules),
+            nextDismissed,
+            List.copyOf(delta.worldSaveMutations),
+            nextResult
+        );
         return nextResult;
     }
 
@@ -145,6 +147,16 @@ final class PlanningSessionImpl implements PlanningSession {
         ensureOpen();
         if (undoStack.isEmpty()) {
             return current.result();
+        }
+        if (guidanceStore != null && !current.worldSaveMutations().isEmpty()) {
+            for (int i = current.worldSaveMutations().size() - 1; i >= 0; i--) {
+                WorldSaveMutation mut = current.worldSaveMutations().get(i);
+                if (mut.previousRule() != null) {
+                    guidanceStore.putRule(mut.previousRule());
+                } else {
+                    guidanceStore.removeRule(mut.appliedRule().ruleId());
+                }
+            }
         }
         redoStack.push(current);
         current = undoStack.pop();
@@ -159,6 +171,11 @@ final class PlanningSessionImpl implements PlanningSession {
         }
         undoStack.push(current);
         current = redoStack.pop();
+        if (guidanceStore != null && !current.worldSaveMutations().isEmpty()) {
+            for (WorldSaveMutation mut : current.worldSaveMutations()) {
+                guidanceStore.putRule(mut.appliedRule());
+            }
+        }
         return current.result();
     }
 
@@ -208,11 +225,12 @@ final class PlanningSessionImpl implements PlanningSession {
             );
         }
         delta.dismissedPromptIds.add(apf.promptId());
+        service.recordPromptAnswered(matchedPrompt.questionKey());
         appendRules(matchedOption.compiledRules(), apf.persistToWorld(), delta);
         if (matchedOption.followUp().isPresent()) {
             HumanFeedback follow = matchedOption.followUp().get();
             if (follow instanceof DeclareOwnedMachineFeedback dmf && apf.persistToWorld() && !dmf.persistToWorld()) {
-                follow = new DeclareOwnedMachineFeedback(dmf.machineId(), dmf.ownedCount(), true);
+                follow = new DeclareOwnedMachineFeedback(dmf.machine(), dmf.ownedCount(), true);
             }
             applyFeedback(follow, delta);
         }
@@ -223,7 +241,7 @@ final class PlanningSessionImpl implements PlanningSession {
         List<OwnedMachineGroup> nextMachines = new ArrayList<>(oldFac.ownedMachines().size() + 1);
         OwnedMachineGroup existing = null;
         for (OwnedMachineGroup g : oldFac.ownedMachines()) {
-            if (g.machineId().equals(dmf.machineId())) {
+            if (g.machine().equals(dmf.machine())) {
                 existing = g;
             } else {
                 nextMachines.add(g);
@@ -232,10 +250,10 @@ final class PlanningSessionImpl implements PlanningSession {
         if (dmf.ownedCount() > 0) {
             MachineCapabilityId cap = existing != null
                     ? existing.capability()
-                    : inferMachineCapability(service.graph(), dmf.machineId());
+                    : inferMachineCapability(service.graph(), dmf.machine());
             double speed = existing != null ? existing.passiveSpeedMultiplier() : 1.0;
             boolean autoFeed = existing != null && existing.automatedFeeding();
-            nextMachines.add(new OwnedMachineGroup(dmf.machineId(), cap, dmf.ownedCount(), speed, autoFeed));
+            nextMachines.add(new OwnedMachineGroup(dmf.machine(), cap, dmf.ownedCount(), speed, autoFeed));
         }
         delta.facilities = new FacilitySnapshot(
             nextMachines,
@@ -249,20 +267,13 @@ final class PlanningSessionImpl implements PlanningSession {
     }
 
     private void applyOverrideStock(OverrideStockFeedback osf, MutableDelta delta) {
-        Map<ResourceKey, Long> nextEntries = new LinkedHashMap<>(delta.inventory.available().entries());
-        if (osf.newAvailableAmount() <= 0L) {
-            nextEntries.remove(osf.resource());
-        } else {
-            nextEntries.put(osf.resource(), osf.newAvailableAmount());
-        }
-        StockLedger nextAvail = nextEntries.isEmpty() ? StockLedger.empty : new StockLedger(nextEntries);
-        delta.inventory = new InventorySnapshot(nextAvail, delta.inventory.reserved());
+        delta.inventory = delta.inventory.withOverriddenStock(osf.resource(), osf.newAvailableAmount());
     }
 
     private void applyPinRecipe(PinResourceRecipeFeedback prf, MutableDelta delta) {
         GuidanceScope scope = prf.persistToWorld() ? GuidanceScope.worldSave : GuidanceScope.session;
         RecipeRule pinRule = new RecipeRule(
-            "session:pin:" + prf.resource().shortString() + ":" + prf.recipeKey().toString(),
+            "session:pin:" + prf.resource().canonicalKey() + ":" + prf.recipeKey().toString(),
             scope,
             RuleStrength.hardPin,
             prf.recipeKey()
@@ -271,13 +282,7 @@ final class PlanningSessionImpl implements PlanningSession {
     }
 
     private void applyRejectStep(RejectStepFeedback rsf, MutableDelta delta) {
-        ProductionPlan plan = null;
-        for (ProductionPlan p : current.result().paretoPlans()) {
-            if (p.planId().equals(rsf.planId())) {
-                plan = p;
-                break;
-            }
-        }
+        ProductionPlan plan = findPlanById(rsf.planId());
         if (plan == null) {
             throw new IllegalArgumentException("Unknown planId: " + rsf.planId());
         }
@@ -369,16 +374,16 @@ final class PlanningSessionImpl implements PlanningSession {
             }
             case ProvisionMachineStep pm -> generated.add(
                 new MachineRule(
-                    "session:reject:machine:" + pm.machineId(),
+                    "session:reject:machine:" + pm.machine().canonicalKey(),
                     scope,
                     RuleStrength.hardBan,
-                    pm.machineId(),
+                    pm.machine(),
                     false
                 )
             );
             case AcquireStep ac -> generated.add(
                 new ResourceRule(
-                    "session:reject:res:" + ac.resource().shortString(),
+                    "session:reject:res:" + ac.resource().canonicalKey(),
                     scope,
                     RuleStrength.hardBan,
                     ac.resource(),
@@ -387,16 +392,16 @@ final class PlanningSessionImpl implements PlanningSession {
             );
             case SetupLineStep sl -> generated.add(
                 new MachineRule(
-                    "session:reject:machine:" + sl.primaryMachineId(),
+                    "session:reject:machine:" + sl.primaryMachine().canonicalKey(),
                     scope,
                     RuleStrength.hardBan,
-                    sl.primaryMachineId(),
+                    sl.primaryMachine(),
                     false
                 )
             );
             case LinePullStep lp -> generated.add(
                 new ResourceRule(
-                    "session:reject:res:" + lp.resource().shortString(),
+                    "session:reject:res:" + lp.resource().canonicalKey(),
                     scope,
                     RuleStrength.hardBan,
                     lp.resource(),
@@ -407,6 +412,20 @@ final class PlanningSessionImpl implements PlanningSession {
         appendRules(generated, rsf.persistToWorld(), delta);
     }
 
+    private @Nullable ProductionPlan findPlanById(String planId) {
+        for (ProductionPlan p : current.result().paretoPlans()) {
+            if (p.planId().equals(planId)) {
+                return p;
+            }
+        }
+        for (ProductionPlan p : current.result().conditionalDrafts()) {
+            if (p.planId().equals(planId)) {
+                return p;
+            }
+        }
+        return null;
+    }
+
     private void appendRules(List<GuidanceRule> rules, boolean persistToWorld, MutableDelta delta) {
         if (rules == null || rules.isEmpty()) {
             return;
@@ -415,23 +434,37 @@ final class PlanningSessionImpl implements PlanningSession {
             GuidanceRule effective = persistToWorld ? withScope(raw, GuidanceScope.worldSave) : raw;
             delta.sessionRules.add(effective);
             if (persistToWorld && guidanceStore != null) {
+                GuidanceRule previous = findExistingWorldSaveRule(effective.ruleId());
                 guidanceStore.putRule(effective);
+                delta.worldSaveMutations.add(new WorldSaveMutation(effective, previous));
             }
         }
     }
 
-    private static MachineCapabilityId inferMachineCapability(CompiledRecipeGraph graph, String machineId) {
+    private @Nullable GuidanceRule findExistingWorldSaveRule(String ruleId) {
+        if (guidanceStore == null) {
+            return null;
+        }
+        for (GuidanceRule r : guidanceStore.rulesInScope(GuidanceScope.worldSave)) {
+            if (r.ruleId().equals(ruleId)) {
+                return r;
+            }
+        }
+        return null;
+    }
+
+    private static MachineCapabilityId inferMachineCapability(CompiledRecipeGraph graph, MachineEntry machine) {
         int total = graph.stats().compiledRecipes();
         for (int id = 0; id < total; id++) {
             Optional<CompiledRecipe> opt = graph.recipeByCompactId(id);
-            if (opt.isPresent() && opt.get().machineRequirement().compatibleMachineIds().contains(machineId)) {
+            if (opt.isPresent() && opt.get().machineRequirement().compatibleMachines().contains(machine)) {
                 Optional<MachineCapabilityId> cap = opt.get().machineRequirement().capabilityId();
                 if (cap.isPresent()) {
                     return cap.get();
                 }
             }
         }
-        return new MachineCapabilityId("cirrus:capability/machine/" + machineId.replace(':', '/'));
+        return MachineCapabilityGroups.capabilityOfMachine(machine);
     }
 
     private static GuidanceRule withScope(GuidanceRule rule, GuidanceScope scope) {
@@ -442,11 +475,11 @@ final class PlanningSessionImpl implements PlanningSession {
             case RecipeRule r -> new RecipeRule(r.ruleId(), scope, r.strength(), r.recipeKey());
             case SystemRule r -> new SystemRule(r.ruleId(), scope, r.strength(), r.systemId(), r.optInEnabled());
             case MachineRule r ->
-                new MachineRule(r.ruleId(), scope, r.strength(), r.machineId(), r.willingToBuildNew());
+                new MachineRule(r.ruleId(), scope, r.strength(), r.machine(), r.willingToBuildNew());
             case ResourceRule r ->
                 new ResourceRule(r.ruleId(), scope, r.strength(), r.resource(), r.treatAsFreeBaseSource());
             case TagDefaultRule r ->
-                new TagDefaultRule(r.ruleId(), scope, r.strength(), r.tagId(), r.preferredMember());
+                new TagDefaultRule(r.ruleId(), scope, r.strength(), r.tag(), r.preferredMember());
             case CycleBreakRule r ->
                 new CycleBreakRule(r.ruleId(), scope, r.strength(), r.targetResource(), r.bannedSourceRecipe());
             case CostOverrideRule r ->
@@ -455,10 +488,13 @@ final class PlanningSessionImpl implements PlanningSession {
         };
     }
 
+    private record WorldSaveMutation(GuidanceRule appliedRule, @Nullable GuidanceRule previousRule) {}
+
     private record SessionState(
         PlanningRequest request,
         List<GuidanceRule> sessionRules,
         Set<String> dismissedPromptIds,
+        List<WorldSaveMutation> worldSaveMutations,
         PlanningResult result
     ) {}
 
@@ -467,6 +503,7 @@ final class PlanningSessionImpl implements PlanningSession {
         FacilitySnapshot facilities;
         final List<GuidanceRule> sessionRules;
         final Set<String> dismissedPromptIds;
+        final List<WorldSaveMutation> worldSaveMutations = new ArrayList<>();
 
         MutableDelta(
             InventorySnapshot inventory,

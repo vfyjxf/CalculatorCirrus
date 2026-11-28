@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
 import dev.vfyjxf.cirrus.ui.CirrusThemeIcons;
 import dev.vfyjxf.cirrus.ui.CirrusThemeTextures;
+import dev.vfyjxf.cirrus.ui.CirrusUiSound;
 import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
 import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
 import dev.vfyjxf.cirrus.util.NumberUtils;
@@ -49,11 +50,11 @@ public class SearchBoxWidget extends Widget {
     private static final int paddingLeft = 15;
     private static final int paddingRight = 4;
     private static final int maxSuggestionCandidates = 48;
-    private static final int maxVisibleSuggestions = 6;
-    private static final int suggestionRowHeight = 14;
+    private static final int maxVisibleSuggestions = 8;
+    private static final int suggestionRowHeight = 20;
     private static final int suggestionGap = 2;
     private static final int suggestionPopupZIndex = 2400;
-    private static final int suggestionPopupPadding = 1;
+    private static final int suggestionPopupPadding = 2;
     private static final int suggestionPopupMinWidth = 64;
 
     private String text = "";
@@ -103,6 +104,18 @@ public class SearchBoxWidget extends Widget {
 
     private void setupEvents() {
         onMouseClick((input, clickCount, context) -> {
+            if (input.isRightClick()) {
+                if (!text.isEmpty()) {
+                    replaceText("");
+                    CirrusUiSound.playClickSound();
+                } else {
+                    clearSelection();
+                }
+                cursorBlinkEpoch = System.currentTimeMillis();
+                syncSuggestionPopup();
+                context.consume();
+                return EventDispatch.consumed;
+            }
             if (!input.isLeftClick()) {
                 return EventDispatch.pass;
             }
@@ -1027,7 +1040,8 @@ public class SearchBoxWidget extends Widget {
             int prefixStart = typedPrefix.isEmpty() ? -1 : token.toLowerCase(Locale.ROOT).indexOf(typedPrefix);
             int prefixEnd = prefixStart < 0 ? -1 : prefixStart + typedPrefix.length();
             int x = 6;
-            for (SearchHighlightSegment segment : RecipeSearchHighlighter.highlight(token)) {
+            int textY = Math.max(1, (height() - font.lineHeight) / 2 + 1);
+            for (SearchHighlightSegment segment : highlighter.apply(token)) {
                 int segmentColor = segment.kind() == SearchHighlightKind.text
                         ? baseColor
                         : highlightColorFor(segment.kind(), palette, dark);
@@ -1045,7 +1059,7 @@ public class SearchBoxWidget extends Widget {
                         }
                     }
                     String piece = token.substring(from, end);
-                    canvas.text(piece, x, 3, color, false);
+                    canvas.text(piece, x, textY, color, false);
                     x += font.width(piece);
                     from = end;
                 }
@@ -1054,7 +1068,7 @@ public class SearchBoxWidget extends Widget {
                 canvas.text(
                     countLabel,
                     Math.max(8, width() - 4 - font.width(countLabel)),
-                    3,
+                    textY,
                     palette.textMuted(),
                     false
                 );

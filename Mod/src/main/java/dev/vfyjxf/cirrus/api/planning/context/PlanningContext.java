@@ -42,6 +42,18 @@ public record PlanningContext(
         Objects.requireNonNull(attributes, "attributes");
     }
 
+    public PlanningContext withInventory(InventorySnapshot newInventory) {
+        return new PlanningContext(newInventory, facilities, baseBoundary, acquisitionOracle, guidance, progression, attributes);
+    }
+
+    public PlanningContext withFacilities(FacilitySnapshot newFacilities) {
+        return new PlanningContext(inventory, newFacilities, baseBoundary, acquisitionOracle, guidance, progression, attributes);
+    }
+
+    public PlanningContext withOracleAndGuidance(AcquisitionOracle newOracle, HumanGuidanceView newGuidance) {
+        return new PlanningContext(inventory, facilities, baseBoundary, newOracle, newGuidance, progression, attributes);
+    }
+
     public PlanningContext withBaseBoundary(BaseBoundarySnapshot newBoundary) {
         return new PlanningContext(inventory, facilities, newBoundary, acquisitionOracle, guidance, progression, attributes);
     }

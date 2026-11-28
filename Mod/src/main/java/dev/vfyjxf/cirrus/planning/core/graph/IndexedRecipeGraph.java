@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning.core.graph;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CatalystSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledCycleMacro;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
@@ -16,11 +17,13 @@ import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmissionPolicy;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledCycleMacroKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.planning.tag.CanonicalRecipeTag;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeEvidenceTier;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeSemanticKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.tags.TagKey;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -40,12 +43,12 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
 
     private final long catalogVersion;
     private final SystemAdmissionPolicy policy;
-    private final Map<String, SystemAdmission> admissionCache;
+    private final Map<Namespace, SystemAdmission> admissionCache;
     private final ResourceDictionary dict;
     private final CandidateTable candidates;
     private final IterativeTarjanScc sccIndex;
     private volatile GraphCompilationStats stats;
-    private final Set<ResourceKey> unresolvedOutputs;
+    private final Set<ComponentStackKey> unresolvedOutputs;
 
     private final int recipeCount;
     private final CompiledRecipeKey[] recipeKeys;
@@ -54,9 +57,9 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     private final long[] sourceRefs;
     private final boolean[] handCraftable;
     private final MachineCapabilityId[] capabilities;
-    private final List<String>[] compatMachines;
-    private final Map<String, Double>[] recipeValues;
-    private final Set<String>[] systemTags;
+    private final List<MachineEntry>[] compatMachines;
+    private final Map<Namespace, Double>[] recipeValues;
+    private final Set<Namespace>[] systemTags;
     private final Set<CanonicalRecipeTag>[] canonicalTags;
     private final RecipeEvidenceTier[] evidenceTiers;
     private final double[] structuralFidelities;
@@ -67,7 +70,7 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     private final int[] inCandList;
     private final long[] inAmount;
     private final byte[] inMatchMode;
-    private final String[] inTagId;
+    private final @Nullable TagKey<?>[] inTag;
 
     private final int[] catStart;
     private final int[] catSlotIndex;
@@ -87,7 +90,7 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
 
     private final Map<CompiledRecipeKey, Integer> compactIdByKey;
     private final CompiledRecipe[] materializedCache;
-    private final Set<ResourceKey> producibleResources;
+    private final Set<ComponentStackKey> producibleResources;
 
     private List<CompiledCycleMacro> allMacros = List.of();
     private Map<CompiledCycleMacroKey, CompiledCycleMacro> macroByKey = Map.of();
@@ -96,21 +99,21 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     IndexedRecipeGraph(
         long catalogVersion,
         SystemAdmissionPolicy policy,
-        Map<String, SystemAdmission> admissionCache,
+        Map<Namespace, SystemAdmission> admissionCache,
         ResourceDictionary dict,
         CandidateTable candidates,
         IterativeTarjanScc sccIndex,
         GraphCompilationStats stats,
-        Set<ResourceKey> unresolvedOutputs,
+        Set<ComponentStackKey> unresolvedOutputs,
         CompiledRecipeKey[] recipeKeys,
         byte[] roles,
         byte[] advisories,
         long[] sourceRefs,
         boolean[] handCraftable,
         MachineCapabilityId[] capabilities,
-        List<String>[] compatMachines,
-        Map<String, Double>[] recipeValues,
-        Set<String>[] systemTags,
+        List<MachineEntry>[] compatMachines,
+        Map<Namespace, Double>[] recipeValues,
+        Set<Namespace>[] systemTags,
         Set<CanonicalRecipeTag>[] canonicalTags,
         RecipeEvidenceTier[] evidenceTiers,
         double[] structuralFidelities,
@@ -120,7 +123,7 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
         int[] inCandList,
         long[] inAmount,
         byte[] inMatchMode,
-        String[] inTagId,
+        @Nullable TagKey<?>[] inTag,
         int[] catStart,
         int[] catSlotIndex,
         int[] catCandList,
@@ -162,7 +165,7 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
         this.inCandList = inCandList.clone();
         this.inAmount = inAmount.clone();
         this.inMatchMode = inMatchMode.clone();
-        this.inTagId = inTagId.clone();
+        this.inTag = inTag.clone();
         this.catStart = catStart.clone();
         this.catSlotIndex = catSlotIndex.clone();
         this.catCandList = catCandList.clone();
@@ -184,7 +187,7 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
         }
         this.compactIdByKey = keyMap;
 
-        TreeSet<ResourceKey> producible = new TreeSet<>();
+        TreeSet<ComponentStackKey> producible = new TreeSet<>();
         for (int u = 0; u < dict.size(); u++) {
             if (prodStart[u + 1] > prodStart[u]) {
                 producible.add(dict.keyOf(u));
@@ -266,15 +269,15 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
         return capabilities[r];
     }
 
-    public List<String> compatMachinesOf(int r) {
+    public List<MachineEntry> compatMachinesOf(int r) {
         return compatMachines[r];
     }
 
-    public Map<String, Double> recipeValuesOf(int r) {
+    public Map<Namespace, Double> recipeValuesOf(int r) {
         return recipeValues[r];
     }
 
-    public Set<String> systemTagsOf(int r) {
+    public Set<Namespace> systemTagsOf(int r) {
         return systemTags[r];
     }
 
@@ -318,8 +321,8 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
         return matchModes[inMatchMode[idx]];
     }
 
-    public String inTagId(int idx) {
-        return inTagId[idx];
+    public @Nullable TagKey<?> inTag(int idx) {
+        return inTag[idx];
     }
 
     public int catStart(int r) {
@@ -410,7 +413,7 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
                 new InputSlot(
                     inSlotIndex[i],
                     inAmount[i],
-                    Optional.ofNullable(inTagId[i]),
+                    Optional.ofNullable(inTag[i]),
                     candidates.viewOf(inCandList[i]),
                     matchModes[inMatchMode[i]]
                 )
@@ -457,7 +460,7 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     }
 
     @Override
-    public SystemAdmission admissionOf(String systemId) {
+    public SystemAdmission admissionOf(Namespace systemId) {
         SystemAdmission cached = admissionCache.get(systemId);
         if (cached != null) {
             return cached;
@@ -466,7 +469,7 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     }
 
     @Override
-    public List<CompiledRecipe> producersOf(ResourceKey output) {
+    public List<CompiledRecipe> producersOf(ComponentStackKey output) {
         int resId = dict.idOf(output);
         if (resId < 0) {
             return List.of();
@@ -483,7 +486,7 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     }
 
     @Override
-    public List<CompiledRecipe> consumersOf(ResourceKey input) {
+    public List<CompiledRecipe> consumersOf(ComponentStackKey input) {
         int resId = dict.idOf(input);
         if (resId < 0) {
             return List.of();
@@ -500,7 +503,7 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     }
 
     @Override
-    public List<CompiledCycleMacro> cycleMacrosProducing(ResourceKey output) {
+    public List<CompiledCycleMacro> cycleMacrosProducing(ComponentStackKey output) {
         int resId = dict.idOf(output);
         if (resId < 0) {
             return List.of();
@@ -523,7 +526,7 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     }
 
     @Override
-    public Set<ResourceKey> allProducibleResources() {
+    public Set<ComponentStackKey> allProducibleResources() {
         return producibleResources;
     }
 
@@ -553,7 +556,7 @@ public final class IndexedRecipeGraph implements CompiledRecipeGraph {
     }
 
     @Override
-    public Set<ResourceKey> unresolvedOutputs() {
+    public Set<ComponentStackKey> unresolvedOutputs() {
         return unresolvedOutputs;
     }
 }

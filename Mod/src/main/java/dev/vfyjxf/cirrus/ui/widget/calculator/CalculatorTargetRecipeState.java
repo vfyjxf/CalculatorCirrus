@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.ui.widget.calculator;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.RawOutputSlot;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
@@ -152,7 +152,7 @@ public final class CalculatorTargetRecipeState {
             return null;
         }
         if (output instanceof StackContent<?, ?> stackContent) {
-            Optional<ResourceKey> key = CirrusContentBridge.toConcreteResourceKey(stackContent.content());
+            Optional<ComponentStackKey> key = CirrusContentBridge.toConcreteKey(stackContent.content());
             long amount = saturatedMultiply(Math.max(1L, stackContent.amount()), times);
             if (key.isPresent() && amount > 0L) {
                 return new TargetDemand(key.get(), amount);

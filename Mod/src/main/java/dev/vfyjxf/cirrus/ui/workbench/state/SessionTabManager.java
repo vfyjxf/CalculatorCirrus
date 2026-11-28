@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.state;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
@@ -311,8 +311,8 @@ public final class SessionTabManager implements AutoCloseable {
         return normalize(left).equals(normalize(right));
     }
 
-    private static Map<ResourceKey, Long> normalize(List<TargetDemand> demands) {
-        TreeMap<ResourceKey, Long> merged = new TreeMap<>();
+    private static Map<ComponentStackKey, Long> normalize(List<TargetDemand> demands) {
+        TreeMap<ComponentStackKey, Long> merged = new TreeMap<>();
         for (TargetDemand demand : demands) {
             merged.merge(demand.resource(), demand.amount(), Math::addExact);
         }

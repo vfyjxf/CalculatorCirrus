@@ -1,12 +1,12 @@
 package dev.vfyjxf.cirrus.planning.core.human;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningContext;
 import dev.vfyjxf.cirrus.api.planning.cost.CostMetadataProvider;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.human.ConflictDiagnosis;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.planning.core.cone.ConeExtractor;
@@ -52,7 +52,7 @@ public final class ConflictMinimalCutDiagnoser {
     public Optional<ConflictDiagnosis> diagnose(
         PlanningRequest request,
         ConeModel failedCone,
-        Map<ResourceKey, String> unmetResources,
+        Map<ComponentStackKey, String> unmetResources,
         WorkBudget workBudget
     ) {
         HumanGuidanceView original = request.context().guidance();
@@ -70,7 +70,7 @@ public final class ConflictMinimalCutDiagnoser {
             return Optional.empty();
         }
 
-        ResourceKey blocked = pickBlockedResource(request, failedCone, unmetResources);
+        ComponentStackKey blocked = pickBlockedResource(request, failedCone, unmetResources);
 
         TreeSet<String> hitIds = new TreeSet<>();
         if (failedCone != null && !failedCone.blockingRuleIds.isEmpty()) {
@@ -157,13 +157,7 @@ public final class ConflictMinimalCutDiagnoser {
         var oracle = ctx.acquisitionOracle() instanceof DefaultAcquisitionOracle dao
                 ? dao.withGuidance(filtered)
                 : ctx.acquisitionOracle();
-        PlanningContext nextCtx = new PlanningContext(
-            ctx.inventory(),
-            ctx.facilities(),
-            oracle,
-            filtered,
-            ctx.progression()
-        );
+        PlanningContext nextCtx = ctx.withOracleAndGuidance(oracle, filtered);
         PlanningRequest probe = new PlanningRequest(request.targets(), nextCtx, request.profile(), request.budget());
         ConeModel cone = coneExtractor.extract(probe, Set.of(), workBudget);
         for (TargetDemand td : probe.targets()) {
@@ -189,10 +183,10 @@ public final class ConflictMinimalCutDiagnoser {
         return DefaultHumanGuidanceView.of(kept);
     }
 
-    private static ResourceKey pickBlockedResource(
+    private static ComponentStackKey pickBlockedResource(
         PlanningRequest request,
         ConeModel failedCone,
-        Map<ResourceKey, String> unmetResources
+        Map<ComponentStackKey, String> unmetResources
     ) {
         if (unmetResources != null && !unmetResources.isEmpty()) {
             for (TargetDemand td : request.targets()) {

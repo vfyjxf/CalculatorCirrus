@@ -1,11 +1,13 @@
 package dev.vfyjxf.cirrus.api.planning.model;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
+
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 
-public record StockLedger(Map<ResourceKey, Long> entries) {
+public record StockLedger(Map<ComponentStackKey, Long> entries) {
 
     public static final StockLedger empty = new StockLedger(Map.of());
 
@@ -14,9 +16,9 @@ public record StockLedger(Map<ResourceKey, Long> entries) {
         if (entries.isEmpty()) {
             entries = Map.of();
         } else {
-            TreeMap<ResourceKey, Long> sorted = new TreeMap<>();
+            TreeMap<ComponentStackKey, Long> sorted = new TreeMap<>();
             for (var entry : entries.entrySet()) {
-                ResourceKey key = Objects.requireNonNull(entry.getKey(), "stock key");
+                ComponentStackKey key = Objects.requireNonNull(entry.getKey(), "stock key");
                 Long value = Objects.requireNonNull(entry.getValue(), "stock value");
                 if (value < 0L) {
                     throw new IllegalArgumentException("stock amount must be >= 0 for " + key + ", got " + value);
@@ -29,7 +31,7 @@ public record StockLedger(Map<ResourceKey, Long> entries) {
         }
     }
 
-    public long amountOf(ResourceKey key) {
+    public long amountOf(ComponentStackKey key) {
         return entries.getOrDefault(key, 0L);
     }
 

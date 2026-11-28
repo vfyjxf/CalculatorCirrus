@@ -119,6 +119,7 @@ class DragPayloadDispatchTest {
         assertEquals(ironOre, override.resource());
         assertEquals(5L, override.newAvailableAmount());
 
+        int toastsBeforeQuickDrop = host.toasts.size();
         assertTrue(CoPilotDnd.accept(host, CoPilotDnd.DropTarget.freeSourceSlot, drag, ctx).handled());
         ApplyRulesFeedback freeRules = (ApplyRulesFeedback) host.feedbacks.get(1);
         assertEquals(1, freeRules.rules().size());
@@ -140,6 +141,7 @@ class DragPayloadDispatchTest {
         ApplyRulesFeedback persisted = (ApplyRulesFeedback) host.feedbacks.get(3);
         assertTrue(persisted.persistToWorld());
         assertEquals(GuidanceScope.worldSave, persisted.rules().get(0).scope());
+        assertEquals(toastsBeforeQuickDrop, host.toasts.size(), "Quick Drop zones must not spawn bottom-right toasts");
     }
 
     @Test
@@ -388,6 +390,74 @@ class DragPayloadDispatchTest {
     }
 
     @Test
+    void leftPlanDockCardsBoxIsScrollableWhenManyPlansOverflow() {
+        List<ProductionPlan> manyPlans = new java.util.ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            manyPlans.add(
+                plan("plan-" + i, "cirrus.strategy.balanced", List.of(), cost(10.0 + i * 5.0, 5.0 + i * 2.0, 1.0, 1.0, 1.0))
+            );
+        }
+        PlanningResult manyResult = new PlanningResult(
+            PlanningStatus.feasible,
+            manyPlans,
+            List.of(),
+            new PlanningDiagnostics(1L, 0, 0, 0, 0, false, Optional.empty())
+        );
+        CoPilotTestFixtures.FakeHost host = new CoPilotTestFixtures.FakeHost(
+            CoPilotTestFixtures.snapshot(manyResult)
+        );
+        LeftPlanDockWidget dock = new LeftPlanDockWidget(host);
+        assertEquals(6, dock.cardList().cardsBox().children().size());
+        assertNotNull(dock.cardList().scrollState());
+
+        WidgetGroup<Widget> root = new WidgetGroup<>();
+        root.useStyle(UIStyles.sizeOf(220, 260), UIStyles.flexColumn());
+        root.addWidget(dock);
+        Scene scene = new Scene(root);
+        scene.init();
+        scene.mount(SceneContext.create(new SceneHost() {
+            @Override
+            @SuppressWarnings("NullAway")
+            public Font font() {
+                return null;
+            }
+
+            @Override
+            public int width() {
+                return 220;
+            }
+
+            @Override
+            public int height() {
+                return 260;
+            }
+        }));
+        try {
+            scene.setRespectExclusions(false);
+            scene.setLayoutArea(220, 260);
+            scene.stabilize();
+            scene.layout();
+            root.applyLayout();
+
+            WidgetGroup<Widget> cardsBox = dock.cardList().cardsBox();
+            assertTrue(cardsBox.height() > 0 && cardsBox.height() < 260, "cardsBox must stay bounded inside dock");
+            assertTrue(
+                dock.cardList().compareSlot().absoluteBounds().bottom() <= 260,
+                "compare slot must stay pinned inside dock viewport"
+            );
+            assertTrue(
+                cardsBox.layout().contentSize().height > cardsBox.height(),
+                "6 plan cards must produce vertical content overflow for scrolling"
+            );
+            for (Widget child : cardsBox.children()) {
+                assertEquals(LeftPlanDockWidget.cardHeight, child.height());
+            }
+        } finally {
+            scene.destroy();
+        }
+    }
+
+    @Test
     void stepInspectorDispatchesTheSixFeedbackKinds() {
         PlanningResult ready = readyResult();
         CoPilotTestFixtures.FakeGraph recipeGraph = (CoPilotTestFixtures.FakeGraph) graph();
@@ -581,6 +651,7 @@ class DragPayloadDispatchTest {
             MachineRule banMachine = (MachineRule) ((ApplyRulesFeedback) host.feedbacks.get(3)).rules().get(0);
             assertEquals(RuleStrength.hardBan, banMachine.strength());
             assertEquals(furnace, banMachine.machineId());
+            assertTrue(host.toasts.isEmpty(), "Quick Drop drag-and-drop must not spawn toast notifications");
         } finally {
             scene.destroy();
         }

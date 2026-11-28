@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.planning.graph;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledCycleMacroKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 
 import java.util.Collections;
 import java.util.List;
@@ -13,8 +13,8 @@ public record CompiledCycleMacro(
     CompiledCycleMacroKey macroKey,
     List<CompiledRecipe> innerRecipes,
     List<Long> innerMultipliers,
-    Map<ResourceKey, Long> workingSeeds,
-    Map<ResourceKey, Long> netDeltaPerIter
+    Map<ComponentStackKey, Long> workingSeeds,
+    Map<ComponentStackKey, Long> netDeltaPerIter
 ) {
 
     public CompiledCycleMacro {
@@ -33,9 +33,9 @@ public record CompiledCycleMacro(
                 throw new IllegalArgumentException("innerMultiplier must be > 0, got " + m);
             }
         }
-        TreeMap<ResourceKey, Long> sortedSeeds = new TreeMap<>();
+        TreeMap<ComponentStackKey, Long> sortedSeeds = new TreeMap<>();
         for (var e : workingSeeds.entrySet()) {
-            ResourceKey k = Objects.requireNonNull(e.getKey());
+            ComponentStackKey k = Objects.requireNonNull(e.getKey());
             Long v = Objects.requireNonNull(e.getValue());
             if (v <= 0L) {
                 throw new IllegalArgumentException("workingSeed must be > 0 for " + k);
@@ -43,7 +43,7 @@ public record CompiledCycleMacro(
             sortedSeeds.put(k, v);
         }
         workingSeeds = sortedSeeds.isEmpty() ? Map.of() : Collections.unmodifiableMap(sortedSeeds);
-        TreeMap<ResourceKey, Long> sortedDelta = new TreeMap<>();
+        TreeMap<ComponentStackKey, Long> sortedDelta = new TreeMap<>();
         for (var e : netDeltaPerIter.entrySet()) {
             sortedDelta.put(Objects.requireNonNull(e.getKey()), Objects.requireNonNull(e.getValue()));
         }

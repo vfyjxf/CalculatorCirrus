@@ -1,17 +1,20 @@
 package dev.vfyjxf.cirrus.planning.core.solve;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
+import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOption;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.OwnedMachineGroup;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledCycleMacro;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.core.cone.ConeModel;
 import dev.vfyjxf.cirrus.planning.core.graph.MachineCapabilityGroups;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
@@ -56,15 +59,15 @@ public final class Netting {
         FacilitySnapshot fac = request.context().facilities();
         HumanGuidanceView guidance = request.context().guidance();
 
-        Set<String> ownedMachines = new HashSet<>();
+        Set<MachineEntry> ownedMachines = new HashSet<>();
         Set<MachineCapabilityId> ownedCaps = new HashSet<>();
         for (OwnedMachineGroup g : fac.ownedMachines()) {
             if (g.count() > 0) {
-                ownedMachines.add(g.machineId());
+                ownedMachines.add(g.machine());
                 ownedCaps.add(g.capability());
             }
         }
-        Set<String> availableMachines = new HashSet<>(ownedMachines);
+        Set<MachineEntry> availableMachines = new HashSet<>(ownedMachines);
         Set<MachineCapabilityId> availableCaps = new HashSet<>(ownedCaps);
 
         for (int u = 0; u < n; u++) {
@@ -208,9 +211,9 @@ public final class Netting {
         ProductionVector vec,
         int u,
         long deficit,
-        Set<String> availableMachines,
+        Set<MachineEntry> availableMachines,
         Set<MachineCapabilityId> availableCaps,
-        Set<String> ownedMachines,
+        Set<MachineEntry> ownedMachines,
         Set<MachineCapabilityId> ownedCaps,
         Set<Long> activeConvPairs,
         Map<Integer, Set<String>> forbiddenMacros,
@@ -331,15 +334,39 @@ public final class Netting {
             }
         }
 
-        // Fallback 4: external acquisition.
-        if (cone.acquireOption[u] != null || cone.freeBase[u]) {
-            vec.acq[u] = SafeMath.addSaturating(vec.acq[u], deficit);
-            vec.net[u] = SafeMath.addSaturating(vec.net[u], deficit);
-            vec.gross[u] = SafeMath.addSaturating(vec.gross[u], deficit);
-            return true;
+        // Fallback 4: external acquisition (respecting forbidFieldTrips & capacityLimit).
+        if (tryAcquireExternal(cone, request, vec, u, deficit)) {
+            if (vec.need[u] <= vec.net[u]) return true;
         }
 
         return vec.need[u] <= vec.net[u];
+    }
+
+    private static boolean tryAcquireExternal(
+        ConeModel cone,
+        PlanningRequest request,
+        ProductionVector vec,
+        int u,
+        long deficit
+    ) {
+        if (deficit <= 0L) return true;
+        AcquisitionOption opt = cone.acquireOption[u];
+        if (opt == null && !cone.freeBase[u]) return false;
+        if (opt != null && opt.requiresFieldTrip() && request.profile().modifiers().forbidFieldTrips()) {
+            return false;
+        }
+        long allowed = deficit;
+        if (opt != null && opt.guaranteedQuantity() < Long.MAX_VALUE) {
+            long remCap = Math.max(0L, opt.guaranteedQuantity() - vec.acq[u]);
+            if (remCap <= 0L) {
+                return false;
+            }
+            allowed = Math.min(deficit, remCap);
+        }
+        vec.acq[u] = SafeMath.addSaturating(vec.acq[u], allowed);
+        vec.net[u] = SafeMath.addSaturating(vec.net[u], allowed);
+        vec.gross[u] = SafeMath.addSaturating(vec.gross[u], allowed);
+        return true;
     }
 
     private static boolean applyChoice(
@@ -351,9 +378,9 @@ public final class Netting {
         int u,
         long deficit,
         Potentials.SourceChoice sc,
-        Set<String> availableMachines,
+        Set<MachineEntry> availableMachines,
         Set<MachineCapabilityId> availableCaps,
-        Set<String> ownedMachines,
+        Set<MachineEntry> ownedMachines,
         Set<MachineCapabilityId> ownedCaps,
         Set<Long> activeConvPairs,
         Map<Integer, Set<String>> forbiddenMacros,
@@ -371,13 +398,7 @@ public final class Netting {
                 vec.gross[u] = SafeMath.addSaturating(vec.gross[u], deficit);
                 yield true;
             }
-            case acquire -> {
-                if (cone.acquireOption[u] == null && !cone.freeBase[u]) yield false;
-                vec.acq[u] = SafeMath.addSaturating(vec.acq[u], deficit);
-                vec.net[u] = SafeMath.addSaturating(vec.net[u], deficit);
-                vec.gross[u] = SafeMath.addSaturating(vec.gross[u], deficit);
-                yield true;
-            }
+            case acquire -> tryAcquireExternal(cone, request, vec, u, deficit);
             case convert ->
                 applyConvert(cone, vec, u, sc.localRecipe(), deficit, activeConvPairs, totalBatchesUsed, heap, inHeap);
             case recipe -> applyStandardRecipe(
@@ -501,9 +522,9 @@ public final class Netting {
         int r,
         long deficit,
         long maxBatches,
-        Set<String> availableMachines,
+        Set<MachineEntry> availableMachines,
         Set<MachineCapabilityId> availableCaps,
-        Set<String> ownedMachines,
+        Set<MachineEntry> ownedMachines,
         Set<MachineCapabilityId> ownedCaps,
         Set<Long> activeConvPairs,
         Map<Integer, Set<String>> forbiddenMacros,
@@ -635,8 +656,8 @@ public final class Netting {
         }
         long batchesToAdd = Math.min(maxBatches, SafeMath.ceilDiv(remainingDeficit, outPerBatch));
 
-        // Resolve machine & optional SetupLineStep (A13).
-        String machine = resolveAndProvisionMachine(
+        // Resolve machine & optional SetupLineStep.
+        MachineEntry machine = resolveAndProvisionMachine(
             cone,
             request,
             potentials,
@@ -718,9 +739,9 @@ public final class Netting {
         ProductionVector vec,
         int outU,
         CompiledCycleMacro macro,
-        Set<String> availableMachines,
+        Set<MachineEntry> availableMachines,
         Set<MachineCapabilityId> availableCaps,
-        Set<String> ownedMachines,
+        Set<MachineEntry> ownedMachines,
         Set<MachineCapabilityId> ownedCaps,
         Set<Long> activeConvPairs,
         Map<Integer, Set<String>> forbiddenMacros,
@@ -791,7 +812,7 @@ public final class Netting {
         for (CompiledRecipe inner : macro.innerRecipes()) {
             int lr = cone.localRecipe(inner.compactId());
             if (lr >= 0) {
-                String mach = resolveAndProvisionMachine(
+                MachineEntry mach = resolveAndProvisionMachine(
                     cone,
                     request,
                     potentials,
@@ -842,38 +863,41 @@ public final class Netting {
         return true;
     }
 
-    private static @Nullable String resolveAndProvisionMachine(
+    private static @Nullable MachineEntry resolveAndProvisionMachine(
         ConeModel cone,
         PlanningRequest request,
         Potentials potentials,
         ChoiceTable choices,
         ProductionVector vec,
         int r,
-        Set<String> availableMachines,
+        Set<MachineEntry> availableMachines,
         Set<MachineCapabilityId> availableCaps,
-        Set<String> ownedMachines,
+        Set<MachineEntry> ownedMachines,
         Set<MachineCapabilityId> ownedCaps,
         PriorityQueue<Integer> heap,
         boolean[] inHeap
     ) {
         CompiledRecipe rec = cone.recObjects[r];
-        String sysId = rec.key().systemId();
+        Namespace sysId = rec.key().systemId();
+        Set<Namespace> sysTags = rec.systemTags();
         MachineCapabilityId cap = cone.recCapability[r];
-        List<String> compat = cone.recCompatMachines[r];
+        List<MachineEntry> compat = cone.recCompatMachines[r];
         HumanGuidanceView guidance = request.context().guidance();
+        FacilitySnapshot fac = request.context().facilities();
 
-        // Check A13 SetupLineStep automation trigger.
+        // Check SetupLineStep automation trigger.
         boolean wantAutoLine = choices.automatedRecipes.contains(r)
-                && request.context().facilities().automatedRecipe(rec.key()).isEmpty();
+                && fac.automatedRecipe(rec.key()).isEmpty();
         if (wantAutoLine) {
-            String primary = pickMachineId(choices.machineOverride.get(r), potentials.bestMachine[r], compat, guidance);
+            MachineEntry primary = pickMachine(choices.machineOverride.get(r), potentials.bestMachine[r], compat, guidance);
             if (primary != null && guidance.isWillingToBuild(primary)) {
                 if (!vec.setupLines.containsKey(sysId)) {
-                    ResourceKey primaryOut = cone.resKeys[cone.outRes[cone.outStart[r]]];
+                    ComponentStackKey primaryOut = cone.resKeys[cone.outRes[cone.outStart[r]]];
                     vec.setupLines.put(
                         sysId,
                         new ProductionVector.SetupLineMeta(
                             sysId,
+                            sysTags,
                             primary,
                             primaryOut,
                             cap != null ? cap : MachineCapabilityGroups.capabilityOf(sysId)
@@ -882,67 +906,67 @@ public final class Netting {
                     availableMachines.add(primary);
                     if (cap != null) availableCaps.add(cap);
                 }
-                return vec.setupLines.get(sysId).primaryMachineId();
+                return vec.setupLines.get(sysId).primaryMachine();
             }
         }
 
         if (cone.recHandCraftable[r]) {
-            for (String m : compat) {
-                if (availableMachines.contains(m)) return m;
+            for (MachineEntry m : compat) {
+                if (availableMachines.contains(m) || fac.ownsMachineFor(m)) return m;
             }
             return null;
         }
 
-        // Respect explicit Stage 2a machine override if willing.
-        String override = choices.machineOverride.get(r);
+        // Respect explicit machine override if willing.
+        MachineEntry override = choices.machineOverride.get(r);
         if (override != null) {
-            if (availableMachines.contains(override)) {
+            if (availableMachines.contains(override) || fac.ownsMachineFor(override)) {
                 return override;
             }
             if (guidance.isWillingToBuild(override)) {
-                provisionMachine(cone, vec, override, sysId, cap, availableMachines, availableCaps, heap, inHeap);
+                provisionMachine(cone, vec, override, sysId, sysTags, cap, availableMachines, availableCaps, heap, inHeap);
                 return override;
             }
         }
 
         // Prefer already-owned/already-provisioned machine or capability.
-        for (String m : compat) {
-            if (availableMachines.contains(m)) {
+        for (MachineEntry m : compat) {
+            if (availableMachines.contains(m) || fac.ownsMachineFor(m)) {
                 return m;
             }
         }
         if (cap != null && availableCaps.contains(cap)) {
-            for (OwnedMachineGroup g : request.context().facilities().ownedMachines()) {
+            for (OwnedMachineGroup g : fac.ownedMachines()) {
                 if (g.count() > 0 && g.capability().equals(cap)) {
-                    return g.machineId();
+                    return g.machine();
                 }
             }
             for (var pm : vec.provisionedMachines.values()) {
                 if (cap.equals(pm.capability())) {
-                    return pm.machineId();
+                    return pm.machine();
                 }
             }
             return compat.isEmpty() ? null : compat.get(0);
         }
 
         // Provision a new machine.
-        String picked = pickMachineId(null, potentials.bestMachine[r], compat, guidance);
+        MachineEntry picked = pickMachine(null, potentials.bestMachine[r], compat, guidance);
         if (picked == null) {
             return null;
         }
-        provisionMachine(cone, vec, picked, sysId, cap, availableMachines, availableCaps, heap, inHeap);
+        provisionMachine(cone, vec, picked, sysId, sysTags, cap, availableMachines, availableCaps, heap, inHeap);
         return picked;
     }
 
-    private static @Nullable String pickMachineId(
-        @Nullable String override,
-        @Nullable String potPick,
-        List<String> compat,
+    private static @Nullable MachineEntry pickMachine(
+        @Nullable MachineEntry override,
+        @Nullable MachineEntry potPick,
+        List<MachineEntry> compat,
         HumanGuidanceView guidance
     ) {
         if (override != null && guidance.isWillingToBuild(override)) return override;
         if (potPick != null && guidance.isWillingToBuild(potPick)) return potPick;
-        for (String m : compat) {
+        for (MachineEntry m : compat) {
             if (guidance.isWillingToBuild(m)) return m;
         }
         return null;
@@ -951,27 +975,30 @@ public final class Netting {
     private static void provisionMachine(
         ConeModel cone,
         ProductionVector vec,
-        String machineId,
-        String systemId,
+        MachineEntry machine,
+        Namespace systemId,
+        Set<Namespace> systemTags,
         MachineCapabilityId cap,
-        Set<String> availableMachines,
+        Set<MachineEntry> availableMachines,
         Set<MachineCapabilityId> availableCaps,
         PriorityQueue<Integer> heap,
         boolean[] inHeap
     ) {
-        availableMachines.add(machineId);
+        availableMachines.add(machine);
         if (cap != null) availableCaps.add(cap);
-        if (vec.provisionedMachines.containsKey(machineId)) {
+        if (vec.provisionedMachines.containsKey(machine)) {
             return;
         }
-        vec.provisionedMachines.put(machineId, new ProductionVector.ProvisionMeta(machineId, systemId, cap, 1));
-        ResourceKey mk = ResourceKey.item(machineId);
-        int mu = cone.localRes(mk);
+        vec.provisionedMachines.put(
+            machine,
+            new ProductionVector.ProvisionMeta(machine, systemId, systemTags, cap, 1)
+        );
+        int mu = machine.contentKey().map(cone::localRes).orElse(-1);
         if (mu >= 0 && cone.tier[mu] < ConeModel.infTier && !cone.bannedRes[mu]) {
             vec.need[mu] = SafeMath.addSaturating(vec.need[mu], 1L);
             pushIfDeficit(vec, mu, heap, inHeap);
         } else {
-            vec.playerPreparedMachines.add(machineId);
+            vec.playerPreparedMachines.add(machine);
         }
     }
 
@@ -1051,7 +1078,7 @@ public final class Netting {
     }
 
     private static String classifyUnmetReason(ConeModel cone, int u, HumanGuidanceView guidance) {
-        ResourceKey rk = cone.resKeys[u];
+        ComponentStackKey rk = cone.resKeys[u];
         if (cone.bannedRes[u]) return reasonResourceBanned;
         Set<String> rules = cone.blockingRuleIds.get(rk);
         if (rules != null && !rules.isEmpty()) return reasonHumanRule;

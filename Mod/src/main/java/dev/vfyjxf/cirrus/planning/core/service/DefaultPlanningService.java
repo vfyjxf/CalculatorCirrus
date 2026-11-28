@@ -1,8 +1,10 @@
 package dev.vfyjxf.cirrus.planning.core.service;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.MachineReadiness;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningBudget;
+import dev.vfyjxf.cirrus.api.planning.context.PlanningContext;
 import dev.vfyjxf.cirrus.api.planning.context.ProgressionState;
 import dev.vfyjxf.cirrus.api.planning.cost.CostMetadataProvider;
 import dev.vfyjxf.cirrus.api.planning.cost.CostWeights;
@@ -16,10 +18,14 @@ import dev.vfyjxf.cirrus.api.planning.human.DecisionPrompt;
 import dev.vfyjxf.cirrus.api.planning.human.DeclareOwnedMachineFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceStore;
+import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
 import dev.vfyjxf.cirrus.api.planning.human.PromptSuppressionLedger;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.human.QuestionKey;
+import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
+import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
+import dev.vfyjxf.cirrus.api.planning.plan.CycleLoopStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
@@ -30,6 +36,9 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningService;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningSession;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
+import dev.vfyjxf.cirrus.api.planning.spi.DecisionDetectorExtension;
+import dev.vfyjxf.cirrus.api.planning.spi.ScoringContributor;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.core.cone.ConeExtractor;
 import dev.vfyjxf.cirrus.planning.core.cone.ConeModel;
 import dev.vfyjxf.cirrus.planning.core.cost.DefaultAcquisitionOracle;
@@ -39,6 +48,7 @@ import dev.vfyjxf.cirrus.planning.core.cost.StageAndCapitalModel;
 import dev.vfyjxf.cirrus.planning.core.human.ConflictMinimalCutDiagnoser;
 import dev.vfyjxf.cirrus.planning.core.human.DecisionPointDetector;
 import dev.vfyjxf.cirrus.planning.core.human.LayeredHumanGuidanceStore;
+import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
 import dev.vfyjxf.cirrus.planning.core.lang.WorkBudget;
 import dev.vfyjxf.cirrus.planning.core.select.ConditionedFrontierSelector;
 import dev.vfyjxf.cirrus.planning.core.select.DiverseParetoSelector;
@@ -46,7 +56,6 @@ import dev.vfyjxf.cirrus.planning.core.select.TechBranchClusterer;
 import dev.vfyjxf.cirrus.planning.core.solve.ChoiceTable;
 import dev.vfyjxf.cirrus.planning.core.solve.ImprovementLoop;
 import dev.vfyjxf.cirrus.planning.core.solve.Netting;
-import dev.vfyjxf.cirrus.planning.core.solve.PassABaselinePotentials;
 import dev.vfyjxf.cirrus.planning.core.solve.Potentials;
 import dev.vfyjxf.cirrus.planning.core.solve.ProductionVector;
 import dev.vfyjxf.cirrus.planning.core.solve.SchedulerAndFinalizer;
@@ -54,6 +63,8 @@ import dev.vfyjxf.cirrus.planning.core.verify.DefaultPlanVerifier;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -83,6 +94,8 @@ public final class DefaultPlanningService implements PlanningService {
     private final CostMetadataProvider costMetadata;
     private final HumanGuidanceStore guidanceStore;
     private final @Nullable Consumer<DeclareOwnedMachineFeedback> machinePersistenceListener;
+    private final List<ScoringContributor> scoringContributors;
+    private final List<DecisionDetectorExtension> decisionDetectors;
     private final ConeExtractor coneExtractor;
     private final ImprovementLoop improvementLoop;
     private final DefaultPlanVerifier verifier;
@@ -105,11 +118,11 @@ public final class DefaultPlanningService implements PlanningService {
     };
 
     public DefaultPlanningService(CompiledRecipeGraph graph) {
-        this(graph, DefaultCostMetadataProvider.instance, new LayeredHumanGuidanceStore(), null);
+        this(graph, DefaultCostMetadataProvider.instance, new LayeredHumanGuidanceStore(), null, List.of(), List.of());
     }
 
     public DefaultPlanningService(CompiledRecipeGraph graph, CostMetadataProvider costMetadata) {
-        this(graph, costMetadata, new LayeredHumanGuidanceStore(), null);
+        this(graph, costMetadata, new LayeredHumanGuidanceStore(), null, List.of(), List.of());
     }
 
     public DefaultPlanningService(
@@ -118,10 +131,23 @@ public final class DefaultPlanningService implements PlanningService {
         HumanGuidanceStore guidanceStore,
         @Nullable Consumer<DeclareOwnedMachineFeedback> machinePersistenceListener
     ) {
+        this(graph, costMetadata, guidanceStore, machinePersistenceListener, List.of(), List.of());
+    }
+
+    public DefaultPlanningService(
+        CompiledRecipeGraph graph,
+        CostMetadataProvider costMetadata,
+        HumanGuidanceStore guidanceStore,
+        @Nullable Consumer<DeclareOwnedMachineFeedback> machinePersistenceListener,
+        List<ScoringContributor> scoringContributors,
+        List<DecisionDetectorExtension> decisionDetectors
+    ) {
         this.graph = Objects.requireNonNull(graph, "graph");
         this.costMetadata = Objects.requireNonNull(costMetadata, "costMetadata");
         this.guidanceStore = guidanceStore == null ? new LayeredHumanGuidanceStore() : guidanceStore;
         this.machinePersistenceListener = machinePersistenceListener;
+        this.scoringContributors = scoringContributors == null ? List.of() : List.copyOf(scoringContributors);
+        this.decisionDetectors = decisionDetectors == null ? List.of() : List.copyOf(decisionDetectors);
         this.coneExtractor = new ConeExtractor(graph);
         this.improvementLoop = new ImprovementLoop();
         this.verifier = new DefaultPlanVerifier(graph, costMetadata);
@@ -147,6 +173,12 @@ public final class DefaultPlanningService implements PlanningService {
         return suppressionLedger;
     }
 
+    void recordPromptAnswered(QuestionKey questionKey) {
+        synchronized (suppressionLedger) {
+            suppressionLedger.markAnsweredOrDismissed(questionKey);
+        }
+    }
+
     @Override
     public PlanningResult planOnce(PlanningRequest request) {
         Objects.requireNonNull(request, "request");
@@ -170,10 +202,10 @@ public final class DefaultPlanningService implements PlanningService {
             pBudget.searchWorkBudget()
         );
 
-        // Compute M5 stage distribution and effective 6D weights with orthogonal modifiers.
+        // Compute stage distribution and effective 6D weights with orthogonal modifiers.
         long totalOrderQ = 0L;
         for (TargetDemand td : request.targets()) {
-            totalOrderQ = Math.addExact(totalOrderQ, td.amount());
+            totalOrderQ = SafeMath.addSaturating(totalOrderQ, td.amount());
         }
         totalOrderQ = Math.max(1L, totalOrderQ);
 
@@ -193,16 +225,17 @@ public final class DefaultPlanningService implements PlanningService {
 
         List<ProductionPlan> rawCandidates = new ArrayList<>();
         int coupledEvaluated = 0;
-        Map<ResourceKey, String> unmetReasons = new TreeMap<>();
+        Map<ComponentStackKey, String> unmetReasons = new TreeMap<>();
         boolean primarySeedFound = false;
         boolean refinedFully = true;
+        @Nullable Potentials primaryPot = null;
 
         boolean targetsReachable = areAllTargetsReachable(cone, request);
         if (targetsReachable) {
             ObjectivePreset primaryPreset = request.profile().preset();
             String primaryLabel = labelForPreset(primaryPreset);
 
-            Potentials primaryPot = Potentials.solve(cone, request, primaryEffectiveWeights, costMetadata, Set.of(), Set.of());
+            primaryPot = Potentials.solve(cone, request, primaryEffectiveWeights, costMetadata, Set.of(), Set.of());
             ChoiceTable primaryChoices = new ChoiceTable(primaryPot);
             ProductionPlan primarySeed = SchedulerAndFinalizer
                     .assembleWithRepair(cone, request, primaryPot, primaryChoices, costMetadata, primaryLabel);
@@ -292,31 +325,35 @@ public final class DefaultPlanningService implements PlanningService {
             collectUnreachableReasons(cone, request, unmetReasons);
         }
 
-        // Compute query scale A & annotate verified candidates with M1 ScoreBreakdown + M6 RegimeSignature.
+        // Compute query scale A & annotate verified candidates with ScoreBreakdown + RegimeSignature.
         double baselineScaleA = StageAndCapitalModel.queryScaleA(
             rawCandidates.isEmpty() ? 10.0 : primaryEffectiveWeights.scalarize(rawCandidates.get(0).totalCost())
         );
 
-        Set<String> allCandidateMachines = new TreeSet<>();
+        Set<MachineEntry> allCandidateMachines = new TreeSet<>(MachineEntry.comparator);
         for (ProductionPlan p : rawCandidates) {
             for (PlanStep s : p.steps()) {
                 if (s instanceof ProvisionMachineStep pm) {
-                    allCandidateMachines.add(pm.machineId());
+                    allCandidateMachines.add(pm.machine());
                 }
             }
         }
-        Map<String, MachineReadiness.Classification> machineClasses = allCandidateMachines.isEmpty()
+        Map<ComponentStackKey, Double> baselineUnitPrices = extractBaselineUnitPrices(cone, primaryPot);
+        Map<MachineEntry, Set<MachineCapabilityId>> capabilitiesByMachine = collectMachineCapabilities(cone);
+        Map<MachineEntry, MachineReadiness.Classification> machineClasses = allCandidateMachines.isEmpty()
                 ? Map.of()
                 : MachineReadinessClassifier.classifyAll(
                     graph,
                     request.context().facilities(),
-                    Map.of(),
+                    baselineUnitPrices,
                     baselineScaleA,
-                    allCandidateMachines
+                    allCandidateMachines,
+                    capabilitiesByMachine
                 );
 
         List<ProductionPlan> feasibleAnnotated = new ArrayList<>();
         List<ProductionPlan> conditionalDrafts = new ArrayList<>();
+        HumanGuidanceView guidance = request.context().guidance();
 
         for (ProductionPlan raw : rawCandidates) {
             var cert = verifier.verify(raw, request);
@@ -328,7 +365,8 @@ public final class DefaultPlanningService implements PlanningService {
                 stage,
                 0L
             );
-            double trustRaw = computeTrustRiskSeconds(raw);
+            double trustRaw = computeTrustRiskSeconds(raw, guidance);
+            double habitRaw = computeHabitBiasSeconds(raw, request.context());
             ScoreBreakdown breakdown = ScoreBreakdown.compute(
                 raw.totalCost(),
                 primaryEffectiveWeights,
@@ -337,11 +375,11 @@ public final class DefaultPlanningService implements PlanningService {
                 0.0,
                 0.0,
                 trustRaw,
-                0.0,
+                habitRaw,
                 0.0
             );
             RegimeSignature regime = buildRegimeSignature(raw, machineClasses);
-            List<String> missingEvidence = collectMissingEvidence(raw);
+            List<String> missingEvidence = collectMissingEvidence(raw, guidance);
             ProductionPlan stamped = new ProductionPlan(
                 raw.planId(),
                 raw.strategyLabelKey(),
@@ -362,7 +400,7 @@ public final class DefaultPlanningService implements PlanningService {
             }
         }
 
-        // Strict M8 eligibility rule: certified feasible plans are selected independently from conditional drafts.
+        // Strict eligibility rule: certified feasible plans are selected independently from conditional drafts.
         List<ProductionPlan> selectedFeasible = feasibleAnnotated.isEmpty()
                 ? List.of()
                 : selectWithConditionedFrontier(feasibleAnnotated, baselineScaleA, request);
@@ -399,13 +437,11 @@ public final class DefaultPlanningService implements PlanningService {
         }
 
         List<ProductionPlan> promptBasis = !selectedFeasible.isEmpty() ? selectedFeasible : selectedConditional;
-        List<DecisionPrompt> prompts = promptDetector.detect(
+        List<DecisionPrompt> prompts = detectAllPrompts(
             request,
             promptBasis,
-            cone.toQuerySubgraph(),
-            graph,
+            cone,
             dismissedPromptIds,
-            suppressionLedger,
             querySeq,
             machineClasses
         );
@@ -428,6 +464,60 @@ public final class DefaultPlanningService implements PlanningService {
         return new PlanningResult(status, selectedFeasible, selectedConditional, prompts, diag);
     }
 
+    private List<DecisionPrompt> detectAllPrompts(
+        PlanningRequest request,
+        List<ProductionPlan> promptBasis,
+        ConeModel cone,
+        Set<String> dismissedPromptIds,
+        long querySeq,
+        Map<MachineEntry, MachineReadiness.Classification> machineClasses
+    ) {
+        List<DecisionPrompt> basePrompts;
+        synchronized (suppressionLedger) {
+            basePrompts = promptDetector.detect(
+                request,
+                promptBasis,
+                cone.toQuerySubgraph(),
+                graph,
+                dismissedPromptIds,
+                suppressionLedger,
+                querySeq,
+                machineClasses
+            );
+        }
+        if (decisionDetectors.isEmpty() || request.budget().maxDecisionPrompts() <= 0) {
+            return basePrompts;
+        }
+        Map<String, DecisionPrompt> merged = new LinkedHashMap<>();
+        for (DecisionPrompt p : basePrompts) {
+            merged.put(p.promptId(), p);
+        }
+        for (DecisionDetectorExtension ext : decisionDetectors) {
+            try {
+                List<DecisionPrompt> extPrompts = ext.detect(request, promptBasis, graph);
+                if (extPrompts == null) continue;
+                for (DecisionPrompt p : extPrompts) {
+                    if (p == null || dismissedPromptIds.contains(p.promptId())) continue;
+                    synchronized (suppressionLedger) {
+                        if (suppressionLedger.isSuppressed(p.questionKey(), querySeq)) {
+                            continue;
+                        }
+                    }
+                    merged.putIfAbsent(p.promptId(), p);
+                }
+            } catch (RuntimeException ignored) {}
+        }
+        List<DecisionPrompt> all = new ArrayList<>(merged.values());
+        all.sort(
+            Comparator.comparingDouble((DecisionPrompt p) -> p.voiEstimate().netEvsiSeconds()).reversed()
+                    .thenComparing(Comparator.comparingDouble(DecisionPrompt::leverageScore).reversed())
+                    .thenComparingInt(p -> p.kind().ordinal())
+                    .thenComparing(DecisionPrompt::promptId)
+        );
+        int limit = request.budget().maxDecisionPrompts();
+        return all.size() > limit ? List.copyOf(all.subList(0, limit)) : List.copyOf(all);
+    }
+
     private List<ProductionPlan> selectWithConditionedFrontier(
         List<ProductionPlan> pool,
         double scaleA,
@@ -438,67 +528,174 @@ public final class DefaultPlanningService implements PlanningService {
             pool,
             refScales,
             ConditionedFrontierSelector.defaultBoxEpsilon,
-            request.budget().maxReturnedPlans()
+            request.budget().maxReturnedPlans(),
+            graph,
+            request.context().guidance()
         );
         return sel.selectedTopK().isEmpty() ? paretoSelector.select(pool, request) : sel.selectedTopK();
     }
 
-    private double computeTrustRiskSeconds(ProductionPlan plan) {
+    private double computeHabitBiasSeconds(ProductionPlan plan, PlanningContext context) {
+        if (scoringContributors.isEmpty()) {
+            return 0.0;
+        }
+        double total = 0.0;
+        for (PlanStep step : plan.steps()) {
+            if (step instanceof CraftStep cs) {
+                total += recipeBias(cs, context);
+            } else if (step instanceof CycleLoopStep cl) {
+                for (CraftStep inner : cl.singleIterationTemplate()) {
+                    total += recipeBias(inner, context);
+                }
+            } else if (step instanceof AcquireStep ac) {
+                for (ScoringContributor contributor : scoringContributors) {
+                    try {
+                        double bias = contributor.resourceSoftBiasSeconds(ac.resource(), context);
+                        if (Double.isFinite(bias) && bias > 0.0) {
+                            total += bias;
+                        }
+                    } catch (RuntimeException ignored) {}
+                }
+            }
+        }
+        return total;
+    }
+
+    private double recipeBias(CraftStep cs, PlanningContext context) {
+        Optional<CompiledRecipe> rec = graph.recipeByKey(cs.recipeKey());
+        if (rec.isEmpty()) {
+            return 0.0;
+        }
+        double sum = 0.0;
+        for (ScoringContributor contributor : scoringContributors) {
+            try {
+                double bias = contributor.recipeSoftBiasSeconds(rec.get(), context);
+                if (Double.isFinite(bias) && bias > 0.0) {
+                    sum += bias;
+                }
+            } catch (RuntimeException ignored) {}
+        }
+        return sum;
+    }
+
+    private double computeTrustRiskSeconds(ProductionPlan plan, HumanGuidanceView guidance) {
         double risk = 0.0;
         for (PlanStep step : plan.steps()) {
             if (step instanceof CraftStep cs) {
-                Optional<CompiledRecipe> rec = graph.recipeByKey(cs.recipeKey());
-                if (rec.isPresent()) {
-                    double deficit = Math.max(0.0, 1.0 - rec.get().structuralFidelity());
-                    if (deficit > 0.0) {
-                        risk += deficit * 15.0 * Math.min(10L, cs.batches());
-                    }
+                risk += craftTrustRisk(cs, cs.batches(), guidance);
+            } else if (step instanceof CycleLoopStep cl) {
+                for (CraftStep inner : cl.singleIterationTemplate()) {
+                    long totalBatches = SafeMath.mulSaturating(inner.batches(), cl.iterations());
+                    risk += craftTrustRisk(inner, totalBatches, guidance);
                 }
             }
         }
         return risk;
     }
 
-    private List<String> collectMissingEvidence(ProductionPlan plan) {
+    private double craftTrustRisk(CraftStep cs, long batches, HumanGuidanceView guidance) {
+        if (guidance.isRecipeTrusted(cs.recipeKey())) {
+            return 0.0;
+        }
+        Optional<CompiledRecipe> rec = graph.recipeByKey(cs.recipeKey());
+        if (rec.isEmpty()) {
+            return 0.0;
+        }
+        double deficit = Math.max(0.0, 1.0 - rec.get().structuralFidelity());
+        return deficit > 0.0 ? deficit * 15.0 * Math.min(10L, batches) : 0.0;
+    }
+
+    private List<String> collectMissingEvidence(ProductionPlan plan, HumanGuidanceView guidance) {
         List<String> missing = new ArrayList<>();
         for (PlanStep step : plan.steps()) {
             if (step instanceof CraftStep cs) {
-                Optional<CompiledRecipe> rec = graph.recipeByKey(cs.recipeKey());
-                if (rec.isPresent() && rec.get().isSuspiciousJei()) {
-                    missing.add("VERIFY_RECIPE:" + cs.recipeKey().shortString());
+                checkCraftEvidence(cs, guidance, missing);
+            } else if (step instanceof CycleLoopStep cl) {
+                for (CraftStep inner : cl.singleIterationTemplate()) {
+                    checkCraftEvidence(inner, guidance, missing);
                 }
             }
         }
         return missing;
     }
 
+    private void checkCraftEvidence(CraftStep cs, HumanGuidanceView guidance, List<String> missing) {
+        if (guidance.isRecipeTrusted(cs.recipeKey())) {
+            return;
+        }
+        Optional<CompiledRecipe> rec = graph.recipeByKey(cs.recipeKey());
+        if (rec.isPresent() && rec.get().isSuspiciousJei()) {
+            missing.add("VERIFY_RECIPE:" + cs.recipeKey().shortString());
+        }
+    }
+
     private RegimeSignature buildRegimeSignature(
         ProductionPlan plan,
-        Map<String, MachineReadiness.Classification> machineClasses
+        Map<MachineEntry, MachineReadiness.Classification> machineClasses
     ) {
-        Set<String> heavyMach = new LinkedHashSet<>();
+        Set<MachineEntry> heavyMach = new LinkedHashSet<>();
         Set<String> clusters = new LinkedHashSet<>();
         Set<String> premises = new LinkedHashSet<>();
         boolean requiresTrip = plan.totalCost().tripActiveSeconds() > 1e-6;
 
         for (PlanStep step : plan.steps()) {
             if (step instanceof ProvisionMachineStep pm) {
-                MachineReadiness.Classification cls = machineClasses.get(pm.machineId());
+                MachineReadiness.Classification cls = machineClasses.get(pm.machine());
                 if (cls == null || cls.readiness() == MachineReadiness.heavyInvestment) {
-                    heavyMach.add(pm.machineId());
-                    premises.add("build_machine:" + pm.machineId());
+                    heavyMach.add(pm.machine());
+                    premises.add("build_machine:" + pm.machine().canonicalKey());
                 }
             } else if (step instanceof CraftStep cs) {
-                Optional<CompiledRecipe> rec = graph.recipeByKey(cs.recipeKey());
-                if (rec.isPresent()) {
-                    String clus = techClusters.clusterOf(rec.get().compactId());
-                    if (!TechBranchClusterer.sharedCommonCluster.equals(clus)) {
-                        clusters.add(clus);
-                    }
+                addTechCluster(cs, clusters);
+            } else if (step instanceof CycleLoopStep cl) {
+                for (CraftStep inner : cl.singleIterationTemplate()) {
+                    addTechCluster(inner, clusters);
                 }
             }
         }
         return new RegimeSignature(heavyMach, clusters, requiresTrip, premises);
+    }
+
+    private void addTechCluster(CraftStep cs, Set<String> clusters) {
+        Optional<CompiledRecipe> rec = graph.recipeByKey(cs.recipeKey());
+        if (rec.isPresent()) {
+            String clus = techClusters.clusterOf(rec.get().compactId());
+            if (!TechBranchClusterer.sharedCommonCluster.equals(clus)) {
+                clusters.add(clus);
+            }
+        }
+    }
+
+    private static Map<ComponentStackKey, Double> extractBaselineUnitPrices(
+        ConeModel cone,
+        @Nullable Potentials pot
+    ) {
+        if (pot == null || cone.nodeCount == 0) {
+            return Map.of();
+        }
+        Map<ComponentStackKey, Double> prices = new HashMap<>(cone.nodeCount * 2);
+        for (int u = 0; u < cone.nodeCount; u++) {
+            double c = pot.potInCost[u];
+            if (Double.isFinite(c) && c >= 0.0) {
+                prices.put(cone.resKeys[u], c);
+            }
+        }
+        return prices;
+    }
+
+    private static Map<MachineEntry, Set<MachineCapabilityId>> collectMachineCapabilities(ConeModel cone) {
+        if (cone.recipeCount == 0) {
+            return Map.of();
+        }
+        Map<MachineEntry, Set<MachineCapabilityId>> map = new HashMap<>();
+        for (int r = 0; r < cone.recipeCount; r++) {
+            MachineCapabilityId cap = cone.recCapability[r];
+            if (cap == null) continue;
+            for (MachineEntry m : cone.recCompatMachines[r]) {
+                map.computeIfAbsent(m, k -> new LinkedHashSet<>()).add(cap);
+            }
+        }
+        return map;
     }
 
     private void probeAlternativeRoute(
@@ -588,7 +785,7 @@ public final class DefaultPlanningService implements PlanningService {
     private static void collectUnreachableReasons(
         ConeModel cone,
         PlanningRequest request,
-        Map<ResourceKey, String> unmetReasons
+        Map<ComponentStackKey, String> unmetReasons
     ) {
         for (TargetDemand td : request.targets()) {
             int u = cone.localRes(td.resource());
@@ -626,7 +823,7 @@ public final class DefaultPlanningService implements PlanningService {
     private record ConeCacheKey(
         long graphVersion,
         List<TargetDemand> targets,
-        Map<ResourceKey, Long> usableStock,
+        Map<ComponentStackKey, Long> usableStock,
         FacilitySnapshot facilities,
         List<GuidanceRule> rules,
         ProgressionState progression,

@@ -403,6 +403,162 @@ class DatabasePageListLayoutTest {
             assertTrue(view.usesGrid());
             assertTrue(view.hasDiffOverlays());
             assertTrue(view.changedSlotCount() >= 4);
+
+            ProjectionPipelineWidget widePipeline = new ProjectionPipelineWidget(
+                raw,
+                result,
+                List.of(ProjectionPlugin.builtin, DebugProjectionPlugin.plugin),
+                ProjectionPlugin.builtin,
+                p -> true,
+                ignored -> {},
+                540
+            );
+            ProjectionPipelineWidget narrowPipeline = new ProjectionPipelineWidget(
+                raw,
+                result,
+                List.of(ProjectionPlugin.builtin, DebugProjectionPlugin.plugin),
+                ProjectionPlugin.builtin,
+                p -> true,
+                ignored -> {},
+                240
+            );
+            assertEquals(4, widePipeline.stageCount());
+            assertTrue(widePipeline.effectCardCount() >= 4);
+            assertEquals(widePipeline.effectCardCount(), narrowPipeline.effectCardCount());
+            assertTrue(widePipeline.visibleItemCount() >= 4);
+            assertEquals(widePipeline.visibleItemCount(), narrowPipeline.visibleItemCount());
+            assertTrue(narrowPipeline.measuredHeight() > widePipeline.measuredHeight());
+
+            DebugProjectionPlugin.DebugProjectionRecipe showcaseRecipe = system.findRecipe("full_pipeline_showcase");
+            assertNotNull(showcaseRecipe);
+            RecipeProjection showcaseRaw = api.resolve(ResolveContext.empty(), system, showcaseRecipe).projection();
+            assertNotNull(showcaseRaw);
+            ProjectionResult showcaseResult = ProjectionPipeline.fromRegistry().trace(new ExecutionContext(), showcaseRaw);
+            ProjectionPipelineWidget showcasePipeline = new ProjectionPipelineWidget(
+                showcaseRaw,
+                showcaseResult,
+                List.of(ProjectionPlugin.builtin, DebugProjectionPlugin.plugin, DebugProjectionPlugin.overclockPlugin),
+                DebugProjectionPlugin.overclockPlugin,
+                p -> true,
+                ignored -> {},
+                480
+            );
+            assertEquals(4, showcasePipeline.stageCount());
+            assertTrue(showcasePipeline.effectCardCount() >= 5);
+            assertTrue(showcasePipeline.visibleItemCount() >= 8);
+            assertEquals(
+                2,
+                showcasePipeline.entryCountByTemplate(
+                    dev.vfyjxf.cirrus.ui.workbench.projection.ProjectionDiffTemplate.Kind.valueMeter
+                )
+            );
+            assertEquals(
+                1,
+                showcasePipeline.entryCountByTemplate(
+                    dev.vfyjxf.cirrus.ui.workbench.projection.ProjectionDiffTemplate.Kind.durability
+                )
+            );
+            assertTrue(
+                showcasePipeline.entryCountByTemplate(
+                    dev.vfyjxf.cirrus.ui.workbench.projection.ProjectionDiffTemplate.Kind.fluid
+                ) >= 2
+            );
+            assertTrue(
+                showcasePipeline.entryCountByTemplate(
+                    dev.vfyjxf.cirrus.ui.workbench.projection.ProjectionDiffTemplate.Kind.stackSlot
+                ) >= 2
+            );
+
+            // Verify sidebar system tooltip shows cycling active machine and Shift expands full machine list
+            dev.vfyjxf.cirrus.api.recipe.database.DatabaseCategoryTree.CategoryNode debugNode = new dev.vfyjxf.cirrus.api.recipe.database.DatabaseCategoryTree.CategoryNode(
+                "sys:" + DebugProjectionPlugin.systemId,
+                "Debug Projection",
+                10,
+                dev.vfyjxf.cirrus.api.recipe.database.DatabaseCategoryTree.NodeKind.system,
+                false,
+                "calculator_cirrus",
+                List.of()
+            );
+            List<dev.vfyjxf.cirrus.api.content.value.ContentStack<net.minecraft.world.item.Item, net.minecraft.world.item.ItemStack>> machines = List.of(
+                dev.vfyjxf.cirrus.api.content.value.ContentStack.fromStack(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.CRAFTING_TABLE)),
+                dev.vfyjxf.cirrus.api.content.value.ContentStack.fromStack(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.FURNACE)),
+                dev.vfyjxf.cirrus.api.content.value.ContentStack.fromStack(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREWING_STAND))
+            );
+            var singleTip = dev.vfyjxf.cirrus.ui.workbench.database.DatabaseExplorerWorkspace.buildSystemNodeTooltip(
+                debugNode,
+                "Debug / Debug Projection",
+                List.of(machines.getFirst()),
+                0,
+                false,
+                20
+            );
+            assertNotNull(singleTip.iconStack());
+            assertFalse(singleTip.hasInteractiveGrid());
+            var singleLists = singleTip.blocks().stream()
+                    .filter(dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltip.Block.ItemList.class::isInstance)
+                    .map(dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltip.Block.ItemList.class::cast)
+                    .toList();
+            assertEquals(1, singleLists.size());
+            assertEquals(1, singleLists.getFirst().entries().size());
+
+            var picked = new java.util.concurrent.atomic.AtomicReference<dev.vfyjxf.cirrus.api.content.value.ContentStack<net.minecraft.world.item.Item, net.minecraft.world.item.ItemStack>>();
+            var multiTip = dev.vfyjxf.cirrus.ui.workbench.database.DatabaseExplorerWorkspace.buildSystemNodeTooltip(
+                debugNode,
+                "Debug / Debug Projection",
+                machines,
+                1,
+                false,
+                20,
+                picked::set
+            );
+            assertNotNull(multiTip.iconStack());
+            assertTrue(multiTip.hasInteractiveGrid());
+            assertTrue(
+                multiTip.blocks().stream()
+                        .anyMatch(dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltip.Block.FooterHint.class::isInstance)
+            );
+            var grid = multiTip.interactiveGrid();
+            assertNotNull(grid);
+            assertEquals(3, grid.items().size());
+            assertEquals(1, grid.activeIndex());
+            assertEquals(10, grid.maxColumns());
+            assertEquals(4, grid.maxRows());
+
+            var interaction = grid.interaction();
+            assertNotNull(interaction);
+            var slotTip = interaction.tooltipForItem(1, machines.get(1));
+            assertNotNull(slotTip);
+            assertNotNull(slotTip.iconStack());
+            assertEquals(
+                net.minecraft.network.chat.Component.literal("minecraft:furnace"),
+                slotTip.subtitle()
+            );
+            interaction.onItemClick(2, machines.get(2));
+            assertEquals(machines.get(2), picked.get());
+
+            // Verify JEI-style GridGeometry hit-testing and scrolling on an overflowing 45-slot grid (10x4 visible, 5 total rows)
+            var overflowGeom = new dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltipRenderer.GridGeometry(
+                new dev.vfyjxf.cloudlib.api.math.Rect(10, 20, 196, 80),
+                new dev.vfyjxf.cloudlib.api.math.Rect(14, 24, 180, 72),
+                new dev.vfyjxf.cloudlib.api.math.Rect(196, 24, 6, 72),
+                10,
+                4,
+                5,
+                1,
+                18,
+                45
+            );
+            assertEquals(0, overflowGeom.itemIndexAt(15, 25, 0));
+            assertEquals(10, overflowGeom.itemIndexAt(15, 25, 1));
+            assertEquals(44, overflowGeom.itemIndexAt(14 + 4 * 18 + 2, 24 + 3 * 18 + 2, 1));
+            assertEquals(-1, overflowGeom.itemIndexAt(14 + 5 * 18 + 2, 24 + 3 * 18 + 2, 1));
+            assertTrue(overflowGeom.isOverScrollbar(198, 40));
+            assertEquals(0, overflowGeom.scrollRowForPointerY(25));
+            assertEquals(1, overflowGeom.scrollRowForPointerY(94));
+
+            var measured = dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltipRenderer.measure(multiTip, null);
+            assertTrue(measured.width() >= dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltipRenderer.minWidth);
+            assertTrue(measured.height() > 60);
         } finally {
             if (previous instanceof RecipeApiImpl impl) {
                 RecipeApiImpl.attach(impl);
@@ -620,10 +776,45 @@ class DatabasePageListLayoutTest {
             assertEquals(0.0f, controls.style().layoutStyle().flexShrink, 0.001f);
             assertTrue(controls.children().size() >= 3);
             assertEquals(4, DatabasePage.detailProjectionRowPadding());
+
+            // Multi-plugin recipe defaults to All changes and supports switching to single plugin & back
+            page.debugLeaveRecipeDetail();
+            page.debugSetQuery("full_pipeline_showcase");
+            page.debugOpenFirstResultDetail();
+            assertTrue(page.debugProjectionDiffShowAll());
+            assertTrue(page.debugRecipeDetailPluginCount() >= 3);
+            WidgetGroup<?> showcaseResults = (WidgetGroup<?>) page.children().get(1);
+            WidgetGroup<?> showcaseShell = (WidgetGroup<?>) showcaseResults.children().getFirst();
+            CirrusCardWidget showcaseDebug = (CirrusCardWidget) showcaseShell.children().get(2);
+            WidgetGroup<?> showcaseWorkspace = (WidgetGroup<?>) showcaseDebug.body().children().getFirst();
+            WidgetGroup<?> showcaseOverview = (WidgetGroup<?>) showcaseWorkspace.children().getFirst();
+            // caption, pipeline, scopeHeader, preview, mergeRow, summaryStrip, inputsGroup, outputsGroup, metaGroup
+            assertEquals(9, showcaseOverview.children().size());
+            WidgetGroup<?> allInputsGroup = (WidgetGroup<?>) showcaseOverview.children().get(6);
+            WidgetGroup<?> allOutputsGroup = (WidgetGroup<?>) showcaseOverview.children().get(7);
+            WidgetGroup<?> allMetaGroup = (WidgetGroup<?>) showcaseOverview.children().get(8);
+            assertTrue(allInputsGroup.children().size() - 1 >= 4);
+            assertTrue(allOutputsGroup.children().size() - 1 >= 3);
+            assertTrue(allMetaGroup.children().size() - 1 >= 2);
+
+            page.debugSelectProjectionPlugin(DebugProjectionPlugin.overclockPlugin.id().toString());
+            assertFalse(page.debugProjectionDiffShowAll());
+            WidgetGroup<?> ocResults = (WidgetGroup<?>) page.children().get(1);
+            WidgetGroup<?> ocShell = (WidgetGroup<?>) ocResults.children().getFirst();
+            CirrusCardWidget ocDebug = (CirrusCardWidget) ocShell.children().get(2);
+            WidgetGroup<?> ocWorkspace = (WidgetGroup<?>) ocDebug.body().children().getFirst();
+            WidgetGroup<?> ocOverview = (WidgetGroup<?>) ocWorkspace.children().getFirst();
+            WidgetGroup<?> ocInputsGroup = (WidgetGroup<?>) ocOverview.children().get(6);
+            assertEquals(1, ocInputsGroup.children().size() - 1);
+
+            page.debugSetProjectionDiffShowAll(true);
+            assertTrue(page.debugProjectionDiffShowAll());
             assertEquals(8, DatabasePage.detailProjectionPanelGap());
             assertEquals(3, DatabasePage.detailProjectionControlMarginLeft());
             WidgetGroup<?> parameters = (WidgetGroup<?>) controls.children().get(2);
-            WidgetGroup<?> booleanRow = (WidgetGroup<?>) parameters.children().get(2);
+            // children: 0 = caption, 1 = selected plugin banner, 2 = scale (Long), 3 = extra_output (Boolean)
+            assertTrue(parameters.children().size() >= 4);
+            WidgetGroup<?> booleanRow = (WidgetGroup<?>) parameters.children().get(3);
             assertTrue(booleanRow.children().getFirst() instanceof CirrusWrappedTextWidget);
             assertTrue(booleanRow.children().get(1) instanceof Slide);
 

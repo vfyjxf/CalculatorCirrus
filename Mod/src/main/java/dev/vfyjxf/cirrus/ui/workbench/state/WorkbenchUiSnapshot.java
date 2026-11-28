@@ -1,10 +1,10 @@
 package dev.vfyjxf.cirrus.ui.workbench.state;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningBudget;
 import dev.vfyjxf.cirrus.api.planning.context.ProgressionState;
 import dev.vfyjxf.cirrus.api.planning.cost.PlanningProfile;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
@@ -36,7 +36,7 @@ public record WorkbenchUiSnapshot(
     @Nullable String comparePlanId,
     Set<String> selectedStepIds,
     @Nullable String hoveredStepId,
-    @Nullable ResourceKey hoveredResource,
+    @Nullable ComponentStackKey hoveredResource,
     FlowViewMode flowViewMode,
     DagLayoutMode dagLayoutMode,
     Set<String> expandedLoopStepIds,

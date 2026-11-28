@@ -17,6 +17,7 @@ import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SlotBinding;
 import dev.vfyjxf.cirrus.api.planning.plan.VerificationCertificate;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.core.solve.ImprovementLoop;
 import dev.vfyjxf.cirrus.planning.core.verify.DefaultPlanVerifier;
 import org.jspecify.annotations.Nullable;
@@ -182,14 +183,15 @@ public final class DiverseParetoSelector {
         List<String> parts = new ArrayList<>(plan.steps().size());
         for (PlanStep step : plan.steps()) {
             parts.add(switch (step) {
-                case AcquireStep a -> "A:" + a.resource().shortString() + "=" + a.amount();
-                case LinePullStep lp -> "L:" + lp.lineId() + ":" + lp.resource().shortString() + "=" + lp.amount();
+                case AcquireStep a -> "A:" + a.resource().canonicalKey() + "=" + a.amount();
+                case LinePullStep lp -> "L:" + lp.lineId() + ":" + lp.resource().canonicalKey() + "=" + lp.amount();
                 case ProvisionMachineStep pm ->
-                    "P:" + pm.machineId() + "x" + pm.countToBuild() + ":" + pm.craftedByPredecessorSteps();
+                    "P:" + pm.machine().canonicalKey() + "x" + pm.countToBuild() + ":" + pm.craftedByPredecessorSteps();
                 case SetupLineStep sl ->
-                    "S:" + sl.systemId() + ":" + sl.primaryMachineId() + ":" + sl.targetOutput().shortString();
+                    "S:" + sl.systemId() + ":" + sl.primaryMachine().canonicalKey() + ":" + sl.targetOutput().canonicalKey();
                 case CraftStep cs ->
-                    "C:" + cs.recipeKey().shortString() + "x" + cs.batches() + ":" + cs.chosenMachineId().orElse("")
+                    "C:" + cs.recipeKey().shortString() + "x" + cs.batches() + ":"
+                            + cs.chosenMachine().map(MachineEntry::canonicalKey).orElse("")
                             + ":" + cs.executedByAutomation() + ":" + bindingsKey(cs.slotBindings());
                 case ConvertStep cv -> "V:" + cv.conversionRecipeKey().shortString() + "x" + cv.batches() + ":"
                         + bindingsKey(cv.slotBindings());
@@ -205,7 +207,7 @@ public final class DiverseParetoSelector {
         StringBuilder sb = new StringBuilder();
         for (var e : bindings.entrySet()) {
             if (!sb.isEmpty()) sb.append(',');
-            sb.append(e.getKey()).append('=').append(e.getValue().chosenResource().shortString());
+            sb.append(e.getKey()).append('=').append(e.getValue().chosenResource().canonicalKey());
         }
         return sb.toString();
     }
@@ -214,10 +216,10 @@ public final class DiverseParetoSelector {
         Set<String> sig = new HashSet<>();
         for (PlanStep step : plan.steps()) {
             switch (step) {
-                case AcquireStep a -> sig.add("acq:" + a.resource().shortString());
+                case AcquireStep a -> sig.add("acq:" + a.resource().canonicalKey());
                 case LinePullStep lp -> sig.add("line:" + lp.lineId());
-                case ProvisionMachineStep pm -> sig.add("prov:" + pm.machineId());
-                case SetupLineStep sl -> sig.add("setup:" + sl.systemId() + ":" + sl.primaryMachineId());
+                case ProvisionMachineStep pm -> sig.add("prov:" + pm.machine().canonicalKey());
+                case SetupLineStep sl -> sig.add("setup:" + sl.systemId() + ":" + sl.primaryMachine().canonicalKey());
                 case CraftStep cs -> sig.add("craft:" + cs.recipeKey().shortString());
                 case ConvertStep cv -> sig.add("conv:" + cv.conversionRecipeKey().shortString());
                 case CycleLoopStep cl -> sig.add("loop:" + cl.macroKey().macroId());

@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.copilot;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
@@ -8,11 +9,11 @@ import dev.vfyjxf.cirrus.api.planning.human.MachineRule;
 import dev.vfyjxf.cirrus.api.planning.human.RecipeRule;
 import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
@@ -67,6 +68,7 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.heightOf;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minHeight;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minWidth;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.padding;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.paddingBottom;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.paddingRight;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeStretch;
 
@@ -100,7 +102,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
     public RightCoPilotDockWidget(CoPilotHost host, PromptCardWidget.PreviewListener previewListener) {
         this.host = Objects.requireNonNull(host, "host");
         this.previewListener = Objects.requireNonNull(previewListener, "previewListener");
-        useStyle(flexColumn(), gap(2), padding(3), sizeStretch(), minWidth(0));
+        useStyle(flexColumn(), gap(2), padding(3), sizeStretch(), minWidth(0), minHeight(0));
 
         this.tabBar = new TabBar(host, this::setTab, () -> {
             if (onCollapse != null) {
@@ -116,7 +118,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
                 .trackTexture(initialTextures.scrollTrack()).thumbTexture(initialTextures.scrollThumb())
                 .scrollbarWidth(5).minThumbSize(14).viewportInset(0, 0, 0, 0);
         promptPage.useEffect(UIEffects.scrollable(promptScrollState));
-        promptPage.useStyle(flexColumn(), flexGrow(1), minWidth(0), minHeight(0), gap(3), paddingRight(6));
+        promptPage.useStyle(flexColumn(), flexGrow(1), minWidth(0), minHeight(0), gap(4), paddingRight(6), paddingBottom(4));
         promptPage.onMount((scene, context, handle) -> CirrusUiTheme.bindThemeListener(promptPage, handle, () -> {
             CirrusThemeTextures textures = CirrusUiTheme.textures(promptPage);
             promptScrollState.trackTexture(textures.scrollTrack()).thumbTexture(textures.scrollThumb());
@@ -155,11 +157,11 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
     private final QuickDropZone banDropZone;
     private final PlanResourceStrip planResourceStrip;
     private final MachineStrip machineStrip;
-    private @Nullable ResourceKey externalDragResource;
-    private @Nullable String externalDragMachine;
+    private @Nullable ComponentStackKey externalDragResource;
+    private @Nullable MachineEntry externalDragMachine;
     private @Nullable QuickDropZone externalHoveredZone;
-    private @Nullable ResourceKey stripPressedResource;
-    private @Nullable String stripPressedMachine;
+    private @Nullable ComponentStackKey stripPressedResource;
+    private @Nullable MachineEntry stripPressedMachine;
     private boolean stripDragging;
     private double stripPressSceneX;
     private double stripPressSceneY;
@@ -168,7 +170,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
     private @Nullable QuickDropZone lastConsumedZone;
     private long lastConsumedAtMs;
 
-    public boolean hoverExternalResourceDrag(double sceneX, double sceneY, @Nullable ResourceKey resource) {
+    public boolean hoverExternalResourceDrag(double sceneX, double sceneY, @Nullable ComponentStackKey resource) {
         externalDragResource = resource;
         externalDragMachine = null;
         externalHoveredZone = null;
@@ -186,11 +188,11 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
         return false;
     }
 
-    public boolean hoverExternalMachineDrag(double sceneX, double sceneY, @Nullable String machineId) {
+    public boolean hoverExternalMachineDrag(double sceneX, double sceneY, @Nullable MachineEntry machine) {
         externalDragResource = null;
-        externalDragMachine = machineId;
+        externalDragMachine = machine;
         externalHoveredZone = null;
-        if (machineId == null || !visible() || tab != Tab.quickDrop) {
+        if (machine == null || machine.isEmpty() || !visible() || tab != Tab.quickDrop) {
             return false;
         }
         if (freeDropZone.containsScenePoint(sceneX, sceneY)) {
@@ -204,7 +206,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
         return false;
     }
 
-    public boolean dropExternalResource(double sceneX, double sceneY, @Nullable ResourceKey resource) {
+    public boolean dropExternalResource(double sceneX, double sceneY, @Nullable ComponentStackKey resource) {
         boolean hit = hoverExternalResourceDrag(sceneX, sceneY, resource);
         QuickDropZone targetZone = externalHoveredZone;
         clearExternalResourceDrag();
@@ -219,14 +221,14 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
         return handled;
     }
 
-    public boolean dropExternalMachine(double sceneX, double sceneY, @Nullable String machineId) {
-        boolean hit = hoverExternalMachineDrag(sceneX, sceneY, machineId);
+    public boolean dropExternalMachine(double sceneX, double sceneY, @Nullable MachineEntry machine) {
+        boolean hit = hoverExternalMachineDrag(sceneX, sceneY, machine);
         QuickDropZone targetZone = externalHoveredZone;
         clearExternalResourceDrag();
-        if (!hit || targetZone == null || machineId == null) {
+        if (!hit || targetZone == null || machine == null || machine.isEmpty()) {
             return false;
         }
-        boolean handled = targetZone.accepts(new DragPayload.MachineDrag(machineId, 1));
+        boolean handled = targetZone.accepts(new DragPayload.MachineDrag(machine, 1));
         if (handled) {
             recordDropConsumed(targetZone);
             CirrusUiSound.playClickSound();
@@ -236,7 +238,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
 
     public boolean finishActiveDrag(double sceneX, double sceneY) {
         if (stripPressedResource != null) {
-            ResourceKey carried = stripPressedResource;
+            ComponentStackKey carried = stripPressedResource;
             boolean wasDragging = stripDragging;
             stripPressedResource = null;
             stripDragging = false;
@@ -247,7 +249,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
             return false;
         }
         if (stripPressedMachine != null) {
-            String carried = stripPressedMachine;
+            MachineEntry carried = stripPressedMachine;
             boolean wasDragging = stripDragging;
             stripPressedMachine = null;
             stripDragging = false;
@@ -301,19 +303,21 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
         FloatPos local = sceneToLocal(stripDragSceneX, stripDragSceneY);
         int gx = (int) Math.round(local.x()) - 11;
         int gy = (int) Math.round(local.y()) - 11;
-        ResourceKey iconResource = stripPressedResource != null
+        ComponentStackKey iconResource = stripPressedResource != null
                 ? stripPressedResource
-                : ResourceKey.item(Objects.requireNonNull(stripPressedMachine));
+                : Objects.requireNonNull(stripPressedMachine).contentKey().orElse(null);
         Component label = stripPressedResource != null
                 ? CoPilotPaint.resourceName(stripPressedResource)
-                : CoPilotPaint.resourceName(iconResource);
+                : CoPilotPaint.machineName(stripPressedMachine);
         int labelW = Math.min(110, ChromeText.width(canvas, label) + 8);
         int pillW = 24 + labelW;
         int pillH = 22;
         int px = Math.max(2, Math.min(Math.max(2, width() - pillW - 2), gx));
         int py = Math.max(2, Math.min(Math.max(2, height() - pillH - 2), gy));
         OreUiPaint.raisedCard(canvas, px, py, pillW, pillH, palette, true, true);
-        CoPilotPaint.icon(canvas, CoPilotPaint.stackOf(iconResource, 1L), px + 3, py + 3, 16, palette);
+        if (iconResource != null) {
+            CoPilotPaint.icon(canvas, CoPilotPaint.stackOf(iconResource, 1L), px + 3, py + 3, 16, palette);
+        }
         ChromeText.drawFitted(
             canvas,
             label,
@@ -324,7 +328,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
         );
     }
 
-    private @Nullable ResourceKey selectedStepResource() {
+    private @Nullable ComponentStackKey selectedStepResource() {
         WorkbenchUiSnapshot snapshot = host.snapshot();
         if (snapshot == null || snapshot.selectedStepIds().isEmpty()) {
             return null;
@@ -342,7 +346,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
         return null;
     }
 
-    private @Nullable ResourceKey primaryResourceOf(PlanStep step) {
+    private @Nullable ComponentStackKey primaryResourceOf(PlanStep step) {
         return inspector.outputResource(step);
     }
 
@@ -606,7 +610,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
 
         private record DroppedEntry(
             GuidanceRule rule,
-            @Nullable ResourceKey iconKey,
+            @Nullable ComponentStackKey iconKey,
             Component label,
             Component effectBadge,
             Rect rowRect,
@@ -658,7 +662,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
                         || (lastConsumedAtMs > 0L && OreUiMotion.nowMs() - lastConsumedAtMs < 150L)) {
                     return EventDispatch.pass;
                 }
-                ResourceKey selected = selectedStepResource();
+                ComponentStackKey selected = selectedStepResource();
                 if (selected != null && accepts(new DragPayload.ResourceDrag(selected, 1L, "quick-drop-click"))) {
                     recordDropConsumed(QuickDropZone.this);
                     CirrusUiSound.playClickSound();
@@ -729,12 +733,12 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
             return out;
         }
 
-        private @Nullable ResourceKey iconForRule(GuidanceRule rule) {
+        private @Nullable ComponentStackKey iconForRule(GuidanceRule rule) {
             if (rule instanceof ResourceRule rr) {
                 return rr.resource();
             }
             if (rule instanceof MachineRule mr) {
-                return ResourceKey.item(mr.machineId());
+                return mr.machine().contentKey().orElse(null);
             }
             if (rule instanceof RecipeRule rec) {
                 CompiledRecipeGraph g = CirrusPlanningRuntime.shared().flatMap(CirrusPlanningRuntime::currentGraph)
@@ -754,10 +758,10 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
                 return CoPilotPaint.resourceName(rr.resource());
             }
             if (rule instanceof MachineRule mr) {
-                return CoPilotPaint.machineName(ResourceKey.item(mr.machineId()), mr.machineId());
+                return CoPilotPaint.machineName(mr.machine());
             }
             if (rule instanceof RecipeRule rec) {
-                ResourceKey out = iconForRule(rule);
+                ComponentStackKey out = iconForRule(rule);
                 if (out != null) {
                     return CoPilotPaint.resourceName(out);
                 }
@@ -815,7 +819,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
                     return builder.build();
                 }
             }
-            ResourceKey selected = selectedStepResource();
+            ComponentStackKey selected = selectedStepResource();
             OreUiRichTooltip.Builder builder = OreUiRichTooltip.builder(
                 free ? "Free Resource Zone" : "Hard Ban Resource Zone"
             ).badge(free ? "FREE" : "BAN", free ? OreUiRichTooltip.Tone.positive : OreUiRichTooltip.Tone.warning).text(
@@ -852,7 +856,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
             boolean mouseHover = mouseX >= 0 && mouseX < width && mouseY >= 0 && mouseY < height;
             long flashElapsed = lastConsumedZone == this ? Math.max(0L, OreUiMotion.nowMs() - lastConsumedAtMs) : 9999L;
             float flashStrength = flashElapsed < 420L ? 1.0f - (flashElapsed / 420.0f) : 0.0f;
-            ResourceKey selected = selectedStepResource();
+            ComponentStackKey selected = selectedStepResource();
             int ink = free ? palette.costS() : palette.ruleHardBan();
             int fill;
             if (dragHover) {
@@ -909,7 +913,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
                     false,
                     rowHov
                 );
-                ResourceKey iconKey = iconForRule(rule);
+                ComponentStackKey iconKey = iconForRule(rule);
                 if (iconKey != null) {
                     CoPilotPaint.icon(
                         canvas,
@@ -968,8 +972,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
             if (dragHover && externalDragResource != null) {
                 sub = Component.literal("Release: ").append(CoPilotPaint.resourceName(externalDragResource));
             } else if (dragHover && externalDragMachine != null) {
-                sub = Component.literal("Release: ")
-                        .append(CoPilotPaint.resourceName(ResourceKey.item(externalDragMachine)));
+                sub = Component.literal("Release: ").append(CoPilotPaint.machineName(externalDragMachine));
             } else if (rules.size() > visible) {
                 sub = Component.literal("+" + (rules.size() - visible) + " more active rules");
             } else if (selected != null) {
@@ -1001,7 +1004,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
                     return EventDispatch.pass;
                 }
                 FloatPos local = input.mouseRelative(this);
-                ResourceKey hit = resourceAt(local.x(), local.y());
+                ComponentStackKey hit = resourceAt(local.x(), local.y());
                 if (hit == null) {
                     return EventDispatch.pass;
                 }
@@ -1044,14 +1047,14 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
             });
         }
 
-        public List<ResourceKey> resources() {
+        public List<ComponentStackKey> resources() {
             WorkbenchUiSnapshot snapshot = host.snapshot();
             if (snapshot == null) {
                 return List.of();
             }
-            Set<ResourceKey> keys = new LinkedHashSet<>();
+            Set<ComponentStackKey> keys = new LinkedHashSet<>();
             for (PlanStep step : snapshot.selectedPlan().map(ProductionPlan::steps).orElse(List.of())) {
-                ResourceKey res = primaryResourceOf(step);
+                ComponentStackKey res = primaryResourceOf(step);
                 if (res != null) {
                     keys.add(res);
                 }
@@ -1059,8 +1062,8 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
             return List.copyOf(keys);
         }
 
-        public @Nullable ResourceKey resourceAt(double localX, double localY) {
-            List<ResourceKey> list = resources();
+        public @Nullable ComponentStackKey resourceAt(double localX, double localY) {
+            List<ComponentStackKey> list = resources();
             for (int index = 0; index < list.size(); index++) {
                 Rect r = chipRect(index);
                 if (r != null && r.contains(localX, localY)) {
@@ -1085,7 +1088,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
             if (stripDragging) {
                 return null;
             }
-            ResourceKey res = resourceAt(localX, localY);
+            ComponentStackKey res = resourceAt(localX, localY);
             if (res == null) {
                 return null;
             }
@@ -1113,7 +1116,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
                 2,
                 palette.textMuted()
             );
-            List<ResourceKey> list = resources();
+            List<ComponentStackKey> list = resources();
             if (list.isEmpty()) {
                 CoPilotPaint.text(
                     canvas,
@@ -1129,7 +1132,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
                 if (r == null || r.right() > w - 2) {
                     continue;
                 }
-                ResourceKey item = list.get(i);
+                ComponentStackKey item = list.get(i);
                 boolean isDraggedSource = stripDragging && item.equals(stripPressedResource);
                 boolean hov = !stripDragging && r.contains(mouseX, mouseY);
                 OreUiPaint.raisedButton(
@@ -1164,7 +1167,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
                     return EventDispatch.pass;
                 }
                 FloatPos local = input.mouseRelative(this);
-                String hit = machineAt(local.x(), local.y());
+                MachineEntry hit = machineAt(local.x(), local.y());
                 if (hit == null) {
                     return EventDispatch.pass;
                 }
@@ -1212,24 +1215,24 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
             );
         }
 
-        public List<String> machines() {
+        public List<MachineEntry> machines() {
             WorkbenchUiSnapshot snapshot = host.snapshot();
             if (snapshot == null) {
                 return List.of();
             }
-            Set<String> machines = new LinkedHashSet<>();
+            Set<MachineEntry> machines = new LinkedHashSet<>();
             for (PlanStep step : snapshot.selectedPlan().map(ProductionPlan::steps).orElse(List.of())) {
                 if (step instanceof ProvisionMachineStep provision) {
-                    machines.add(provision.machineId());
+                    machines.add(provision.machine());
                 } else if (step instanceof CraftStep craft) {
-                    craft.chosenMachineId().ifPresent(machines::add);
+                    craft.chosenMachine().ifPresent(machines::add);
                 }
             }
             return List.copyOf(machines);
         }
 
-        public @Nullable String machineAt(double localX, double localY) {
-            List<String> machines = machines();
+        public @Nullable MachineEntry machineAt(double localX, double localY) {
+            List<MachineEntry> machines = machines();
             for (int index = 0; index < machines.size(); index++) {
                 if (chipRect(index).contains(localX, localY)) {
                     return machines.get(index);
@@ -1258,14 +1261,14 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
                 2,
                 palette.textMuted()
             );
-            List<String> machines = machines();
+            List<MachineEntry> machines = machines();
             for (int index = 0; index < machines.size(); index++) {
                 Rect rect = chipRect(index);
                 if (rect.right() > width) {
                     return;
                 }
-                String machineId = machines.get(index);
-                boolean isDraggedSource = stripDragging && machineId.equals(stripPressedMachine);
+                MachineEntry machine = machines.get(index);
+                boolean isDraggedSource = stripDragging && machine.equals(stripPressedMachine);
                 boolean hover = !stripDragging && rect.contains(mouseX, mouseY);
                 OreUiPaint.raisedButton(
                     canvas,
@@ -1282,14 +1285,17 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
                 if (!isDraggedSource) {
                     OreUiPaint
                             .slot(canvas, rect.x() + 3, rect.y() + Math.max(1, (rect.height() - 18) / 2), 18, palette);
-                    CoPilotPaint.icon(
-                        canvas,
-                        CoPilotPaint.stackOf(ResourceKey.item(machineId), 1L),
-                        rect.x() + 4,
-                        rect.y() + Math.max(2, (rect.height() - 16) / 2),
-                        16,
-                        palette
-                    );
+                    ComponentStackKey iconKey = machine.contentKey().orElse(null);
+                    if (iconKey != null) {
+                        CoPilotPaint.icon(
+                            canvas,
+                            CoPilotPaint.stackOf(iconKey, 1L),
+                            rect.x() + 4,
+                            rect.y() + Math.max(2, (rect.height() - 16) / 2),
+                            16,
+                            palette
+                        );
+                    }
                 }
             }
         }
@@ -1310,7 +1316,7 @@ public class RightCoPilotDockWidget extends WidgetGroup<Widget> {
                 if (parent() == null) {
                     return null;
                 }
-                String machine = machineAt(localX(input), localY(input));
+                MachineEntry machine = machineAt(localX(input), localY(input));
                 if (machine == null) {
                     return null;
                 }

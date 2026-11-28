@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning.normalize;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.RawIngredientSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawOutputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeRecord;
@@ -7,6 +8,7 @@ import dev.vfyjxf.cirrus.api.planning.tag.CanonicalRecipeTag;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeTagAssignment;
 import dev.vfyjxf.cirrus.api.planning.tag.TagProvenance;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -23,11 +25,20 @@ public final class DualTagClassifier {
     private DualTagClassifier() {}
 
     public static List<RecipeTagAssignment> classify(RawRecipeRecord record, boolean mirrorDuplicate, boolean suspectJei) {
-        List<RecipeTagAssignment> out = new ArrayList<>(4);
-        Set<String> sysTags = record.systemTags();
+        return classify(record, mirrorDuplicate, suspectJei, false);
+    }
 
-        if (mirrorDuplicate || sysTags.contains(RecipeSystemTags.displayOnly.toString())
-                || sysTags.contains(RecipeSystemTags.mirrorDuplicate.toString())) {
+    public static List<RecipeTagAssignment> classify(
+        RawRecipeRecord record,
+        boolean mirrorDuplicate,
+        boolean suspectJei,
+        boolean hasReversePackingPartner
+    ) {
+        List<RecipeTagAssignment> out = new ArrayList<>(4);
+        Set<Namespace> sysTags = record.systemTags();
+
+        if (mirrorDuplicate || sysTags.contains(RecipeSystemTags.displayOnly)
+                || sysTags.contains(RecipeSystemTags.mirrorDuplicate)) {
             out.add(new RecipeTagAssignment(
                 CanonicalRecipeTag.junkOrDuplicate,
                 mirrorDuplicate ? TagProvenance.jeiAudit : TagProvenance.systemTag,
@@ -45,7 +56,7 @@ public final class DualTagClassifier {
             ));
         }
 
-        if (sysTags.contains(RecipeSystemTags.resourceGen.toString())) {
+        if (sysTags.contains(RecipeSystemTags.resourceGen)) {
             out.add(new RecipeTagAssignment(
                 CanonicalRecipeTag.resourceGeneration,
                 TagProvenance.systemTag,
@@ -54,19 +65,20 @@ public final class DualTagClassifier {
             ));
         }
 
-        // Structural catalytic/self-multiplying check: exact resource appears in both input and output.
-        Set<String> outKeys = new HashSet<>();
+        // Structural catalytic/self-multiplying check: a consumed input also appears in outputs.
+        // Non-consumed tool/durability catalysts do not make a normal recipe a catalytic loop.
+        Set<ComponentStackKey> outKeys = new HashSet<>();
         for (RawOutputSlot o : record.outputs()) {
-            outKeys.add(o.resource().canonicalString());
+            outKeys.add(o.resource());
         }
         boolean hasConsumed = false;
         boolean catalyticOverlap = false;
         for (RawIngredientSlot in : record.inputs()) {
             if (!in.catalyst()) {
                 hasConsumed = true;
-            }
-            if (in.candidates().size() == 1 && outKeys.contains(in.candidates().get(0).canonicalString())) {
-                catalyticOverlap = true;
+                if (in.candidates().size() == 1 && outKeys.contains(in.candidates().get(0))) {
+                    catalyticOverlap = true;
+                }
             }
         }
         if (catalyticOverlap) {
@@ -85,8 +97,9 @@ public final class DualTagClassifier {
             ));
         }
 
-        // Structural packing/unpacking: 1-to-1 single-candidate scaling ratio (e.g. 9:1 or 4:1 or 1:9).
-        if (record.inputs().size() == 1 && record.outputs().size() == 1) {
+        // Structural packing/unpacking: only when a true reverse recipe exists in the catalog
+        // (prevents one-way 1 log -> 4 planks from being misclassified as unpacking).
+        if (hasReversePackingPartner && record.inputs().size() == 1 && record.outputs().size() == 1) {
             RawIngredientSlot in = record.inputs().get(0);
             RawOutputSlot o = record.outputs().get(0);
             if (!in.catalyst() && in.candidates().size() == 1

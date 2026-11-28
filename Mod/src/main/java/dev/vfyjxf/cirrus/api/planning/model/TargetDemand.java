@@ -1,8 +1,10 @@
 package dev.vfyjxf.cirrus.api.planning.model;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
+
 import java.util.Objects;
 
-public record TargetDemand(ResourceKey resource, long amount) {
+public record TargetDemand(ComponentStackKey resource, long amount) {
 
     public TargetDemand {
         Objects.requireNonNull(resource, "resource");

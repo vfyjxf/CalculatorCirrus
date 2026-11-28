@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning.core.solve;
 
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.core.lang.Fnv1a64;
 
 import java.util.Arrays;
@@ -14,7 +15,7 @@ public final class ChoiceTable {
     public final Potentials.SourceChoice[] sourceByRes;
     public final int[] slotRepOverride;
     public final TreeMap<Integer, List<BatchSplit>> batchMix;
-    public final TreeMap<Integer, String> machineOverride;
+    public final TreeMap<Integer, MachineEntry> machineOverride;
     public final TreeSet<Integer> automatedRecipes;
 
     public ChoiceTable(Potentials potentials) {
@@ -29,7 +30,7 @@ public final class ChoiceTable {
         Potentials.SourceChoice[] sourceByRes,
         int[] slotRepOverride,
         TreeMap<Integer, List<BatchSplit>> batchMix,
-        TreeMap<Integer, String> machineOverride,
+        TreeMap<Integer, MachineEntry> machineOverride,
         TreeSet<Integer> automatedRecipes
     ) {
         this.sourceByRes = sourceByRes;
@@ -41,7 +42,7 @@ public final class ChoiceTable {
 
     public ChoiceTable copy() {
         TreeMap<Integer, List<BatchSplit>> mixCopy = new TreeMap<>(batchMix);
-        TreeMap<Integer, String> machCopy = new TreeMap<>(machineOverride);
+        TreeMap<Integer, MachineEntry> machCopy = new TreeMap<>(machineOverride);
         TreeSet<Integer> autoCopy = new TreeSet<>(automatedRecipes);
         return new ChoiceTable(
             Arrays.copyOf(sourceByRes, sourceByRes.length),
@@ -61,7 +62,7 @@ public final class ChoiceTable {
             h = Fnv1a64.mixByte(h, sc.kind().ordinal());
             if (sc.localRecipe() >= 0) h = Fnv1a64.mixLong(h, sc.localRecipe());
             if (sc.macro() != null) h = Fnv1a64.mixString(h, sc.macro().macroKey().macroId());
-            if (sc.chosenMachine() != null) h = Fnv1a64.mixString(h, sc.chosenMachine());
+            if (sc.chosenMachine() != null) h = Fnv1a64.mixString(h, sc.chosenMachine().canonicalKey());
         }
         h = Fnv1a64.mixByte(h, '|');
         for (var e : batchMix.entrySet()) {
@@ -74,7 +75,7 @@ public final class ChoiceTable {
         h = Fnv1a64.mixByte(h, '|');
         for (var e : machineOverride.entrySet()) {
             h = Fnv1a64.mixLong(h, e.getKey());
-            h = Fnv1a64.mixString(h, e.getValue());
+            h = Fnv1a64.mixString(h, e.getValue().canonicalKey());
         }
         h = Fnv1a64.mixByte(h, '|');
         for (int r : automatedRecipes) {

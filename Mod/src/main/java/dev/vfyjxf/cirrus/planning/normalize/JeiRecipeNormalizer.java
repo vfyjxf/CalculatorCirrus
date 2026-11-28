@@ -1,16 +1,18 @@
 package dev.vfyjxf.cirrus.planning.normalize;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.RawIngredientSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawOutputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeRecord;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.spi.RecipeMetadataEnricher;
 import dev.vfyjxf.cirrus.api.planning.tag.CanonicalRecipeTag;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeEvidenceTier;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeSemanticKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
 import dev.vfyjxf.cirrus.planning.core.trust.FidelityScorer;
 import dev.vfyjxf.cirrus.planning.core.trust.RecipeSemanticKeyBuilder;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -23,11 +25,11 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 4-Stage Universal JEI Recipe Normalization & Anti-Fraud Fidelity Pipeline:
- * J1 Slot cleanup & SHA-256 semantic identity ->
- * J2 Cross-system I/O fingerprint mirror deduplication ->
- * J3 Contamination-proof M8 sibling fidelity scoring ->
- * J4 Declarative JeiNormalizationPatch & RecipeMetadataEnricher SPI overlay.
+ * 4-stage universal JEI recipe normalization & fidelity pipeline:
+ * slot cleanup & SHA-256 semantic identity ->
+ * cross-system I/O fingerprint mirror deduplication ->
+ * contamination-proof sibling fidelity scoring ->
+ * declarative patch & RecipeMetadataEnricher SPI overlay.
  */
 public final class JeiRecipeNormalizer {
 
@@ -45,6 +47,8 @@ public final class JeiRecipeNormalizer {
         NormalizationStats stats
     ) {}
 
+    private record PackingPair(ComponentStackKey in, long inAmt, ComponentStackKey out, long outAmt) {}
+
     private JeiRecipeNormalizer() {}
 
     public static NormalizationResult normalize(
@@ -58,19 +62,23 @@ public final class JeiRecipeNormalizer {
         List<JeiNormalizationPatch> activePatches = patches == null ? List.of() : patches;
         List<RecipeMetadataEnricher> activeEnrichers = enrichers == null ? List.of() : enrichers;
 
-        // Stage J1 + J4 pre-pass: apply declarative patches & enrichers, compute SHA-256 semantic keys.
         List<RawRecipeRecord> staged = new ArrayList<>(rawRecords.size());
+        boolean[] hasExplicitFidelityOverride = new boolean[rawRecords.size()];
         Set<String> nativeIoFingerprints = new HashSet<>();
-        Map<String, Integer> systemRecipeCount = new HashMap<>();
-        Map<String, Integer> systemMissingIdCount = new HashMap<>();
-        Map<ResourceKey, List<FidelityScorer.SiblingSample>> siblingSamplesByOut = new HashMap<>();
-        Map<ResourceKey, Integer> producerCountByOut = new HashMap<>();
+        Map<Namespace, Integer> systemRecipeCount = new HashMap<>();
+        Map<Namespace, Integer> systemMissingIdCount = new HashMap<>();
+        Map<ComponentStackKey, List<FidelityScorer.SiblingSample>> siblingSamplesByOut = new HashMap<>();
+        Map<ComponentStackKey, Integer> producerCountByOut = new HashMap<>();
+        Set<PackingPair> singlePairs = new HashSet<>();
         int patchesApplied = 0;
 
-        for (RawRecipeRecord rec : rawRecords) {
-            RawRecipeRecord cur = rec;
+        for (int idx = 0; idx < rawRecords.size(); idx++) {
+            RawRecipeRecord cur = rawRecords.get(idx);
             for (JeiNormalizationPatch patch : activePatches) {
                 if (patch.matches(cur)) {
+                    if (patch.fidelityOverride() != null) {
+                        hasExplicitFidelityOverride[idx] = true;
+                    }
                     cur = applyPatch(cur, patch);
                     patchesApplied++;
                 }
@@ -78,6 +86,9 @@ public final class JeiRecipeNormalizer {
             for (RecipeMetadataEnricher enricher : activeEnrichers) {
                 RecipeMetadataEnricher.EnrichmentDelta delta = enricher.enrich(cur);
                 if (delta != null && delta != RecipeMetadataEnricher.EnrichmentDelta.none) {
+                    if (delta.fidelityOverride() != null) {
+                        hasExplicitFidelityOverride[idx] = true;
+                    }
                     cur = applyEnrichment(cur, delta);
                 }
             }
@@ -87,7 +98,7 @@ public final class JeiRecipeNormalizer {
                 cur.systemId(),
                 cur.sourceKind(),
                 cur.explicitId(),
-                cur.machineIds(),
+                cur.machines(),
                 cur.inputs(),
                 cur.outputs(),
                 cur.recipeValues(),
@@ -100,6 +111,14 @@ public final class JeiRecipeNormalizer {
                 cur.hasOpaqueConstraint()
             );
             staged.add(cur);
+
+            if (cur.inputs().size() == 1 && cur.outputs().size() == 1) {
+                RawIngredientSlot in = cur.inputs().get(0);
+                RawOutputSlot o = cur.outputs().get(0);
+                if (!in.catalyst() && in.candidates().size() == 1 && !in.candidates().get(0).equals(o.resource())) {
+                    singlePairs.add(new PackingPair(in.candidates().get(0), in.amount(), o.resource(), o.amount()));
+                }
+            }
 
             systemRecipeCount.merge(cur.systemId(), 1, Integer::sum);
             if (cur.explicitId().isEmpty()) {
@@ -114,32 +133,34 @@ public final class JeiRecipeNormalizer {
             double apparentUnitCost = estimateApparentUnitCost(cur);
             boolean feasibleAnchor = !cur.hasOpaqueConstraint()
                     && !cur.canonicalTags().contains(CanonicalRecipeTag.junkOrDuplicate)
-                    && !cur.systemTags().contains(RecipeSystemTags.displayOnly.toString());
+                    && !cur.systemTags().contains(RecipeSystemTags.displayOnly);
             for (RawOutputSlot out : cur.outputs()) {
                 producerCountByOut.merge(out.resource(), 1, Integer::sum);
+                double normalizedOut = normalizedQuantity(out.resource(), out.amount());
                 siblingSamplesByOut.computeIfAbsent(out.resource(), k -> new ArrayList<>())
                         .add(new FidelityScorer.SiblingSample(
                             semKey.lineageGroup(),
                             cur.evidenceTier(),
-                            apparentUnitCost / Math.max(1L, out.amount()),
+                            apparentUnitCost / Math.max(1e-6, normalizedOut),
                             feasibleAnchor
                         ));
             }
         }
 
-        // Precompute contamination-proof M8 sibling anchors per output.
-        Map<ResourceKey, FidelityScorer.SiblingAnchor> anchorByOut = new HashMap<>(siblingSamplesByOut.size() * 2);
+        // Precompute contamination-proof sibling anchors per output.
+        Map<ComponentStackKey, FidelityScorer.SiblingAnchor> anchorByOut = new HashMap<>(siblingSamplesByOut.size() * 2);
         for (var entry : siblingSamplesByOut.entrySet()) {
             anchorByOut.put(entry.getKey(), FidelityScorer.computeSiblingAnchor(entry.getValue()));
         }
 
-        // Stage J2 + J3: mirror dedup, structural fidelity scoring, dual-layer tagging, unique-producer safety net.
+        // Mirror dedup, structural fidelity scoring, dual-layer tagging, unique-producer safety net.
         List<RawRecipeRecord> outRecords = new ArrayList<>(staged.size());
         int mirrorCount = 0;
         int suspectCount = 0;
         int uniqueProtected = 0;
 
-        for (RawRecipeRecord cur : staged) {
+        for (int idx = 0; idx < staged.size(); idx++) {
+            RawRecipeRecord cur = staged.get(idx);
             boolean isJei = isJeiFallback(cur);
             String fp = RecipeSemanticKeyBuilder.ioFingerprint(cur);
             boolean mirrorDup = isJei && nativeIoFingerprints.contains(fp);
@@ -156,7 +177,7 @@ public final class JeiRecipeNormalizer {
             double inComplete = cur.inputs().isEmpty() ? 0.10 : 1.0;
             double outComplete = cur.outputs().isEmpty() ? 0.0 : (cur.outputs().size() >= 4 && isJei ? 0.35 : 1.0);
             double gateDesc = cur.hasOpaqueConstraint() ? 0.25
-                    : (isJei && cur.machineIds().isEmpty() && !cur.systemTags().contains(RecipeSystemTags.handOperable.toString()) ? 0.55 : 0.95);
+                    : (isJei && cur.machines().isEmpty() && !cur.systemTags().contains(RecipeSystemTags.handOperable) ? 0.55 : 0.95);
             double repro = cur.evidenceTier() == RecipeEvidenceTier.tierA ? 1.0 : 0.60;
 
             FidelityScorer.StructuralFeatures feats = new FidelityScorer.StructuralFeatures(
@@ -167,7 +188,6 @@ public final class JeiRecipeNormalizer {
                 repro
             );
 
-            // Evaluate against primary output anchor (worst-case if multi-output).
             double apparentTotal = estimateApparentUnitCost(cur);
             double minPhi = 1.0;
             boolean anySuspect = false;
@@ -177,10 +197,11 @@ public final class JeiRecipeNormalizer {
                     isUniqueProducer = true;
                 }
                 FidelityScorer.SiblingAnchor anchor = anchorByOut.getOrDefault(out.resource(), FidelityScorer.SiblingAnchor.none);
+                double normalizedOut = normalizedQuantity(out.resource(), out.amount());
                 FidelityScorer.FidelityAssessment assessment = FidelityScorer.assess(
                     feats,
                     cur.evidenceTier(),
-                    apparentTotal / Math.max(1L, out.amount()),
+                    apparentTotal / Math.max(1e-6, normalizedOut),
                     cur.hasOpaqueConstraint() || cur.outputs().isEmpty(),
                     anchor
                 );
@@ -192,17 +213,35 @@ public final class JeiRecipeNormalizer {
                 }
             }
 
-            // Respect explicit high-fidelity patch override.
-            double finalPhi = cur.evidenceTier() == RecipeEvidenceTier.tierB && cur.structuralFidelity() >= 0.85
-                    ? cur.structuralFidelity()
-                    : minPhi;
-            boolean suspectJei = isJei && (anySuspect || finalPhi < FidelityScorer.defaultSuspectThreshold);
+            // Respect explicit patch/enricher fidelity overrides, as well as verified tierB overrides.
+            double finalPhi;
+            if (hasExplicitFidelityOverride[idx]) {
+                finalPhi = cur.structuralFidelity();
+            } else if (cur.evidenceTier() == RecipeEvidenceTier.tierB && cur.structuralFidelity() >= 0.85) {
+                finalPhi = cur.structuralFidelity();
+            } else {
+                finalPhi = minPhi;
+            }
+            boolean suspectJei = isJei && (hasExplicitFidelityOverride[idx]
+                    ? finalPhi < FidelityScorer.defaultSuspectThreshold
+                    : (anySuspect || finalPhi < FidelityScorer.defaultSuspectThreshold));
 
-            var assignments = DualTagClassifier.classify(cur, mirrorDup, suspectJei);
+            boolean hasReversePacking = false;
+            if (cur.inputs().size() == 1 && cur.outputs().size() == 1) {
+                RawIngredientSlot in = cur.inputs().get(0);
+                RawOutputSlot o = cur.outputs().get(0);
+                if (!in.catalyst() && in.candidates().size() == 1 && !in.candidates().get(0).equals(o.resource())) {
+                    hasReversePacking = singlePairs.contains(
+                        new PackingPair(o.resource(), o.amount(), in.candidates().get(0), in.amount())
+                    );
+                }
+            }
+
+            var assignments = DualTagClassifier.classify(cur, mirrorDup, suspectJei, hasReversePacking);
             EnumSet<CanonicalRecipeTag> finalTags = EnumSet.copyOf(DualTagClassifier.tagSet(assignments));
 
-            // Unique producer safety net (M8): never silently drop the sole producer as junk;
-            // keep it inspectable as suspiciousJei so planner produces CONDITIONAL / VERIFY_RECIPE.
+            // Unique producer safety net: never silently drop the sole producer as junk;
+            // keep it inspectable as suspiciousJei so planner produces conditional verification.
             if (isUniqueProducer && finalTags.contains(CanonicalRecipeTag.junkOrDuplicate) && !mirrorDup) {
                 finalTags.remove(CanonicalRecipeTag.junkOrDuplicate);
                 finalTags.add(CanonicalRecipeTag.suspiciousJei);
@@ -220,7 +259,7 @@ public final class JeiRecipeNormalizer {
                 cur.systemId(),
                 cur.sourceKind(),
                 cur.explicitId(),
-                cur.machineIds(),
+                cur.machines(),
                 cur.inputs(),
                 cur.outputs(),
                 cur.recipeValues(),
@@ -242,16 +281,20 @@ public final class JeiRecipeNormalizer {
 
     private static boolean isJeiFallback(RawRecipeRecord rec) {
         return "jei_fallback".equals(rec.sourceKind())
-                || rec.systemTags().contains(RecipeSystemTags.jeiFallback.toString())
-                || rec.systemId().startsWith("jei:");
+                || "jei".equalsIgnoreCase(rec.sourceKind())
+                || rec.systemTags().contains(RecipeSystemTags.jeiFallback)
+                || "jei".equals(rec.systemId().namespace());
     }
 
-    /** Scale-invariant structural input proxy (sum of consumed input amounts + machine complexity proxy). */
+    /** Scale-invariant structural input proxy using each Cirrus StackType's standard unit quantity. */
     private static double estimateApparentUnitCost(RawRecipeRecord rec) {
         double cost = 1.0;
         for (RawIngredientSlot in : rec.inputs()) {
             if (!in.catalyst()) {
-                cost += Math.min(1000.0, (double) in.amount());
+                double qty = in.candidates().isEmpty()
+                        ? (double) in.amount()
+                        : normalizedQuantity(in.candidates().get(0), in.amount());
+                cost += Math.min(1000.0, qty);
             } else {
                 cost += 0.25;
             }
@@ -259,12 +302,17 @@ public final class JeiRecipeNormalizer {
         return cost;
     }
 
+    private static double normalizedQuantity(ComponentStackKey key, long rawAmount) {
+        long unit = Math.max(1L, key.stackType().quantity());
+        return (double) rawAmount / unit;
+    }
+
     private static RawRecipeRecord applyPatch(RawRecipeRecord cur, JeiNormalizationPatch patch) {
-        Set<String> sysTags = new LinkedHashSet<>(cur.systemTags());
+        Set<Namespace> sysTags = new LinkedHashSet<>(cur.systemTags());
         sysTags.addAll(patch.systemTagsToAdd());
 
-        List<String> machines = new ArrayList<>(cur.machineIds());
-        for (String m : patch.requiredMachineIdsToAdd()) {
+        List<MachineEntry> machines = new ArrayList<>(cur.machines());
+        for (MachineEntry m : patch.requiredMachinesToAdd()) {
             if (!machines.contains(m)) {
                 machines.add(m);
             }
@@ -274,7 +322,7 @@ public final class JeiRecipeNormalizer {
         for (int i = 0; i < cur.inputs().size(); i++) {
             RawIngredientSlot s = cur.inputs().get(i);
             if (patch.catalystSlotIndices().contains(i) && !s.catalyst()) {
-                inputs.add(new RawIngredientSlot(s.tagId(), s.candidates(), 0L, s.matchMode(), 0, 1));
+                inputs.add(new RawIngredientSlot(s.tag(), s.candidates(), 0L, s.matchMode(), 0, 1));
             } else {
                 inputs.add(s);
             }
@@ -308,7 +356,7 @@ public final class JeiRecipeNormalizer {
     }
 
     private static RawRecipeRecord applyEnrichment(RawRecipeRecord cur, RecipeMetadataEnricher.EnrichmentDelta delta) {
-        Set<String> sysTags = new LinkedHashSet<>(cur.systemTags());
+        Set<Namespace> sysTags = new LinkedHashSet<>(cur.systemTags());
         sysTags.addAll(delta.systemTagsToAdd());
         EnumSet<CanonicalRecipeTag> cTags = cur.canonicalTags().isEmpty()
                 ? EnumSet.noneOf(CanonicalRecipeTag.class)
@@ -321,7 +369,7 @@ public final class JeiRecipeNormalizer {
             cur.systemId(),
             cur.sourceKind(),
             cur.explicitId(),
-            cur.machineIds(),
+            cur.machines(),
             cur.inputs(),
             cur.outputs(),
             cur.recipeValues(),

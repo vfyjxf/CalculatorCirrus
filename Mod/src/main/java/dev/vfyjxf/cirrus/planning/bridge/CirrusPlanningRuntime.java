@@ -68,7 +68,8 @@ public final class CirrusPlanningRuntime implements AutoCloseable {
         this.compiler = new DefaultRecipeGraphCompiler();
         this.costMetadata = Objects.requireNonNull(costMetadata, "costMetadata");
         this.guidanceStore = new LayeredHumanGuidanceStore(
-            rule -> WorldFacilityRegistry.installed().ifPresent(reg -> reg.worldSaveListener().accept(rule))
+            rule -> WorldFacilityRegistry.installed().ifPresent(reg -> reg.worldSaveListener().accept(rule)),
+            ruleId -> WorldFacilityRegistry.installed().ifPresent(reg -> reg.removeWorldSaveRule(ruleId))
         );
         this.machinePersistenceListener = fb -> WorldFacilityRegistry.installed()
                 .ifPresent(reg -> reg.machinePersistenceListener().accept(fb));
@@ -203,11 +204,14 @@ public final class CirrusPlanningRuntime implements AutoCloseable {
                 return;
             }
             long version = publishedVersionCounter.incrementAndGet();
+            PlanningExtensionRegistry ext = PlanningExtensionRegistry.instance();
             DefaultPlanningService service = new DefaultPlanningService(
                 graph,
                 costMetadata,
                 guidanceStore,
-                machinePersistenceListener
+                machinePersistenceListener,
+                ext.scoringContributors(),
+                ext.decisionDetectors()
             );
             PlanningContextFactory factory = new PlanningContextFactory(graph);
             PublishedSnapshot snapshot = new PublishedSnapshot(

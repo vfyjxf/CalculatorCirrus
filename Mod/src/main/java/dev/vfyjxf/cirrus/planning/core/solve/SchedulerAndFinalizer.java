@@ -1,11 +1,13 @@
 package dev.vfyjxf.cirrus.planning.core.solve;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOption;
 import dev.vfyjxf.cirrus.api.planning.context.AutomatedLine;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.cost.CostMetadataProvider;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
+import dev.vfyjxf.cirrus.api.planning.cost.PreferenceModifiers;
 import dev.vfyjxf.cirrus.api.planning.graph.CatalystSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledCycleMacro;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
@@ -13,7 +15,6 @@ import dev.vfyjxf.cirrus.api.planning.graph.InputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.OutputSlot;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledCycleMacroKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
@@ -30,12 +31,14 @@ import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SlotBinding;
 import dev.vfyjxf.cirrus.api.planning.plan.VerificationCertificate;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.core.cone.ConeModel;
 import dev.vfyjxf.cirrus.planning.core.cost.PlanCosts;
 import dev.vfyjxf.cirrus.planning.core.cost.StepCosts;
 import dev.vfyjxf.cirrus.planning.core.lang.Fnv1a64;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
 import dev.vfyjxf.cirrus.planning.core.select.DiverseParetoSelector;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayDeque;
@@ -68,7 +71,7 @@ public final class SchedulerAndFinalizer {
         @Nullable ProductionPlan plan,
         int repairResLocalId,
         long repairExtraAmount,
-        @Nullable String cycleMachineToDetach
+        @Nullable MachineEntry cycleMachineToDetach
     ) {
         public static AssembleOutcome ok(ProductionPlan plan) {
             return new AssembleOutcome(plan, -1, 0L, null);
@@ -78,8 +81,8 @@ public final class SchedulerAndFinalizer {
             return new AssembleOutcome(null, localRes, extra, null);
         }
 
-        public static AssembleOutcome detachMachine(String machineId) {
-            return new AssembleOutcome(null, -1, 0L, machineId);
+        public static AssembleOutcome detachMachine(MachineEntry machine) {
+            return new AssembleOutcome(null, -1, 0L, machine);
         }
 
         public static AssembleOutcome fail() {
@@ -100,7 +103,8 @@ public final class SchedulerAndFinalizer {
     private record StepNode(
         NodeKind kind,
         int localId,
-        @Nullable String stringId,
+        @Nullable MachineEntry machine,
+        @Nullable Namespace systemId,
         @Nullable CompiledCycleMacroKey macroKey,
         int psi,
         String tieKey
@@ -117,17 +121,17 @@ public final class SchedulerAndFinalizer {
         String strategyLabel
     ) {
         Map<Integer, Long> extraPresence = new HashMap<>();
-        Set<String> forcedPlayerPrepared = new HashSet<>();
+        Set<MachineEntry> forcedPlayerPrepared = new HashSet<>();
 
         for (int attempt = 0; attempt < 4; attempt++) {
             ProductionVector vec = Netting.settle(cone, request, potentials, choices, extraPresence);
             if (!vec.isFeasible()) {
                 return null;
             }
-            for (String detached : forcedPlayerPrepared) {
+            for (MachineEntry detached : forcedPlayerPrepared) {
                 if (vec.provisionedMachines.containsKey(detached)) {
                     vec.playerPreparedMachines.add(detached);
-                    int mu = cone.localRes(ResourceKey.item(detached));
+                    int mu = detached.contentKey().map(cone::localRes).orElse(-1);
                     if (mu >= 0 && vec.need[mu] > 0L) {
                         vec.need[mu] = Math.max(0L, vec.need[mu] - 1L);
                     }
@@ -158,25 +162,26 @@ public final class SchedulerAndFinalizer {
     ) {
         FacilitySnapshot fac = request.context().facilities();
         HumanGuidanceView guidance = request.context().guidance();
+        boolean ignoreStock = request.profile().modifiers().stockMode() == PreferenceModifiers.StockReferenceMode.ignore;
 
         // 1. Collect all step nodes deterministically.
         List<StepNode> nodes = new ArrayList<>();
         for (int u = 0; u < cone.nodeCount; u++) {
             if (vec.acq[u] > 0L) {
-                nodes.add(new StepNode(NodeKind.acquire, u, null, null, 0, "A:" + cone.resKeys[u].shortString()));
+                nodes.add(new StepNode(NodeKind.acquire, u, null, null, null, 0, "A:" + cone.resKeys[u].canonicalKey()));
             }
             if (vec.line[u] > 0L) {
-                nodes.add(new StepNode(NodeKind.linePull, u, null, null, 0, "L:" + cone.resKeys[u].shortString()));
+                nodes.add(new StepNode(NodeKind.linePull, u, null, null, null, 0, "L:" + cone.resKeys[u].canonicalKey()));
             }
         }
         for (var e : vec.setupLines.entrySet()) {
-            nodes.add(new StepNode(NodeKind.setupLine, -1, e.getKey(), null, 0, "S:" + e.getKey()));
+            nodes.add(new StepNode(NodeKind.setupLine, -1, null, e.getKey(), null, 0, "S:" + e.getKey()));
         }
         for (var e : vec.provisionedMachines.entrySet()) {
-            String mid = e.getKey();
-            int mu = cone.localRes(ResourceKey.item(mid));
-            int psi = (!vec.playerPreparedMachines.contains(mid) && mu >= 0) ? cone.tier[mu] : 0;
-            nodes.add(new StepNode(NodeKind.provision, mu, mid, null, psi, "P:" + mid));
+            MachineEntry m = e.getKey();
+            int mu = m.contentKey().map(cone::localRes).orElse(-1);
+            int psi = (!vec.playerPreparedMachines.contains(m) && mu >= 0) ? cone.tier[mu] : 0;
+            nodes.add(new StepNode(NodeKind.provision, mu, m, null, null, psi, "P:" + m.canonicalKey()));
         }
         for (int r = 0; r < cone.recipeCount; r++) {
             if (vec.convertBatches[r] > 0L) {
@@ -184,6 +189,7 @@ public final class SchedulerAndFinalizer {
                     new StepNode(
                         NodeKind.convert,
                         r,
+                        null,
                         null,
                         null,
                         Math.max(1, cone.recPsi[r]),
@@ -196,6 +202,7 @@ public final class SchedulerAndFinalizer {
                     new StepNode(
                         NodeKind.craft,
                         r,
+                        null,
                         null,
                         null,
                         Math.max(1, cone.recPsi[r]),
@@ -216,7 +223,7 @@ public final class SchedulerAndFinalizer {
                         }
                     }
                 }
-                nodes.add(new StepNode(NodeKind.cycleLoop, -1, null, e.getKey(), psi, "Y:" + e.getKey().macroId()));
+                nodes.add(new StepNode(NodeKind.cycleLoop, -1, null, null, e.getKey(), psi, "Y:" + e.getKey().macroId()));
             }
         }
 
@@ -224,23 +231,24 @@ public final class SchedulerAndFinalizer {
         Map<Integer, List<Integer>> producersOf = new HashMap<>();
         Map<Integer, List<Integer>> consumersOf = new HashMap<>();
         Map<Integer, List<Integer>> presenceNeedsOf = new HashMap<>();
-        Map<String, Integer> machineProvider = new HashMap<>();
-        Map<String, Integer> systemAutoProvider = new HashMap<>();
-        Map<String, List<Integer>> machineWaiters = new HashMap<>();
-        Map<String, List<Integer>> systemAutoWaiters = new HashMap<>();
+        Map<MachineEntry, Integer> machineProvider = new HashMap<>();
+        Map<Namespace, Integer> systemAutoProvider = new HashMap<>();
+        Map<MachineEntry, List<Integer>> machineWaiters = new HashMap<>();
+        Map<Namespace, List<Integer>> systemAutoWaiters = new HashMap<>();
 
         for (int i = 0; i < mCount; i++) {
             StepNode nd = nodes.get(i);
             switch (nd.kind) {
                 case acquire, linePull -> producersOf.computeIfAbsent(nd.localId, ignored -> new ArrayList<>(2)).add(i);
                 case setupLine -> {
-                    ProductionVector.SetupLineMeta sm = Objects.requireNonNull(vec.setupLines.get(nd.stringId));
-                    machineProvider.put(sm.primaryMachineId(), i);
+                    ProductionVector.SetupLineMeta sm = Objects.requireNonNull(vec.setupLines.get(nd.systemId));
+                    machineProvider.put(sm.primaryMachine(), i);
                     systemAutoProvider.put(sm.systemId(), i);
                 }
                 case provision -> {
-                    machineProvider.putIfAbsent(nd.stringId, i);
-                    if (!vec.playerPreparedMachines.contains(nd.stringId) && nd.localId >= 0) {
+                    MachineEntry m = Objects.requireNonNull(nd.machine);
+                    machineProvider.putIfAbsent(m, i);
+                    if (!vec.playerPreparedMachines.contains(m) && nd.localId >= 0) {
                         consumersOf.computeIfAbsent(nd.localId, ignored -> new ArrayList<>(2)).add(i);
                     }
                 }
@@ -270,7 +278,7 @@ public final class SchedulerAndFinalizer {
                     for (int oi = cone.outStart[r]; oi < cone.outStart[r + 1]; oi++) {
                         producersOf.computeIfAbsent(cone.outRes[oi], ignored -> new ArrayList<>(2)).add(i);
                     }
-                    String mach = vec.chosenMachine[r];
+                    MachineEntry mach = vec.chosenMachine[r];
                     if (mach != null) {
                         machineWaiters.computeIfAbsent(mach, ignored -> new ArrayList<>(2)).add(i);
                     }
@@ -291,7 +299,7 @@ public final class SchedulerAndFinalizer {
                             consumersOf.computeIfAbsent(lu, ignored -> new ArrayList<>(2)).add(i);
                         }
                     }
-                    for (ResourceKey sk : macro.workingSeeds().keySet()) {
+                    for (ComponentStackKey sk : macro.workingSeeds().keySet()) {
                         int su = cone.localRes(sk);
                         if (su >= 0) {
                             consumersOf.computeIfAbsent(su, ignored -> new ArrayList<>(2)).add(i);
@@ -300,11 +308,11 @@ public final class SchedulerAndFinalizer {
                     }
                     for (CompiledRecipe inner : macro.innerRecipes()) {
                         int lr = cone.localRecipe(inner.compactId());
-                        String mach = (lr >= 0 && vec.chosenMachine[lr] != null)
+                        MachineEntry mach = (lr >= 0 && vec.chosenMachine[lr] != null)
                                 ? vec.chosenMachine[lr]
-                                : (inner.machineRequirement().compatibleMachineIds().isEmpty()
+                                : (inner.machineRequirement().compatibleMachines().isEmpty()
                                         ? null
-                                        : inner.machineRequirement().compatibleMachineIds().get(0));
+                                        : inner.machineRequirement().compatibleMachines().get(0));
                         if (mach != null) {
                             machineWaiters.computeIfAbsent(mach, ignored -> new ArrayList<>(2)).add(i);
                         }
@@ -400,13 +408,13 @@ public final class SchedulerAndFinalizer {
             }
         }
 
-        // Detect cycle (e.g., TC-10 self-dependent machine crafting): detach a cyclic ProvisionMachine node.
+        // Detect cycle (e.g., self-dependent machine crafting): detach a cyclic ProvisionMachine node.
         if (order.size() != mCount) {
             for (int i = 0; i < mCount; i++) {
                 if (!scheduled[i]
                         && nodes.get(i).kind == NodeKind.provision
-                        && !vec.playerPreparedMachines.contains(nodes.get(i).stringId)) {
-                    return AssembleOutcome.detachMachine(Objects.requireNonNull(nodes.get(i).stringId));
+                        && !vec.playerPreparedMachines.contains(nodes.get(i).machine)) {
+                    return AssembleOutcome.detachMachine(Objects.requireNonNull(nodes.get(i).machine));
                 }
             }
             return AssembleOutcome.fail();
@@ -418,15 +426,17 @@ public final class SchedulerAndFinalizer {
             stepIds[order.get(pos)] = String.format("s%03d", pos + 1);
         }
 
-        Map<ResourceKey, Long> initialBefore = new TreeMap<>(request.context().inventory().allUsable());
-        Map<ResourceKey, Long> initialPool = new TreeMap<>(initialBefore);
-        Map<ResourceKey, Deque<FinalBatch>> producedPool = new TreeMap<>();
+        Map<ComponentStackKey, Long> initialBefore = ignoreStock
+                ? new TreeMap<>()
+                : new TreeMap<>(request.context().inventory().allUsable());
+        Map<ComponentStackKey, Long> initialPool = new TreeMap<>(initialBefore);
+        Map<ComponentStackKey, Deque<FinalBatch>> producedPool = new TreeMap<>();
 
         List<PlanStep> planSteps = new ArrayList<>(mCount);
-        Map<ResourceKey, Long> totalAcquired = new TreeMap<>();
-        Map<String, Integer> totalMachinesProv = new TreeMap<>();
+        Map<ComponentStackKey, Long> totalAcquired = new TreeMap<>();
+        Map<MachineEntry, Integer> totalMachinesProv = new TreeMap<>(MachineEntry.comparator);
         Set<String> linesUsed = new TreeSet<>();
-        Set<ResourceKey> catalystsReq = new TreeSet<>();
+        Set<ComponentStackKey> catalystsReq = new TreeSet<>();
 
         for (int pos = 0; pos < mCount; pos++) {
             int ni = order.get(pos);
@@ -441,7 +451,7 @@ public final class SchedulerAndFinalizer {
             switch (nd.kind) {
                 case acquire -> {
                     int u = nd.localId;
-                    ResourceKey rk = cone.resKeys[u];
+                    ComponentStackKey rk = cone.resKeys[u];
                     long amt = vec.acq[u];
                     AcquisitionOption opt = cone.acquireOption[u];
                     AcquisitionKind kind = (cone.freeBase[u] || opt == null)
@@ -450,13 +460,17 @@ public final class SchedulerAndFinalizer {
                     CostVector sc = opt != null
                             ? StepCosts.acquireCost(opt, amt, cone.freeBase[u])
                             : StepCosts.freeBaseCost;
-                    planSteps.add(new AcquireStep(sid, deps, rk, amt, kind, sc));
+                    String tripEp = (opt != null && !cone.freeBase[u]) ? opt.tripEpisodeId() : "";
+                    double fixedTrip = (opt != null && !cone.freeBase[u] && kind == AcquisitionKind.manualGather)
+                            ? opt.fixedTripHumanSeconds()
+                            : 0.0;
+                    planSteps.add(new AcquireStep(sid, deps, rk, amt, kind, sc, tripEp, fixedTrip));
                     produceFifo(producedPool, rk, amt, sid);
                     totalAcquired.merge(rk, amt, SafeMath::addSaturating);
                 }
                 case linePull -> {
                     int u = nd.localId;
-                    ResourceKey rk = cone.resKeys[u];
+                    ComponentStackKey rk = cone.resKeys[u];
                     long amt = vec.line[u];
                     AutomatedLine line = cone.bestLine[u];
                     CostVector sc = StepCosts.linePullCost(line, amt);
@@ -465,35 +479,35 @@ public final class SchedulerAndFinalizer {
                     linesUsed.add(line.lineId());
                 }
                 case setupLine -> {
-                    ProductionVector.SetupLineMeta sm = Objects.requireNonNull(vec.setupLines.get(nd.stringId));
-                    CostVector sc = StepCosts.setupLineCost(sm.systemId(), sm.capability(), meta);
+                    ProductionVector.SetupLineMeta sm = Objects.requireNonNull(vec.setupLines.get(nd.systemId));
+                    CostVector sc = StepCosts.setupLineCost(sm.systemId(), sm.systemTags(), sm.capability(), meta);
                     planSteps.add(
-                        new SetupLineStep(sid, deps, sm.systemId(), sm.primaryMachineId(), sm.targetOutput(), sc)
+                        new SetupLineStep(sid, deps, sm.systemId(), sm.primaryMachine(), sm.targetOutput(), sc)
                     );
                 }
                 case provision -> {
-                    String mid = Objects.requireNonNull(nd.stringId);
-                    ProductionVector.ProvisionMeta pm = Objects.requireNonNull(vec.provisionedMachines.get(mid));
-                    boolean craftedFromStock = !vec.playerPreparedMachines.contains(mid);
+                    MachineEntry m = Objects.requireNonNull(nd.machine);
+                    ProductionVector.ProvisionMeta pm = Objects.requireNonNull(vec.provisionedMachines.get(m));
+                    boolean craftedFromStock = !vec.playerPreparedMachines.contains(m);
                     if (craftedFromStock) {
-                        ResourceKey mk = ResourceKey.item(mid);
-                        if (!consumeFifo(producedPool, initialPool, mk, pm.count())) {
-                            return AssembleOutcome.detachMachine(mid);
+                        Optional<ComponentStackKey> mkOpt = m.contentKey();
+                        if (mkOpt.isEmpty() || !consumeFifo(producedPool, initialPool, mkOpt.get(), pm.count())) {
+                            return AssembleOutcome.detachMachine(m);
                         }
                     }
-                    CostVector sc = StepCosts.provisionMachineCost(mid, pm.systemId(), pm.count(), meta);
+                    CostVector sc = StepCosts.provisionMachineCost(m, pm.systemId(), pm.systemTags(), pm.count(), meta);
                     planSteps.add(
                         new ProvisionMachineStep(
                             sid,
                             deps,
-                            mid,
+                            m,
                             Optional.ofNullable(pm.capability()),
                             pm.count(),
                             craftedFromStock,
                             sc
                         )
                     );
-                    totalMachinesProv.merge(mid, pm.count(), Integer::sum);
+                    totalMachinesProv.merge(m, pm.count(), Integer::sum);
                 }
                 case convert -> {
                     int r = nd.localId;
@@ -501,7 +515,7 @@ public final class SchedulerAndFinalizer {
                     long b = vec.convertBatches[r];
                     Map<Integer, SlotBinding> bindings = buildSlotBindings(cone, vec, r);
                     for (InputSlot slot : rec.inputs()) {
-                        ResourceKey chosen = Objects.requireNonNull(bindings.get(slot.slotIndex())).chosenResource();
+                        ComponentStackKey chosen = Objects.requireNonNull(bindings.get(slot.slotIndex())).chosenResource();
                         long need = SafeMath.mulSaturating(b, slot.amountPerBatch());
                         if (!consumeFifo(producedPool, initialPool, chosen, need)) {
                             int lu = cone.localRes(chosen);
@@ -518,9 +532,9 @@ public final class SchedulerAndFinalizer {
                     CompiledRecipe rec = cone.recObjects[r];
                     long b = vec.batches[r];
                     Map<Integer, SlotBinding> bindings = buildSlotBindings(cone, vec, r);
-                    Map<Integer, ResourceKey> catBindings = buildCatBindings(cone, vec, r);
+                    Map<Integer, ComponentStackKey> catBindings = buildCatBindings(cone, vec, r);
                     for (CatalystSlot cat : rec.catalysts()) {
-                        ResourceKey ck = Objects.requireNonNull(catBindings.get(cat.slotIndex()));
+                        ComponentStackKey ck = Objects.requireNonNull(catBindings.get(cat.slotIndex()));
                         long minNeed = (cat.durabilityCostPerBatch() > 0 && cat.maxDurability() > 0)
                                 ? SafeMath.ceilDiv(
                                     SafeMath.mulSaturating(b, cat.durabilityCostPerBatch()),
@@ -534,7 +548,7 @@ public final class SchedulerAndFinalizer {
                         catalystsReq.add(ck);
                     }
                     for (InputSlot slot : rec.inputs()) {
-                        ResourceKey chosen = Objects.requireNonNull(bindings.get(slot.slotIndex())).chosenResource();
+                        ComponentStackKey chosen = Objects.requireNonNull(bindings.get(slot.slotIndex())).chosenResource();
                         long need = SafeMath.mulSaturating(b, slot.amountPerBatch());
                         if (!consumeFifo(producedPool, initialPool, chosen, need)) {
                             int lu = cone.localRes(chosen);
@@ -544,7 +558,7 @@ public final class SchedulerAndFinalizer {
                     for (OutputSlot out : rec.outputs()) {
                         produceFifo(producedPool, out.resource(), SafeMath.mulSaturating(b, out.amountPerBatch()), sid);
                     }
-                    Optional<String> chosenM = Optional.ofNullable(vec.chosenMachine[r]);
+                    Optional<MachineEntry> chosenM = Optional.ofNullable(vec.chosenMachine[r]);
                     boolean auto = fac.automatedRecipe(rec.key()).isPresent() || vec.automatedLocalRecipes.contains(r);
                     CostVector sc = StepCosts.craftCost(rec, b, chosenM, auto, fac, meta);
                     planSteps.add(new CraftStep(sid, deps, rec.key(), b, chosenM, auto, bindings, catBindings, sc));
@@ -564,22 +578,22 @@ public final class SchedulerAndFinalizer {
                         long mult = macro.innerMultipliers().get(k);
                         Map<Integer, SlotBinding> ib = new TreeMap<>();
                         for (InputSlot slot : inner.inputs()) {
-                            ResourceKey c = slot.candidates().get(0);
+                            ComponentStackKey c = slot.candidates().get(0);
                             ib.put(slot.slotIndex(), new SlotBinding(c, List.of()));
                         }
-                        Map<Integer, ResourceKey> icb = new TreeMap<>();
+                        Map<Integer, ComponentStackKey> icb = new TreeMap<>();
                         for (CatalystSlot cat : inner.catalysts()) {
-                            ResourceKey c = cat.candidates().get(0);
+                            ComponentStackKey c = cat.candidates().get(0);
                             icb.put(cat.slotIndex(), c);
                             catalystsReq.add(c);
                         }
                         int lr = cone.localRecipe(inner.compactId());
-                        String mach = (lr >= 0 && vec.chosenMachine[lr] != null)
+                        MachineEntry mach = (lr >= 0 && vec.chosenMachine[lr] != null)
                                 ? vec.chosenMachine[lr]
-                                : (inner.machineRequirement().compatibleMachineIds().isEmpty()
+                                : (inner.machineRequirement().compatibleMachines().isEmpty()
                                         ? null
-                                        : inner.machineRequirement().compatibleMachineIds().get(0));
-                        Optional<String> machOpt = Optional.ofNullable(mach);
+                                        : inner.machineRequirement().compatibleMachines().get(0));
+                        Optional<MachineEntry> machOpt = Optional.ofNullable(mach);
                         CostVector icost = StepCosts.craftCost(inner, mult, machOpt, false, fac, meta);
                         template.add(
                             new CraftStep(
@@ -641,7 +655,7 @@ public final class SchedulerAndFinalizer {
             }
         }
 
-        Map<ResourceKey, Long> consumedInv = new TreeMap<>();
+        Map<ComponentStackKey, Long> consumedInv = new TreeMap<>();
         for (var e : initialBefore.entrySet()) {
             long rem = initialPool.getOrDefault(e.getKey(), 0L);
             long used = e.getValue() - rem;
@@ -677,14 +691,14 @@ public final class SchedulerAndFinalizer {
         Map<Integer, SlotBinding> out = new TreeMap<>();
         for (int pos = cone.inStart[r]; pos < cone.inStart[r + 1]; pos++) {
             int chosen = vec.chosenSlotBind[pos];
-            ResourceKey chosenKey = cone.resKeys[chosen];
-            List<ResourceKey> alts = List.of();
+            ComponentStackKey chosenKey = cone.resKeys[chosen];
+            List<ComponentStackKey> alts = List.of();
             for (int cid = cone.inClassStart[pos]; cid < cone.inClassStart[pos + 1]; cid++) {
                 if (cone.classRep[cid] == chosen) {
                     int ms = cone.classMemStart[cid];
                     int me = cone.classMemStart[cid + 1];
                     if (me - ms > 1) {
-                        List<ResourceKey> a = new ArrayList<>(me - ms - 1);
+                        List<ComponentStackKey> a = new ArrayList<>(me - ms - 1);
                         for (int j = ms; j < me; j++) {
                             if (cone.classMemRes[j] != chosen) {
                                 a.add(cone.resKeys[cone.classMemRes[j]]);
@@ -700,8 +714,8 @@ public final class SchedulerAndFinalizer {
         return out;
     }
 
-    private static Map<Integer, ResourceKey> buildCatBindings(ConeModel cone, ProductionVector vec, int r) {
-        Map<Integer, ResourceKey> out = new TreeMap<>();
+    private static Map<Integer, ComponentStackKey> buildCatBindings(ConeModel cone, ProductionVector vec, int r) {
+        Map<Integer, ComponentStackKey> out = new TreeMap<>();
         for (int cpos = cone.catStart[r]; cpos < cone.catStart[r + 1]; cpos++) {
             out.put(cone.catSlotIndex[cpos], cone.resKeys[vec.chosenCatBind[cpos]]);
         }
@@ -720,7 +734,7 @@ public final class SchedulerAndFinalizer {
         if (presenceNeedsOf.isEmpty()) return false;
         return switch (nd.kind) {
             case provision -> {
-                if (vec.playerPreparedMachines.contains(nd.stringId) || nd.localId < 0) yield false;
+                if (vec.playerPreparedMachines.contains(nd.machine) || nd.localId < 0) yield false;
                 yield starves(nd.localId, 1L, nodeIdx, simStock, presenceNeedsOf, scheduled);
             }
             case convert -> {
@@ -810,7 +824,7 @@ public final class SchedulerAndFinalizer {
             case acquire -> simStock[nd.localId] = SafeMath.addSaturating(simStock[nd.localId], vec.acq[nd.localId]);
             case linePull -> simStock[nd.localId] = SafeMath.addSaturating(simStock[nd.localId], vec.line[nd.localId]);
             case provision -> {
-                if (!vec.playerPreparedMachines.contains(nd.stringId) && nd.localId >= 0) {
+                if (!vec.playerPreparedMachines.contains(nd.machine) && nd.localId >= 0) {
                     simStock[nd.localId] -= 1L;
                 }
             }
@@ -859,15 +873,15 @@ public final class SchedulerAndFinalizer {
         return a.tieKey.compareTo(b.tieKey);
     }
 
-    private static void produceFifo(Map<ResourceKey, Deque<FinalBatch>> pool, ResourceKey rk, long amt, String stepId) {
+    private static void produceFifo(Map<ComponentStackKey, Deque<FinalBatch>> pool, ComponentStackKey rk, long amt, String stepId) {
         if (amt <= 0L) return;
         pool.computeIfAbsent(rk, ignored -> new ArrayDeque<>()).addLast(new FinalBatch(stepId, amt));
     }
 
     private static long totalFifo(
-        Map<ResourceKey, Deque<FinalBatch>> prod,
-        Map<ResourceKey, Long> init,
-        ResourceKey rk
+        Map<ComponentStackKey, Deque<FinalBatch>> prod,
+        Map<ComponentStackKey, Long> init,
+        ComponentStackKey rk
     ) {
         long sum = init.getOrDefault(rk, 0L);
         Deque<FinalBatch> q = prod.get(rk);
@@ -878,9 +892,9 @@ public final class SchedulerAndFinalizer {
     }
 
     private static boolean consumeFifo(
-        Map<ResourceKey, Deque<FinalBatch>> prod,
-        Map<ResourceKey, Long> init,
-        ResourceKey rk,
+        Map<ComponentStackKey, Deque<FinalBatch>> prod,
+        Map<ComponentStackKey, Long> init,
+        ComponentStackKey rk,
         long need
     ) {
         if (need <= 0L) return true;

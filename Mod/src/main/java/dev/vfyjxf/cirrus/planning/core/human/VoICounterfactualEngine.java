@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * M9.1 Single-Pass Counterfactual Expected Value of Sample Information (EVSI) Engine (Pure JDK 21).
+ * Single-Pass Counterfactual Expected Value of Sample Information (EVSI) Engine.
  *
  * <p>Given answer priors p_b and loss matrix L_{a,b} (in base-equivalent seconds s_e) over feasible
  * actions a and mutually exclusive answers b:
@@ -82,7 +82,7 @@ public final class VoICounterfactualEngine {
     }
 
     /**
-     * Same-system priority aggregation (M9.1): max V_q + rho * sum_{disjoint} V_q
+     * Same-system priority aggregation: max V_q + rho * sum_{disjoint} V_q
      * where V_q = max(0, EVSI_lo - c_ask).
      */
     public static double aggregateSystemGroupPriority(List<VoIEstimate> disjointEstimates, double rho) {

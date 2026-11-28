@@ -1,10 +1,12 @@
 package dev.vfyjxf.cirrus.planning.core.trust;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.RawIngredientSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawOutputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeRecord;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.model.PlanningTagKeys;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeSemanticKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -12,7 +14,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Deterministic SHA-256 semantic key builder (M8 §1, Pure JDK 21):
+ * Deterministic SHA-256 semantic key builder:
  * invariant to JEI page enumeration order and commutative slot permutation,
  * while strictly distinguishing machines, gates, opaque constraints, and slot match semantics.
  */
@@ -29,14 +31,15 @@ public final class RecipeSemanticKeyBuilder {
         List<String> inputTokens = new ArrayList<>(record.inputs().size());
         for (RawIngredientSlot in : record.inputs()) {
             List<String> cands = new ArrayList<>(in.candidates().size());
-            for (ResourceKey rk : in.candidates()) {
-                cands.add(rk.canonicalString());
+            for (ComponentStackKey rk : in.candidates()) {
+                cands.add(rk.canonicalKey());
             }
             Collections.sort(cands);
+            String tagToken = in.tag().map(PlanningTagKeys::canonicalString).orElse("-");
             String token = (in.catalyst() ? "CAT:" : "IN:")
                     + in.amount()
                     + ":" + in.matchMode().name()
-                    + ":" + in.tagId().orElse("-")
+                    + ":" + tagToken
                     + ":" + String.join(",", cands);
             inputTokens.add(token);
         }
@@ -46,11 +49,14 @@ public final class RecipeSemanticKeyBuilder {
 
         List<String> outputTokens = new ArrayList<>(record.outputs().size());
         for (RawOutputSlot out : record.outputs()) {
-            outputTokens.add("OUT:" + out.amount() + ":" + out.resource().canonicalString());
+            outputTokens.add("OUT:" + out.amount() + ":" + out.resource().canonicalKey());
         }
         Collections.sort(outputTokens);
 
-        List<String> machines = new ArrayList<>(record.machineIds());
+        List<String> machines = new ArrayList<>(record.machines().size());
+        for (MachineEntry m : record.machines()) {
+            machines.add(m.canonicalKey());
+        }
         Collections.sort(machines);
 
         String descriptor = "sys=" + record.systemId()
@@ -72,8 +78,8 @@ public final class RecipeSemanticKeyBuilder {
         List<String> ins = new ArrayList<>(record.inputs().size());
         for (RawIngredientSlot in : record.inputs()) {
             List<String> cands = new ArrayList<>(in.candidates().size());
-            for (ResourceKey rk : in.candidates()) {
-                cands.add(rk.canonicalString());
+            for (ComponentStackKey rk : in.candidates()) {
+                cands.add(rk.canonicalKey());
             }
             Collections.sort(cands);
             ins.add((in.catalyst() ? "C:" : "I:") + in.amount() + ":" + String.join(",", cands));
@@ -82,7 +88,7 @@ public final class RecipeSemanticKeyBuilder {
 
         List<String> outs = new ArrayList<>(record.outputs().size());
         for (RawOutputSlot out : record.outputs()) {
-            outs.add("O:" + out.amount() + ":" + out.resource().canonicalString());
+            outs.add("O:" + out.amount() + ":" + out.resource().canonicalKey());
         }
         Collections.sort(outs);
 

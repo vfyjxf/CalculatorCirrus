@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.tooltip;
 
+import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusThemeIcons;
 import dev.vfyjxf.cirrus.ui.workbench.chrome.ChromeText;
@@ -7,6 +8,7 @@ import dev.vfyjxf.cirrus.ui.workbench.copilot.CoPilotPaint;
 import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiPaint;
 import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiRecipeGrid;
 import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiSlotAmount;
+import dev.vfyjxf.cloudlib.api.math.Rect;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
@@ -32,14 +34,77 @@ public final class OreUiRichTooltipRenderer {
     public static final int pillsHeight = 14;
     public static final int pillRowGap = 3;
     public static final int flowSlotSize = 18;
+    public static final int gridCellSize = 18;
+    public static final int gridOuterPad = 3;
+    public static final int gridInnerPad = 1;
+    public static final int gridScrollbarGap = 2;
+    public static final int gridScrollbarWidth = 6;
     public static final int listRowHeight = 16;
     public static final int footerPadY = 4;
     public static final int cursorOffset = 12;
     public static final int viewportMargin = 6;
+    public static final int pinnedFramePad = 2;
 
     private OreUiRichTooltipRenderer() {}
 
-    public record Placement(int x, int y, int width, int height) {}
+    public record Placement(int x, int y, int width, int height) {
+
+        public boolean contains(double px, double py) {
+            return px >= x && px < x + width && py >= y && py < y + height;
+        }
+    }
+
+    public record GridGeometry(
+        Rect frameRect,
+        Rect gridRect,
+        @Nullable Rect scrollbarRect,
+        int columns,
+        int visibleRows,
+        int totalRows,
+        int maxRowOffset,
+        int cellSize,
+        int itemCount
+    ) {
+
+        public int itemIndexAt(double px, double py, int scrollRow) {
+            if (columns <= 0 || visibleRows <= 0 || cellSize <= 0 || !gridRect.contains(px, py)) {
+                return -1;
+            }
+            int col = (int) ((px - gridRect.x()) / cellSize);
+            int row = (int) ((py - gridRect.y()) / cellSize);
+            if (col < 0 || col >= columns || row < 0 || row >= visibleRows) {
+                return -1;
+            }
+            int clampedScroll = Math.max(0, Math.min(maxRowOffset, scrollRow));
+            int index = (clampedScroll + row) * columns + col;
+            return index >= 0 && index < itemCount ? index : -1;
+        }
+
+        public boolean isOverScrollbar(double px, double py) {
+            Rect sb = scrollbarRect;
+            return sb != null && sb.contains(px, py);
+        }
+
+        public int scrollRowForPointerY(double py) {
+            Rect sb = scrollbarRect;
+            if (sb == null || maxRowOffset <= 0) {
+                return 0;
+            }
+            int innerTop = sb.y() + 1;
+            int innerH = Math.max(1, sb.height() - 2);
+            int thumbH = Math.max(12, Math.round(innerH * (visibleRows / (float) Math.max(1, totalRows))));
+            int travel = Math.max(1, innerH - thumbH);
+            double ratio = Math.max(0.0, Math.min(1.0, (py - innerTop - thumbH * 0.5) / travel));
+            return Math.max(0, Math.min(maxRowOffset, (int) Math.round(ratio * maxRowOffset)));
+        }
+    }
+
+    public record GridRenderState(int scrollRow, int hoveredIndex, boolean scrollbarHovered, boolean scrollbarDragging) {
+
+        public static final GridRenderState passive = new GridRenderState(0, -1, false, false);
+    }
+
+    public record RenderResult(Placement placement, @Nullable GridGeometry interactiveGrid) {}
 
     public record Measured(
         int width,
@@ -121,6 +186,11 @@ public final class OreUiRichTooltipRenderer {
                     }
                     yield maxRow;
                 }
+                case OreUiRichTooltip.Block.ItemGrid grid -> {
+                    GridMetrics gm = measureItemGrid(grid, maxContentW);
+                    int headingW = grid.heading() == null ? 0 : textWidth(font, grid.heading());
+                    yield Math.max(gm.frameWidth(), headingW);
+                }
                 case OreUiRichTooltip.Block.FooterHint footer -> textWidth(font, footer.hint());
             };
             contentWidth = Math.max(contentWidth, Math.min(maxContentW, wanted));
@@ -168,6 +238,11 @@ public final class OreUiRichTooltipRenderer {
                     int headingH = list.heading() != null && !list.heading().getString().isEmpty() ? 11 : 0;
                     yield headingH + visible * listRowHeight + (overflow ? 10 : 0);
                 }
+                case OreUiRichTooltip.Block.ItemGrid grid -> {
+                    GridMetrics gm = measureItemGrid(grid, innerContentW);
+                    int headingH = grid.heading() != null && !grid.heading().getString().isEmpty() ? 11 : 0;
+                    yield headingH + gm.frameHeight();
+                }
                 case OreUiRichTooltip.Block.FooterHint footer -> {
                     hasFooter = true;
                     int lines = Math.max(1, wrapCount(font, footer.hint(), innerContentW));
@@ -198,12 +273,61 @@ public final class OreUiRichTooltipRenderer {
         int viewHeight,
         CirrusPalette palette
     ) {
+        return renderInternal(canvas, tooltip, anchorX, anchorY, viewWidth, viewHeight, null, GridRenderState.passive, null, false, palette)
+                .placement();
+    }
+
+    /**
+     * Renders a JEI-style pinned interactive tooltip at its exact locked {@link Placement} with zero
+     * positional or dimensional shift, drawing the subtle outer pinned highlight frame, interactive
+     * grid hover/scroll state, and returning the exact laid-out {@link GridGeometry} for hit-testing.
+     */
+    public static RenderResult renderPinned(
+        SceneCanvas canvas,
+        OreUiRichTooltip tooltip,
+        Placement lockedBox,
+        GridRenderState gridState,
+        @Nullable Component footerOverride,
+        CirrusPalette palette
+    ) {
+        return renderInternal(
+            canvas,
+            tooltip,
+            lockedBox.x(),
+            lockedBox.y(),
+            lockedBox.x() + lockedBox.width() + viewportMargin,
+            lockedBox.y() + lockedBox.height() + viewportMargin,
+            lockedBox,
+            gridState == null ? GridRenderState.passive : gridState,
+            footerOverride,
+            true,
+            palette
+        );
+    }
+
+    private static RenderResult renderInternal(
+        SceneCanvas canvas,
+        OreUiRichTooltip tooltip,
+        int anchorX,
+        int anchorY,
+        int viewWidth,
+        int viewHeight,
+        @Nullable Placement forcedBox,
+        GridRenderState gridState,
+        @Nullable Component footerOverride,
+        boolean pinned,
+        CirrusPalette palette
+    ) {
         if (canvas == null || tooltip == null || tooltip.isEmpty() || palette == null) {
-            return new Placement(0, 0, 0, 0);
+            return new RenderResult(new Placement(0, 0, 0, 0), null);
         }
-        int dynamicMaxW = Math.min(maxWidth, Math.max(minWidth, viewWidth - viewportMargin * 2));
+        int dynamicMaxW = forcedBox != null
+                ? Math.max(minWidth, Math.min(maxWidth, forcedBox.width()))
+                : Math.min(maxWidth, Math.max(minWidth, viewWidth - viewportMargin * 2));
         Measured measured = measure(tooltip, ChromeText.font(canvas), dynamicMaxW);
-        Placement box = position(anchorX, anchorY, measured.width(), measured.height(), viewWidth, viewHeight);
+        Placement box = forcedBox != null
+                ? forcedBox
+                : position(anchorX, anchorY, measured.width(), measured.height(), viewWidth, viewHeight);
         int x = box.x();
         int y = box.y();
         int w = box.width();
@@ -212,6 +336,14 @@ public final class OreUiRichTooltipRenderer {
         boolean dark = OreUiPaint.isDark(palette);
 
         canvas.shadow(x, y, w, h, 3f, 4f, 9f, palette.dropShadow());
+        if (pinned) {
+            int fx = x - pinnedFramePad;
+            int fy = y - pinnedFramePad;
+            int fw = w + pinnedFramePad * 2;
+            int fh = h + pinnedFramePad * 2;
+            canvas.fill(fx, fy, fw, fh, OreUiPaint.withAlpha(palette.focusRing(), 0.16f));
+            canvas.strokeRect(fx, fy, fw, fh, OreUiPaint.withAlpha(palette.focusRing(), 0.92f), 1);
+        }
         canvas.fill(x, y, w, h, OreUiPaint.outerInk(palette));
         int innerW = Math.max(1, w - 2);
         int innerH = Math.max(1, h - 2);
@@ -280,6 +412,7 @@ public final class OreUiRichTooltipRenderer {
         int contentW = Math.max(16, w - padX * 2);
         OreUiRichTooltip.Block.FooterHint footer = null;
         int drawnNonFooter = 0;
+        GridGeometry interactiveGeometry = null;
 
         for (int i = 0; i < tooltip.blocks().size(); i++) {
             OreUiRichTooltip.Block block = tooltip.blocks().get(i);
@@ -291,7 +424,23 @@ public final class OreUiRichTooltipRenderer {
             if (drawnNonFooter > 0) {
                 cursorY += blockGap;
             }
-            drawBlock(canvas, block, x + padX, cursorY, contentW, bh, palette);
+            if (block instanceof OreUiRichTooltip.Block.ItemGrid grid) {
+                GridGeometry geom = drawItemGrid(
+                    canvas,
+                    grid,
+                    x + padX,
+                    cursorY,
+                    contentW,
+                    gridState,
+                    pinned,
+                    palette
+                );
+                if (grid.isInteractive() && interactiveGeometry == null) {
+                    interactiveGeometry = geom;
+                }
+            } else {
+                drawBlock(canvas, block, x + padX, cursorY, contentW, bh, palette);
+            }
             cursorY += bh;
             drawnNonFooter++;
         }
@@ -301,15 +450,26 @@ public final class OreUiRichTooltipRenderer {
             int footY = y + h - 3 - fH;
             canvas.fill(x + 1, footY, innerW, 1, OreUiPaint.cardDivider(palette));
             canvas.fill(x + 1, footY + 1, innerW, fH - 1, OreUiPaint.cardFooter(palette));
-            List<FormattedCharSequence> footLines = splitLines(canvas, footer.hint(), contentW);
-            int fy = footY + footerPadY + 1;
-            for (FormattedCharSequence line : footLines) {
-                canvas.drawString(line, x + padX, fy, palette.textMuted(), false);
-                fy += 10;
+            if (pinned && footerOverride != null && !footerOverride.getString().isEmpty()) {
+                Component fitted = ChromeText.fit(canvas, footerOverride, contentW);
+                ChromeText.draw(
+                    canvas,
+                    fitted,
+                    x + padX,
+                    ChromeText.centeredY(footY + 1, Math.max(10, fH - 1), canvas),
+                    palette.textSecondary()
+                );
+            } else {
+                List<FormattedCharSequence> footLines = splitLines(canvas, footer.hint(), contentW);
+                int fy = footY + footerPadY + 1;
+                for (FormattedCharSequence line : footLines) {
+                    canvas.drawString(line, x + padX, fy, palette.textMuted(), false);
+                    fy += 10;
+                }
             }
         }
 
-        return box;
+        return new RenderResult(box, interactiveGeometry);
     }
 
     private static void drawBlock(
@@ -389,8 +549,138 @@ public final class OreUiRichTooltipRenderer {
             }
             case OreUiRichTooltip.Block.ItemFlow flow -> drawItemFlow(canvas, flow, x, y, width, palette);
             case OreUiRichTooltip.Block.ItemList list -> drawItemList(canvas, list, x, y, width, palette);
+            case OreUiRichTooltip.Block.ItemGrid ignored -> {}
             case OreUiRichTooltip.Block.FooterHint ignored -> {}
         }
+    }
+
+    private record GridMetrics(
+        int columns,
+        int visibleRows,
+        int totalRows,
+        int maxRowOffset,
+        int frameWidth,
+        int frameHeight
+    ) {}
+
+    private static GridMetrics measureItemGrid(OreUiRichTooltip.Block.ItemGrid grid, int maxContentW) {
+        int count = grid.items().size();
+        int chromeW = gridOuterPad * 2 + gridInnerPad * 2;
+        int maxColsFit = Math.max(1, (maxContentW - chromeW - gridScrollbarGap - gridScrollbarWidth) / gridCellSize);
+        int cols = Math.min(Math.min(grid.maxColumns(), maxColsFit), Math.max(1, count));
+        int totalRows = count == 0 ? 1 : (count + cols - 1) / cols;
+        int visibleRows = Math.min(grid.maxRows(), Math.max(1, totalRows));
+        int maxRowOffset = Math.max(0, totalRows - visibleRows);
+        int scrollbarSpace = maxRowOffset > 0 ? gridScrollbarGap + gridScrollbarWidth : 0;
+        int frameW = chromeW + cols * gridCellSize + scrollbarSpace;
+        int frameH = gridOuterPad * 2 + gridInnerPad * 2 + visibleRows * gridCellSize;
+        return new GridMetrics(cols, visibleRows, totalRows, maxRowOffset, frameW, frameH);
+    }
+
+    private static GridGeometry drawItemGrid(
+        SceneCanvas canvas,
+        OreUiRichTooltip.Block.ItemGrid grid,
+        int x,
+        int y,
+        int width,
+        GridRenderState state,
+        boolean pinned,
+        CirrusPalette palette
+    ) {
+        int cursorY = y;
+        if (grid.heading() != null && !grid.heading().getString().isEmpty()) {
+            ChromeText.draw(canvas, grid.heading(), x, cursorY, palette.textMuted());
+            cursorY += 11;
+        }
+        GridMetrics gm = measureItemGrid(grid, width);
+        int frameW = gm.frameWidth();
+        int frameH = gm.frameHeight();
+        Rect frameRect = new Rect(x, cursorY, frameW, frameH);
+        canvas.fill(frameRect.x(), frameRect.y(), frameRect.width(), frameRect.height(), palette.recessedSurface());
+        canvas.strokeRect(
+            frameRect.x(),
+            frameRect.y(),
+            frameRect.width(),
+            frameRect.height(),
+            OreUiPaint.cardDivider(palette),
+            1
+        );
+
+        int gridX = x + gridOuterPad + gridInnerPad;
+        int gridY = cursorY + gridOuterPad + gridInnerPad;
+        int gridW = gm.columns() * gridCellSize;
+        int gridH = gm.visibleRows() * gridCellSize;
+        Rect gridRect = new Rect(gridX, gridY, gridW, gridH);
+
+        int clampedScroll = Math.max(0, Math.min(gm.maxRowOffset(), state.scrollRow()));
+        int count = grid.items().size();
+        int hoveredIdx = pinned ? state.hoveredIndex() : -1;
+
+        for (int r = 0; r < gm.visibleRows(); r++) {
+            for (int c = 0; c < gm.columns(); c++) {
+                int idx = (clampedScroll + r) * gm.columns() + c;
+                if (idx >= count) {
+                    break;
+                }
+                int cx = gridX + c * gridCellSize;
+                int cy = gridY + r * gridCellSize;
+                OreUiPaint.slot(canvas, cx, cy, gridCellSize, palette);
+                boolean isHover = idx == hoveredIdx;
+                boolean isActive = idx == grid.activeIndex();
+                if (isHover) {
+                    canvas.fill(
+                        cx + 1,
+                        cy + 1,
+                        gridCellSize - 2,
+                        gridCellSize - 2,
+                        OreUiPaint.withAlpha(palette.focusRing(), 0.24f)
+                    );
+                }
+                ContentStack<?, ?> stack = grid.items().get(idx);
+                CoPilotPaint.icon(canvas, stack, cx + 1, cy + 1, 16, palette);
+                if (isHover) {
+                    canvas.strokeRect(cx, cy, gridCellSize, gridCellSize, palette.focusRing(), 1);
+                } else if (isActive) {
+                    canvas.strokeRect(
+                        cx,
+                        cy,
+                        gridCellSize,
+                        gridCellSize,
+                        OreUiPaint.withAlpha(palette.costS(), 0.65f),
+                        1
+                    );
+                }
+            }
+        }
+
+        Rect scrollbarRect = null;
+        if (gm.maxRowOffset() > 0) {
+            int sbX = gridX + gridW + gridScrollbarGap;
+            scrollbarRect = new Rect(sbX, gridY, gridScrollbarWidth, gridH);
+            canvas.fill(sbX, gridY, gridScrollbarWidth, gridH, OreUiPaint.withAlpha(OreUiPaint.outerInk(palette), 0.35f));
+            canvas.strokeRect(sbX, gridY, gridScrollbarWidth, gridH, OreUiPaint.cardDivider(palette), 1);
+            int innerH = Math.max(4, gridH - 2);
+            int thumbH = Math.max(12, Math.round(innerH * (gm.visibleRows() / (float) Math.max(1, gm.totalRows()))));
+            int travel = Math.max(0, innerH - thumbH);
+            int thumbY = gridY + 1 + Math.round(travel * (clampedScroll / (float) gm.maxRowOffset()));
+            boolean thumbActive = pinned && (state.scrollbarDragging() || state.scrollbarHovered());
+            int thumbColor = thumbActive
+                    ? palette.focusRing()
+                    : OreUiPaint.withAlpha(palette.textMuted(), 0.85f);
+            canvas.fill(sbX + 1, thumbY, Math.max(2, gridScrollbarWidth - 2), thumbH, thumbColor);
+        }
+
+        return new GridGeometry(
+            frameRect,
+            gridRect,
+            scrollbarRect,
+            gm.columns(),
+            gm.visibleRows(),
+            gm.totalRows(),
+            gm.maxRowOffset(),
+            gridCellSize,
+            count
+        );
     }
 
     private static int measurePillRowsHeight(OreUiRichTooltip.Block.MetricPills pills, @Nullable Font font, int width) {

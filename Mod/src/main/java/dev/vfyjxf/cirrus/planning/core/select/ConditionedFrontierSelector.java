@@ -1,16 +1,22 @@
 package dev.vfyjxf.cirrus.planning.core.select;
 
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
+import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
+import dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory;
+import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
+import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
+import dev.vfyjxf.cirrus.api.planning.plan.CycleLoopStep;
+import dev.vfyjxf.cirrus.api.planning.plan.LinePullStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.RegimeSignature;
+import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,15 +25,13 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * M6 Strictly Acyclic Regime-Conditioned Frontier & Weighted Jaccard Top-K Diversity Selector (Pure JDK 21).
+ * Strictly acyclic regime-conditioned Pareto frontier and weighted-Jaccard Top-K diversity selector.
  *
  * <p>Eliminates naive cross-regime epsilon-dominance 3-cycles by:
  * 1. Taking strict 6D Pareto frontier inside each prerequisite regime R(P) (while preserving the J-champion).
  * 2. Quantizing physical dimensions onto candidate-independent reference box coordinates
- *    b_i(P) = floor(C_i(P) / (epsilon_i * s_i)), adding directed cross-regime edge A -> B ONLY when
- *    E(B) => E(A) AND b(A) <= b(B) AND at least one coordinate strictly smaller.
- *    Because (sum b_i, sum C_i / s_i) strictly increases along every edge, the dominance graph is
- *    mathematically guaranteed acyclic and permutation-invariant!
+ *    b_i(P) = floor(C_i(P) / (epsilon_i * s_i)), adding directed cross-regime edge A -> B only when
+ *    E(B) => E(A) and b(A) <= b(B) and at least one coordinate strictly smaller.
  * 3. Selecting Top-K via Max-Min weighted Jaccard diversity (group weights 0.30/0.25/0.20/0.15/0.10),
  *    using exact combination search for small pools (K <= 4, n <= 14) and deterministic O(K n L_s) greedy fallback.
  */
@@ -55,6 +59,8 @@ public final class ConditionedFrontierSelector {
         long[] boxCoords,
         long boxSum,
         double normalizedSum,
+        int pinnedUsed,
+        int advisoryWeight,
         Map<String, Double> diversityVector
     ) {}
 
@@ -65,6 +71,17 @@ public final class ConditionedFrontierSelector {
         double[] referenceScalesS,
         double boxEpsilon,
         int maxReturnedK
+    ) {
+        return select(candidates, referenceScalesS, boxEpsilon, maxReturnedK, null, null);
+    }
+
+    public static SelectionOutput select(
+        List<ProductionPlan> candidates,
+        double[] referenceScalesS,
+        double boxEpsilon,
+        int maxReturnedK,
+        @Nullable CompiledRecipeGraph graph,
+        @Nullable HumanGuidanceView guidance
     ) {
         Objects.requireNonNull(candidates, "candidates");
         if (candidates.isEmpty() || maxReturnedK <= 0) {
@@ -86,16 +103,40 @@ public final class ConditionedFrontierSelector {
                 bSum += boxes[i];
                 nSum += arr[i] / scales[i];
             }
-            Entry entry = new Entry(p, cKey, boxes, bSum, nSum, buildDiversityVector(p));
+            int pinnedUsed = countPinnedRecipes(p, guidance);
+            int advWeight = advisoryWeight(p, graph, guidance);
+            Entry entry = new Entry(p, cKey, boxes, bSum, nSum, pinnedUsed, advWeight, buildDiversityVector(p));
             Entry existing = deduped.get(cKey);
             if (existing == null || compareChampionOrder(entry, existing) < 0) {
                 deduped.put(cKey, entry);
             }
         }
+        if (deduped.isEmpty()) {
+            return new SelectionOutput(List.of(), List.of(), 0);
+        }
+
+        List<Entry> pool = new ArrayList<>(deduped.values());
+        int maxPinned = 0;
+        boolean hasNonLastResort = false;
+        for (Entry e : pool) {
+            if (e.pinnedUsed() > maxPinned) {
+                maxPinned = e.pinnedUsed();
+            }
+            if (e.advisoryWeight() < RecipeAdvisory.lastResort.weight()) {
+                hasNonLastResort = true;
+            }
+        }
+        if (maxPinned > 0) {
+            final int bestPin = maxPinned;
+            pool.removeIf(e -> e.pinnedUsed() < bestPin);
+        }
+        if (hasNonLastResort) {
+            pool.removeIf(e -> e.advisoryWeight() >= RecipeAdvisory.lastResort.weight());
+        }
 
         // 1. Within-regime strict 6D Pareto + retain J-champion per regime.
         Map<RegimeSignature, List<Entry>> byRegime = new TreeMap<>();
-        for (Entry e : deduped.values()) {
+        for (Entry e : pool) {
             byRegime.computeIfAbsent(e.plan().regimeSignature(), k -> new ArrayList<>()).add(e);
         }
 
@@ -148,6 +189,9 @@ public final class ConditionedFrontierSelector {
             }
         }
         frontier.sort(ConditionedFrontierSelector::compareChampionOrder);
+        if (frontier.isEmpty()) {
+            return new SelectionOutput(List.of(), List.of(), 0);
+        }
 
         // 3. Quality band filter (preserving incompatible regime champions).
         double j0 = frontier.get(0).plan().scoreBreakdown().totalObjectiveJ();
@@ -331,13 +375,25 @@ public final class ConditionedFrontierSelector {
 
         for (PlanStep s : p.steps()) {
             switch (s) {
-                case ProvisionMachineStep pm -> mach.add("M:" + pm.machineId());
+                case ProvisionMachineStep pm -> mach.add("M:" + pm.machine().canonicalKey());
                 case CraftStep cs -> {
-                    cs.chosenMachineId().ifPresent(m -> mach.add("M:" + m));
+                    cs.chosenMachine().ifPresent(m -> mach.add("M:" + m.canonicalKey()));
                     trans.add("R:" + cs.recipeKey().shortString());
                 }
-                case AcquireStep as -> acq.add("A:" + as.acquisitionKind().name() + ":" + as.resource().shortString());
-                default -> {}
+                case ConvertStep cv -> trans.add("V:" + cv.conversionRecipeKey().shortString());
+                case CycleLoopStep cl -> {
+                    trans.add("Y:" + cl.macroKey().macroId());
+                    for (CraftStep inner : cl.singleIterationTemplate()) {
+                        inner.chosenMachine().ifPresent(m -> mach.add("M:" + m.canonicalKey()));
+                        trans.add("R:" + inner.recipeKey().shortString());
+                    }
+                }
+                case SetupLineStep sl -> {
+                    mach.add("M:" + sl.primaryMachine().canonicalKey());
+                    trans.add("S:" + sl.systemId() + ":" + sl.targetOutput().canonicalKey());
+                }
+                case LinePullStep lp -> acq.add("L:" + lp.lineId() + ":" + lp.resource().canonicalKey());
+                case AcquireStep as -> acq.add("A:" + as.acquisitionKind().name() + ":" + as.resource().canonicalKey());
             }
         }
         addNormalizedGroup(raw, mach, wMachine);
@@ -346,6 +402,54 @@ public final class ConditionedFrontierSelector {
         addNormalizedGroup(raw, List.copyOf(p.regimeSignature().premiseAtoms()), wFamily);
         addNormalizedGroup(raw, acq, wAcquire);
         return raw;
+    }
+
+    private static int countPinnedRecipes(ProductionPlan plan, @Nullable HumanGuidanceView guidance) {
+        if (guidance == null || guidance.allRules().isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (PlanStep step : plan.steps()) {
+            if (step instanceof CraftStep cs && guidance.isRecipePinned(cs.recipeKey())) {
+                count++;
+            } else if (step instanceof CycleLoopStep cl) {
+                for (CraftStep inner : cl.singleIterationTemplate()) {
+                    if (guidance.isRecipePinned(inner.recipeKey())) {
+                        count++;
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
+    private static int advisoryWeight(
+        ProductionPlan plan,
+        @Nullable CompiledRecipeGraph graph,
+        @Nullable HumanGuidanceView guidance
+    ) {
+        if (graph == null) return 0;
+        int sum = 0;
+        for (PlanStep step : plan.steps()) {
+            switch (step) {
+                case CraftStep cs -> {
+                    if (guidance == null || !guidance.isRecipePinned(cs.recipeKey())) {
+                        sum += graph.recipeByKey(cs.recipeKey()).map(r -> r.advisory().weight()).orElse(0);
+                    }
+                }
+                case ConvertStep cv ->
+                    sum += graph.recipeByKey(cv.conversionRecipeKey()).map(r -> r.advisory().weight()).orElse(0);
+                case CycleLoopStep cl -> {
+                    for (CraftStep inner : cl.singleIterationTemplate()) {
+                        if (guidance == null || !guidance.isRecipePinned(inner.recipeKey())) {
+                            sum += graph.recipeByKey(inner.recipeKey()).map(r -> r.advisory().weight()).orElse(0);
+                        }
+                    }
+                }
+                default -> {}
+            }
+        }
+        return sum;
     }
 
     private static void addNormalizedGroup(Map<String, Double> out, List<String> items, double groupWeight) {
@@ -382,7 +486,11 @@ public final class ConditionedFrontierSelector {
     }
 
     private static int compareChampionOrder(Entry a, Entry b) {
-        int c = Long.compare(
+        int c = Integer.compare(b.pinnedUsed(), a.pinnedUsed());
+        if (c != 0) return c;
+        c = Integer.compare(a.advisoryWeight(), b.advisoryWeight());
+        if (c != 0) return c;
+        c = Long.compare(
             a.plan().scoreBreakdown().quantizedObjective(),
             b.plan().scoreBreakdown().quantizedObjective()
         );

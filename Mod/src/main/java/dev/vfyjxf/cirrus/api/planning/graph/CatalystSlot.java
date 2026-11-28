@@ -1,11 +1,16 @@
 package dev.vfyjxf.cirrus.api.planning.graph;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 
 import java.util.List;
 import java.util.Objects;
 
-public record CatalystSlot(int slotIndex, List<ResourceKey> candidates, int durabilityCostPerBatch, int maxDurability) {
+public record CatalystSlot(
+    int slotIndex,
+    List<ComponentStackKey> candidates,
+    int durabilityCostPerBatch,
+    int maxDurability
+) {
 
     public CatalystSlot {
         if (slotIndex < 0) {

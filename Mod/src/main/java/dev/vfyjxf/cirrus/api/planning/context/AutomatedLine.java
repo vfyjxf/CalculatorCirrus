@@ -1,12 +1,12 @@
 package dev.vfyjxf.cirrus.api.planning.context;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 
 import java.util.Objects;
 
 public record AutomatedLine(
     String lineId,
-    ResourceKey output,
+    ComponentStackKey output,
     double throughputPerMinute,
     double humanAttentionSecondsPerPull,
     long bufferedStock,

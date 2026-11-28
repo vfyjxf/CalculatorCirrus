@@ -1,14 +1,15 @@
 package dev.vfyjxf.cirrus.ui.workbench.facilities;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
@@ -35,8 +36,8 @@ public class OptInSystemsPanel extends FacilitiesAndRulesWorkspace.Panel {
     @Override
     protected void buildContent() {
         FacilitySnapshot snapshot = host().facilitySnapshot();
-        Map<String, Integer> recipeCounts = recipeCountsBySystem();
-        List<String> optIn = optInSystems();
+        Map<Namespace, Integer> recipeCounts = recipeCountsBySystem();
+        List<Namespace> optIn = optInSystems();
         content().addWidget(
             row(
                 value(CirrusLangs.Workbench.Facilities.optIn),
@@ -44,8 +45,8 @@ public class OptInSystemsPanel extends FacilitiesAndRulesWorkspace.Panel {
             )
         );
         int visible = 0;
-        for (String systemId : optIn) {
-            if (!matches(systemId)) {
+        for (Namespace systemId : optIn) {
+            if (!matches(systemId.toString())) {
                 continue;
             }
             content().addWidget(
@@ -62,9 +63,9 @@ public class OptInSystemsPanel extends FacilitiesAndRulesWorkspace.Panel {
         }
     }
 
-    private Widget systemCard(String systemId, int recipeCount, boolean unlocked) {
+    private Widget systemCard(Namespace systemId, int recipeCount, boolean unlocked) {
         PanelCard card = card();
-        card.addWidget(row(value(Component.literal(systemId)), muted(tr("recipe_count", recipeCount))));
+        card.addWidget(row(value(Component.literal(systemId.toString())), muted(tr("recipe_count", recipeCount))));
         WidgetGroup<Widget> hint = row(muted(le("opt_in_hint").component()));
         hint.useStyle(flexGrow(1), minWidth(0));
         card.addWidget(hint);
@@ -74,15 +75,15 @@ public class OptInSystemsPanel extends FacilitiesAndRulesWorkspace.Panel {
         return card;
     }
 
-    private List<String> optInSystems() {
-        List<String> known = host().systemIds();
+    private List<Namespace> optInSystems() {
+        List<Namespace> known = host().systemIds();
         var graph = host().graph();
         if (graph.isEmpty()) {
             return List.of();
         }
         CompiledRecipeGraph compiled = graph.get();
-        List<String> optIn = new ArrayList<>();
-        for (String systemId : known) {
+        List<Namespace> optIn = new ArrayList<>();
+        for (Namespace systemId : known) {
             if (compiled.admissionOf(systemId) == SystemAdmission.optInOnly) {
                 optIn.add(systemId);
             }
@@ -90,11 +91,11 @@ public class OptInSystemsPanel extends FacilitiesAndRulesWorkspace.Panel {
         return List.copyOf(optIn);
     }
 
-    private Map<String, Integer> recipeCountsBySystem() {
-        Map<String, Integer> counts = new HashMap<>();
-        Set<ResourceKey> visited = new HashSet<>();
+    private Map<Namespace, Integer> recipeCountsBySystem() {
+        Map<Namespace, Integer> counts = new HashMap<>();
+        Set<ComponentStackKey> visited = new HashSet<>();
         host().graph().ifPresent(graph -> {
-            for (ResourceKey resource : graph.allProducibleResources()) {
+            for (ComponentStackKey resource : graph.allProducibleResources()) {
                 if (!visited.add(resource)) {
                     continue;
                 }
@@ -106,7 +107,7 @@ public class OptInSystemsPanel extends FacilitiesAndRulesWorkspace.Panel {
         return counts;
     }
 
-    private void setUnlocked(String systemId, boolean unlocked) {
+    private void setUnlocked(Namespace systemId, boolean unlocked) {
         if (unlocked) {
             host().registry().unlockSystem(systemId);
         } else {

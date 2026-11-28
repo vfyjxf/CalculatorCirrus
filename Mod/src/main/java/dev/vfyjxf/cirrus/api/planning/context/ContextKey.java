@@ -15,6 +15,7 @@ public record ContextKey<T>(String id, Class<T> valueType) implements Comparable
 
     @Override
     public int compareTo(ContextKey<?> other) {
-        return this.id.compareTo(other.id);
+        int c = this.id.compareTo(other.id);
+        return c != 0 ? c : this.valueType.getName().compareTo(other.valueType.getName());
     }
 }

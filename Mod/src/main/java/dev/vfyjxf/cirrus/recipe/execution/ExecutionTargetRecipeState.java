@@ -346,13 +346,7 @@ public final class ExecutionTargetRecipeState {
             );
             var filteredInventory = PlanningContextFactory.excludeTargetStock(context.inventory(), demands);
             if (filteredInventory != context.inventory()) {
-                context = new PlanningContext(
-                    filteredInventory,
-                    context.facilities(),
-                    context.acquisitionOracle(),
-                    context.guidance(),
-                    context.progression()
-                );
+                context = context.withInventory(filteredInventory);
             }
             PlanningRequest request = new PlanningRequest(
                 demands,
@@ -402,7 +396,7 @@ public final class ExecutionTargetRecipeState {
                     craft.dependsOnStepIds(),
                     craft.recipeKey(),
                     scaleQuantity(craft.batches(), safeOld, safeNew),
-                    craft.chosenMachineId(),
+                    craft.chosenMachine(),
                     craft.executedByAutomation(),
                     craft.slotBindings(),
                     craft.catalystBindings(),
@@ -422,7 +416,9 @@ public final class ExecutionTargetRecipeState {
                     acquire.resource(),
                     scaleQuantity(acquire.amount(), safeOld, safeNew),
                     acquire.acquisitionKind(),
-                    acquire.stepCost()
+                    acquire.stepCost(),
+                    acquire.tripEpisodeId(),
+                    acquire.fixedTripHumanSeconds()
                 );
                 default -> step;
             });

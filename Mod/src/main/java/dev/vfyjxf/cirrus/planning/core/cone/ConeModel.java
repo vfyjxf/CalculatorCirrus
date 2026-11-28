@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning.core.cone;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOption;
 import dev.vfyjxf.cirrus.api.planning.context.AutomatedLine;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledCycleMacro;
@@ -11,9 +12,11 @@ import dev.vfyjxf.cirrus.api.planning.graph.QuerySubgraph;
 import dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory;
 import dev.vfyjxf.cirrus.api.planning.graph.RecipeRole;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.core.lang.IntIntMap;
+import net.minecraft.tags.TagKey;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Map;
@@ -30,9 +33,9 @@ public final class ConeModel {
 
     public final CompiledRecipeGraph graph;
     public final int nodeCount;
-    public final ResourceKey[] resKeys;
+    public final ComponentStackKey[] resKeys;
     public final int[] resGlobalId;
-    public final Map<ResourceKey, Integer> localByKey;
+    public final Map<ComponentStackKey, Integer> localByKey;
     public final IntIntMap localByGlobalRes;
     public final int[] tier;
     public final long[] usableStock;
@@ -52,14 +55,14 @@ public final class ConeModel {
     public final boolean[] recPinned;
     public final boolean[] recHandCraftable;
     public final MachineCapabilityId[] recCapability;
-    public final List<String>[] recCompatMachines;
+    public final List<MachineEntry>[] recCompatMachines;
     public final byte[] recActive;
     public final int[] recPsi;
 
     public final int[] inStart;
     public final int[] inSlotIndex;
     public final long[] inAmount;
-    public final String[] inTagId;
+    public final @Nullable TagKey<?>[] inTag;
     public final SlotMatchMode[] inMatchMode;
     public final int[] inOrigCandCount;
     public final int[] inClassStart;
@@ -87,14 +90,14 @@ public final class ConeModel {
     public final List<CoupledComponent> coupledComponents;
     public final int collapsedOrCandidates;
     public final boolean truncatedByBudget;
-    public final Set<ResourceKey> dormantResources;
-    public final Map<ResourceKey, Set<String>> blockingRuleIds;
+    public final Set<ComponentStackKey> dormantResources;
+    public final Map<ComponentStackKey, Set<String>> blockingRuleIds;
 
     ConeModel(
         CompiledRecipeGraph graph,
-        ResourceKey[] resKeys,
+        ComponentStackKey[] resKeys,
         int[] resGlobalId,
-        Map<ResourceKey, Integer> localByKey,
+        Map<ComponentStackKey, Integer> localByKey,
         IntIntMap localByGlobalRes,
         int[] tier,
         long[] usableStock,
@@ -112,13 +115,13 @@ public final class ConeModel {
         boolean[] recPinned,
         boolean[] recHandCraftable,
         MachineCapabilityId[] recCapability,
-        List<String>[] recCompatMachines,
+        List<MachineEntry>[] recCompatMachines,
         byte[] recActive,
         int[] recPsi,
         int[] inStart,
         int[] inSlotIndex,
         long[] inAmount,
-        String[] inTagId,
+        @Nullable TagKey<?>[] inTag,
         SlotMatchMode[] inMatchMode,
         int[] inOrigCandCount,
         int[] inClassStart,
@@ -141,8 +144,8 @@ public final class ConeModel {
         List<CoupledComponent> coupledComponents,
         int collapsedOrCandidates,
         boolean truncatedByBudget,
-        Set<ResourceKey> dormantResources,
-        Map<ResourceKey, Set<String>> blockingRuleIds
+        Set<ComponentStackKey> dormantResources,
+        Map<ComponentStackKey, Set<String>> blockingRuleIds
     ) {
         this.graph = graph;
         this.nodeCount = resKeys.length;
@@ -173,7 +176,7 @@ public final class ConeModel {
         this.inStart = inStart.clone();
         this.inSlotIndex = inSlotIndex.clone();
         this.inAmount = inAmount.clone();
-        this.inTagId = inTagId.clone();
+        this.inTag = inTag.clone();
         this.inMatchMode = inMatchMode.clone();
         this.inOrigCandCount = inOrigCandCount.clone();
         this.inClassStart = inClassStart.clone();
@@ -200,7 +203,7 @@ public final class ConeModel {
         this.blockingRuleIds = blockingRuleIds;
     }
 
-    public int localRes(ResourceKey key) {
+    public int localRes(ComponentStackKey key) {
         Integer id = localByKey.get(key);
         return id == null ? -1 : id;
     }
@@ -227,12 +230,12 @@ public final class ConeModel {
         if (cs == ce) {
             return List.of();
         }
-        Optional<String> tag = Optional.ofNullable(inTagId[slotPos]);
+        Optional<TagKey<?>> tag = Optional.ofNullable(inTag[slotPos]);
         EquivalenceClass[] arr = new EquivalenceClass[ce - cs];
         for (int i = cs; i < ce; i++) {
             int ms = classMemStart[i];
             int me = classMemStart[i + 1];
-            ResourceKey[] mems = new ResourceKey[me - ms];
+            ComponentStackKey[] mems = new ComponentStackKey[me - ms];
             for (int j = ms; j < me; j++) {
                 mems[j - ms] = resKeys[classMemRes[j]];
             }

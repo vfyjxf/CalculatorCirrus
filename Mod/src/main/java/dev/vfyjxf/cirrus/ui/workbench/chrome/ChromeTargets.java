@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.chrome;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 
 import java.util.ArrayList;
@@ -14,7 +14,7 @@ public final class ChromeTargets {
 
     private ChromeTargets() {}
 
-    public static long amountOf(List<TargetDemand> current, ResourceKey resource) {
+    public static long amountOf(List<TargetDemand> current, ComponentStackKey resource) {
         if (current == null || resource == null) {
             return 0L;
         }
@@ -26,7 +26,7 @@ public final class ChromeTargets {
         return 0L;
     }
 
-    public static List<TargetDemand> merged(List<TargetDemand> current, ResourceKey resource, boolean addToBasket) {
+    public static List<TargetDemand> merged(List<TargetDemand> current, ComponentStackKey resource, boolean addToBasket) {
         Objects.requireNonNull(resource, "resource");
         List<TargetDemand> source = current == null ? List.of() : current;
         long existing = amountOf(source, resource);

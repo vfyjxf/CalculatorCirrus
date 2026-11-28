@@ -12,18 +12,19 @@ import dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CycleLoopStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.core.cone.ConeModel;
 import dev.vfyjxf.cirrus.planning.core.cost.StepCosts;
 import dev.vfyjxf.cirrus.planning.core.graph.MachineCapabilityGroups;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
 import dev.vfyjxf.cirrus.planning.core.lang.WorkBudget;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -89,7 +90,7 @@ public final class ImprovementLoop {
 
         // Move 1: Stage 2a Machine Set Cover (when unowned machines are present).
         if (pBudget.enableMachineSetCoverRefinement() && canContinue(budget, startWork, perspectiveWorkLimit)) {
-            Set<String> coverChoice = runMachineSetCover(cone, request, weights, meta, potentials, incumbentPlan);
+            Set<MachineEntry> coverChoice = runMachineSetCover(cone, request, weights, meta, potentials, incumbentPlan);
             if (!coverChoice.isEmpty()) {
                 coupledEvaluated++;
                 ChoiceTable cand = incumbent.copy();
@@ -252,8 +253,12 @@ public final class ImprovementLoop {
                         }
                     }
                 }
-                // Also try direct acquire if acquirable and not currently acquiring.
-                if ((cone.acquireOption[u] != null || cone.freeBase[u])
+                // Also try direct acquire if acquirable (respecting forbidFieldTrips) and not currently acquiring.
+                boolean canDirectAcquire = (cone.freeBase[u]
+                        || (cone.acquireOption[u] != null
+                                && !(cone.acquireOption[u].requiresFieldTrip()
+                                        && request.profile().modifiers().forbidFieldTrips())));
+                if (canDirectAcquire
                         && (incumbent.sourceByRes[u] == null
                                 || incumbent.sourceByRes[u].kind() != Potentials.SourceKind.acquire)
                         && canContinue(budget, startWork, perspectiveWorkLimit)) {
@@ -292,9 +297,12 @@ public final class ImprovementLoop {
             List<CraftStep> heavyCrafts = new ArrayList<>();
             for (PlanStep step : incumbentPlan.steps()) {
                 if (step instanceof CraftStep cs && !cs.executedByAutomation()) {
-                    String sysId = cs.recipeKey().systemId();
+                    Namespace sysId = cs.recipeKey().systemId();
+                    Set<Namespace> sysTags = cone.graph.recipeByKey(cs.recipeKey())
+                            .map(CompiledRecipe::systemTags)
+                            .orElse(Set.of());
                     MachineCapabilityId cap = MachineCapabilityGroups.capabilityOf(sysId);
-                    double setupH = meta.estimateLineSetupHumanSeconds(sysId, cap);
+                    double setupH = meta.estimateLineSetupHumanSeconds(sysId, sysTags, cap);
                     if (cs.batches() >= 32L
                             || cs.stepCost().passiveWaitSeconds() >= 120.0
                             || cs.stepCost().totalActiveSeconds() > setupH * 0.25) {
@@ -339,7 +347,7 @@ public final class ImprovementLoop {
         return new SearchOutcome(incumbent, incumbentPlan, discovered, coupledEvaluated);
     }
 
-    private Set<String> runMachineSetCover(
+    private Set<MachineEntry> runMachineSetCover(
         ConeModel cone,
         PlanningRequest request,
         CostWeights weights,
@@ -349,11 +357,11 @@ public final class ImprovementLoop {
     ) {
         FacilitySnapshot fac = request.context().facilities();
         HumanGuidanceView guidance = request.context().guidance();
-        Set<String> ownedMachines = new HashSet<>();
+        Set<MachineEntry> ownedMachines = new HashSet<>();
         Set<MachineCapabilityId> ownedCaps = new HashSet<>();
         for (OwnedMachineGroup g : fac.ownedMachines()) {
             if (g.count() > 0) {
-                ownedMachines.add(g.machineId());
+                ownedMachines.add(g.machine());
                 ownedCaps.add(g.capability());
             }
         }
@@ -367,14 +375,14 @@ public final class ImprovementLoop {
             if (rec.machineRequirement().handCraftable()) continue;
             boolean owned = rec.machineRequirement().capabilityId().map(ownedCaps::contains).orElse(false);
             if (!owned) {
-                for (String m : rec.machineRequirement().compatibleMachineIds()) {
-                    if (ownedMachines.contains(m)) {
+                for (MachineEntry m : rec.machineRequirement().compatibleMachines()) {
+                    if (ownedMachines.contains(m) || fac.ownsMachineFor(m)) {
                         owned = true;
                         break;
                     }
                 }
             }
-            if (!owned && !rec.machineRequirement().compatibleMachineIds().isEmpty()) {
+            if (!owned && !rec.machineRequirement().compatibleMachines().isEmpty()) {
                 unownedSteps.add(rec);
             }
         }
@@ -383,28 +391,29 @@ public final class ImprovementLoop {
         }
 
         int k = unownedSteps.size();
-        Map<String, BitSet> coverByMachine = new TreeMap<>();
-        Map<String, String> sysByMachine = new HashMap<>();
+        Map<MachineEntry, BitSet> coverByMachine = new TreeMap<>(MachineEntry.comparator);
+        Map<MachineEntry, CompiledRecipe> sampleRecByMachine = new HashMap<>();
         for (int i = 0; i < k; i++) {
             CompiledRecipe rec = unownedSteps.get(i);
-            for (String mid : rec.machineRequirement().compatibleMachineIds()) {
-                if (!guidance.isWillingToBuild(mid)) continue;
-                coverByMachine.computeIfAbsent(mid, ignored -> new BitSet(k)).set(i);
-                sysByMachine.putIfAbsent(mid, rec.key().systemId());
+            for (MachineEntry m : rec.machineRequirement().compatibleMachines()) {
+                if (!guidance.isWillingToBuild(m)) continue;
+                coverByMachine.computeIfAbsent(m, ignored -> new BitSet(k)).set(i);
+                sampleRecByMachine.putIfAbsent(m, rec);
             }
         }
 
         List<BitmaskAndGreedySetCover.CandidateMachine> cands = new ArrayList<>(coverByMachine.size());
         for (var e : coverByMachine.entrySet()) {
-            String mid = e.getKey();
+            MachineEntry m = e.getKey();
+            CompiledRecipe sampleRec = Objects.requireNonNull(sampleRecByMachine.get(m));
             double setup = weights.scalarize(
-                StepCosts.provisionMachineCost(mid, Objects.requireNonNull(sysByMachine.get(mid)), 1, meta)
+                StepCosts.provisionMachineCost(m, sampleRec.key().systemId(), sampleRec.systemTags(), 1, meta)
             );
-            int mLocal = cone.localRes(ResourceKey.item(mid));
+            int mLocal = m.contentKey().map(cone::localRes).orElse(-1);
             double itemPot = (mLocal >= 0 && Double.isFinite(potentials.potInCost[mLocal]))
                     ? potentials.potInCost[mLocal]
                     : setup * 2.0 + 50.0;
-            cands.add(new BitmaskAndGreedySetCover.CandidateMachine(mid, e.getValue(), setup + itemPot));
+            cands.add(new BitmaskAndGreedySetCover.CandidateMachine(m, e.getValue(), setup + itemPot));
         }
         return setCoverSolver.solve(k, cands);
     }
@@ -413,7 +422,7 @@ public final class ImprovementLoop {
         ConeModel cone,
         ChoiceTable choices,
         ProductionPlan plan,
-        Set<String> chosen
+        Set<MachineEntry> chosen
     ) {
         for (PlanStep step : plan.steps()) {
             if (!(step instanceof CraftStep cs)) continue;
@@ -422,7 +431,7 @@ public final class ImprovementLoop {
             CompiledRecipe rec = recOpt.get();
             int lr = cone.localRecipe(rec.compactId());
             if (lr < 0) continue;
-            for (String m : rec.machineRequirement().compatibleMachineIds()) {
+            for (MachineEntry m : rec.machineRequirement().compatibleMachines()) {
                 if (chosen.contains(m)) {
                     choices.machineOverride.put(lr, m);
                     break;
@@ -503,7 +512,7 @@ public final class ImprovementLoop {
                 inputPot += cone.inAmount[pos] * potentials.potInCost[rep];
             }
             if (!ok) continue;
-            Optional<String> mach = Optional.ofNullable(potentials.bestMachine[r]);
+            Optional<MachineEntry> mach = Optional.ofNullable(potentials.bestMachine[r]);
             boolean auto = fac.automatedRecipe(rec.key()).isPresent();
             double runCost = weights.scalarize(StepCosts.craftCost(rec, 1L, mach, auto, fac, meta));
             double softMult = guidance.softCostMultiplier(rec.key(), mach);
@@ -535,7 +544,7 @@ public final class ImprovementLoop {
                 if (guidance.isRecipePinned(cs.recipeKey())) {
                     adj -= Math.max(1000.0, weights.scalarize(cs.stepCost()) * 10.0);
                 }
-                double m = guidance.softCostMultiplier(cs.recipeKey(), cs.chosenMachineId());
+                double m = guidance.softCostMultiplier(cs.recipeKey(), cs.chosenMachine());
                 if (m != 1.0) {
                     adj += Math.max(5.0, weights.scalarize(cs.stepCost())) * (m - 1.0);
                 }
@@ -546,7 +555,7 @@ public final class ImprovementLoop {
                 }
             } else if (step instanceof CycleLoopStep cl) {
                 for (CraftStep inner : cl.singleIterationTemplate()) {
-                    double m = guidance.softCostMultiplier(inner.recipeKey(), inner.chosenMachineId());
+                    double m = guidance.softCostMultiplier(inner.recipeKey(), inner.chosenMachine());
                     if (m != 1.0) {
                         adj += Math.max(5.0, weights.scalarize(inner.stepCost())) * cl.iterations() * (m - 1.0);
                     }

@@ -1,8 +1,9 @@
 package dev.vfyjxf.cirrus.api.planning.plan;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 
 import java.util.Collections;
 import java.util.List;
@@ -16,10 +17,10 @@ public record CraftStep(
     List<String> dependsOnStepIds,
     CompiledRecipeKey recipeKey,
     long batches,
-    Optional<String> chosenMachineId,
+    Optional<MachineEntry> chosenMachine,
     boolean executedByAutomation,
     Map<Integer, SlotBinding> slotBindings,
-    Map<Integer, ResourceKey> catalystBindings,
+    Map<Integer, ComponentStackKey> catalystBindings,
     CostVector stepCost
 ) implements PlanStep {
 
@@ -27,7 +28,7 @@ public record CraftStep(
         Objects.requireNonNull(stepId, "stepId");
         Objects.requireNonNull(dependsOnStepIds, "dependsOnStepIds");
         Objects.requireNonNull(recipeKey, "recipeKey");
-        Objects.requireNonNull(chosenMachineId, "chosenMachineId");
+        Objects.requireNonNull(chosenMachine, "chosenMachine");
         Objects.requireNonNull(slotBindings, "slotBindings");
         Objects.requireNonNull(catalystBindings, "catalystBindings");
         Objects.requireNonNull(stepCost, "stepCost");

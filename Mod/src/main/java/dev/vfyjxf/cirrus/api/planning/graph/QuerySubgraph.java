@@ -1,16 +1,16 @@
 package dev.vfyjxf.cirrus.api.planning.graph;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 
 import java.util.List;
 
 public interface QuerySubgraph {
 
-    List<ResourceKey> activeNodes();
+    List<ComponentStackKey> activeNodes();
 
     List<CompiledRecipe> activeRecipes();
 
-    int acquisitionTierOf(ResourceKey resource);
+    int acquisitionTierOf(ComponentStackKey resource);
 
     List<EquivalenceClass> reducedCandidates(int recipeCompactId, int slotIndex);
 

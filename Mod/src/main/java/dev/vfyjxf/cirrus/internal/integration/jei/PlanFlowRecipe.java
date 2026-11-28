@@ -3,7 +3,9 @@ package dev.vfyjxf.cirrus.internal.integration.jei;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.vfyjxf.cirrus.CirrusConstants;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.planning.bridge.WorldFacilityRegistry;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
@@ -19,13 +21,7 @@ import java.util.Set;
  */
 public record PlanFlowRecipe(String id, CirrusPlanBookmarkStore.PlanBookmarkEntry snapshot) {
 
-    public static final Codec<ResourceKey> resourceKeyCodec = RecordCodecBuilder.create(
-        instance -> instance.group(
-            Codec.STRING.fieldOf("type").forGetter(ResourceKey::contentTypeId),
-            Codec.STRING.fieldOf("id").forGetter(ResourceKey::resourceId),
-            Codec.STRING.optionalFieldOf("variant").forGetter(ResourceKey::canonicalVariantHash)
-        ).apply(instance, ResourceKey::new)
-    );
+    public static final Codec<ComponentStackKey> resourceKeyCodec = WorldFacilityRegistry.resourceKeyCodec;
 
     public static final Codec<CirrusPlanBookmarkStore.MaterialLine> materialLineCodec = RecordCodecBuilder.create(
         instance -> instance.group(
@@ -36,7 +32,7 @@ public record PlanFlowRecipe(String id, CirrusPlanBookmarkStore.PlanBookmarkEntr
 
     public static final Codec<CirrusPlanBookmarkStore.MachineLine> machineLineCodec = RecordCodecBuilder.create(
         instance -> instance.group(
-            Codec.STRING.fieldOf("machineId").forGetter(CirrusPlanBookmarkStore.MachineLine::machineId),
+            WorldFacilityRegistry.machineEntryCodec.fieldOf("machine").forGetter(CirrusPlanBookmarkStore.MachineLine::machine),
             Codec.INT.fieldOf("countToBuild").forGetter(CirrusPlanBookmarkStore.MachineLine::countToBuild)
         ).apply(instance, CirrusPlanBookmarkStore.MachineLine::new)
     );
@@ -48,7 +44,8 @@ public record PlanFlowRecipe(String id, CirrusPlanBookmarkStore.PlanBookmarkEntr
             resourceKeyCodec.optionalFieldOf("output").forGetter(s -> Optional.ofNullable(s.output())),
             Codec.LONG.fieldOf("amount").forGetter(CirrusPlanBookmarkStore.StepLine::amount),
             Codec.LONG.optionalFieldOf("batches").forGetter(s -> Optional.of(s.batches())),
-            Codec.STRING.optionalFieldOf("machineId").forGetter(s -> Optional.ofNullable(s.machineId())),
+            WorldFacilityRegistry.machineEntryCodec.optionalFieldOf("machine")
+                    .forGetter(s -> Optional.ofNullable(s.machine())),
             Codec.BOOL.optionalFieldOf("auto", false).forGetter(CirrusPlanBookmarkStore.StepLine::auto),
             Codec.DOUBLE.optionalFieldOf("workSeconds", 0.0).forGetter(CirrusPlanBookmarkStore.StepLine::workSeconds),
             Codec.DOUBLE.optionalFieldOf("waitSeconds", 0.0).forGetter(CirrusPlanBookmarkStore.StepLine::waitSeconds),
@@ -60,14 +57,14 @@ public record PlanFlowRecipe(String id, CirrusPlanBookmarkStore.PlanBookmarkEntr
                     .forGetter(CirrusPlanBookmarkStore.StepLine::inputAmounts)
         ).apply(
             instance,
-            (stepId, kind, output, amount, batches, machineId, auto, workSec, waitSec, dependsOn, inputs, inAmts) ->
+            (stepId, kind, output, amount, batches, machine, auto, workSec, waitSec, dependsOn, inputs, inAmts) ->
                 new CirrusPlanBookmarkStore.StepLine(
                     stepId,
                     kind,
                     output.orElse(null),
                     amount,
                     batches.orElse(amount),
-                    machineId.orElse(null),
+                    machine.orElse(null),
                     auto,
                     workSec,
                     waitSec,
@@ -115,7 +112,7 @@ public record PlanFlowRecipe(String id, CirrusPlanBookmarkStore.PlanBookmarkEntr
 
     private static PlanFlowRecipe decode(
         String id,
-        ResourceKey primaryResource,
+        ComponentStackKey primaryResource,
         long primaryAmount,
         String title,
         int totalSteps,
@@ -126,7 +123,7 @@ public record PlanFlowRecipe(String id, CirrusPlanBookmarkStore.PlanBookmarkEntr
         List<CirrusPlanBookmarkStore.StepLine> steps,
         List<String> checkedStepIds,
         List<CirrusPlanBookmarkStore.MachineLine> machinesToProvision,
-        List<ResourceKey> catalysts,
+        List<ComponentStackKey> catalysts,
         List<CirrusPlanBookmarkStore.MaterialLine> surplusByproducts,
         List<String> automatedLines
     ) {

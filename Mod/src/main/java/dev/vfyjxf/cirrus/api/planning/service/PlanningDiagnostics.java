@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.planning.service;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.human.ConflictDiagnosis;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 
 import java.util.Collections;
 import java.util.Map;
@@ -17,7 +17,7 @@ public record PlanningDiagnostics(
     int coupledComponentsEvaluated,
     boolean truncatedByNodeBudget,
     Optional<ConflictDiagnosis> conflictDiagnosis,
-    Map<ResourceKey, String> unmetResources
+    Map<ComponentStackKey, String> unmetResources
 ) {
 
     public PlanningDiagnostics(
@@ -47,7 +47,7 @@ public record PlanningDiagnostics(
         if (unmetResources.isEmpty()) {
             unmetResources = Map.of();
         } else {
-            TreeMap<ResourceKey, String> sorted = new TreeMap<>();
+            TreeMap<ComponentStackKey, String> sorted = new TreeMap<>();
             for (var e : unmetResources.entrySet()) {
                 sorted.put(Objects.requireNonNull(e.getKey()), Objects.requireNonNull(e.getValue()));
             }

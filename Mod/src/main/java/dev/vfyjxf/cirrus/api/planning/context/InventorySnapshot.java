@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.api.planning.context;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 
 import java.util.Collections;
@@ -13,9 +13,9 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * Multi-tier inventory snapshot (M1.1 / M2.2):
- * preserves per-tier available/reserved amounts, already-open channels (beta = 0),
- * and resources protected from automatic generic Tag substitution (d^{genericTag}_{v,l} = 0).
+ * Multi-tier inventory snapshot:
+ * preserves per-tier available/reserved amounts, already-open channels,
+ * and resources protected from automatic generic Tag substitution.
  */
 public record InventorySnapshot(
     StockLedger available,
@@ -23,7 +23,7 @@ public record InventorySnapshot(
     Map<InventoryTier, StockLedger> availableByTier,
     Map<InventoryTier, StockLedger> reservedByTier,
     Set<InventoryTier> alreadyOpenTiers,
-    Set<ResourceKey> protectedFromGenericTags
+    Set<ComponentStackKey> protectedFromGenericTags
 ) {
 
     public static final InventorySnapshot empty = new InventorySnapshot(
@@ -77,7 +77,7 @@ public record InventorySnapshot(
         if (protectedFromGenericTags.isEmpty()) {
             protectedFromGenericTags = Set.of();
         } else {
-            TreeSet<ResourceKey> sorted = new TreeSet<>(protectedFromGenericTags);
+            TreeSet<ComponentStackKey> sorted = new TreeSet<>(protectedFromGenericTags);
             protectedFromGenericTags = Collections.unmodifiableSet(sorted);
         }
     }
@@ -86,9 +86,9 @@ public record InventorySnapshot(
         Map<InventoryTier, StockLedger> availableByTier,
         Map<InventoryTier, StockLedger> reservedByTier,
         Set<InventoryTier> alreadyOpenTiers,
-        Set<ResourceKey> protectedFromGenericTags
+        Set<ComponentStackKey> protectedFromGenericTags
     ) {
-        TreeMap<ResourceKey, Long> mergedAvail = new TreeMap<>();
+        TreeMap<ComponentStackKey, Long> mergedAvail = new TreeMap<>();
         if (availableByTier != null) {
             for (StockLedger ledger : availableByTier.values()) {
                 if (ledger == null) continue;
@@ -103,7 +103,7 @@ public record InventorySnapshot(
                 }
             }
         }
-        TreeMap<ResourceKey, Long> mergedRes = new TreeMap<>();
+        TreeMap<ComponentStackKey, Long> mergedRes = new TreeMap<>();
         if (reservedByTier != null) {
             for (StockLedger ledger : reservedByTier.values()) {
                 if (ledger == null) continue;
@@ -128,7 +128,67 @@ public record InventorySnapshot(
         );
     }
 
-    public long usableAmount(ResourceKey key) {
+    /** Returns a copy with {@code resource} overridden to {@code amount} in hand stock while preserving tiers & protection sets. */
+    public InventorySnapshot withOverriddenStock(ComponentStackKey resource, long amount) {
+        Objects.requireNonNull(resource, "resource");
+        long clamped = Math.max(0L, amount);
+        EnumMap<InventoryTier, StockLedger> nextAvailByTier = new EnumMap<>(InventoryTier.class);
+        EnumMap<InventoryTier, StockLedger> nextResByTier = new EnumMap<>(InventoryTier.class);
+        for (InventoryTier tier : InventoryTier.values()) {
+            StockLedger tierAvail = availableByTier.get(tier);
+            if (tierAvail != null && !tierAvail.isEmpty()) {
+                TreeMap<ComponentStackKey, Long> m = new TreeMap<>(tierAvail.entries());
+                m.remove(resource);
+                if (!m.isEmpty()) {
+                    nextAvailByTier.put(tier, new StockLedger(m));
+                }
+            }
+            StockLedger tierRes = reservedByTier.get(tier);
+            if (tierRes != null && !tierRes.isEmpty()) {
+                TreeMap<ComponentStackKey, Long> m = new TreeMap<>(tierRes.entries());
+                m.remove(resource);
+                if (!m.isEmpty()) {
+                    nextResByTier.put(tier, new StockLedger(m));
+                }
+            }
+        }
+        if (clamped > 0L) {
+            TreeMap<ComponentStackKey, Long> hand = new TreeMap<>();
+            StockLedger existingHand = nextAvailByTier.get(InventoryTier.hand);
+            if (existingHand != null) {
+                hand.putAll(existingHand.entries());
+            }
+            hand.put(resource, clamped);
+            nextAvailByTier.put(InventoryTier.hand, new StockLedger(hand));
+        }
+        return fromTiers(nextAvailByTier, nextResByTier, alreadyOpenTiers, protectedFromGenericTags);
+    }
+
+    /** Returns a copy excluding all specified resources while preserving tiers, open channels, and tag protections. */
+    public InventorySnapshot withoutResources(Set<ComponentStackKey> excluded) {
+        if (excluded == null || excluded.isEmpty() || (available.isEmpty() && availableByTier.isEmpty())) {
+            return this;
+        }
+        boolean anyRemoved = false;
+        EnumMap<InventoryTier, StockLedger> nextAvailByTier = new EnumMap<>(InventoryTier.class);
+        for (var e : availableByTier.entrySet()) {
+            TreeMap<ComponentStackKey, Long> m = new TreeMap<>(e.getValue().entries());
+            for (ComponentStackKey ex : excluded) {
+                if (m.remove(ex) != null) {
+                    anyRemoved = true;
+                }
+            }
+            if (!m.isEmpty()) {
+                nextAvailByTier.put(e.getKey(), new StockLedger(m));
+            }
+        }
+        if (!anyRemoved) {
+            return this;
+        }
+        return fromTiers(nextAvailByTier, reservedByTier, alreadyOpenTiers, protectedFromGenericTags);
+    }
+
+    public long usableAmount(ComponentStackKey key) {
         if (!availableByTier.isEmpty()) {
             long total = 0L;
             for (InventoryTier tier : InventoryTier.values()) {
@@ -144,7 +204,7 @@ public record InventorySnapshot(
         return Math.max(0L, available.amountOf(key) - reserved.amountOf(key));
     }
 
-    public long usableAmountInTier(ResourceKey key, InventoryTier tier) {
+    public long usableAmountInTier(ComponentStackKey key, InventoryTier tier) {
         StockLedger a = availableByTier.get(tier);
         if (a == null || a.isEmpty()) {
             return 0L;
@@ -160,18 +220,18 @@ public record InventorySnapshot(
         return net != null && !net.isEmpty();
     }
 
-    public boolean isProtectedFromGenericTag(ResourceKey key) {
+    public boolean isProtectedFromGenericTag(ComponentStackKey key) {
         return protectedFromGenericTags.contains(key);
     }
 
-    public Map<ResourceKey, Long> allUsable() {
+    public Map<ComponentStackKey, Long> allUsable() {
         if (available.isEmpty() && availableByTier.isEmpty()) {
             return Map.of();
         }
-        TreeMap<ResourceKey, Long> out = new TreeMap<>();
+        TreeMap<ComponentStackKey, Long> out = new TreeMap<>();
         if (!availableByTier.isEmpty()) {
             for (StockLedger ledger : availableByTier.values()) {
-                for (ResourceKey k : ledger.entries().keySet()) {
+                for (ComponentStackKey k : ledger.entries().keySet()) {
                     out.putIfAbsent(k, usableAmount(k));
                 }
             }

@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.planning.human;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 
 import java.util.Objects;
 
@@ -9,7 +9,7 @@ public record CycleBreakRule(
     String ruleId,
     GuidanceScope scope,
     RuleStrength strength,
-    ResourceKey targetResource,
+    ComponentStackKey targetResource,
     CompiledRecipeKey bannedSourceRecipe
 ) implements GuidanceRule {
 

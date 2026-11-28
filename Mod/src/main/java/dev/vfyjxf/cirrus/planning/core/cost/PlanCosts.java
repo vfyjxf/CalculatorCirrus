@@ -7,6 +7,7 @@ import dev.vfyjxf.cirrus.api.planning.plan.CycleLoopStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -15,7 +16,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 6D Physical CostVector aggregator (M1.3):
+ * 6D Physical CostVector aggregator:
  * aggregates H_craft, H_trip (deduplicating shared trip episodes), parallel passive wall-clock W,
  * K_mach, M_scarcity, and F_steps without leaking any soft rules into reported physical quantities.
  */
@@ -32,12 +33,19 @@ public final class PlanCosts {
         double maxFinishP = 0.0;
 
         Map<String, Double> finishP = new HashMap<>(steps.size() * 2);
-        Set<String> distinctMachines = new HashSet<>();
+        Set<MachineEntry> distinctMachines = new HashSet<>();
+        Set<String> seenTripEpisodes = new HashSet<>();
 
         for (PlanStep step : steps) {
             CostVector sc = step.stepCost();
             hCraft += sc.humanActiveSeconds();
-            hTrip += sc.tripActiveSeconds();
+            double tripAdd = sc.tripActiveSeconds();
+            if (step instanceof AcquireStep as && !as.tripEpisodeId().isEmpty() && as.fixedTripHumanSeconds() > 0.0) {
+                if (!seenTripEpisodes.add(as.tripEpisodeId())) {
+                    tripAdd = Math.max(0.0, tripAdd - as.fixedTripHumanSeconds());
+                }
+            }
+            hTrip += tripAdd;
             k += sc.machineSetupCapital();
             s += sc.materialScarcity();
             f += sc.cognitiveFriction();
@@ -62,14 +70,14 @@ public final class PlanCosts {
         return new CostVector(hCraft, hTrip, maxFinishP, k, s, f);
     }
 
-    private static void collectMachines(PlanStep step, Set<String> machines) {
+    private static void collectMachines(PlanStep step, Set<MachineEntry> machines) {
         switch (step) {
-            case CraftStep cs -> cs.chosenMachineId().ifPresent(machines::add);
-            case ProvisionMachineStep pm -> machines.add(pm.machineId());
-            case SetupLineStep sl -> machines.add(sl.primaryMachineId());
+            case CraftStep cs -> cs.chosenMachine().ifPresent(machines::add);
+            case ProvisionMachineStep pm -> machines.add(pm.machine());
+            case SetupLineStep sl -> machines.add(sl.primaryMachine());
             case CycleLoopStep loop -> {
                 for (CraftStep inner : loop.singleIterationTemplate()) {
-                    inner.chosenMachineId().ifPresent(machines::add);
+                    inner.chosenMachine().ifPresent(machines::add);
                 }
             }
             default -> {}

@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchBreakpoint;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchFormatters;
@@ -42,14 +42,14 @@ public final class LedgerSorting {
         return keyAt(indexOf(key) + 1);
     }
 
-    public static InventorySnapshot overlay(InventorySnapshot base, Map<ResourceKey, Long> simulated) {
+    public static InventorySnapshot overlay(InventorySnapshot base, Map<ComponentStackKey, Long> simulated) {
         InventorySnapshot source = base == null ? InventorySnapshot.empty : base;
         if (simulated == null || simulated.isEmpty()) {
             return source;
         }
-        TreeMap<ResourceKey, Long> available = new TreeMap<>(source.available().entries());
-        for (Map.Entry<ResourceKey, Long> entry : simulated.entrySet()) {
-            ResourceKey resource = entry.getKey();
+        TreeMap<ComponentStackKey, Long> available = new TreeMap<>(source.available().entries());
+        for (Map.Entry<ComponentStackKey, Long> entry : simulated.entrySet()) {
+            ComponentStackKey resource = entry.getKey();
             Long amount = entry.getValue();
             if (resource == null || amount == null) {
                 continue;
@@ -61,12 +61,21 @@ public final class LedgerSorting {
                 available.put(resource, clamped);
             }
         }
-        return new InventorySnapshot(new StockLedger(available), source.reserved());
+        return new InventorySnapshot(
+            new StockLedger(available),
+            source.reserved(),
+            source.inChest(),
+            source.inStorageNetwork()
+        );
     }
 
-    public static Map<ResourceKey, Long> simulate(Map<ResourceKey, Long> current, ResourceKey resource, long amount) {
+    public static Map<ComponentStackKey, Long> simulate(
+        Map<ComponentStackKey, Long> current,
+        ComponentStackKey resource,
+        long amount
+    ) {
         Objects.requireNonNull(resource, "resource");
-        Map<ResourceKey, Long> next = current == null ? new TreeMap<>() : new TreeMap<>(current);
+        Map<ComponentStackKey, Long> next = current == null ? new TreeMap<>() : new TreeMap<>(current);
         long clamped = Math.max(minSimulatedAmount, Math.min(maxSimulatedAmount, amount));
         next.put(resource, clamped);
         return next;

@@ -13,6 +13,7 @@ import dev.vfyjxf.cloudlib.api.ui.floating.FloatingEffect;
 import dev.vfyjxf.cloudlib.api.ui.floating.FloatingPlacement;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import net.minecraft.network.chat.Component;
+import net.minecraft.tags.TagKey;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
@@ -36,7 +37,7 @@ public class InlineDecisionBeaconWidget extends Widget {
     private final ResolvedPrompt prompt;
     private @Nullable PromptCardWidget card;
     private PromptCardWidget.@Nullable PreviewListener previewListener;
-    private @Nullable Consumer<String> candidateRequestListener;
+    private @Nullable Consumer<TagKey<?>> candidateRequestListener;
     private boolean closeScheduled;
 
     public InlineDecisionBeaconWidget(CoPilotHost host, ResolvedPrompt prompt) {
@@ -80,7 +81,7 @@ public class InlineDecisionBeaconWidget extends Widget {
         return this;
     }
 
-    public InlineDecisionBeaconWidget candidateRequestListener(@Nullable Consumer<String> listener) {
+    public InlineDecisionBeaconWidget candidateRequestListener(@Nullable Consumer<TagKey<?>> listener) {
         this.candidateRequestListener = listener;
         if (card != null) {
             card.candidateRequestListener(listener);

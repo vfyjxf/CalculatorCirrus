@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.api.planning.human;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 
 import java.util.Objects;
 
@@ -8,7 +8,7 @@ public record ResourceRule(
     String ruleId,
     GuidanceScope scope,
     RuleStrength strength,
-    ResourceKey resource,
+    ComponentStackKey resource,
     boolean treatAsFreeBaseSource
 ) implements GuidanceRule {
 

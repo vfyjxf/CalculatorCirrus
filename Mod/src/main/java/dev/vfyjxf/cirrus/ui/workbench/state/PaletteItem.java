@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.state;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
@@ -10,7 +10,7 @@ public record PaletteItem(
     String categoryKey,
     String displayText,
     @Nullable String shortcutHint,
-    @Nullable ResourceKey iconResource,
+    @Nullable ComponentStackKey iconResource,
     int score,
     PaletteAction primaryAction,
     @Nullable PaletteAction shiftAction

@@ -645,6 +645,75 @@ class ExecutionCockpitModelAndControlTest {
     }
 
     @Test
+    void diagnosticsDrawerExpandsUpwardWithoutOverflowingCompactMainPanel() {
+        WidgetGroup<Widget> root = new WidgetGroup<>();
+        root.useStyle(UIStyles.sizeOf(640, 360));
+        MainPanel panel = new MainPanel(handle());
+        panel.useStyle(
+            UIStyles.positionAbsolute(),
+            UIStyles.insetLeft(10),
+            UIStyles.insetTop(10),
+            UIStyles.sizeOf(220, 280)
+        );
+        root.addWidget(panel);
+        Scene scene = new Scene(root);
+        scene.init();
+        scene.mount(SceneContext.create(new SceneHost() {
+            @Override
+            @SuppressWarnings("NullAway")
+            public Font font() {
+                return null;
+            }
+
+            @Override
+            public int width() {
+                return 640;
+            }
+
+            @Override
+            public int height() {
+                return 360;
+            }
+        }));
+        try {
+            scene.setLayoutArea(640, 360);
+            scene.stabilize();
+
+            var drawer = panel.diagnosticsDrawer();
+            int collapsedY = drawer.posY();
+            int collapsedBottom = drawer.posY() + drawer.height();
+            assertEquals(dev.vfyjxf.cirrus.ui.execution.cockpit.ExecutionDiagnosticsDrawerWidget.collapsedHeight, drawer.height());
+            assertTrue(collapsedBottom <= panel.height(), "collapsed drawer must stay inside MainPanel bottom");
+
+            drawer.setExpanded(true);
+            drawer.snapHeightToTarget();
+            scene.stabilize();
+
+            int expandedBottom = drawer.posY() + drawer.height();
+            assertTrue(drawer.height() > dev.vfyjxf.cirrus.ui.execution.cockpit.ExecutionDiagnosticsDrawerWidget.collapsedHeight);
+            assertTrue(
+                drawer.posY() < collapsedY,
+                "expanded drawer must rise upward (topY " + drawer.posY() + " < collapsedY " + collapsedY + ")"
+            );
+            assertTrue(
+                expandedBottom <= panel.height(),
+                "expanded drawer must never overflow below MainPanel bottom (" + expandedBottom + " <= " + panel.height() + ")"
+            );
+            assertEquals(
+                collapsedBottom,
+                expandedBottom,
+                "drawer bottom edge must stay anchored flush with MainPanel bottom"
+            );
+            assertTrue(
+                drawer.posY() >= panel.topFixedHeight(),
+                "expanded drawer must stay below Header and Control Deck"
+            );
+        } finally {
+            scene.destroy();
+        }
+    }
+
+    @Test
     void mainPanelConsumesClicksInsideBoundsAndPassesOutsideClicks() {
         WidgetGroup<Widget> root = new WidgetGroup<>();
         root.useStyle(UIStyles.sizeOf(640, 360));

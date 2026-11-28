@@ -109,12 +109,30 @@ public final class ExecutionMaterialsPanelWidget extends Widget implements OreUi
         applyFlexStyle();
 
         onMouseClick((input, clickCount, ctx) -> {
-            if (!input.isLeftClick()) {
-                return EventDispatch.pass;
-            }
             FloatPos local = input.mouseRelative(this);
             int lx = (int) Math.round(local.x());
             int ly = (int) Math.round(local.y());
+            if (input.isRightClick()) {
+                if (searchRect != null && searchRect.contains(lx, ly)) {
+                    if (!searchQuery.isEmpty()) {
+                        searchQuery = "";
+                        scrollY = 0;
+                        CirrusUiSound.playClickSound();
+                    }
+                    if (!searchOpen) {
+                        searchOpen = true;
+                    }
+                    if (scene() != null) {
+                        scene().requestFocus(this);
+                    }
+                    ctx.consume();
+                    return EventDispatch.consumed;
+                }
+                return EventDispatch.pass;
+            }
+            if (!input.isLeftClick()) {
+                return EventDispatch.pass;
+            }
 
             if (searchClearRect != null && searchClearRect.contains(lx, ly)) {
                 searchQuery = "";

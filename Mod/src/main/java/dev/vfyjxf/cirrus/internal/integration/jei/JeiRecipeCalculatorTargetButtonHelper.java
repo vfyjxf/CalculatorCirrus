@@ -1,8 +1,8 @@
 package dev.vfyjxf.cirrus.internal.integration.jei;
 
 import dev.vfyjxf.cirrus.api.content.ContentApi;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusContentBridge;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
@@ -71,13 +71,13 @@ public final class JeiRecipeCalculatorTargetButtonHelper {
     private static <I> @Nullable TargetDemand toTargetDemand(ITypedIngredient<I> typed) {
         I raw = typed.getIngredient();
         if (raw instanceof ItemStack itemStack && !itemStack.isEmpty()) {
-            Optional<ResourceKey> key = CirrusContentBridge.toResourceKey(itemStack);
+            Optional<ComponentStackKey> key = ComponentStackKey.fromItemStack(itemStack);
             if (key.isPresent()) {
                 return new TargetDemand(key.get(), Math.max(1L, itemStack.getCount()));
             }
         }
         if (raw instanceof FluidStack fluidStack && !fluidStack.isEmpty()) {
-            Optional<ResourceKey> key = CirrusContentBridge.toResourceKey(fluidStack);
+            Optional<ComponentStackKey> key = ComponentStackKey.fromFluidStack(fluidStack);
             if (key.isPresent()) {
                 return new TargetDemand(key.get(), Math.max(1L, fluidStack.getAmount()));
             }
@@ -89,7 +89,7 @@ public final class JeiRecipeCalculatorTargetButtonHelper {
                 ContentStack<?, I> stack = ContentStack
                         .fromStack(stackType, raw, amount > 0L ? amount : stackType.quantity());
                 if (stack.notEmpty()) {
-                    Optional<ResourceKey> key = CirrusContentBridge.toConcreteResourceKey(stack);
+                    Optional<ComponentStackKey> key = CirrusContentBridge.toConcreteKey(stack);
                     if (key.isPresent()) {
                         return new TargetDemand(key.get(), Math.max(1L, stack.amount()));
                     }

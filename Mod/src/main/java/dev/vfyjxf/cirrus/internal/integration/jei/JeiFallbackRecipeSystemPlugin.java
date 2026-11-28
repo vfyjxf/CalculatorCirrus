@@ -50,6 +50,10 @@ public final class JeiFallbackRecipeSystemPlugin implements CirrusPlugin {
         for (RecipeType<?> recipeType : recipeTypes()) {
             Namespace systemId = JeiCategoryRecipeSystem.systemId(recipeType);
             register.registerSystemTagEntry(RecipeSystemTags.jeiFallback, systemId);
+            register.registerSystemTagEntry(
+                RecipeSystemTags.folder("jei", recipeType.getUid().getNamespace()),
+                systemId
+            );
             if (nativeVanillaMirrors.contains(recipeType)) {
                 register.registerSystemTagEntry(RecipeSystemTags.mirrorDuplicate, systemId);
             }

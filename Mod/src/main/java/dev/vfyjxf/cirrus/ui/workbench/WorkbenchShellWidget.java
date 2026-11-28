@@ -1,8 +1,8 @@
 package dev.vfyjxf.cirrus.ui.workbench;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -453,7 +453,7 @@ public class WorkbenchShellWidget extends WidgetGroup<Widget> implements Workben
         return recipeAssistant;
     }
 
-    public void openRecipeAssistant(@Nullable ResourceKey resource) {
+    public void openRecipeAssistant(@Nullable ComponentStackKey resource) {
         if (resource == null) {
             return;
         }
@@ -503,6 +503,7 @@ public class WorkbenchShellWidget extends WidgetGroup<Widget> implements Workben
     public void releaseAllDrags() {
         leftResizeHandle.release();
         rightResizeHandle.release();
+        tooltipOverlay.stopScrollbarDrag();
         if (rightDock instanceof RightCoPilotDockWidget dock) {
             dock.finishActiveDrag(-1.0, -1.0);
         }
@@ -515,6 +516,7 @@ public class WorkbenchShellWidget extends WidgetGroup<Widget> implements Workben
     public void releaseAllDrags(double mouseX, double mouseY) {
         leftResizeHandle.release();
         rightResizeHandle.release();
+        tooltipOverlay.stopScrollbarDrag();
         finishExternalDrags(mouseX, mouseY);
     }
 
@@ -533,6 +535,9 @@ public class WorkbenchShellWidget extends WidgetGroup<Widget> implements Workben
     /** Closes every floating popover, menu and palette other than {@code except}. */
     public boolean closeTransientOverlays(@Nullable Widget except) {
         boolean closed = false;
+        if (tooltipOverlay != except && tooltipOverlay.dismissInteractiveTooltip()) {
+            closed = true;
+        }
         if (commandPalette != except && commandPalette.isOpen()) {
             commandPalette.close();
             closed = true;
@@ -694,7 +699,7 @@ public class WorkbenchShellWidget extends WidgetGroup<Widget> implements Workben
             return null;
         }
         CompiledRecipeGraph graph = runtime.currentGraph().orElse(null);
-        ResourceKey primaryTarget = targets.isEmpty() ? null : targets.get(0).resource();
+        ComponentStackKey primaryTarget = targets.isEmpty() ? null : targets.get(0).resource();
         CompiledRecipeKey fallbackKey = null;
         int fallbackBatches = 1;
 

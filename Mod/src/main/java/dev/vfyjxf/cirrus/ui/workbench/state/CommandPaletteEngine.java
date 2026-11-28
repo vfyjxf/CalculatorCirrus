@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.state;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.human.ApplyRulesFeedback;
@@ -9,7 +10,6 @@ import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
 import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
@@ -21,9 +21,12 @@ import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusContentBridge;
 import dev.vfyjxf.cirrus.ui.workbench.copilot.CoPilotPaint;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -168,8 +171,8 @@ public final class CommandPaletteEngine {
         return finalizeItems(items, limit);
     }
 
-    public static List<ResourceKey> fullCatalog(@Nullable CompiledRecipeGraph graph) {
-        LinkedHashSet<ResourceKey> catalog = new LinkedHashSet<>();
+    public static List<ComponentStackKey> fullCatalog(@Nullable CompiledRecipeGraph graph) {
+        LinkedHashSet<ComponentStackKey> catalog = new LinkedHashSet<>();
         if (graph != null) {
             catalog.addAll(graph.allProducibleResources());
         }
@@ -185,14 +188,14 @@ public final class CommandPaletteEngine {
         if (limit <= 0) {
             return List.of();
         }
-        List<ResourceKey> catalog = fullCatalog(graph);
+        List<ComponentStackKey> catalog = fullCatalog(graph);
         if (catalog.isEmpty()) {
             return List.of();
         }
-        Set<ResourceKey> producible = graph == null ? Set.of() : graph.allProducibleResources();
+        Set<ComponentStackKey> producible = graph == null ? Set.of() : graph.allProducibleResources();
         String raw = rawInput == null ? "" : rawInput.trim();
         if (raw.isEmpty()) {
-            List<ResourceKey> all = new ArrayList<>(catalog);
+            List<ComponentStackKey> all = new ArrayList<>(catalog);
             all.sort((left, right) -> {
                 boolean leftInGraph = producible.contains(left);
                 boolean rightInGraph = producible.contains(right);
@@ -209,7 +212,7 @@ public final class CommandPaletteEngine {
                 if (leftVanilla != rightVanilla) {
                     return leftVanilla ? -1 : 1;
                 }
-                return left.resourceId().compareTo(right.resourceId());
+                return left.compareTo(right);
             });
             int cap = Math.min(limit, all.size());
             List<PaletteItem> items = new ArrayList<>(cap);
@@ -222,7 +225,7 @@ public final class CommandPaletteEngine {
         boolean modOnly = query.startsWith("@");
         String modNeedle = modOnly ? query.substring(1).trim() : "";
         List<PaletteItem> items = new ArrayList<>();
-        for (ResourceKey resource : catalog) {
+        for (ComponentStackKey resource : catalog) {
             int score;
             if (modOnly) {
                 String ns = namespaceOf(resource);
@@ -300,7 +303,7 @@ public final class CommandPaletteEngine {
         List<TargetDemand> targets = new ArrayList<>(snapshot.targets());
         targets.sort(
             Comparator.comparingLong(TargetDemand::amount).reversed()
-                    .thenComparing(demand -> demand.resource().resourceId())
+                    .thenComparing(TargetDemand::resource)
         );
         int count = Math.min(limitRecentTargets, targets.size());
         List<PaletteItem> items = new ArrayList<>(count);
@@ -366,15 +369,15 @@ public final class CommandPaletteEngine {
             );
         }
         for (var byproduct : plan.surplusByproducts()) {
-            int score = match(query, byproduct.resource().resourceId());
+            int score = match(query, byproduct.resource().displayId());
             if (score < 0) {
                 continue;
             }
             items.add(
                 new PaletteItem(
-                    byproductItemPrefix + byproduct.resource().shortString(),
+                    byproductItemPrefix + byproduct.resource().canonicalKey(),
                     categoryStep,
-                    byproduct.resource().shortString(),
+                    byproduct.resource().displayId(),
                     null,
                     byproduct.resource(),
                     byproductBase + score,
@@ -388,7 +391,7 @@ public final class CommandPaletteEngine {
 
     private static List<PaletteItem> resourceItems(CompiledRecipeGraph graph, String query) {
         List<PaletteItem> items = new ArrayList<>();
-        for (ResourceKey resource : graph.allProducibleResources()) {
+        for (ComponentStackKey resource : graph.allProducibleResources()) {
             int score = matchResource(query, resource);
             if (score < 0) {
                 continue;
@@ -398,8 +401,8 @@ public final class CommandPaletteEngine {
         return items;
     }
 
-    private static int matchResource(String query, ResourceKey resource) {
-        String id = resource.resourceId();
+    private static int matchResource(String query, ComponentStackKey resource) {
+        String id = resource.displayId();
         int best = match(query, id);
         int colon = id.indexOf(':');
         String path = colon >= 0 ? id.substring(colon + 1) : id;
@@ -433,7 +436,7 @@ public final class CommandPaletteEngine {
         return -1;
     }
 
-    private static String localizedResourceName(ResourceKey resource) {
+    private static String localizedResourceName(ComponentStackKey resource) {
         try {
             ContentStack<?, ?> stack = CoPilotPaint.stackOf(resource, 1L);
             if (stack == null || stack.isEmpty()) {
@@ -458,9 +461,9 @@ public final class CommandPaletteEngine {
         if (graph == null) {
             return items;
         }
-        List<ResourceKey> exact = new ArrayList<>();
-        List<ResourceKey> prefixed = new ArrayList<>();
-        for (ResourceKey resource : graph.allProducibleResources()) {
+        List<ComponentStackKey> exact = new ArrayList<>();
+        List<ComponentStackKey> prefixed = new ArrayList<>();
+        for (ComponentStackKey resource : graph.allProducibleResources()) {
             String candidate = namespaceOf(resource);
             if (candidate.equals(namespace)) {
                 exact.add(resource);
@@ -468,7 +471,7 @@ public final class CommandPaletteEngine {
                 prefixed.add(resource);
             }
         }
-        for (ResourceKey resource : exact.isEmpty() ? prefixed : exact) {
+        for (ComponentStackKey resource : exact.isEmpty() ? prefixed : exact) {
             items.add(targetItem(resource, resourceBase, categoryResource));
         }
         return items;
@@ -531,40 +534,53 @@ public final class CommandPaletteEngine {
             return List.of();
         }
         return switch (verb) {
-            case "own", "拥有", "声明拥有" -> List.of(ownMachineItem(argument)); // NOPMD - Chinese verb alias
-            case "free", "免费", "设为免费" -> List.of(freeResourceItem(argument, graph)); // NOPMD - Chinese verb alias
+            case "own", "拥有", "声明拥有" -> { // NOPMD - Chinese verb alias
+                PaletteItem item = ownMachineItem(argument, graph);
+                yield item == null ? List.of() : List.of(item);
+            }
+            case "free", "免费", "设为免费" -> { // NOPMD - Chinese verb alias
+                PaletteItem item = freeResourceItem(argument, graph);
+                yield item == null ? List.of() : List.of(item);
+            }
             default -> List.of();
         };
     }
 
-    private static PaletteItem ownMachineItem(String argument) {
-        String machineId = argument.trim();
-        DeclareOwnedMachineFeedback feedback = new DeclareOwnedMachineFeedback(machineId, 1, false);
+    private static @Nullable PaletteItem ownMachineItem(String argument, @Nullable CompiledRecipeGraph graph) {
+        ComponentStackKey key = resolveResource(argument, graph);
+        if (key == null) {
+            return null;
+        }
+        MachineEntry machine = MachineEntry.fromKey(key);
+        DeclareOwnedMachineFeedback feedback = new DeclareOwnedMachineFeedback(machine, 1, false);
         return new PaletteItem(
-            feedbackItemPrefix + "own:" + machineId,
+            feedbackItemPrefix + "own:" + machine.canonicalKey(),
             categoryCommand,
-            "own 1× " + machineId,
+            "own 1× " + key.displayId(),
             null,
-            null,
+            key,
             commandBase + scoreExact,
             new PaletteAction.ApplyFeedback(feedback),
             null
         );
     }
 
-    private static PaletteItem freeResourceItem(String argument, @Nullable CompiledRecipeGraph graph) {
-        ResourceKey resource = resolveResource(argument, graph);
+    private static @Nullable PaletteItem freeResourceItem(String argument, @Nullable CompiledRecipeGraph graph) {
+        ComponentStackKey resource = resolveResource(argument, graph);
+        if (resource == null) {
+            return null;
+        }
         GuidanceRule rule = new ResourceRule(
-            "session.free:" + resource.shortString(),
+            "session.free:" + resource.canonicalKey(),
             GuidanceScope.session,
             RuleStrength.hardPin,
             resource,
             true
         );
         return new PaletteItem(
-            feedbackItemPrefix + "free:" + resource.shortString(),
+            feedbackItemPrefix + "free:" + resource.canonicalKey(),
             categoryCommand,
-            "free " + resource.shortString(),
+            "free " + resource.displayId(),
             null,
             resource,
             commandBase + scoreExact,
@@ -573,11 +589,11 @@ public final class CommandPaletteEngine {
         );
     }
 
-    private static PaletteItem targetItem(ResourceKey resource, int score, String categoryKey) {
+    private static PaletteItem targetItem(ComponentStackKey resource, int score, String categoryKey) {
         return new PaletteItem(
-            resourceItemPrefix + resource.shortString(),
+            resourceItemPrefix + resource.canonicalKey(),
             categoryKey,
-            resource.shortString(),
+            resource.displayId(),
             null,
             resource,
             score,
@@ -632,63 +648,79 @@ public final class CommandPaletteEngine {
     private static String stepSearchText(PlanStep step) {
         StringBuilder text = new StringBuilder(step.stepId());
         switch (step) {
-            case AcquireStep acquire -> text.append(' ').append(acquire.resource().resourceId());
-            case ProvisionMachineStep provision -> text.append(' ').append(provision.machineId());
+            case AcquireStep acquire -> text.append(' ').append(acquire.resource().displayId());
+            case ProvisionMachineStep provision -> text.append(' ').append(provision.machine().canonicalKey());
             case SetupLineStep setup -> text.append(' ').append(setup.systemId()).append(' ')
-                    .append(setup.primaryMachineId()).append(' ').append(setup.targetOutput().resourceId());
+                    .append(setup.primaryMachine().canonicalKey()).append(' ').append(setup.targetOutput().displayId());
             case CraftStep craft -> {
                 text.append(' ').append(craft.recipeKey().shortString());
                 craft.recipeKey().explicitRecipeId().ifPresent(id -> text.append(' ').append(id));
-                craft.chosenMachineId().ifPresent(machine -> text.append(' ').append(machine));
+                craft.chosenMachine().ifPresent(machine -> text.append(' ').append(machine.canonicalKey()));
             }
             case ConvertStep convert -> text.append(' ').append(convert.conversionRecipeKey().shortString());
             case LinePullStep pull ->
-                text.append(' ').append(pull.resource().resourceId()).append(' ').append(pull.lineId());
+                text.append(' ').append(pull.resource().displayId()).append(' ').append(pull.lineId());
             case CycleLoopStep loop -> {
                 text.append(' ').append(loop.macroKey().macroId());
                 for (CraftStep inner : loop.singleIterationTemplate()) {
                     text.append(' ').append(inner.recipeKey().shortString());
-                    inner.chosenMachineId().ifPresent(machine -> text.append(' ').append(machine));
+                    inner.chosenMachine().ifPresent(machine -> text.append(' ').append(machine.canonicalKey()));
                 }
             }
         }
         return text.toString();
     }
 
-    private static @Nullable ResourceKey stepIconResource(PlanStep step) {
+    private static @Nullable ComponentStackKey stepIconResource(PlanStep step) {
         return switch (step) {
             case AcquireStep acquire -> acquire.resource();
             case LinePullStep pull -> pull.resource();
             case SetupLineStep setup -> setup.targetOutput();
-            case ProvisionMachineStep provision -> null;
+            case ProvisionMachineStep provision -> provision.machine().contentKey().orElse(null);
             case CraftStep craft -> null;
             case ConvertStep convert -> null;
             case CycleLoopStep loop -> null;
         };
     }
 
-    private static ResourceKey resolveResource(String token, @Nullable CompiledRecipeGraph graph) {
+    private static @Nullable ComponentStackKey resolveResource(String token, @Nullable CompiledRecipeGraph graph) {
         String raw = token.trim();
-        if (raw.indexOf(':') >= 0) {
-            return ResourceKey.item(raw);
+        if (raw.isEmpty()) {
+            return null;
         }
         if (graph != null) {
-            String suffix = ":" + lower(raw);
-            ResourceKey best = null;
-            for (ResourceKey resource : graph.allProducibleResources()) {
-                if (lower(resource.resourceId()).endsWith(suffix) && (best == null || resource.compareTo(best) < 0)) {
-                    best = resource;
+            String lowerRaw = lower(raw);
+            String suffix = raw.indexOf(':') >= 0 ? null : (":" + lowerRaw);
+            ComponentStackKey best = null;
+            for (ComponentStackKey resource : graph.allProducibleResources()) {
+                String disp = lower(resource.displayId());
+                if (disp.equals(lowerRaw) || (suffix != null && disp.endsWith(suffix))) {
+                    if (best == null || resource.compareTo(best) < 0) {
+                        best = resource;
+                    }
                 }
             }
             if (best != null) {
                 return best;
             }
         }
-        return ResourceKey.item("minecraft:" + raw);
+        ResourceLocation loc = ResourceLocation.tryParse(raw.indexOf(':') >= 0 ? raw : "minecraft:" + raw);
+        if (loc == null) {
+            return null;
+        }
+        var item = BuiltInRegistries.ITEM.getOptional(loc);
+        if (item.isPresent()) {
+            return ComponentStackKey.ofItem(item.get());
+        }
+        return BuiltInRegistries.FLUID.getOptional(loc).map(ComponentStackKey::ofFluid).orElse(null);
     }
 
-    private static String namespaceOf(ResourceKey resource) {
-        String id = resource.resourceId();
+    private static String namespaceOf(ComponentStackKey resource) {
+        ResourceLocation loc = resource.location();
+        if (loc != null) {
+            return lower(loc.getNamespace());
+        }
+        String id = resource.displayId();
         int separator = id.indexOf(':');
         return separator <= 0 ? "" : lower(id.substring(0, separator));
     }

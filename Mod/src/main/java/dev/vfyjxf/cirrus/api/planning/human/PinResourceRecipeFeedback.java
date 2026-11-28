@@ -1,11 +1,11 @@
 package dev.vfyjxf.cirrus.api.planning.human;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 
 import java.util.Objects;
 
-public record PinResourceRecipeFeedback(ResourceKey resource, CompiledRecipeKey recipeKey, boolean persistToWorld)
+public record PinResourceRecipeFeedback(ComponentStackKey resource, CompiledRecipeKey recipeKey, boolean persistToWorld)
         implements
             HumanFeedback {
 

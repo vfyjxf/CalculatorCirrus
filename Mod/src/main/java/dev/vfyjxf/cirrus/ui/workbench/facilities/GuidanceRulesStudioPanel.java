@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.facilities;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.InputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.MachineRequirement;
@@ -7,7 +8,8 @@ import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.model.PlanningTagKeys;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.widget.NumberInputWidget;
@@ -17,7 +19,9 @@ import dev.vfyjxf.cirrus.ui.workbench.chrome.ChromeText;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
+import net.minecraft.tags.TagKey;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -304,7 +308,7 @@ public class GuidanceRulesStudioPanel extends FacilitiesAndRulesWorkspace.Panel 
             }
             switch (field.type()) {
                 case resource -> {
-                    ResourceKey resource = (ResourceKey) option.value();
+                    ComponentStackKey resource = (ComponentStackKey) option.value();
                     if (RuleSentenceBuilder.fieldMember.equals(field.key())) {
                         builder.preferredMember(resource);
                     } else if (RuleSentenceBuilder.fieldTargetResource.equals(field.key())) {
@@ -321,9 +325,9 @@ public class GuidanceRulesStudioPanel extends FacilitiesAndRulesWorkspace.Panel 
                         builder.recipe(recipeKey);
                     }
                 }
-                case system -> builder.system((String) option.value());
-                case machine -> builder.machine((String) option.value());
-                case tag -> builder.tag((String) option.value());
+                case system -> builder.system((Namespace) option.value());
+                case machine -> builder.machine((MachineEntry) option.value());
+                case tag -> builder.tag((TagKey<?>) option.value());
                 case mod -> builder.mod((String) option.value());
                 default -> {}
             }
@@ -335,18 +339,20 @@ public class GuidanceRulesStudioPanel extends FacilitiesAndRulesWorkspace.Panel 
         List<Choice> options = new ArrayList<>();
         switch (field.type()) {
             case resource -> {
-                Map<String, ResourceKey> resources = new TreeMap<>();
+                Map<String, ComponentStackKey> resources = new TreeMap<>();
                 host().graph().ifPresent(graph -> {
-                    for (ResourceKey resource : graph.allProducibleResources()) {
-                        resources.putIfAbsent(resource.shortString(), resource);
+                    for (ComponentStackKey resource : graph.allProducibleResources()) {
+                        resources.putIfAbsent(resource.canonicalKey(), resource);
                     }
                 });
-                resources.forEach((display, resource) -> options.add(new Choice(display, display, resource)));
+                resources.forEach(
+                    (display, resource) -> options.add(new Choice(display, display + " " + resource.displayId(), resource))
+                );
             }
             case recipe -> {
                 Map<String, CompiledRecipeKey> keys = new TreeMap<>();
                 host().graph().ifPresent(graph -> {
-                    for (ResourceKey resource : graph.allProducibleResources()) {
+                    for (ComponentStackKey resource : graph.allProducibleResources()) {
                         for (CompiledRecipe recipe : graph.producersOf(resource)) {
                             keys.putIfAbsent(recipe.key().shortString(), recipe.key());
                         }
@@ -355,36 +361,45 @@ public class GuidanceRulesStudioPanel extends FacilitiesAndRulesWorkspace.Panel 
                 keys.forEach((display, key) -> options.add(new Choice(display, display + " " + key.systemId(), key)));
             }
             case machine -> {
-                TreeSet<String> machines = new TreeSet<>();
+                TreeSet<MachineEntry> machines = new TreeSet<>(MachineEntry.comparator);
                 host().graph().ifPresent(graph -> {
-                    for (ResourceKey resource : graph.allProducibleResources()) {
+                    for (ComponentStackKey resource : graph.allProducibleResources()) {
                         for (CompiledRecipe recipe : graph.producersOf(resource)) {
                             MachineRequirement requirement = recipe.machineRequirement();
-                            machines.addAll(requirement.compatibleMachineIds());
+                            machines.addAll(requirement.compatibleMachines());
                         }
                     }
                 });
-                machines.forEach(machine -> options.add(new Choice(machine, machine, machine)));
+                machines.forEach(
+                    machine -> options.add(new Choice(machine.canonicalKey(), machine.canonicalKey(), machine))
+                );
             }
-            case system -> host().systemIds().forEach(system -> options.add(new Choice(system, system, system)));
+            case system -> host().systemIds()
+                    .forEach(system -> options.add(new Choice(system.toString(), system.toString(), system)));
             case tag -> {
-                TreeSet<String> tags = new TreeSet<>();
+                TreeSet<TagKey<?>> tags = new TreeSet<>(PlanningTagKeys.comparator);
                 host().graph().ifPresent(graph -> {
-                    for (ResourceKey resource : graph.allProducibleResources()) {
+                    for (ComponentStackKey resource : graph.allProducibleResources()) {
                         for (CompiledRecipe recipe : graph.producersOf(resource)) {
                             for (InputSlot slot : recipe.inputs()) {
-                                slot.tagId().ifPresent(tags::add);
+                                slot.tagKey().ifPresent(tags::add);
                             }
                         }
                     }
                 });
-                tags.forEach(tag -> options.add(new Choice(tag, tag, tag)));
+                tags.forEach(tag -> {
+                    String formatted = PlanningTagKeys.format(tag);
+                    options.add(new Choice(formatted, formatted, tag));
+                });
             }
             case mod -> {
                 TreeSet<String> mods = new TreeSet<>();
                 host().graph().ifPresent(graph -> {
-                    for (ResourceKey resource : graph.allProducibleResources()) {
-                        mods.add(resource.resourceId().split(":")[0]);
+                    for (ComponentStackKey resource : graph.allProducibleResources()) {
+                        String ns = resource.namespace();
+                        if (ns != null && !ns.isEmpty()) {
+                            mods.add(ns);
+                        }
                     }
                 });
                 mods.forEach(mod -> options.add(new Choice(mod, mod, mod)));
@@ -399,8 +414,10 @@ public class GuidanceRulesStudioPanel extends FacilitiesAndRulesWorkspace.Panel 
             return null;
         }
         return switch (field.type()) {
-            case resource -> ((ResourceKey) value).shortString();
+            case resource -> ((ComponentStackKey) value).canonicalKey();
             case recipe -> ((CompiledRecipeKey) value).shortString();
+            case machine -> ((MachineEntry) value).canonicalKey();
+            case tag -> PlanningTagKeys.format((TagKey<?>) value);
             default -> String.valueOf(value);
         };
     }

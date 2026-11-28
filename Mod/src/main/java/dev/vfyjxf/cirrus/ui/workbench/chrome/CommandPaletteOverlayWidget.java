@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.chrome;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.cost.ObjectivePreset;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
@@ -8,7 +9,6 @@ import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
 import dev.vfyjxf.cirrus.api.planning.human.ModNamespaceRule;
 import dev.vfyjxf.cirrus.api.planning.human.PinResourceRecipeFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
@@ -135,10 +135,24 @@ public class CommandPaletteOverlayWidget extends Widget implements OreUiTooltipP
             return EventDispatch.consumed;
         });
         onMouseClick((input, clickCount, context1) -> {
-            if (!open || !input.isLeftClick()) {
+            if (!open) {
                 return EventDispatch.pass;
             }
             var local = input.mouseRelative(this);
+            if (input.isRightClick()) {
+                if (local.y() < headerHeight) {
+                    if (!query.isEmpty()) {
+                        setQueryText("");
+                        CirrusUiSound.playClickSound();
+                    }
+                    context1.consume();
+                    return EventDispatch.consumed;
+                }
+                return EventDispatch.pass;
+            }
+            if (!input.isLeftClick()) {
+                return EventDispatch.pass;
+            }
             for (ModeChipHit chip : modeChipHits) {
                 if (chip.rect().contains(local.x(), local.y())) {
                     setQueryText(chip.prefix());
@@ -472,7 +486,7 @@ public class CommandPaletteOverlayWidget extends Widget implements OreUiTooltipP
         };
     }
 
-    public boolean applyTarget(ResourceKey resource, boolean addToBasket) {
+    public boolean applyTarget(ComponentStackKey resource, boolean addToBasket) {
         if (resource == null) {
             return false;
         }
@@ -815,7 +829,7 @@ public class CommandPaletteOverlayWidget extends Widget implements OreUiTooltipP
                 }
                 int tint = categoryTint(palette, item.categoryKey());
                 int textX = pad + 2;
-                ResourceKey iconRes = item.iconResource();
+                ComponentStackKey iconRes = item.iconResource();
                 if (iconRes != null) {
                     ChromeButtons.drawMiniItem(canvas, iconRes, palette, textX, y + 2, 11);
                     textX += 15;
@@ -913,7 +927,7 @@ public class CommandPaletteOverlayWidget extends Widget implements OreUiTooltipP
         int px = x + 8;
         int pw = w - 16;
         int py = y + 7;
-        ResourceKey res = item.iconResource();
+        ComponentStackKey res = item.iconResource();
         if (res == null && item.primaryAction() instanceof PaletteAction.SetTarget setTarget) {
             res = setTarget.resource();
         } else if (res == null && item.primaryAction() instanceof PaletteAction.AddToBasket addBasket) {
@@ -978,7 +992,7 @@ public class CommandPaletteOverlayWidget extends Widget implements OreUiTooltipP
     private void renderResourcePreview(
         SceneCanvas canvas,
         CirrusPalette palette,
-        ResourceKey resource,
+        ComponentStackKey resource,
         int x,
         int y,
         int w,
@@ -997,7 +1011,7 @@ public class CommandPaletteOverlayWidget extends Widget implements OreUiTooltipP
         );
         ChromeText.drawFitted(
             canvas,
-            Component.literal(resource.resourceId()),
+            Component.literal(resource.displayId()),
             x + 28,
             y + 12,
             Math.max(20, w - 30),
@@ -1067,10 +1081,10 @@ public class CommandPaletteOverlayWidget extends Widget implements OreUiTooltipP
             Rect card = new Rect(x, cy, w, cardH);
             boolean cardHover = card.contains(mouseX, mouseY);
             OreUiPaint.raisedCard(canvas, card.x(), card.y(), card.width(), card.height(), palette, cardHover, false);
-            String machine = recipe.machineRequirement().compatibleMachineIds().isEmpty()
+            String machine = recipe.machineRequirement().compatibleMachines().isEmpty()
                     ? "Hand Craft"
                     : StepNodeCardRenderer
-                            .machineNameOf(recipe.machineRequirement().compatibleMachineIds().get(0), null).getString();
+                            .machineNameOf(recipe.machineRequirement().compatibleMachines().get(0), null).getString();
             Component pinText = Component.literal("Pin");
             int pinW = ChromeText.width(canvas, pinText) + 10;
             Rect pinBtn = new Rect(card.right() - pinW - 4, card.y() + 3, pinW, 13);

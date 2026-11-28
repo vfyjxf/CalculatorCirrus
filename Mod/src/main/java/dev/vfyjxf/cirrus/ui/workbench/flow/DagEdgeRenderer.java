@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchFormatters;
@@ -345,13 +345,13 @@ public final class DagEdgeRenderer {
         };
     }
 
-    public static int resourceConduitColor(@Nullable ResourceKey resource, CirrusPalette palette) {
+    public static int resourceConduitColor(@Nullable ComponentStackKey resource, CirrusPalette palette) {
         if (resource == null) {
             return palette.edgeMaterial();
         }
         int[] hues = {palette.craftStep().accent(), palette.acquireStep().accent(), palette.costH(), palette.costC(),
                 palette.ruleHardBan(), palette.convertStep().accent()};
-        String id = resource.resourceId().toLowerCase(Locale.ROOT);
+        String id = resource.displayId().toLowerCase(Locale.ROOT);
         if (id.contains("coal") || id.contains("charcoal") || id.contains("gold") || id.contains("blaze")) {
             return hues[2];
         }

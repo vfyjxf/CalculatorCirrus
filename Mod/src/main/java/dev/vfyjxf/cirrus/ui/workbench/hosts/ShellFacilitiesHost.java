@@ -11,6 +11,7 @@ import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cirrus.planning.bridge.WorldFacilityRegistry;
 import dev.vfyjxf.cirrus.ui.workbench.facilities.FacilitiesHost;
 import dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchUiSnapshot;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
@@ -90,7 +91,7 @@ public final class ShellFacilitiesHost implements FacilitiesHost {
     }
 
     @Override
-    public List<String> systemIds() {
+    public List<Namespace> systemIds() {
         return delegate.systemIds();
     }
 

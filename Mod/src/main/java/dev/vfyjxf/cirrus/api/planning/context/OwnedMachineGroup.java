@@ -1,11 +1,12 @@
 package dev.vfyjxf.cirrus.api.planning.context;
 
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 
 import java.util.Objects;
 
 public record OwnedMachineGroup(
-    String machineId,
+    MachineEntry machine,
     MachineCapabilityId capability,
     int count,
     double passiveSpeedMultiplier,
@@ -13,10 +14,10 @@ public record OwnedMachineGroup(
 ) {
 
     public OwnedMachineGroup {
-        Objects.requireNonNull(machineId, "machineId");
+        Objects.requireNonNull(machine, "machine");
         Objects.requireNonNull(capability, "capability");
-        if (machineId.isEmpty()) {
-            throw new IllegalArgumentException("machineId must not be empty");
+        if (machine.isEmpty()) {
+            throw new IllegalArgumentException("machine must not be empty");
         }
         if (count < 0) {
             throw new IllegalArgumentException("count must be >= 0, got " + count);

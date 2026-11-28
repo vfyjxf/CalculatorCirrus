@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.ui.workbench.layout;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ByproductEntry;
@@ -10,6 +10,7 @@ import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PreparationSummary;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -28,7 +29,7 @@ public record PreparationLedgerModel(
     List<AcquireRow> stockConsumedRows,
     List<MachinePrepRow> machinesToProvision,
     Set<String> automatedLinesUsed,
-    Set<ResourceKey> catalystsRequired,
+    Set<ComponentStackKey> catalystsRequired,
     List<ByproductEntry> surplusByproducts,
     double stockCoverageRatio
 ) {
@@ -38,7 +39,7 @@ public record PreparationLedgerModel(
     }
 
     public record AcquireRow(
-        ResourceKey resource,
+        ComponentStackKey resource,
         long neededAmount,
         long availableStock,
         long reservedStock,
@@ -61,10 +62,10 @@ public record PreparationLedgerModel(
         }
     }
 
-    public record MachinePrepRow(String machineId, int countToBuild, List<String> stepIds) {
+    public record MachinePrepRow(MachineEntry machine, int countToBuild, List<String> stepIds) {
 
         public MachinePrepRow {
-            Objects.requireNonNull(machineId, "machineId");
+            Objects.requireNonNull(machine, "machine");
             Objects.requireNonNull(stepIds, "stepIds");
             stepIds = List.copyOf(stepIds);
         }
@@ -101,7 +102,7 @@ public record PreparationLedgerModel(
         }
         InventorySnapshot snapshot = inventory == null ? InventorySnapshot.empty : inventory;
         PreparationSummary preparation = plan.preparation();
-        Map<ResourceKey, Double> resourceCost = resourceCosts(plan.steps());
+        Map<ComponentStackKey, Double> resourceCost = resourceCosts(plan.steps());
         double totalCost = 0.0;
         for (double value : resourceCost.values()) {
             totalCost += value;
@@ -144,10 +145,10 @@ public record PreparationLedgerModel(
         );
     }
 
-    private static Map<ResourceKey, Double> resourceCosts(List<PlanStep> steps) {
-        Map<ResourceKey, Double> costs = new TreeMap<>();
+    private static Map<ComponentStackKey, Double> resourceCosts(List<PlanStep> steps) {
+        Map<ComponentStackKey, Double> costs = new TreeMap<>();
         for (PlanStep step : steps) {
-            ResourceKey resource = referencedResource(step);
+            ComponentStackKey resource = referencedResource(step);
             if (resource == null) {
                 continue;
             }
@@ -158,7 +159,7 @@ public record PreparationLedgerModel(
     }
 
     @Nullable
-    private static ResourceKey referencedResource(PlanStep step) {
+    private static ComponentStackKey referencedResource(PlanStep step) {
         return switch (step) {
             case AcquireStep acquire -> acquire.resource();
             case LinePullStep pull -> pull.resource();
@@ -170,12 +171,12 @@ public record PreparationLedgerModel(
         StockLedger ledger,
         InventorySnapshot snapshot,
         List<PlanStep> steps,
-        Map<ResourceKey, Double> resourceCost,
+        Map<ComponentStackKey, Double> resourceCost,
         double totalCost
     ) {
         List<AcquireRow> rows = new ArrayList<>(ledger.entries().size());
         for (var entry : ledger.entries().entrySet()) {
-            ResourceKey resource = entry.getKey();
+            ComponentStackKey resource = entry.getKey();
             double cost = resourceCost.getOrDefault(resource, 0.0);
             double share = totalCost <= 0.0 ? 0.0 : Math.max(0.0, Math.min(1.0, cost / totalCost));
             rows.add(
@@ -192,7 +193,7 @@ public record PreparationLedgerModel(
         return rows;
     }
 
-    private static List<String> stepIdsFor(List<PlanStep> steps, ResourceKey resource) {
+    private static List<String> stepIdsFor(List<PlanStep> steps, ComponentStackKey resource) {
         TreeSet<String> ids = new TreeSet<>();
         for (PlanStep step : steps) {
             if (resource.equals(referencedResource(step))) {
@@ -207,7 +208,7 @@ public record PreparationLedgerModel(
         for (var entry : preparation.machinesToProvision().entrySet()) {
             TreeSet<String> ids = new TreeSet<>();
             for (PlanStep step : steps) {
-                if (step instanceof ProvisionMachineStep provision && entry.getKey().equals(provision.machineId())) {
+                if (step instanceof ProvisionMachineStep provision && entry.getKey().equals(provision.machine())) {
                     ids.add(provision.stepId());
                 }
             }
@@ -225,7 +226,7 @@ public record PreparationLedgerModel(
         String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
         List<AcquireRow> filtered = new ArrayList<>(rows.size());
         for (AcquireRow row : rows) {
-            if (needle.isEmpty() || row.resource().shortString().toLowerCase(Locale.ROOT).contains(needle)) {
+            if (needle.isEmpty() || row.resource().displayId().toLowerCase(Locale.ROOT).contains(needle)) {
                 filtered.add(row);
             }
         }
@@ -246,8 +247,8 @@ public record PreparationLedgerModel(
             case missingFirst -> Comparator.comparingLong(AcquireRow::shortfall).reversed();
             case availableFirst -> Comparator.comparingLong(AcquireRow::usableStock).reversed();
             case amount -> Comparator.comparingLong(AcquireRow::neededAmount);
-            case name -> Comparator.comparing((AcquireRow row) -> row.resource().shortString());
-            case id -> Comparator.comparing((AcquireRow row) -> row.resource().resourceId());
+            case name -> Comparator.comparing((AcquireRow row) -> row.resource().displayId());
+            case id -> Comparator.comparing(AcquireRow::resource);
         };
     }
 

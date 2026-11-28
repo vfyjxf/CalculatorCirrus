@@ -5,6 +5,8 @@ import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.VerificationCertificate;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
+import dev.vfyjxf.cirrus.ui.CirrusScroll;
+import dev.vfyjxf.cirrus.ui.CirrusThemeTextures;
 import dev.vfyjxf.cirrus.ui.CirrusUiSound;
 import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchFormatters;
@@ -28,9 +30,12 @@ import dev.vfyjxf.cloudlib.api.ui.drag.DragConsumer;
 import dev.vfyjxf.cloudlib.api.ui.drag.DragContext;
 import dev.vfyjxf.cloudlib.api.ui.drag.DragProvider;
 import dev.vfyjxf.cloudlib.api.ui.drag.DraggableElement;
+import dev.vfyjxf.cloudlib.api.ui.effect.UIEffects;
+import dev.vfyjxf.cloudlib.api.ui.scroll.ScrollState;
 import dev.vfyjxf.cloudlib.api.ui.style.Styles;
 import dev.vfyjxf.cloudlib.api.ui.texture.VisualTexture;
 import dev.vfyjxf.cloudlib.ui.widget.InfoBarWidget;
+import dev.vfyjxf.taffy.style.TaffyDimension;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
@@ -52,8 +57,10 @@ import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.insetTop;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minHeight;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minWidth;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.padding;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.paddingRight;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.positionAbsolute;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeStretch;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.widthOf;
 
 /**
  * Left Pareto plan dock: card/scatter dual state, OreUI plan cards, five-axis relative bars and a drag compare slot.
@@ -80,7 +87,7 @@ public class LeftPlanDockWidget extends WidgetGroup<Widget> {
     public LeftPlanDockWidget(CoPilotHost host) {
         this.host = Objects.requireNonNull(host, "host");
         addStyleClass("workbench-dock");
-        useStyle(flexColumn(), gap(2), padding(3), sizeStretch());
+        useStyle(flexColumn(), gap(2), padding(3), sizeStretch(), minWidth(0), minHeight(0));
 
         this.header = new ModeHeader(host, this::setMode, () -> {
             if (onCollapse != null) {
@@ -91,7 +98,7 @@ public class LeftPlanDockWidget extends WidgetGroup<Widget> {
         addWidget(header);
 
         this.cardList = new PlanCardList();
-        cardList.useStyle(flexColumn(), flexGrow(1), gap(2), flexShrink(1));
+        cardList.useStyle(flexColumn(), flexGrow(1), flexShrink(1), gap(2), minWidth(0), minHeight(0));
         addWidget(cardList);
 
         this.scatter = new ParetoScatterPlotWidget(host);
@@ -370,11 +377,29 @@ public class LeftPlanDockWidget extends WidgetGroup<Widget> {
     public final class PlanCardList extends WidgetGroup<Widget> {
 
         private final WidgetGroup<Widget> cardsBox;
+        private final ScrollState cardsScrollState;
         private final CompareSlot compareSlot;
 
         PlanCardList() {
             this.cardsBox = new WidgetGroup<>();
-            cardsBox.useStyle(flexColumn(), flexGrow(1), gap(2), minHeight(0));
+            CirrusThemeTextures initialTextures = CirrusUiTheme.textures(LeftPlanDockWidget.this);
+            this.cardsScrollState = CirrusScroll.longVerticalState(14).smooth(true).smoothSpeed(0.35f)
+                    .trackTexture(initialTextures.scrollTrack()).thumbTexture(initialTextures.scrollThumb())
+                    .scrollbarWidth(5).minThumbSize(14).viewportInset(0, 0, 0, 0);
+            cardsBox.useEffect(UIEffects.scrollable(cardsScrollState));
+            cardsBox.useStyle(
+                flexColumn(),
+                flexGrow(1),
+                flexShrink(1),
+                minWidth(0),
+                minHeight(0),
+                gap(2),
+                paddingRight(6)
+            );
+            cardsBox.onMount((scene, context, handle) -> CirrusUiTheme.bindThemeListener(cardsBox, handle, () -> {
+                CirrusThemeTextures textures = CirrusUiTheme.textures(cardsBox);
+                cardsScrollState.trackTexture(textures.scrollTrack()).thumbTexture(textures.scrollThumb());
+            }));
             addWidget(cardsBox);
             this.compareSlot = new CompareSlot();
             compareSlot.useStyle(heightOf(compareSlotHeight), flexShrink(0));
@@ -392,10 +417,26 @@ public class LeftPlanDockWidget extends WidgetGroup<Widget> {
                 int index = 0;
                 for (ProductionPlan plan : snapshot.result().paretoPlans()) {
                     PlanCard card = new PlanCard(plan, index++);
-                    card.useStyle(heightOf(cardHeight), flexShrink(0));
+                    card.useStyle(
+                        widthOf(TaffyDimension.percent(1f)),
+                        minWidth(0),
+                        heightOf(cardHeight),
+                        flexShrink(0)
+                    );
                     cardsBox.addWidget(card);
                 }
             }
+            if (cardsBox.children().isEmpty()) {
+                cardsScrollState.jumpTo(0f, 0f);
+            }
+        }
+
+        public ScrollState scrollState() {
+            return cardsScrollState;
+        }
+
+        public WidgetGroup<Widget> cardsBox() {
+            return cardsBox;
         }
 
         public CompareSlot compareSlot() {
@@ -472,7 +513,12 @@ public class LeftPlanDockWidget extends WidgetGroup<Widget> {
                 if (local.y() >= footerY && local.x() >= width() - 24) {
                     expanded = !expanded;
                     expandStartedAtMs = expanded ? OreUiMotion.nowMs() : 0L;
-                    useStyle(heightOf(cardHeight + (expanded ? expandedExtraHeight : 0)), flexShrink(0));
+                    useStyle(
+                        widthOf(TaffyDimension.percent(1f)),
+                        minWidth(0),
+                        heightOf(cardHeight + (expanded ? expandedExtraHeight : 0)),
+                        flexShrink(0)
+                    );
                     CirrusUiSound.playClickSound();
                     context.consume();
                     return EventDispatch.consumed;

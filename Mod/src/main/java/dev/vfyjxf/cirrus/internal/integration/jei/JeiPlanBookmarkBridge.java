@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.internal.integration.jei;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningBudget;
@@ -7,7 +8,6 @@ import dev.vfyjxf.cirrus.api.planning.context.PlanningContext;
 import dev.vfyjxf.cirrus.api.planning.cost.PlanningProfile;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -18,9 +18,9 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningService;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.content.type.FluidStackType;
-import dev.vfyjxf.cirrus.planning.bridge.CirrusContentBridge;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cirrus.planning.bridge.PlanningContextFactory;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cirrus.recipe.execution.ExecutionQueueStore;
 import dev.vfyjxf.cirrus.ui.execution.overlay.ExecutionOverlayOpenState;
 import dev.vfyjxf.cirrus.ui.widget.calculator.CalculatorScreen;
@@ -117,15 +117,15 @@ public final class JeiPlanBookmarkBridge {
         }
     }
 
-    public static void showRecipesFor(@Nullable ResourceKey resource) {
+    public static void showRecipesFor(@Nullable ComponentStackKey resource) {
         showRoleFor(resource, RecipeIngredientRole.OUTPUT);
     }
 
-    public static void showUsesFor(@Nullable ResourceKey resource) {
+    public static void showUsesFor(@Nullable ComponentStackKey resource) {
         showRoleFor(resource, RecipeIngredientRole.INPUT);
     }
 
-    private static void showRoleFor(@Nullable ResourceKey resource, RecipeIngredientRole role) {
+    private static void showRoleFor(@Nullable ComponentStackKey resource, RecipeIngredientRole role) {
         if (resource == null) {
             return;
         }
@@ -258,13 +258,7 @@ public final class JeiPlanBookmarkBridge {
         List<TargetDemand> targets = List.of(new TargetDemand(entry.primaryResource(), scaledAmount));
         PlanningContext rawCtx = factory.createContext(mc == null ? null : mc.player, null, runtime.guidanceStore());
         InventorySnapshot filteredInv = PlanningContextFactory.excludeTargetStock(rawCtx.inventory(), targets);
-        PlanningContext ctx = new PlanningContext(
-            filteredInv,
-            rawCtx.facilities(),
-            rawCtx.acquisitionOracle(),
-            rawCtx.guidance(),
-            rawCtx.progression()
-        );
+        PlanningContext ctx = rawCtx.withInventory(filteredInv);
         PlanningRequest request = new PlanningRequest(
             targets,
             ctx,
@@ -291,13 +285,13 @@ public final class JeiPlanBookmarkBridge {
         return plan.planId();
     }
 
-    static @Nullable ContentStack<?, ?> resolveDisplayContent(@Nullable ResourceKey resource) {
+    static @Nullable ContentStack<?, ?> resolveDisplayContent(@Nullable ComponentStackKey resource) {
         if (resource == null) {
             return null;
         }
         try {
-            ContentStack<?, ?> content = CirrusContentBridge.toBestEffortContentStack(resource, 1L).orElse(null);
-            if (content != null && !content.isEmpty()) {
+            ContentStack<?, ?> content = resource.toStack(1L);
+            if (!content.isEmpty()) {
                 return content;
             }
         } catch (RuntimeException | LinkageError ignored) {
@@ -306,7 +300,7 @@ public final class JeiPlanBookmarkBridge {
         return null;
     }
 
-    static ItemStack resolveDisplayStack(ResourceKey resource) {
+    static ItemStack resolveDisplayStack(ComponentStackKey resource) {
         ContentStack<?, ?> content = resolveDisplayContent(resource);
         if (content != null && content.value() instanceof ItemStack itemStack) {
             ItemStack copy = itemStack.copy();
@@ -316,7 +310,7 @@ public final class JeiPlanBookmarkBridge {
         return new ItemStack(Items.CRAFTING_TABLE);
     }
 
-    static PlanFlowViewModel.ResourceUnitSpec resolveUnitSpec(@Nullable ResourceKey resource) {
+    static PlanFlowViewModel.ResourceUnitSpec resolveUnitSpec(@Nullable ComponentStackKey resource) {
         if (resource == null) {
             return PlanFlowViewModel.ResourceUnitSpec.plain;
         }
@@ -347,11 +341,11 @@ public final class JeiPlanBookmarkBridge {
         return PlanFlowViewModel.ResourceUnitSpec.defaultItem;
     }
 
-    private static boolean isFluidContentType(@Nullable String contentTypeId) {
+    private static boolean isFluidContentType(@Nullable Namespace contentTypeId) {
         if (contentTypeId == null) {
             return false;
         }
-        return contentTypeId.contains("fluid");
+        return Namespace.ofMc("fluid").equals(contentTypeId) || contentTypeId.path().contains("fluid");
     }
 
     private static long safeScale(long base, int mult) {

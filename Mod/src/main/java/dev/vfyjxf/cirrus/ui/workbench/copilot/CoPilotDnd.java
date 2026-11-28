@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.copilot;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.human.ApplyRulesFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.DeclareOwnedMachineFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
@@ -8,13 +9,13 @@ import dev.vfyjxf.cirrus.api.planning.human.OverrideStockFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.PinResourceRecipeFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.workbench.state.DragPayload;
 import dev.vfyjxf.cloudlib.api.math.FloatPos;
@@ -135,7 +136,7 @@ public final class CoPilotDnd {
         DragPayload.ResourceDrag drag,
         DropContext context
     ) {
-        ResourceKey resource = drag.resource();
+        ComponentStackKey resource = drag.resource();
         long amount = Math.max(1L, drag.suggestedAmount());
         return switch (target) {
             case canvasBlank -> {
@@ -150,7 +151,7 @@ public final class CoPilotDnd {
             }
             case acquireStep -> {
                 AcquireStep step = acquireStep(host, context.targetStepId());
-                if (step == null || !step.resource().sameBaseIdentity(resource)) {
+                if (step == null || !step.resource().sameContent(resource)) {
                     yield DropOutcome.rejected();
                 }
                 host.refine(new OverrideStockFeedback(resource, amount), null);
@@ -164,7 +165,6 @@ public final class CoPilotDnd {
                     ),
                     null
                 );
-                host.toast(CirrusLangs.Workbench.Dnd.dropFreeSource);
                 yield DropOutcome.accepted(CirrusLangs.Workbench.Dnd.dropFreeSource);
             }
             case banSlot -> {
@@ -175,7 +175,6 @@ public final class CoPilotDnd {
                     ),
                     null
                 );
-                host.toast(CirrusLangs.Workbench.Dnd.dropBanResource);
                 yield DropOutcome.accepted(CirrusLangs.Workbench.Dnd.dropBanResource);
             }
             default -> DropOutcome.rejected();
@@ -193,8 +192,7 @@ public final class CoPilotDnd {
         }
         int count = Math.max(1, drag.suggestedCount());
         if (target == DropTarget.freeSourceSlot) {
-            host.refine(new DeclareOwnedMachineFeedback(drag.machineId(), count, context.persistToWorld()), null);
-            host.toast(CirrusLangs.Workbench.Dnd.dropOwnMachine);
+            host.refine(new DeclareOwnedMachineFeedback(drag.machine(), count, context.persistToWorld()), null);
             return DropOutcome.accepted(CirrusLangs.Workbench.Dnd.dropOwnMachine);
         }
         if (target == DropTarget.banSlot) {
@@ -202,10 +200,10 @@ public final class CoPilotDnd {
                 new ApplyRulesFeedback(
                     List.of(
                         new MachineRule(
-                            ruleId("ban_machine", drag.machineId()),
+                            ruleId("ban_machine", drag.machine()),
                             scopeFor(context.persistToWorld()),
                             RuleStrength.hardBan,
-                            drag.machineId(),
+                            drag.machine(),
                             false
                         )
                     ),
@@ -213,24 +211,23 @@ public final class CoPilotDnd {
                 ),
                 null
             );
-            host.toast(CirrusLangs.Workbench.Dnd.dropBanResource);
             return DropOutcome.accepted(CirrusLangs.Workbench.Dnd.dropBanResource);
         }
         boolean matches = switch (target) {
             case provisionStep -> {
                 ProvisionMachineStep step = provisionStep(host, context.targetStepId());
-                yield step != null && step.machineId().equals(drag.machineId());
+                yield step != null && step.machine().equals(drag.machine());
             }
             case craftStep -> {
                 CraftStep step = craftStep(host, context.targetStepId());
-                yield step != null && step.chosenMachineId().map(drag.machineId()::equals).orElse(false);
+                yield step != null && step.chosenMachine().map(drag.machine()::equals).orElse(false);
             }
             default -> false;
         };
         if (!matches) {
             return DropOutcome.rejected();
         }
-        host.refine(new DeclareOwnedMachineFeedback(drag.machineId(), count, context.persistToWorld()), null);
+        host.refine(new DeclareOwnedMachineFeedback(drag.machine(), count, context.persistToWorld()), null);
         return DropOutcome.accepted(CirrusLangs.Workbench.Dnd.dropOwnMachine);
     }
 
@@ -250,7 +247,7 @@ public final class CoPilotDnd {
             }
             case acquireStep -> {
                 AcquireStep step = acquireStep(host, context.targetStepId());
-                yield step != null && step.resource().sameBaseIdentity(drag.outputResource());
+                yield step != null && step.resource().sameContent(drag.outputResource());
             }
             default -> false;
         };
@@ -296,7 +293,7 @@ public final class CoPilotDnd {
         return persistToWorld ? GuidanceScope.worldSave : GuidanceScope.session;
     }
 
-    public static ResourceRule freeSourceRule(ResourceKey resource, boolean persistToWorld) {
+    public static ResourceRule freeSourceRule(ComponentStackKey resource, boolean persistToWorld) {
         return new ResourceRule(
             ruleId("free", resource),
             scopeFor(persistToWorld),
@@ -306,7 +303,7 @@ public final class CoPilotDnd {
         );
     }
 
-    public static ResourceRule banRule(ResourceKey resource, boolean persistToWorld) {
+    public static ResourceRule banRule(ComponentStackKey resource, boolean persistToWorld) {
         return new ResourceRule(
             ruleId("ban", resource),
             scopeFor(persistToWorld),
@@ -316,13 +313,14 @@ public final class CoPilotDnd {
         );
     }
 
-    public static String ruleId(String kind, ResourceKey resource) {
+    public static String ruleId(String kind, ComponentStackKey resource) {
         Objects.requireNonNull(resource, "resource");
-        String subject = (resource.contentTypeId() + "_" + resource.resourceId());
-        if (resource.canonicalVariantHash().isPresent()) {
-            subject = subject + "_" + resource.canonicalVariantHash().get();
-        }
-        return ruleId(kind, subject);
+        return ruleId(kind, resource.canonicalKey());
+    }
+
+    public static String ruleId(String kind, MachineEntry machine) {
+        Objects.requireNonNull(machine, "machine");
+        return ruleId(kind, machine.canonicalKey());
     }
 
     public static String ruleId(String kind, String subject) {

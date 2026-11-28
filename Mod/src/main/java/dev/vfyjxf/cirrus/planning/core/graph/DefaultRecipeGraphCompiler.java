@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning.core.graph;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledCycleMacro;
 import dev.vfyjxf.cirrus.api.planning.graph.GraphCompilationStats;
 import dev.vfyjxf.cirrus.api.planning.graph.RawIngredientSlot;
@@ -13,13 +14,18 @@ import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
 import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmissionPolicy;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.model.PlanningTagKeys;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.planning.tag.CanonicalRecipeTag;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeEvidenceTier;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeSemanticKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
 import dev.vfyjxf.cirrus.planning.core.lang.Fnv1a64;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -59,13 +65,13 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         int excludedNoInputs = 0;
         int[] normalizedIds = new int[1];
 
-        Map<String, SystemAdmission> admissionCache = new HashMap<>();
+        Map<Namespace, SystemAdmission> admissionCache = new HashMap<>();
         ResourceDictionary.Builder dictBuilder = new ResourceDictionary.Builder();
-        IdentityHashMap<List<ResourceKey>, int[]> rawCandListCache = new IdentityHashMap<>(2048);
+        IdentityHashMap<List<ComponentStackKey>, int[]> rawCandListCache = new IdentityHashMap<>(2048);
         List<StageRecord> staged = new ArrayList<>(totalRaw);
 
         for (RawRecipeRecord raw : rawCatalog.recipes()) {
-            if (raw == null || raw.systemId().isEmpty()) {
+            if (raw == null) {
                 excludedInvalid++;
                 continue;
             }
@@ -138,7 +144,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                     insane = true;
                     break;
                 }
-                List<ResourceKey> rawCands = in.candidates();
+                List<ComponentStackKey> rawCands = in.candidates();
                 int[] candTempIds = rawCandListCache.get(rawCands);
                 if (candTempIds == null) {
                     int[] buf = new int[rawCands.size()];
@@ -172,7 +178,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                     parsedCats.add(new TempCat(candTempIds, in.durabilityCostPerBatch(), in.maxDurability()));
                     continue;
                 }
-                parsedInputs.add(new TempInput(in.tagId().orElse(null), candTempIds, in.amount(), in.matchMode()));
+                parsedInputs.add(new TempInput(in.tag().orElse(null), candTempIds, in.amount(), in.matchMode()));
             }
             if (insane) {
                 excludedInsane++;
@@ -185,13 +191,17 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
 
             RecipeAdvisory baseAdvisory = policy.advisoryOf(raw);
             MachineCapabilityId cap = policy.capabilityOf(raw.systemId());
-            List<String> orderedMachines = policy.orderMachinesForCapability(raw.systemId(), raw.machineIds());
+            List<MachineEntry> orderedMachines = policy.orderMachinesForCapability(raw.systemId(), raw.machines());
             boolean hand = MachineCapabilityGroups
                     .isHandCraftable(raw.systemId(), raw.systemTags(), orderedMachines, parsedInputs.size());
-            String explicitId = raw.explicitId().filter(s -> !s.isEmpty()).orElse(null);
+            @Nullable ResourceLocation explicitId = raw.explicitId().orElse(null);
 
             // JEI cycling-output display slots (>= 4 distinct outputs) represent alternatives, not co-production.
-            if ("jei".equalsIgnoreCase(raw.sourceKind()) && mergedOuts.size() >= jeiMultiOutputSplitThreshold) {
+            boolean isJeiSource = raw.systemTags().contains(RecipeSystemTags.jeiFallback)
+                    || "jei".equalsIgnoreCase(raw.sourceKind())
+                    || "jei_fallback".equalsIgnoreCase(raw.sourceKind())
+                    || "jei".equals(raw.systemId().namespace());
+            if (isJeiSource && mergedOuts.size() >= jeiMultiOutputSplitThreshold) {
                 RecipeAdvisory splitAdv = RecipeAdvisory.max(baseAdvisory, RecipeAdvisory.discouraged);
                 for (var outEntry : mergedOuts.entrySet()) {
                     LinkedHashMap<Integer, Long> singleOut = new LinkedHashMap<>(2);
@@ -247,14 +257,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
             }
         }
 
-        // Normalize unresolvedOutputs into canonical dictionary too.
-        Set<ResourceKey> normalizedUnresolved = new TreeSet<>();
-        for (ResourceKey u : rawCatalog.unresolvedOutputs()) {
-            ResourceKey norm = ResourceDictionary.normalizeOrNull(u, null);
-            if (norm != null) {
-                normalizedUnresolved.add(norm);
-            }
-        }
+        Set<ComponentStackKey> normalizedUnresolved = new TreeSet<>(rawCatalog.unresolvedOutputs());
 
         // Freeze ResourceDictionary -> canonical dense int IDs 0..R-1.
         ResourceDictionary.Built builtDict = dictBuilder.freeze();
@@ -280,7 +283,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
 
         List<CanonicalRecord> deduped = new ArrayList<>(canonicalRecords.size());
         int deduplicated = 0;
-        Map<String, Map<Long, List<CanonicalRecord>>> hashBucketsBySystem = new HashMap<>();
+        Map<Namespace, Map<Long, List<CanonicalRecord>>> hashBucketsBySystem = new HashMap<>();
 
         for (CanonicalRecord cr : canonicalRecords) {
             Map<Long, List<CanonicalRecord>> byHash = hashBucketsBySystem
@@ -347,11 +350,11 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         boolean[] handCraftable = new boolean[n];
         MachineCapabilityId[] capabilities = new MachineCapabilityId[n];
         @SuppressWarnings("unchecked")
-        List<String>[] compatMachines = (List<String>[]) new List<?>[n];
+        List<MachineEntry>[] compatMachines = (List<MachineEntry>[]) new List<?>[n];
         @SuppressWarnings("unchecked")
-        Map<String, Double>[] recipeValues = (Map<String, Double>[]) new Map<?, ?>[n];
+        Map<Namespace, Double>[] recipeValues = (Map<Namespace, Double>[]) new Map<?, ?>[n];
         @SuppressWarnings("unchecked")
-        Set<String>[] systemTags = (Set<String>[]) new Set<?>[n];
+        Set<Namespace>[] systemTags = (Set<Namespace>[]) new Set<?>[n];
         @SuppressWarnings("unchecked")
         Set<CanonicalRecipeTag>[] canonicalTags = (Set<CanonicalRecipeTag>[]) new Set<?>[n];
         RecipeEvidenceTier[] evidenceTiers = new RecipeEvidenceTier[n];
@@ -370,7 +373,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         int[] inCandList = new int[totalIn];
         long[] inAmount = new long[totalIn];
         byte[] inMatchMode = new byte[totalIn];
-        String[] inTagId = new String[totalIn];
+        @Nullable TagKey<?>[] inTag = new TagKey<?>[totalIn];
 
         int[] catStart = new int[n + 1];
         int[] catSlotIndex = new int[totalCat];
@@ -407,7 +410,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                 inCandList[inCur] = cr.inCandList[i];
                 inAmount[inCur] = cr.inAmount[i];
                 inMatchMode[inCur] = cr.inMatchMode[i];
-                inTagId[inCur] = cr.inTagId[i];
+                inTag[inCur] = cr.inTag[i];
                 inCur++;
             }
 
@@ -575,7 +578,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
             inStart,
             inCandList,
             inAmount,
-            inTagId,
+            inTag,
             outStart,
             outRes,
             outAmount
@@ -635,7 +638,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
             inCandList,
             inAmount,
             inMatchMode,
-            inTagId,
+            inTag,
             catStart,
             catSlotIndex,
             catCandList,
@@ -676,15 +679,15 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
     }
 
     private static @Nullable StageRecord buildStageRecord(
-        String systemId,
-        @Nullable String explicitId,
+        Namespace systemId,
+        @Nullable ResourceLocation explicitId,
         long sourceRef,
         RecipeAdvisory advisory,
         MachineCapabilityId cap,
-        List<String> orderedMachines,
+        List<MachineEntry> orderedMachines,
         boolean handCraftable,
-        Map<String, Double> recipeValues,
-        Set<String> systemTags,
+        Map<Namespace, Double> recipeValues,
+        Set<Namespace> systemTags,
         Set<CanonicalRecipeTag> canonicalTags,
         RecipeEvidenceTier evidenceTier,
         double structuralFidelity,
@@ -697,7 +700,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         LinkedHashMap<Integer, Long> singleInAmounts = new LinkedHashMap<>();
         List<TempInput> workingInputs = new ArrayList<>(rawInputs.size());
         for (TempInput ti : rawInputs) {
-            if (ti.cands.length == 1 && ti.tagId == null) {
+            if (ti.cands.length == 1 && ti.tag == null) {
                 int c = ti.cands[0];
                 singleInAmounts.merge(c, ti.amount, SafeMath::addSaturating);
             }
@@ -711,7 +714,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         List<TempInput> finalInputs = new ArrayList<>(workingInputs.size());
 
         for (TempInput ti : workingInputs) {
-            if (ti.cands.length == 1 && ti.tagId == null && outsAfter.containsKey(ti.cands[0])) {
+            if (ti.cands.length == 1 && ti.tag == null && outsAfter.containsKey(ti.cands[0])) {
                 int resTempId = ti.cands[0];
                 if (!handledSingles.add(resTempId)) {
                     continue;
@@ -799,29 +802,29 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         int[] inCandList;
         long[] inAmount;
         byte[] inMatchMode;
-        String[] inTagId;
+        @Nullable TagKey<?>[] inTag;
         int inCount;
         if (rawInCount == 0) {
             inCount = 0;
             inCandList = new int[0];
             inAmount = new long[0];
             inMatchMode = new byte[0];
-            inTagId = new String[0];
+            inTag = new TagKey<?>[0];
         } else if (rawInCount == 1) {
             TempInput ti = sr.inputs.get(0);
             inCount = 1;
             inCandList = new int[]{internTempCand(ti.cands, perm, dict, candBuilder, tempCandToListId)};
             inAmount = new long[]{ti.amount};
             inMatchMode = new byte[]{(byte) ti.matchMode.ordinal()};
-            inTagId = new String[]{ti.tagId};
+            inTag = new TagKey<?>[]{ti.tag};
         } else {
-            // Remap, sort, dedupe, and coalesce inputs with identical (tagId, candList, matchMode).
+            // Remap, sort, dedupe, and coalesce inputs with identical (tag, candList, matchMode).
             Map<InputCoalesceKey, Long> coalescedInputs = new TreeMap<>();
             for (int i = 0; i < rawInCount; i++) {
                 TempInput ti = sr.inputs.get(i);
                 int listId = internTempCand(ti.cands, perm, dict, candBuilder, tempCandToListId);
                 InputCoalesceKey ck = new InputCoalesceKey(
-                    ti.tagId,
+                    ti.tag,
                     listId,
                     ti.matchMode,
                     candBuilder.membersOf(listId)
@@ -832,14 +835,14 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
             inCandList = new int[inCount];
             inAmount = new long[inCount];
             inMatchMode = new byte[inCount];
-            inTagId = new String[inCount];
+            inTag = new TagKey<?>[inCount];
             int idx = 0;
             for (var e : coalescedInputs.entrySet()) {
                 InputCoalesceKey ck = e.getKey();
                 inCandList[idx] = ck.listId;
                 inAmount[idx] = e.getValue();
                 inMatchMode[idx] = (byte) ck.matchMode.ordinal();
-                inTagId[idx] = ck.tagId;
+                inTag[idx] = ck.tag;
                 idx++;
             }
         }
@@ -908,11 +911,11 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         // Streaming FNV-1a 64-bit structural fingerprint using cached per-list hashes.
         long h = Fnv1a64.initial();
         h = Fnv1a64.mixString(h, "SYS:");
-        h = Fnv1a64.mixString(h, sr.systemId);
+        h = Fnv1a64.mixString(h, sr.systemId.toString());
         h = Fnv1a64.mixString(h, "|IN:");
         for (int i = 0; i < inCount; i++) {
             if (i > 0) h = Fnv1a64.mixByte(h, ';');
-            if (inTagId[i] != null) h = Fnv1a64.mixString(h, inTagId[i]);
+            if (inTag[i] != null) h = Fnv1a64.mixString(h, PlanningTagKeys.canonicalString(inTag[i]));
             h = Fnv1a64.mixByte(h, ':');
             h = Fnv1a64.mixLong(h, candBuilder.hash64Of(inCandList[i]));
             h = Fnv1a64.mixByte(h, '*');
@@ -934,11 +937,11 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         }
         h = Fnv1a64.mixString(h, "|MACH:");
         if (sr.capability != null) {
-            h = Fnv1a64.mixString(h, sr.capability.id());
+            h = Fnv1a64.mixString(h, sr.capability.id().toString());
         } else {
             for (int i = 0; i < sr.orderedMachines.size(); i++) {
                 if (i > 0) h = Fnv1a64.mixByte(h, ',');
-                h = Fnv1a64.mixString(h, sr.orderedMachines.get(i));
+                h = Fnv1a64.mixString(h, sr.orderedMachines.get(i).canonicalKey());
             }
         }
 
@@ -962,7 +965,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
             inCandList,
             inAmount,
             inMatchMode,
-            inTagId,
+            inTag,
             catCandList,
             catDurCost,
             catMaxDur,
@@ -993,7 +996,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
 
     private static boolean hasKeyCollision(
         Map<Long, List<CanonicalRecord>> byHash,
-        @Nullable String explicitId,
+        @Nullable ResourceLocation explicitId,
         long hash
     ) {
         List<CanonicalRecord> bucket = byHash.get(hash);
@@ -1019,7 +1022,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         int[] inStart,
         int[] inCandList,
         long[] inAmount,
-        String[] inTagId,
+        @Nullable TagKey<?>[] inTag,
         int[] outStart,
         int[] outRes,
         long[] outAmount
@@ -1124,7 +1127,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
             for (int r : group) {
                 boolean hasTag = false;
                 for (int si = inStart[r]; si < inStart[r + 1]; si++) {
-                    if (inTagId[si] != null) {
+                    if (inTag[si] != null) {
                         hasTag = true;
                         break;
                     }
@@ -1145,7 +1148,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
 
     private static boolean hasSharedSystem(List<Integer> fwd, List<Integer> rev, CompiledRecipeKey[] keys) {
         for (int a : fwd) {
-            String sysA = keys[a].systemId();
+            Namespace sysA = keys[a].systemId();
             for (int b : rev) {
                 if (sysA.equals(keys[b].systemId())) {
                     return true;
@@ -1157,22 +1160,22 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
 
     private record SinglePairKey(int inRes, long inAmt, int outRes, long outAmt) {}
 
-    private record SysOutKey(String systemId, int outRes) {}
+    private record SysOutKey(Namespace systemId, int outRes) {}
 
-    private record TempInput(@Nullable String tagId, int[] cands, long amount, SlotMatchMode matchMode) {}
+    private record TempInput(@Nullable TagKey<?> tag, int[] cands, long amount, SlotMatchMode matchMode) {}
 
     private record TempCat(int[] cands, int durCost, int maxDur) {}
 
     private record StageRecord(
-        String systemId,
-        @Nullable String explicitId,
+        Namespace systemId,
+        @Nullable ResourceLocation explicitId,
         long sourceRef,
         RecipeAdvisory advisory,
         MachineCapabilityId capability,
-        List<String> orderedMachines,
+        List<MachineEntry> orderedMachines,
         boolean handCraftable,
-        Map<String, Double> recipeValues,
-        Set<String> systemTags,
+        Map<Namespace, Double> recipeValues,
+        Set<Namespace> systemTags,
         Set<CanonicalRecipeTag> canonicalTags,
         RecipeEvidenceTier evidenceTier,
         double structuralFidelity,
@@ -1183,13 +1186,22 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         @Nullable Map<Integer, Long> selfAmpSeeds
     ) {}
 
-    private record InputCoalesceKey(@Nullable String tagId, int listId, SlotMatchMode matchMode, int[] members)
+    private record InputCoalesceKey(@Nullable TagKey<?> tag, int listId, SlotMatchMode matchMode, int[] members)
             implements
                 Comparable<InputCoalesceKey> {
 
         @Override
         public int compareTo(InputCoalesceKey o) {
-            int c = (tagId == null ? "" : tagId).compareTo(o.tagId == null ? "" : o.tagId);
+            int c;
+            if (tag == null && o.tag == null) {
+                c = 0;
+            } else if (tag == null) {
+                c = -1;
+            } else if (o.tag == null) {
+                c = 1;
+            } else {
+                c = PlanningTagKeys.comparator.compare(tag, o.tag);
+            }
             if (c != 0) return c;
             c = Arrays.compare(members, o.members);
             if (c != 0) return c;
@@ -1201,12 +1213,12 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
             return obj instanceof InputCoalesceKey o
                     && listId == o.listId
                     && matchMode == o.matchMode
-                    && Objects.equals(tagId, o.tagId);
+                    && Objects.equals(tag, o.tag);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(tagId, listId, matchMode);
+            return Objects.hash(tag, listId, matchMode);
         }
     }
 
@@ -1223,17 +1235,17 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
     }
 
     private record CanonicalRecord(
-        String systemId,
-        @Nullable String explicitId,
+        Namespace systemId,
+        @Nullable ResourceLocation explicitId,
         long structuralHash64,
         CompiledRecipeKey key,
         long sourceRef,
         RecipeAdvisory advisory,
         MachineCapabilityId capability,
-        List<String> orderedMachines,
+        List<MachineEntry> orderedMachines,
         boolean handCraftable,
-        Map<String, Double> recipeValues,
-        Set<String> systemTags,
+        Map<Namespace, Double> recipeValues,
+        Set<Namespace> systemTags,
         Set<CanonicalRecipeTag> canonicalTags,
         RecipeEvidenceTier evidenceTier,
         double structuralFidelity,
@@ -1241,7 +1253,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         int[] inCandList,
         long[] inAmount,
         byte[] inMatchMode,
-        String[] inTagId,
+        @Nullable TagKey<?>[] inTag,
         int[] catCandList,
         int[] catDurCost,
         int[] catMaxDur,
@@ -1269,7 +1281,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                     && Arrays.equals(inCandList, o.inCandList)
                     && Arrays.equals(inAmount, o.inAmount)
                     && Arrays.equals(inMatchMode, o.inMatchMode)
-                    && Arrays.equals(inTagId, o.inTagId)
+                    && Arrays.equals(inTag, o.inTag)
                     && Arrays.equals(catCandList, o.catCandList)
                     && Arrays.equals(catDurCost, o.catDurCost)
                     && Arrays.equals(catMaxDur, o.catMaxDur)
@@ -1297,7 +1309,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                 inCandList,
                 inAmount,
                 inMatchMode,
-                inTagId,
+                inTag,
                 catCandList,
                 catDurCost,
                 catMaxDur,
@@ -1327,7 +1339,7 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
                 inCandList,
                 inAmount,
                 inMatchMode,
-                inTagId,
+                inTag,
                 catCandList,
                 catDurCost,
                 catMaxDur,

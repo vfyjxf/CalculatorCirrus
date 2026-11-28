@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.ui.workbench.hosts;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.human.HumanFeedback;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchShellContext;
@@ -27,7 +27,7 @@ public final class ShellCoPilotHost implements CoPilotHost {
     private final BooleanSupplier reducedMotion;
 
     private final List<String> focusRequests = new ArrayList<>();
-    private @Nullable ResourceKey pendingAlternatives;
+    private @Nullable ComponentStackKey pendingAlternatives;
     private @Nullable HumanFeedback lastRefined;
 
     public ShellCoPilotHost(WorkbenchShellContext context) {
@@ -123,7 +123,7 @@ public final class ShellCoPilotHost implements CoPilotHost {
     }
 
     @Override
-    public void openAlternativesFor(ResourceKey resource) {
+    public void openAlternativesFor(ComponentStackKey resource) {
         if (resource == null) {
             return;
         }
@@ -150,12 +150,12 @@ public final class ShellCoPilotHost implements CoPilotHost {
         focusRequests.clear();
     }
 
-    public @Nullable ResourceKey pendingAlternatives() {
+    public @Nullable ComponentStackKey pendingAlternatives() {
         return pendingAlternatives;
     }
 
-    public @Nullable ResourceKey consumePendingAlternatives() {
-        ResourceKey consumed = pendingAlternatives;
+    public @Nullable ComponentStackKey consumePendingAlternatives() {
+        ComponentStackKey consumed = pendingAlternatives;
         pendingAlternatives = null;
         return consumed;
     }

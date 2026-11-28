@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.layout;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
@@ -9,7 +9,7 @@ public record DagEdgeRoute(
     String fromStepId,
     String toStepId,
     EdgeKind kind,
-    @Nullable ResourceKey resource,
+    @Nullable ComponentStackKey resource,
     long amountFlow,
     long sourceTotalProduced,
     float x0,

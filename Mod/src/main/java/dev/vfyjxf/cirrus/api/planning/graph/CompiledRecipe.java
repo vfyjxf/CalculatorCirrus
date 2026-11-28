@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.tag.CanonicalRecipeTag;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeEvidenceTier;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeSemanticKey;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.Collections;
 import java.util.EnumSet;
@@ -23,9 +24,9 @@ public record CompiledRecipe(
     List<CatalystSlot> catalysts,
     List<OutputSlot> outputs,
     MachineRequirement machineRequirement,
-    Map<String, Double> recipeValues,
+    Map<Namespace, Double> recipeValues,
     RecipeAdvisory advisory,
-    Set<String> systemTags,
+    Set<Namespace> systemTags,
     Set<CanonicalRecipeTag> canonicalTags,
     RecipeEvidenceTier evidenceTier,
     double structuralFidelity,
@@ -40,7 +41,7 @@ public record CompiledRecipe(
         List<CatalystSlot> catalysts,
         List<OutputSlot> outputs,
         MachineRequirement machineRequirement,
-        Map<String, Double> recipeValues
+        Map<Namespace, Double> recipeValues
     ) {
         this(
             compactId,
@@ -68,7 +69,7 @@ public record CompiledRecipe(
         List<CatalystSlot> catalysts,
         List<OutputSlot> outputs,
         MachineRequirement machineRequirement,
-        Map<String, Double> recipeValues,
+        Map<Namespace, Double> recipeValues,
         RecipeAdvisory advisory
     ) {
         this(
@@ -114,7 +115,7 @@ public record CompiledRecipe(
         if (recipeValues.isEmpty()) {
             recipeValues = Map.of();
         } else {
-            TreeMap<String, Double> sorted = new TreeMap<>();
+            TreeMap<Namespace, Double> sorted = new TreeMap<>();
             for (var e : recipeValues.entrySet()) {
                 sorted.put(Objects.requireNonNull(e.getKey()), Objects.requireNonNull(e.getValue()));
             }

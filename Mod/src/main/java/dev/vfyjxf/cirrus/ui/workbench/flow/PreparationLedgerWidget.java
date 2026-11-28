@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
 import dev.vfyjxf.cirrus.api.planning.human.ApplyRulesFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.DeclareOwnedMachineFeedback;
@@ -8,9 +9,9 @@ import dev.vfyjxf.cirrus.api.planning.human.MachineRule;
 import dev.vfyjxf.cirrus.api.planning.human.OverrideStockFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.ByproductEntry;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.internal.integration.jei.CirrusPlanBookmarkStore;
 import dev.vfyjxf.cirrus.internal.integration.jei.JeiPlanBookmarkBridge;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
@@ -104,8 +105,8 @@ public class PreparationLedgerWidget extends CompositeWidget<Widget> implements 
     private final RingWidget coverageRing;
     private final List<SliderWidget> sliders = new ArrayList<>();
     private final List<InfoBarWidget> meters = new ArrayList<>();
-    private final Map<ResourceKey, Long> simulated = new TreeMap<>();
-    private final Map<ResourceKey, Pending> pending = new TreeMap<>();
+    private final Map<ComponentStackKey, Long> simulated = new TreeMap<>();
+    private final Map<ComponentStackKey, Pending> pending = new TreeMap<>();
     private final List<Hotspot> hotspots = new ArrayList<>();
     private final List<TipRegion> tipRegions = new ArrayList<>();
 
@@ -157,6 +158,18 @@ public class PreparationLedgerWidget extends CompositeWidget<Widget> implements 
             TextFieldWidget.create().setPlaceholder(CirrusLangs.Workbench.Topbar.searchPlaceholder.get().getString())
                     .setMaxLength(64).onTextChanged(this::setQuery)
         );
+        searchField.onMouseClicked((input, clickCtx) -> {
+            if (!input.isRightClick()) {
+                return EventDispatch.pass;
+            }
+            if (!searchField.text().isEmpty() || !query.isEmpty()) {
+                searchField.setText("");
+                setQuery("");
+                CirrusUiSound.playClickSound();
+            }
+            clickCtx.consume();
+            return EventDispatch.consumed;
+        });
         viewToggle = addWidget(
             ToggleWidget.create(true)
                     .setTextures(CirrusTextures.Toggle.Switch.Calc.listOff, CirrusTextures.Toggle.Switch.Calc.gridOn)
@@ -274,7 +287,7 @@ public class PreparationLedgerWidget extends CompositeWidget<Widget> implements 
         return pending.size();
     }
 
-    public Map<ResourceKey, Long> simulatedStock() {
+    public Map<ComponentStackKey, Long> simulatedStock() {
         return Map.copyOf(simulated);
     }
 
@@ -380,12 +393,12 @@ public class PreparationLedgerWidget extends CompositeWidget<Widget> implements 
         relayout();
     }
 
-    public void simulateStock(ResourceKey resource, long amount) {
+    public void simulateStock(ComponentStackKey resource, long amount) {
         if (resource == null) {
             return;
         }
         long clamped = Math.max(LedgerSorting.minSimulatedAmount, Math.min(LedgerSorting.maxSimulatedAmount, amount));
-        Map<ResourceKey, Long> next = LedgerSorting.simulate(Map.copyOf(simulated), resource, clamped);
+        Map<ComponentStackKey, Long> next = LedgerSorting.simulate(Map.copyOf(simulated), resource, clamped);
         simulated.clear();
         simulated.putAll(next);
         pending.put(resource, new Pending(clamped, clock.getAsLong() + whatIfDebounceMs));
@@ -397,14 +410,14 @@ public class PreparationLedgerWidget extends CompositeWidget<Widget> implements 
     }
 
     public int flushDueOverrides(long nowMillis) {
-        List<ResourceKey> due = new ArrayList<>();
-        for (Map.Entry<ResourceKey, Pending> entry : pending.entrySet()) {
+        List<ComponentStackKey> due = new ArrayList<>();
+        for (Map.Entry<ComponentStackKey, Pending> entry : pending.entrySet()) {
             if (entry.getValue().dueAtMillis() <= nowMillis) {
                 due.add(entry.getKey());
             }
         }
         int dispatched = 0;
-        for (ResourceKey resource : due) {
+        for (ComponentStackKey resource : due) {
             Pending value = pending.remove(resource);
             if (value == null) {
                 continue;
@@ -416,35 +429,35 @@ public class PreparationLedgerWidget extends CompositeWidget<Widget> implements 
         return dispatched;
     }
 
-    public void declareOwned(String machineId) {
-        if (machineId == null || machineId.isBlank()) {
+    public void declareOwned(MachineEntry machine) {
+        if (machine == null || machine.isEmpty()) {
             return;
         }
-        host.dispatch(new DeclareOwnedMachineFeedback(machineId, 1, false));
+        host.dispatch(new DeclareOwnedMachineFeedback(machine, 1, false));
         dispatchCount++;
     }
 
-    public void rejectMachine(String machineId) {
-        if (machineId == null || machineId.isBlank()) {
+    public void rejectMachine(MachineEntry machine) {
+        if (machine == null || machine.isEmpty()) {
             return;
         }
         MachineRule rule = new MachineRule(
-            "rule:nobuild:" + machineId,
+            "rule:nobuild:" + machine.canonicalKey(),
             GuidanceScope.session,
             RuleStrength.hardBan,
-            machineId,
+            machine,
             false
         );
         host.dispatch(new ApplyRulesFeedback(List.of(rule), false));
         dispatchCount++;
     }
 
-    public void declareFreeSource(ResourceKey resource) {
+    public void declareFreeSource(ComponentStackKey resource) {
         if (resource == null) {
             return;
         }
         ResourceRule rule = new ResourceRule(
-            "session.free:" + resource.shortString(),
+            "session.free:" + resource.canonicalKey(),
             GuidanceScope.session,
             RuleStrength.hardPin,
             resource,
@@ -511,7 +524,7 @@ public class PreparationLedgerWidget extends CompositeWidget<Widget> implements 
         }
     }
 
-    private double effectiveSimulated(ResourceKey resource) {
+    private double effectiveSimulated(ComponentStackKey resource) {
         Long value = simulated.get(resource);
         return value == null ? 0.0 : value.doubleValue();
     }
@@ -1655,7 +1668,7 @@ public class PreparationLedgerWidget extends CompositeWidget<Widget> implements 
             int rh = compactRowHeight - 2;
             boolean rowHover = ChromeText.hit(mouseX, mouseY, rx, ry, rw, rh);
             OreUiPaint.raisedCard(canvas, rx, ry, rw, rh, palette, rowHover, false);
-            renderSlot(canvas, palette, ResourceKey.item(row.machineId()), rx + 4, ry + Math.max(1, (rh - 18) / 2), 18);
+            renderSlot(canvas, palette, row.machine().contentKey().orElse(null), rx + 4, ry + Math.max(1, (rh - 18) / 2), 18);
             int rowRight = rx + rw - 4;
             int ownX = rowRight - microButtonWidth;
             int rejectX = ownX - microButtonWidth - 3;
@@ -1670,7 +1683,7 @@ public class PreparationLedgerWidget extends CompositeWidget<Widget> implements 
                 mouseX,
                 mouseY,
                 true,
-                () -> declareOwned(row.machineId())
+                () -> declareOwned(row.machine())
             );
             renderMicroButton(
                 canvas,
@@ -1682,10 +1695,10 @@ public class PreparationLedgerWidget extends CompositeWidget<Widget> implements 
                 mouseX,
                 mouseY,
                 false,
-                () -> rejectMachine(row.machineId())
+                () -> rejectMachine(row.machine())
             );
             if (font != null) {
-                String name = StepNodeCardRenderer.machineNameOf(row.machineId(), null).getString();
+                String name = StepNodeCardRenderer.machineNameOf(row.machine(), null).getString();
                 String status = CirrusLangs.Workbench.Ledger.needBuildStatus.get(row.countToBuild()).getString();
                 String label = name + " · " + status;
                 canvas.text(
@@ -1711,7 +1724,7 @@ public class PreparationLedgerWidget extends CompositeWidget<Widget> implements 
         }
         int iconX = card.x() + 6;
         int catColor = palette.edgeCatalyst();
-        for (ResourceKey catalyst : model.catalystsRequired()) {
+        for (ComponentStackKey catalyst : model.catalystsRequired()) {
             if (iconX + 54 > card.x() + card.width()) {
                 break;
             }
@@ -1799,14 +1812,14 @@ public class PreparationLedgerWidget extends CompositeWidget<Widget> implements 
         );
     }
 
-    private void renderSlot(SceneCanvas canvas, CirrusPalette palette, @Nullable ResourceKey resource, int x, int y) {
+    private void renderSlot(SceneCanvas canvas, CirrusPalette palette, @Nullable ComponentStackKey resource, int x, int y) {
         renderSlot(canvas, palette, resource, x, y, slotSize);
     }
 
     private void renderSlot(
         SceneCanvas canvas,
         CirrusPalette palette,
-        @Nullable ResourceKey resource,
+        @Nullable ComponentStackKey resource,
         int x,
         int y,
         int size

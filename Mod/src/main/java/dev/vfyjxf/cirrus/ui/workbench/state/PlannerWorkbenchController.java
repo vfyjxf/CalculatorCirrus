@@ -10,8 +10,8 @@ import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
 import dev.vfyjxf.cirrus.api.planning.human.HumanFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.OverrideStockFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.PinResourceRecipeFeedback;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.human.RejectStepFeedback;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
@@ -312,7 +312,7 @@ public final class PlannerWorkbenchController implements AutoCloseable {
         publish();
     }
 
-    public void setHoveredResource(@Nullable ResourceKey resource) {
+    public void setHoveredResource(@Nullable ComponentStackKey resource) {
         synchronized (lock) {
             if (closed.get()) {
                 return;

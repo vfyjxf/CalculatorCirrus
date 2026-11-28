@@ -1,13 +1,13 @@
 package dev.vfyjxf.cirrus.ui.workbench;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.human.HumanFeedback;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
-import dev.vfyjxf.cirrus.planning.bridge.CirrusContentBridge;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cirrus.planning.bridge.StorageInventorySnapshotAdapter;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
@@ -303,23 +303,23 @@ public final class WorkbenchIntegrationProvider implements WorkspaceProvider {
         instance;
 
         @Override
-        public @Nullable ContentStack<?, ?> stackOf(ResourceKey resource, long amount) {
+        public @Nullable ContentStack<?, ?> stackOf(ComponentStackKey resource, long amount) {
             if (resource == null || amount <= 0L) {
                 return null;
             }
             try {
-                return CirrusContentBridge.toBestEffortContentStack(resource, amount).orElse(null);
+                return resource.toStack(amount);
             } catch (RuntimeException | LinkageError failure) {
                 return null;
             }
         }
 
         @Override
-        public Component nameOf(ResourceKey resource) {
+        public Component nameOf(ComponentStackKey resource) {
             if (resource == null) {
                 return Component.empty();
             }
-            Component fallback = Component.literal(resource.resourceId());
+            Component fallback = Component.literal(resource.displayId());
             ContentStack<?, ?> stack = stackOf(resource, 1L);
             if (stack == null || stack.isEmpty()) {
                 return fallback;
@@ -332,14 +332,14 @@ public final class WorkbenchIntegrationProvider implements WorkspaceProvider {
         }
 
         @Override
-        public Component machineNameOf(String machineId) {
-            if (machineId == null || machineId.isEmpty()) {
+        public Component machineNameOf(MachineEntry machine) {
+            if (machine == null || machine.isEmpty()) {
                 return Component.empty();
             }
             try {
-                return CoPilotPaint.machineName(null, machineId);
+                return CoPilotPaint.machineName(machine);
             } catch (RuntimeException | LinkageError failure) {
-                return Component.literal(machineId);
+                return Component.literal(machine.canonicalKey());
             }
         }
     }

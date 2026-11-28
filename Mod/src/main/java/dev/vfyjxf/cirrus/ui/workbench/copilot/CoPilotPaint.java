@@ -1,9 +1,9 @@
 package dev.vfyjxf.cirrus.ui.workbench.copilot;
 
 import dev.vfyjxf.cirrus.api.content.render.StackRenderer;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
-import dev.vfyjxf.cirrus.planning.bridge.CirrusContentBridge;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.chrome.ChromeText;
 import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiPaint;
@@ -179,23 +179,23 @@ public final class CoPilotPaint {
         icon(canvas, stack, ox, oy, itemSize, palette);
     }
 
-    public static @Nullable ContentStack<?, ?> stackOf(@Nullable ResourceKey resource, long amount) {
+    public static @Nullable ContentStack<?, ?> stackOf(@Nullable ComponentStackKey resource, long amount) {
         if (resource == null) {
             return null;
         }
         try {
-            return CirrusContentBridge.toBestEffortContentStack(resource, Math.max(1L, amount)).orElse(null);
+            return resource.toStack(Math.max(1L, amount));
         } catch (RuntimeException | LinkageError ignored) {
             return null;
         }
     }
 
-    public static Component resourceName(@Nullable ResourceKey resource) {
+    public static Component resourceName(@Nullable ComponentStackKey resource) {
         if (resource == null) {
             return Component.literal("-");
         }
         ContentStack<?, ?> stack = stackOf(resource, 1L);
-        Component fallback = Component.literal(humanizeId(resource.resourceId()));
+        Component fallback = Component.literal(humanizeId(resource.displayId()));
         return stackName(stack, fallback);
     }
 
@@ -243,12 +243,25 @@ public final class CoPilotPaint {
         return trimmed;
     }
 
-    public static Component machineName(@Nullable ResourceKey iconKey, @Nullable String machineId) {
+    public static Component machineName(@Nullable MachineEntry machine) {
+        if (machine == null || machine.isEmpty()) {
+            return Component.literal("-");
+        }
+        ComponentStackKey key = machine.contentKey().orElse(null);
+        if (key != null) {
+            return resourceName(key);
+        }
+        return Component.literal(humanizeId(machine.canonicalKey()));
+    }
+
+    public static Component machineName(@Nullable ComponentStackKey iconKey, @Nullable String machineId) {
+        if (iconKey != null) {
+            return resourceName(iconKey);
+        }
         if (machineId == null || machineId.isEmpty()) {
             return Component.literal("-");
         }
-        Component fallback = Component.literal(humanizeId(machineId));
-        return stackName(stackOf(iconKey, 1L), fallback);
+        return Component.literal(humanizeId(machineId));
     }
 
     public static String humanizeId(@Nullable String rawId) {

@@ -1,11 +1,11 @@
 package dev.vfyjxf.cirrus.ui.workbench.layout;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.InputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.OutputSlot;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -16,8 +16,10 @@ import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SlotBinding;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.ui.workbench.state.DagLayoutMode;
 import dev.vfyjxf.cloudlib.api.math.FloatPos;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -133,7 +135,7 @@ public final class PlanDagLayout {
 
     private static String edgeKey(DagEdgeRoute edge) {
         return edge.fromStepId() + "|" + edge.toStepId() + "|" + edge.kind().name() + "|"
-                + (edge.resource() == null ? "" : edge.resource().toString());
+                + (edge.resource() == null ? "" : edge.resource().canonicalKey());
     }
 
     private static DagNodeBox withStatus(DagNodeBox node, DagNodeBox.DiffStatus status) {
@@ -714,7 +716,7 @@ public final class PlanDagLayout {
                 new SwimlaneBand(
                     lane.laneId(),
                     lane.titleKey(),
-                    lane.iconMachineId(),
+                    lane.iconMachine(),
                     LayoutGeometry.round(bandY),
                     LayoutGeometry.round(bandHeight),
                     lane.stepIds().size(),
@@ -857,7 +859,7 @@ public final class PlanDagLayout {
             }
             if (step instanceof CraftStep craft && !craft.catalystBindings().isEmpty()) {
                 for (var catalyst : craft.catalystBindings().entrySet()) {
-                    ResourceKey resource = catalyst.getValue();
+                    ComponentStackKey resource = catalyst.getValue();
                     if (resource == null) {
                         continue;
                     }
@@ -917,7 +919,7 @@ public final class PlanDagLayout {
         if (source instanceof ProvisionMachineStep) {
             return new EdgeSpec(DagEdgeRoute.EdgeKind.machine, null, 0L, 0L);
         }
-        ResourceKey link = flow.link(from, to);
+        ComponentStackKey link = flow.link(from, to);
         long total = flow.producedTotal(from, link);
         long amount = link == null ? total : flow.amount(from, to, link);
         return new EdgeSpec(DagEdgeRoute.EdgeKind.material, link, amount, total);
@@ -939,7 +941,7 @@ public final class PlanDagLayout {
             return;
         }
         String key = from + "|" + to + "|" + spec.kind().name() + "|"
-                + (spec.resource() == null ? "" : spec.resource().toString());
+                + (spec.resource() == null ? "" : spec.resource().canonicalKey());
         if (!seen.add(key)) {
             return;
         }
@@ -966,12 +968,12 @@ public final class PlanDagLayout {
             DagNodeBox target = Objects.requireNonNull(boxes.get(e.to()));
             return vertical ? target.centerX() : target.centerY();
         }).thenComparing(PendingEdge::to).thenComparing(e -> e.spec().kind().ordinal())
-                .thenComparing(e -> e.spec().resource() == null ? "" : e.spec().resource().toString());
+                .thenComparing(e -> e.spec().resource() == null ? "" : e.spec().resource().canonicalKey());
         Comparator<PendingEdge> bySourcePos = Comparator.comparingDouble((PendingEdge e) -> {
             DagNodeBox source = Objects.requireNonNull(boxes.get(e.from()));
             return vertical ? source.centerX() : source.centerY();
         }).thenComparing(PendingEdge::from).thenComparing(e -> e.spec().kind().ordinal())
-                .thenComparing(e -> e.spec().resource() == null ? "" : e.spec().resource().toString());
+                .thenComparing(e -> e.spec().resource() == null ? "" : e.spec().resource().canonicalKey());
         for (List<PendingEdge> list : outgoing.values()) {
             list.sort(byTargetPos);
         }
@@ -1139,9 +1141,11 @@ public final class PlanDagLayout {
                 case ProvisionMachineStep ignored -> machines.add(stepId);
                 case SetupLineStep ignored -> machines.add(stepId);
                 default -> {
-                    String systemId = LayoutGeometry.systemIdOf(step);
+                    Namespace systemId = LayoutGeometry.systemIdOf(step);
                     if (systemId != null) {
-                        bySystem.computeIfAbsent(systemId, key -> new ArrayList<>()).add(stepId);
+                        bySystem.computeIfAbsent(systemId.toString(), key -> new ArrayList<>()).add(stepId);
+                    } else if (step instanceof CycleLoopStep loop) {
+                        bySystem.computeIfAbsent(loop.macroKey().macroId(), key -> new ArrayList<>()).add(stepId);
                     } else {
                         sources.add(stepId);
                     }
@@ -1172,7 +1176,7 @@ public final class PlanDagLayout {
                     lanes.size(),
                     laneIdMachines,
                     laneTitleKeyMachines,
-                    firstMachineId(byId, machines),
+                    firstMachine(byId, machines),
                     machines,
                     totalHuman(byId, machines),
                     totalPassive(byId, machines)
@@ -1196,7 +1200,7 @@ public final class PlanDagLayout {
                     lanes.size(),
                     entry.getKey(),
                     entry.getKey(),
-                    firstMachineId(byId, stepIds),
+                    firstMachine(byId, stepIds),
                     stepIds,
                     totalHuman(byId, stepIds),
                     totalPassive(byId, stepIds)
@@ -1234,11 +1238,11 @@ public final class PlanDagLayout {
     }
 
     @Nullable
-    private static String firstMachineId(Map<String, PlanStep> byId, List<String> stepIds) {
+    private static MachineEntry firstMachine(Map<String, PlanStep> byId, List<String> stepIds) {
         for (String stepId : stepIds) {
-            String machineId = LayoutGeometry.primaryMachineIdOf(Objects.requireNonNull(byId.get(stepId)));
-            if (machineId != null) {
-                return machineId;
+            MachineEntry machine = LayoutGeometry.primaryMachineOf(Objects.requireNonNull(byId.get(stepId)));
+            if (machine != null && !machine.isEmpty()) {
+                return machine;
             }
         }
         return null;
@@ -1248,7 +1252,7 @@ public final class PlanDagLayout {
         int index,
         String laneId,
         String titleKey,
-        @Nullable String iconMachineId,
+        @Nullable MachineEntry iconMachine,
         List<String> stepIds,
         double totalH,
         double totalP
@@ -1262,7 +1266,7 @@ public final class PlanDagLayout {
 
     private record EdgeSpec(
         DagEdgeRoute.EdgeKind kind,
-        @Nullable ResourceKey resource,
+        @Nullable ComponentStackKey resource,
         long amountFlow,
         long sourceTotalProduced
     ) {}
@@ -1291,8 +1295,8 @@ public final class PlanDagLayout {
 
     private static final class Flow {
 
-        private final Map<String, Map<ResourceKey, Long>> produced = new TreeMap<>();
-        private final Map<String, Map<ResourceKey, Long>> consumed = new TreeMap<>();
+        private final Map<String, Map<ComponentStackKey, Long>> produced = new TreeMap<>();
+        private final Map<String, Map<ComponentStackKey, Long>> consumed = new TreeMap<>();
 
         private Flow(CompiledRecipeGraph graph, Map<String, PlanStep> byId) {
             for (PlanStep step : byId.values()) {
@@ -1301,8 +1305,8 @@ public final class PlanDagLayout {
             }
         }
 
-        private long producedTotal(@Nullable String stepId, @Nullable ResourceKey resource) {
-            Map<ResourceKey, Long> amounts = stepId == null ? null : produced.get(stepId);
+        private long producedTotal(@Nullable String stepId, @Nullable ComponentStackKey resource) {
+            Map<ComponentStackKey, Long> amounts = stepId == null ? null : produced.get(stepId);
             if (amounts == null) {
                 return 0L;
             }
@@ -1316,20 +1320,20 @@ public final class PlanDagLayout {
             return total;
         }
 
-        private @Nullable ResourceKey link(String from, String to) {
-            Map<ResourceKey, Long> source = produced.get(from);
-            Map<ResourceKey, Long> target = consumed.get(to);
+        private @Nullable ComponentStackKey link(String from, String to) {
+            Map<ComponentStackKey, Long> source = produced.get(from);
+            Map<ComponentStackKey, Long> target = consumed.get(to);
             if (source == null || target == null || source.isEmpty() || target.isEmpty()) {
                 return null;
             }
-            for (ResourceKey key : source.keySet()) {
+            for (ComponentStackKey key : source.keySet()) {
                 if (target.containsKey(key)) {
                     return key;
                 }
             }
-            for (ResourceKey key : source.keySet()) {
-                for (ResourceKey candidate : target.keySet()) {
-                    if (key.sameBaseIdentity(candidate)) {
+            for (ComponentStackKey key : source.keySet()) {
+                for (ComponentStackKey candidate : target.keySet()) {
+                    if (key.sameContent(candidate)) {
                         return key;
                     }
                 }
@@ -1337,18 +1341,18 @@ public final class PlanDagLayout {
             return null;
         }
 
-        private long amount(String from, String to, @Nullable ResourceKey resource) {
+        private long amount(String from, String to, @Nullable ComponentStackKey resource) {
             long available = producedTotal(from, resource);
             if (resource == null) {
                 return available;
             }
-            Map<ResourceKey, Long> target = consumed.get(to);
+            Map<ComponentStackKey, Long> target = consumed.get(to);
             if (target == null) {
                 return available;
             }
             Long needed = null;
             for (var entry : target.entrySet()) {
-                if (entry.getKey().sameBaseIdentity(resource)) {
+                if (entry.getKey().sameContent(resource)) {
                     needed = entry.getValue();
                     break;
                 }
@@ -1359,7 +1363,7 @@ public final class PlanDagLayout {
             return Math.min(available, needed);
         }
 
-        private @Nullable String producerOf(ResourceKey resource, List<String> preferred, String excluded) {
+        private @Nullable String producerOf(ComponentStackKey resource, List<String> preferred, String excluded) {
             for (String stepId : preferred) {
                 if (!stepId.equals(excluded) && holds(stepId, resource)) {
                     return stepId;
@@ -1373,16 +1377,16 @@ public final class PlanDagLayout {
             return null;
         }
 
-        private boolean holds(String stepId, ResourceKey resource) {
-            Map<ResourceKey, Long> amounts = produced.get(stepId);
+        private boolean holds(String stepId, ComponentStackKey resource) {
+            Map<ComponentStackKey, Long> amounts = produced.get(stepId);
             if (amounts == null) {
                 return false;
             }
             if (amounts.containsKey(resource)) {
                 return true;
             }
-            for (ResourceKey key : amounts.keySet()) {
-                if (key.sameBaseIdentity(resource)) {
+            for (ComponentStackKey key : amounts.keySet()) {
+                if (key.sameContent(resource)) {
                     return true;
                 }
             }
@@ -1390,7 +1394,7 @@ public final class PlanDagLayout {
         }
     }
 
-    private static Map<ResourceKey, Long> producedOf(CompiledRecipeGraph graph, PlanStep step) {
+    private static Map<ComponentStackKey, Long> producedOf(CompiledRecipeGraph graph, PlanStep step) {
         return switch (step) {
             case AcquireStep acquire -> single(acquire.resource(), acquire.amount());
             case LinePullStep pull -> single(pull.resource(), pull.amount());
@@ -1402,7 +1406,7 @@ public final class PlanDagLayout {
         };
     }
 
-    private static Map<ResourceKey, Long> consumedOf(CompiledRecipeGraph graph, PlanStep step) {
+    private static Map<ComponentStackKey, Long> consumedOf(CompiledRecipeGraph graph, PlanStep step) {
         return switch (step) {
             case CraftStep craft -> recipeInputs(graph, craft.recipeKey(), craft.slotBindings(), craft.batches());
             case ConvertStep convert ->
@@ -1415,16 +1419,16 @@ public final class PlanDagLayout {
         };
     }
 
-    private static Map<ResourceKey, Long> single(ResourceKey resource, long amount) {
+    private static Map<ComponentStackKey, Long> single(ComponentStackKey resource, long amount) {
         if (amount <= 0L) {
             return Map.of();
         }
-        TreeMap<ResourceKey, Long> out = new TreeMap<>();
+        TreeMap<ComponentStackKey, Long> out = new TreeMap<>();
         out.put(resource, amount);
         return out;
     }
 
-    private static Map<ResourceKey, Long> recipeOutputs(
+    private static Map<ComponentStackKey, Long> recipeOutputs(
         CompiledRecipeGraph graph,
         CompiledRecipeKey key,
         long batches
@@ -1433,7 +1437,7 @@ public final class PlanDagLayout {
         if (recipe == null || recipe.isEmpty() || batches <= 0L) {
             return Map.of();
         }
-        TreeMap<ResourceKey, Long> out = new TreeMap<>();
+        TreeMap<ComponentStackKey, Long> out = new TreeMap<>();
         for (OutputSlot slot : recipe.get().outputs()) {
             long amount = slot.amountPerBatch() * batches;
             if (amount > 0L) {
@@ -1443,7 +1447,7 @@ public final class PlanDagLayout {
         return out;
     }
 
-    private static Map<ResourceKey, Long> recipeInputs(
+    private static Map<ComponentStackKey, Long> recipeInputs(
         CompiledRecipeGraph graph,
         CompiledRecipeKey key,
         Map<Integer, SlotBinding> bindings,
@@ -1453,9 +1457,9 @@ public final class PlanDagLayout {
         if (recipe == null || recipe.isEmpty() || batches <= 0L) {
             return Map.of();
         }
-        TreeMap<ResourceKey, Long> out = new TreeMap<>();
+        TreeMap<ComponentStackKey, Long> out = new TreeMap<>();
         for (InputSlot slot : recipe.get().inputs()) {
-            ResourceKey chosen = resolveInput(bindings, slot);
+            ComponentStackKey chosen = resolveInput(bindings, slot);
             if (chosen == null) {
                 continue;
             }
@@ -1468,7 +1472,7 @@ public final class PlanDagLayout {
     }
 
     @Nullable
-    private static ResourceKey resolveInput(Map<Integer, SlotBinding> bindings, InputSlot slot) {
+    private static ComponentStackKey resolveInput(Map<Integer, SlotBinding> bindings, InputSlot slot) {
         SlotBinding binding = bindings.get(slot.slotIndex());
         if (binding != null) {
             return binding.chosenResource();
@@ -1476,8 +1480,8 @@ public final class PlanDagLayout {
         return slot.candidates().size() == 1 ? slot.candidates().get(0) : null;
     }
 
-    private static Map<ResourceKey, Long> cycleProduced(CycleLoopStep loop) {
-        TreeMap<ResourceKey, Long> out = new TreeMap<>();
+    private static Map<ComponentStackKey, Long> cycleProduced(CycleLoopStep loop) {
+        TreeMap<ComponentStackKey, Long> out = new TreeMap<>();
         for (var entry : loop.netDeltaPerIteration().entrySet()) {
             long amount = entry.getValue() * loop.iterations();
             if (amount > 0L) {
@@ -1487,10 +1491,10 @@ public final class PlanDagLayout {
         return out;
     }
 
-    private static Map<ResourceKey, Long> cycleConsumed(CompiledRecipeGraph graph, CycleLoopStep loop) {
-        TreeMap<ResourceKey, Long> out = new TreeMap<>();
+    private static Map<ComponentStackKey, Long> cycleConsumed(CompiledRecipeGraph graph, CycleLoopStep loop) {
+        TreeMap<ComponentStackKey, Long> out = new TreeMap<>();
         for (CraftStep template : loop.singleIterationTemplate()) {
-            Map<ResourceKey, Long> perBatch = recipeInputs(
+            Map<ComponentStackKey, Long> perBatch = recipeInputs(
                 graph,
                 template.recipeKey(),
                 template.slotBindings(),

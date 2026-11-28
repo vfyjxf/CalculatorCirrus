@@ -1,7 +1,8 @@
 package dev.vfyjxf.cirrus.ui.workbench.facilities;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusThemeTextures;
@@ -463,13 +464,22 @@ public class FacilitiesAndRulesWorkspace extends CompositeWidget<Widget> {
          */
         protected static final class Glyph extends Widget {
 
-            private final String resourceId;
+            private final @Nullable ComponentStackKey resourceKey;
+            private final String fallbackLabel;
             private final Supplier<CirrusPalette> palette;
             private @Nullable ContentStack<?, ?> resolved;
             private boolean resolveAttempted;
 
-            protected Glyph(String resourceId, Supplier<CirrusPalette> palette, int size) {
-                this.resourceId = resourceId == null ? "" : resourceId;
+            protected Glyph(@Nullable ComponentStackKey resourceKey, Supplier<CirrusPalette> palette, int size) {
+                this.resourceKey = resourceKey;
+                this.fallbackLabel = resourceKey == null ? "" : resourceKey.displayId();
+                this.palette = palette;
+                useStyle(sizeOf(size, size));
+            }
+
+            protected Glyph(@Nullable MachineEntry machine, Supplier<CirrusPalette> palette, int size) {
+                this.resourceKey = machine == null ? null : machine.contentKey().orElse(null);
+                this.fallbackLabel = machine == null ? "" : machine.canonicalKey();
                 this.palette = palette;
                 useStyle(sizeOf(size, size));
             }
@@ -493,16 +503,16 @@ public class FacilitiesAndRulesWorkspace extends CompositeWidget<Widget> {
             }
 
             private String initial() {
-                int slash = Math.max(resourceId.lastIndexOf(':'), resourceId.lastIndexOf('/'));
-                String tail = slash < 0 ? resourceId : resourceId.substring(slash + 1);
+                int slash = Math.max(fallbackLabel.lastIndexOf(':'), fallbackLabel.lastIndexOf('/'));
+                String tail = slash < 0 ? fallbackLabel : fallbackLabel.substring(slash + 1);
                 return tail.isEmpty() ? "?" : tail.substring(0, 1).toUpperCase(Locale.ROOT);
             }
 
             private @Nullable ContentStack<?, ?> stack() {
                 if (!resolveAttempted) {
                     resolveAttempted = true;
-                    if (!resourceId.isEmpty() && Minecraft.getInstance().level != null) {
-                        resolved = CoPilotPaint.stackOf(ResourceKey.item(resourceId), 1L);
+                    if (resourceKey != null && Minecraft.getInstance().level != null) {
+                        resolved = CoPilotPaint.stackOf(resourceKey, 1L);
                     }
                 }
                 return resolved;
@@ -510,7 +520,7 @@ public class FacilitiesAndRulesWorkspace extends CompositeWidget<Widget> {
 
             @Override
             public String toString() {
-                return "Glyph[" + resourceId + "]";
+                return "Glyph[" + fallbackLabel + "]";
             }
         }
 

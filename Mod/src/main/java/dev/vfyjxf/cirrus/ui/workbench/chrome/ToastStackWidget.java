@@ -4,13 +4,13 @@ import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
+import dev.vfyjxf.cirrus.ui.CirrusUiSound;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchShellContext;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchShellLayout;
 import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiPaint;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.math.FloatPos;
 import dev.vfyjxf.cloudlib.api.math.Rect;
-import dev.vfyjxf.cloudlib.api.ui.base.SceneLayer;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.api.ui.style.UIStyle;
@@ -78,13 +78,23 @@ public class ToastStackWidget extends Widget {
         this.shellContext = Objects.requireNonNull(context, "context");
         WorkbenchShellLayout.Rect region = shellLayout().toastStack();
         addStyleClass("workbench-toast");
-        setSceneLayer(SceneLayer.overlay);
         defaultStyle(UIStyle.of(background(CirrusTextures.Workbench.cardSurface(context.theme()))));
         useStyle(positionAbsolute(), sizeOf(region.width(), region.height()));
         setInteractive(true);
         setVisible(false);
         setTickable(true);
         onTick(this::pruneExpired);
+        onMouseClicked((input, clickContext) -> {
+            if (!input.isLeftClick()) {
+                return EventDispatch.pass;
+            }
+            FloatPos local = input.mouseRelative(this);
+            if (hitsAnyToast(local.x(), local.y())) {
+                clickContext.consume();
+                return EventDispatch.consumed;
+            }
+            return EventDispatch.pass;
+        });
         onMouseClick((input, clickCount, clickContext) -> {
             if (!input.isLeftClick()) {
                 return EventDispatch.pass;
@@ -95,15 +105,20 @@ public class ToastStackWidget extends Widget {
             if (!renderedCards.isEmpty()) {
                 for (int i = renderedCards.size() - 1; i >= 0; i--) {
                     RenderedCard card = renderedCards.get(i);
-                    if (!card.cardRect().contains(lx, ly)) {
+                    if (!card.cardRect().contains(lx, ly) && !card.closeRect().contains(lx, ly)) {
                         continue;
                     }
-                    if (card.undoRect() != null
+                    if (card.closeRect().contains(lx, ly)) {
+                        removeToast(card.toast());
+                        CirrusUiSound.playClickSound();
+                    } else if (card.undoRect() != null
                             && card.undoRect().contains(lx, ly)
                             && card.toast().undoAction() != null) {
                         runUndo(card.toast());
+                        CirrusUiSound.playClickSound();
                     } else {
                         removeToast(card.toast());
+                        CirrusUiSound.playClickSound();
                     }
                     clickContext.consume();
                     return EventDispatch.consumed;
@@ -119,9 +134,22 @@ public class ToastStackWidget extends Widget {
             } else {
                 removeToast(toast);
             }
+            CirrusUiSound.playClickSound();
             clickContext.consume();
             return EventDispatch.consumed;
         });
+    }
+
+    private boolean hitsAnyToast(double lx, double ly) {
+        if (!renderedCards.isEmpty()) {
+            for (RenderedCard card : renderedCards) {
+                if (card.cardRect().contains(lx, ly) || card.closeRect().contains(lx, ly)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return toastAtRow((int) ly) != null;
     }
 
     public void push(Component message) {
@@ -332,7 +360,7 @@ public class ToastStackWidget extends Widget {
             int accent = toneColor(toast.tone(), palette);
 
             int textXOffset = padX + iconBox + 7;
-            int closeSize = 12;
+            int closeSize = 14;
             int rawBadgeW = toast.badge() == null ? 0 : ChromeText.width(canvas, toast.badge()) + 10;
             int maxBadgeW = Math.max(44, ((w - textXOffset - closeSize - padX - 10) * 42) / 100);
             int badgeW = Math.min(rawBadgeW, maxBadgeW);
@@ -381,8 +409,25 @@ public class ToastStackWidget extends Widget {
             );
 
             // Close button [x]
-            Rect closeRect = new Rect(cardX + w - padX - closeSize, baseY + padY, closeSize, closeSize);
+            Rect closeRect = new Rect(cardX + w - padX - closeSize, baseY + padY - 1, closeSize, closeSize);
             boolean closeHover = closeRect.contains(mouseX, mouseY);
+            if (closeHover) {
+                canvas.fill(
+                    closeRect.x(),
+                    closeRect.y(),
+                    closeRect.width(),
+                    closeRect.height(),
+                    OreUiPaint.withAlpha(palette.cardSurfaceHover(), 0.90f * alpha)
+                );
+                canvas.strokeRect(
+                    closeRect.x(),
+                    closeRect.y(),
+                    closeRect.width(),
+                    closeRect.height(),
+                    OreUiPaint.withAlpha(palette.focusRing(), 0.85f * alpha),
+                    1
+                );
+            }
             Component xMark = Component.literal("\u00d7");
             int xw = ChromeText.width(canvas, xMark);
             ChromeText.draw(

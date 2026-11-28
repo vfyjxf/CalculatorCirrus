@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.planning.core.select;
 
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,7 +16,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * M6 Deterministic IDF-Weighted Sparse Tech-Branch Clusterer (Pure JDK 21, ZERO mod hardcoding).
+ * Deterministic IDF-weighted sparse tech-branch clusterer (zero mod hardcoding).
  *
  * <p>Clusters recipes into parallel technology paradigms in O(k_p * L_c) by comparing against at most
  * k_p = 8 prototypes per primary inverted bucket using weighted Jaccard similarity >= 0.60.
@@ -96,6 +97,8 @@ public final class TechBranchClusterer {
             List<Prototype> bucket = buckets.computeIfAbsent(rarestCoreKey, k -> new ArrayList<>());
             String bestCluster = null;
             double bestSim = defaultSimilarityThreshold;
+            String fallbackCluster = null;
+            double fallbackSim = -1.0;
             int limit = Math.min(defaultMaxPrototypesPerBucket, bucket.size());
             for (int i = 0; i < limit; i++) {
                 Prototype p = bucket.get(i);
@@ -104,14 +107,20 @@ public final class TechBranchClusterer {
                     bestSim = sim;
                     bestCluster = p.clusterId();
                 }
+                if (sim > fallbackSim) {
+                    fallbackSim = sim;
+                    fallbackCluster = p.clusterId();
+                }
             }
 
             if (bestCluster == null) {
-                bestCluster = "cluster:" + (nextClusterNum++) + ":" + rarestCoreKey;
                 if (bucket.size() < defaultMaxPrototypesPerBucket) {
+                    bestCluster = "cluster:" + (nextClusterNum++) + ":" + rarestCoreKey;
                     bucket.add(new Prototype(bestCluster, vec));
+                    protoTokenView.put(bestCluster, Collections.unmodifiableSet(new TreeSet<>(vec.keySet())));
+                } else {
+                    bestCluster = fallbackCluster != null ? fallbackCluster : sharedCommonCluster;
                 }
-                protoTokenView.put(bestCluster, Collections.unmodifiableSet(new TreeSet<>(vec.keySet())));
             }
             assignments.put(cid, bestCluster);
         }
@@ -129,7 +138,7 @@ public final class TechBranchClusterer {
         }
         tokens.add("sys:" + r.key().systemId());
         r.machineRequirement().capabilityId().ifPresent(cap -> tokens.add("cap:" + cap.id()));
-        for (String tag : r.systemTags()) {
+        for (Namespace tag : r.systemTags()) {
             tokens.add("stag:" + tag);
         }
         if (!r.catalysts().isEmpty()) {

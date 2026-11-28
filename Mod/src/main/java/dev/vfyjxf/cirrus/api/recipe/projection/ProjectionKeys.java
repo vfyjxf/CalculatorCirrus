@@ -31,7 +31,7 @@ public final class ProjectionKeys {
         /** Marks an input slot whose item stack is a fluid container eligible for unpacking. */
         public static final Namespace fluidContainer = tag("fluid_container");
 
-        /** Marks an input slot representing a damageable tool/catalyst. */
+        /** Marks an input slot representing a damageable tool whose craft consumes durability. */
         public static final Namespace durabilityTool = tag("durability_tool");
 
         /** Marks a recipe whose non-guaranteed (chance < 1) outputs should be stripped. */

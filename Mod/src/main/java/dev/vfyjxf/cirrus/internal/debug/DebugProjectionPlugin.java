@@ -7,13 +7,17 @@ import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
+import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
 import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContextKey;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionAttributeKey;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionAttributes;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionKeys;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
+import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionSlot;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionTags;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
+import dev.vfyjxf.cirrus.api.recipe.projection.SlotAddress;
 import dev.vfyjxf.cirrus.api.recipe.projection.SlotChannel;
 import dev.vfyjxf.cirrus.api.recipe.projection.TagQuery;
 import dev.vfyjxf.cirrus.api.recipe.projection.context.BooleanProjectionContextOption;
@@ -23,6 +27,7 @@ import dev.vfyjxf.cirrus.api.recipe.projection.context.ProjectionContextChoice;
 import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionEffect;
 import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionGuard;
 import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionStage;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.register.MachineEntryRegister;
@@ -30,6 +35,7 @@ import dev.vfyjxf.cirrus.api.register.ProjectionContextOptionRegister;
 import dev.vfyjxf.cirrus.api.register.ProjectionEffectRegister;
 import dev.vfyjxf.cirrus.api.register.ProjectionPluginRegister;
 import dev.vfyjxf.cirrus.api.register.RecipeSystemRegister;
+import dev.vfyjxf.cirrus.api.register.RecipeSystemTagRegister;
 import dev.vfyjxf.cirrus.recipe.system.BasicRecipeSystem;
 import dev.vfyjxf.cloudlib.api.plugin.PluginMarker;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
@@ -58,14 +64,43 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
         "cirrus.ui.calculator.database.debug_plugin.desc",
         true
     );
+    public static final ProjectionPlugin overclockPlugin = ProjectionPlugin.of(
+        Namespace.of(CirrusConstants.modId, "projection/debug_overclock"),
+        "cirrus.ui.calculator.database.debug_overclock",
+        "cirrus.ui.calculator.database.debug_overclock.desc",
+        true
+    );
     public static final Namespace effectId = Namespace.of(CirrusConstants.modId, "debug/projection_probe");
+    public static final Namespace gridRepositionEffectId = Namespace.of(CirrusConstants.modId, "debug/grid_reposition");
+    public static final Namespace overclockEffectId = Namespace.of(CirrusConstants.modId, "debug/overclock_energy_time");
+    public static final Namespace parallelBatchEffectId = Namespace.of(CirrusConstants.modId, "debug/parallel_batch");
+    public static final Namespace thermalByproductEffectId = Namespace.of(CirrusConstants.modId, "debug/thermal_byproduct");
+    public static final Namespace hvPowerGuardEffectId = Namespace.of(CirrusConstants.modId, "debug/hv_power_guard");
     public static final Namespace probeTag = Namespace.of(CirrusConstants.modId, "debug/tag/projection_probe");
+    public static final Namespace overclockableTag = Namespace.of(CirrusConstants.modId, "debug/tag/overclockable");
+    public static final Namespace overclockedTag = Namespace.of(CirrusConstants.modId, "debug/tag/overclocked");
+    public static final Namespace noParallelTag = Namespace.of(CirrusConstants.modId, "debug/tag/no_parallel");
+    public static final Namespace shiftGridTag = Namespace.of(CirrusConstants.modId, "debug/tag/shift_grid");
+    public static final Namespace hvRequiredTag = Namespace.of(CirrusConstants.modId, "debug/tag/hv_required");
+    public static final Namespace hvValidatedTag = Namespace.of(CirrusConstants.modId, "debug/tag/hv_validated");
+    public static final ProjectionAttributeKey<Integer> overclockMultiplierAttr = ProjectionAttributeKey.create(
+        Namespace.of(CirrusConstants.modId, "debug/attr/overclock_multiplier"),
+        Integer.class
+    );
+    private static final Namespace energyValueTypeId = Namespace.of(CirrusConstants.modId, "energy");
+    private static final Namespace timeValueTypeId = Namespace.of(CirrusConstants.modId, "time");
     public static final Namespace systemId = Namespace.of(CirrusConstants.modId, "debug_projection");
     public static final ExecutionContextKey<Long> scaleKey = key("scale", Long.class, 1L);
     public static final ExecutionContextKey<Boolean> extraOutputKey = key("extra_output", Boolean.class, false);
     public static final ExecutionContextKey<String> channelKey = key("channel", String.class, "input");
+    public static final ExecutionContextKey<Long> overclockTierKey = key("overclock_tier", Long.class, 2L);
+    public static final ExecutionContextKey<Long> parallelBatchKey = key("parallel_batch", Long.class, 1L);
+    public static final ExecutionContextKey<Boolean> highVoltageKey = key("high_voltage", Boolean.class, false);
     public static final Namespace resolveGuardFailId = Namespace.of(CirrusConstants.modId, "debug/resolve_guard_fail");
     public static final Namespace resolveGuardPassId = Namespace.of(CirrusConstants.modId, "debug/resolve_guard_pass");
+    public static final Namespace thermalThresholdGuardId = Namespace
+            .of(CirrusConstants.modId, "debug/thermal_threshold_guard");
+    public static final Namespace hvSupplyGuardId = Namespace.of(CirrusConstants.modId, "debug/hv_supply_guard");
     public static final Namespace resolveBoostInputId = Namespace
             .of(CirrusConstants.modId, "debug/resolve_boost_input");
     public static final int longChainDepth = 72;
@@ -114,6 +149,144 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
             })
             .build();
 
+    public static final ProjectionGuard thermalThresholdGuard = ProjectionGuard.nonBlocking(
+        thermalThresholdGuardId,
+        (context, view) -> context.get(overclockTierKey) >= 2L
+                ? ProjectionGuard.Result.pass()
+                : ProjectionGuard.Result.fail("overclock_tier_below_2")
+    );
+
+    public static final ProjectionGuard hvSupplyGuard = ProjectionGuard.of(
+        hvSupplyGuardId,
+        (context, view) -> context.get(overclockTierKey) >= 3L && !context.get(highVoltageKey)
+                ? ProjectionGuard.Result.fail("hv_power_required_for_tier_3_plus")
+                : ProjectionGuard.Result.pass()
+    );
+
+    public static final ProjectionEffect gridRepositionEffect = ProjectionEffect.builder(gridRepositionEffectId)
+            .plugin(plugin)
+            .stage(ProjectionStage.prepare)
+            .priority(5)
+            .requireTags(shiftGridTag)
+            .when((context, view) -> debugEnabled())
+            .apply(tx -> {
+                var grid = tx.view().inputGrid();
+                if (grid != null && grid.width() >= 3 && grid.height() >= 3) {
+                    SlotAddress source = SlotAddress.inputGrid(0, 0, grid.width());
+                    SlotAddress target = SlotAddress.inputGrid(2, 2, grid.width());
+                    if (tx.slot(source) != null && tx.slot(target) == null) {
+                        tx.moveGridCell(SlotChannel.input, 0, 0, 2, 2);
+                    }
+                }
+                tx.addNamedInput(
+                    "grid_stabilizer",
+                    InputContent.fromItemStack(new ItemStack(Items.QUARTZ), 1, RecipeContent.MIN_CHANCE)
+                );
+            })
+            .build();
+
+    public static final ProjectionEffect overclockEnergyTimeEffect = ProjectionEffect.builder(overclockEffectId)
+            .plugin(overclockPlugin)
+            .stage(ProjectionStage.transform)
+            .priority(10)
+            .watches(overclockTierKey)
+            .requireTags(overclockableTag)
+            .when((context, view) -> debugEnabled())
+            .apply(tx -> {
+                long tier = Math.max(0L, tx.context().get(overclockTierKey));
+                if (tier <= 0L) {
+                    return;
+                }
+                long energyFactor = 1L << Math.min(10, tier * 2L);
+                long speedDivisor = 1L << Math.min(10, tier);
+                boolean touched = false;
+                for (ProjectionSlot<InputContent> slot : tx.inputSlots()) {
+                    if (slot.content() instanceof ValueContent<?> value) {
+                        if (energyValueTypeId.equals(value.type().typeId())) {
+                            tx.setSlotAmount(slot.address(), Math.multiplyExact(value.amount(), energyFactor));
+                            touched = true;
+                        } else if (timeValueTypeId.equals(value.type().typeId())) {
+                            tx.setSlotAmount(slot.address(), Math.max(1L, value.amount() / speedDivisor));
+                            touched = true;
+                        }
+                    }
+                }
+                for (ProjectionSlot<OutputContent> slot : tx.outputSlots()) {
+                    if (slot.content() instanceof ValueContent<?> value) {
+                        if (energyValueTypeId.equals(value.type().typeId())) {
+                            tx.setSlotAmount(slot.address(), Math.multiplyExact(value.amount(), energyFactor));
+                            touched = true;
+                        } else if (timeValueTypeId.equals(value.type().typeId())) {
+                            tx.setSlotAmount(slot.address(), Math.max(1L, value.amount() / speedDivisor));
+                            touched = true;
+                        }
+                    }
+                }
+                if (touched) {
+                    tx.addTag(overclockedTag);
+                    tx.putAttribute(overclockMultiplierAttr, (int) speedDivisor);
+                }
+            })
+            .build();
+
+    public static final ProjectionEffect parallelBatchEffect = ProjectionEffect.builder(parallelBatchEffectId)
+            .plugin(overclockPlugin)
+            .stage(ProjectionStage.transform)
+            .priority(20)
+            .watches(parallelBatchKey)
+            .requireTags(overclockableTag)
+            .forbidTags(noParallelTag)
+            .when((context, view) -> debugEnabled())
+            .apply(tx -> {
+                long batch = Math.max(1L, tx.context().get(parallelBatchKey));
+                if (batch <= 1L) {
+                    return;
+                }
+                for (ProjectionSlot<InputContent> slot : tx.inputSlots()) {
+                    if (!(slot.content() instanceof ValueContent<?>)) {
+                        tx.setSlotAmount(slot.address(), Math.multiplyExact(slot.content().amount(), batch));
+                    }
+                }
+                for (ProjectionSlot<OutputContent> slot : tx.outputSlots()) {
+                    if (!(slot.content() instanceof ValueContent<?>)) {
+                        tx.setSlotAmount(slot.address(), Math.multiplyExact(slot.content().amount(), batch));
+                    }
+                }
+            })
+            .build();
+
+    public static final ProjectionEffect thermalByproductEffect = ProjectionEffect.builder(thermalByproductEffectId)
+            .plugin(plugin)
+            .stage(ProjectionStage.finalize)
+            .priority(10)
+            .watches(overclockTierKey)
+            .requireTags(overclockedTag)
+            .guard(thermalThresholdGuard)
+            .when((context, view) -> debugEnabled())
+            .apply(tx -> {
+                int wasteCount = (int) Math.max(1L, Math.min(64L, tx.context().get(overclockTierKey)));
+                tx.addNamedOutput(
+                    "thermal_waste",
+                    OutputContent.fromItemStack(new ItemStack(Items.BLAZE_POWDER, wasteCount))
+                );
+            })
+            .build();
+
+    public static final ProjectionEffect hvPowerGuardEffect = ProjectionEffect.builder(hvPowerGuardEffectId)
+            .plugin(overclockPlugin)
+            .stage(ProjectionStage.validate)
+            .priority(0)
+            .watches(overclockTierKey, highVoltageKey)
+            .requireTags(hvRequiredTag)
+            .guard(hvSupplyGuard)
+            .when((context, view) -> debugEnabled())
+            .apply(tx -> {
+                if (tx.context().get(overclockTierKey) >= 3L && tx.context().get(highVoltageKey)) {
+                    tx.addTag(hvValidatedTag);
+                }
+            })
+            .build();
+
     public static final ProjectionEffect blockedBoostFirstInput = ProjectionEffect.builder(resolveBoostInputId)
             .plugin(ProjectionPlugin.builtin)
             .stage(ProjectionStage.transform)
@@ -141,6 +314,14 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
     }
 
     @Override
+    public void registerRecipeSystemTag(RecipeSystemTagRegister register) {
+        if (debugEnabled()) {
+            register.registerSystemTagEntry(RecipeSystemTags.debug, systemId);
+            register.registerSystemTagEntry(RecipeSystemTags.folderDebug, systemId);
+        }
+    }
+
+    @Override
     public void registerMachineEntry(MachineEntryRegister register) {
         if (!debugEnabled()) {
             return;
@@ -157,6 +338,7 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
     public void registerProjectionPlugin(ProjectionPluginRegister register) {
         if (debugEnabled()) {
             register.registerProjectionPlugin(plugin);
+            register.registerProjectionPlugin(overclockPlugin);
         }
     }
 
@@ -199,12 +381,50 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
                 )
             )
         );
+        register.registerProjectionContextOption(
+            new LongProjectionContextOption(
+                Namespace.of(CirrusConstants.modId, "debug/overclock_tier"),
+                overclockPlugin,
+                overclockTierKey,
+                "cirrus.ui.calculator.database.debug_overclock.tier",
+                "cirrus.ui.calculator.database.debug_overclock.tier.desc",
+                0L,
+                4L,
+                1L
+            )
+        );
+        register.registerProjectionContextOption(
+            new LongProjectionContextOption(
+                Namespace.of(CirrusConstants.modId, "debug/parallel_batch"),
+                overclockPlugin,
+                parallelBatchKey,
+                "cirrus.ui.calculator.database.debug_overclock.parallel",
+                "cirrus.ui.calculator.database.debug_overclock.parallel.desc",
+                1L,
+                8L,
+                1L
+            )
+        );
+        register.registerProjectionContextOption(
+            new BooleanProjectionContextOption(
+                Namespace.of(CirrusConstants.modId, "debug/high_voltage"),
+                overclockPlugin,
+                highVoltageKey,
+                "cirrus.ui.calculator.database.debug_overclock.hv",
+                "cirrus.ui.calculator.database.debug_overclock.hv.desc"
+            )
+        );
     }
 
     @Override
     public void registerProjectionEffect(ProjectionEffectRegister register) {
         if (debugEnabled()) {
             register.registerProjectionEffect(debugEffect);
+            register.registerProjectionEffect(gridRepositionEffect);
+            register.registerProjectionEffect(overclockEnergyTimeEffect);
+            register.registerProjectionEffect(parallelBatchEffect);
+            register.registerProjectionEffect(thermalByproductEffect);
+            register.registerProjectionEffect(hvPowerGuardEffect);
         }
     }
 
@@ -233,6 +453,10 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
             resolvePolicyEffect,
             resolvePolicyGuard,
             craftingGridTransform,
+            fullPipelineShowcase,
+            gridCellRearrange,
+            overclockEnergyLine,
+            multiEffectStress,
             longChainStep,
             longChainTarget
         }
@@ -246,6 +470,10 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
                 case resolvePolicyEffect -> resolvePolicyEffectProjection();
                 case resolvePolicyGuard -> resolvePolicyGuardProjection();
                 case craftingGridTransform -> craftingGridTransformProjection();
+                case fullPipelineShowcase -> fullPipelineShowcaseProjection();
+                case gridCellRearrange -> gridCellRearrangeProjection();
+                case overclockEnergyLine -> overclockEnergyLineProjection();
+                case multiEffectStress -> multiEffectStressProjection();
                 case longChainStep -> longChainStepProjection();
                 case longChainTarget -> longChainTargetProjection();
             };
@@ -278,12 +506,15 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
         }
 
         private RecipeProjection durabilityCostProjection() {
-            ItemStack tool = new ItemStack(Items.IRON_PICKAXE);
-            tool.setDamageValue(Math.max(0, tool.getMaxDamage() - 1));
             return builder()
                     .input(
-                        InputContent.fromItemStack(tool),
-                        ProjectionAttributes.of(ProjectionKeys.durabilityCost, 1),
+                        InputContent.fromItemStack(new ItemStack(Items.IRON_PICKAXE)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(ProjectionKeys.Tags.durabilityTool)
+                    )
+                    .input(
+                        InputContent.fromItemStack(new ItemStack(Items.DIAMOND_PICKAXE)),
+                        ProjectionAttributes.of(ProjectionKeys.durabilityCost, 4),
                         ProjectionTags.of(ProjectionKeys.Tags.durabilityTool)
                     )
                     .output(OutputContent.fromItemStack(new ItemStack(Items.IRON_NUGGET)))
@@ -316,15 +547,13 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
         }
 
         private RecipeProjection craftingGridTransformProjection() {
-            ItemStack breakingTool = new ItemStack(Items.IRON_PICKAXE);
-            breakingTool.setDamageValue(Math.max(0, breakingTool.getMaxDamage() - 1));
             return builder()
                     .inputGrid(3, 3)
                     .inputCell(
                         0,
                         0,
-                        InputContent.fromItemStack(breakingTool),
-                        ProjectionAttributes.of(ProjectionKeys.durabilityCost, 1),
+                        InputContent.fromItemStack(new ItemStack(Items.IRON_PICKAXE)),
+                        ProjectionAttributes.empty(),
                         ProjectionTags.of(ProjectionKeys.Tags.durabilityTool)
                     )
                     .inputCell(
@@ -345,6 +574,134 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
                     .output(OutputContent.fromItemStack(new ItemStack(Items.COPPER_BLOCK)))
                     .output(OutputContent.fromItemStack(new ItemStack(Items.DIAMOND), 1, 0.25F))
                     .tag(ProjectionKeys.Tags.guaranteedOutput)
+                    .build();
+        }
+
+        private RecipeProjection fullPipelineShowcaseProjection() {
+            return builder()
+                    .inputGrid(3, 3)
+                    .inputCell(
+                        0,
+                        0,
+                        InputContent.fromItemStack(new ItemStack(Items.IRON_PICKAXE)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(ProjectionKeys.Tags.durabilityTool)
+                    )
+                    .inputCell(
+                        1,
+                        1,
+                        InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(ProjectionKeys.Tags.fluidContainer)
+                    )
+                    .inputCell(
+                        2,
+                        1,
+                        InputContent.fromItemStack(new ItemStack(Items.COPPER_INGOT, 2)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(probeTag)
+                    )
+                    .inputCell(1, 2, InputContent.fromItemStack(new ItemStack(Items.STICK)))
+                    .input(InputContent.fromEnergy(1000L))
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.COPPER_BLOCK)))
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.DIAMOND), 1, 0.25F))
+                    .output(OutputContent.fromTimeTick(200))
+                    .tag(ProjectionKeys.Tags.guaranteedOutput)
+                    .tag(overclockableTag)
+                    .tag(hvRequiredTag)
+                    .build();
+        }
+
+        private RecipeProjection gridCellRearrangeProjection() {
+            return builder()
+                    .inputGrid(3, 3)
+                    .inputCell(0, 0, InputContent.fromItemStack(new ItemStack(Items.IRON_INGOT)))
+                    .inputCell(
+                        1,
+                        0,
+                        InputContent.fromItemStack(new ItemStack(Items.GOLD_INGOT, 2)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(probeTag)
+                    )
+                    .inputCell(
+                        1,
+                        1,
+                        InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(ProjectionKeys.Tags.fluidContainer)
+                    )
+                    .inputCell(
+                        0,
+                        2,
+                        InputContent.fromItemStack(new ItemStack(Items.IRON_PICKAXE)),
+                        ProjectionAttributes.of(ProjectionKeys.durabilityCost, 2),
+                        ProjectionTags.of(ProjectionKeys.Tags.durabilityTool)
+                    )
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.COMPASS)))
+                    .tag(shiftGridTag)
+                    .build();
+        }
+
+        private RecipeProjection overclockEnergyLineProjection() {
+            return builder()
+                    .input(InputContent.fromItemStack(new ItemStack(Items.IRON_INGOT, 4)))
+                    .input(InputContent.fromItemStack(new ItemStack(Items.REDSTONE, 2)))
+                    .input(InputContent.fromEnergy(2048L))
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.IRON_BLOCK, 2)))
+                    .output(OutputContent.fromTimeTick(160))
+                    .tag(overclockableTag)
+                    .tag(hvRequiredTag)
+                    .build();
+        }
+
+        private RecipeProjection multiEffectStressProjection() {
+            return builder()
+                    .inputGrid(3, 3)
+                    .inputCell(0, 0, InputContent.fromItemStack(new ItemStack(Items.IRON_INGOT)))
+                    .inputCell(
+                        0,
+                        1,
+                        InputContent.fromItemStack(new ItemStack(Items.IRON_PICKAXE)),
+                        ProjectionAttributes.of(ProjectionKeys.durabilityCost, 4),
+                        ProjectionTags.of(ProjectionKeys.Tags.durabilityTool)
+                    )
+                    .inputCell(
+                        1,
+                        1,
+                        InputContent.fromItemStack(new ItemStack(Items.WATER_BUCKET)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(ProjectionKeys.Tags.fluidContainer)
+                    )
+                    .inputCell(
+                        2,
+                        0,
+                        InputContent.fromItemStack(new ItemStack(Items.LAVA_BUCKET)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(ProjectionKeys.Tags.fluidContainer)
+                    )
+                    .inputCell(
+                        2,
+                        1,
+                        InputContent.fromItemStack(new ItemStack(Items.COPPER_INGOT, 2)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(probeTag)
+                    )
+                    .inputCell(
+                        1,
+                        2,
+                        InputContent.fromItemStack(new ItemStack(Items.GOLD_INGOT, 3)),
+                        ProjectionAttributes.empty(),
+                        ProjectionTags.of(probeTag)
+                    )
+                    .input(InputContent.fromEnergy(4096L))
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.COPPER_BLOCK)))
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.DIAMOND), 1, 0.25F))
+                    .output(OutputContent.fromItemStack(new ItemStack(Items.EMERALD), 1, 0.50F))
+                    .output(OutputContent.fromTimeTick(320))
+                    .tag(shiftGridTag)
+                    .tag(overclockableTag)
+                    .tag(ProjectionKeys.Tags.guaranteedOutput)
+                    .tag(hvRequiredTag)
                     .build();
         }
 
@@ -441,6 +798,12 @@ public final class DebugProjectionPlugin implements CirrusPlugin {
             out.add(
                 new DebugProjectionRecipe("crafting_grid_transform", DebugProjectionRecipe.Kind.craftingGridTransform)
             );
+            out.add(
+                new DebugProjectionRecipe("full_pipeline_showcase", DebugProjectionRecipe.Kind.fullPipelineShowcase)
+            );
+            out.add(new DebugProjectionRecipe("grid_cell_rearrange", DebugProjectionRecipe.Kind.gridCellRearrange));
+            out.add(new DebugProjectionRecipe("overclock_energy_line", DebugProjectionRecipe.Kind.overclockEnergyLine));
+            out.add(new DebugProjectionRecipe("multi_effect_stress", DebugProjectionRecipe.Kind.multiEffectStress));
             for (int i = 0; i < longChainDepth; i++) {
                 out.add(
                     new DebugProjectionRecipe("debug_chain_step_" + i, DebugProjectionRecipe.Kind.longChainStep, i)

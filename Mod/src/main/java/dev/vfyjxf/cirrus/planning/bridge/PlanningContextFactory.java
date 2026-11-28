@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning.bridge;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
 import dev.vfyjxf.cirrus.api.planning.context.BaseBoundarySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.ContextAttributeView;
@@ -13,26 +14,24 @@ import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceStore;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.api.planning.spi.BaseBoundaryProvider;
 import dev.vfyjxf.cirrus.api.planning.spi.ContextContributor;
 import dev.vfyjxf.cirrus.planning.core.cost.DefaultAcquisitionOracle;
-import dev.vfyjxf.cirrus.planning.core.cost.V3AcquisitionOracle;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import net.minecraft.world.entity.player.Player;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
- * Assembles extensible Planning v3 contexts from Cirrus StorageApi, WorldFacilityRegistry,
+ * Assembles extensible planning contexts from Cirrus StorageApi, WorldFacilityRegistry,
  * externalized DefaultDomainProfileProvider, and all registered plugin SPIs.
  */
 public final class PlanningContextFactory {
@@ -42,7 +41,7 @@ public final class PlanningContextFactory {
 
     public PlanningContextFactory(CompiledRecipeGraph graph) {
         this.graph = Objects.requireNonNull(graph, "graph");
-        this.baseOracle = new DefaultAcquisitionOracle(graph, DefaultDomainProfileProvider.defaultSnapshot(), null);
+        this.baseOracle = new DefaultAcquisitionOracle(graph, DefaultDomainProfileProvider.defaultSnapshot(), null, true);
     }
 
     public CompiledRecipeGraph graph() {
@@ -129,21 +128,26 @@ public final class PlanningContextFactory {
         }
         ContextAttributeView attrs = attrBuilder.build();
 
-        AcquisitionOracle oracle = ext.acquisitionEstimators().isEmpty()
-                ? (guidance.allRules().isEmpty() ? baseOracle : baseOracle.withGuidance(guidance))
-                : new V3AcquisitionOracle(
+        boolean boundaryChanged = boundary != DefaultDomainProfileProvider.defaultSnapshot();
+        var estimators = ext.acquisitionEstimators();
+        AcquisitionOracle oracle = estimators.isEmpty()
+                ? (boundaryChanged
+                        ? new DefaultAcquisitionOracle(graph, boundary, guidance, true)
+                        : (guidance.allRules().isEmpty() ? baseOracle : baseOracle.withGuidance(guidance)))
+                : new DefaultAcquisitionOracle(
                     graph,
                     boundary,
                     guidance,
-                    ext.acquisitionEstimators(),
-                    prelim.withBaseBoundary(boundary).withAttributes(attrs)
+                    estimators,
+                    prelim.withBaseBoundary(boundary).withAttributes(attrs),
+                    true
                 );
 
         return new PlanningContext(inventory, facilities, boundary, oracle, guidance, progression, attrs);
     }
 
     public PlanningRequest createRequest(
-        ResourceKey target,
+        ComponentStackKey target,
         long amount,
         @Nullable Player player,
         @Nullable WorldFacilityRegistry facilityRegistry,
@@ -175,25 +179,10 @@ public final class PlanningContextFactory {
         if (inventory == null || targets == null || targets.isEmpty()) {
             return inventory == null ? InventorySnapshot.empty : inventory;
         }
-        Map<ResourceKey, Long> available = inventory.available().entries();
-        if (available.isEmpty()) {
-            return inventory;
-        }
-        boolean overlaps = false;
+        Set<ComponentStackKey> excluded = new HashSet<>(targets.size() * 2);
         for (TargetDemand target : targets) {
-            if (available.containsKey(target.resource())) {
-                overlaps = true;
-                break;
-            }
+            excluded.add(target.resource());
         }
-        if (!overlaps) {
-            return inventory;
-        }
-        Map<ResourceKey, Long> nextAvailable = new LinkedHashMap<>(available);
-        for (TargetDemand target : targets) {
-            nextAvailable.remove(target.resource());
-        }
-        StockLedger ledger = nextAvailable.isEmpty() ? StockLedger.empty : new StockLedger(nextAvailable);
-        return new InventorySnapshot(ledger, inventory.reserved());
+        return inventory.withoutResources(excluded);
     }
 }

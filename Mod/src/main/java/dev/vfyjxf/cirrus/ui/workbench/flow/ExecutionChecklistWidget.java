@@ -1,8 +1,8 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -223,7 +223,7 @@ public class ExecutionChecklistWidget extends CompositeWidget<Widget> implements
             StepTipRegion region = tipRegions.get(i);
             if (region.contains(localX, localY)) {
                 PlanStep step = region.step();
-                ResourceKey icon = iconResourceOf(step);
+                ComponentStackKey icon = iconResourceOf(step);
                 ExecutionReadiness readiness = readinessOf(step);
                 OreUiRichTooltip.Builder builder = OreUiRichTooltip
                         .builder(
@@ -1040,7 +1040,7 @@ public class ExecutionChecklistWidget extends CompositeWidget<Widget> implements
         int slotX = checkboxX + checkboxSize + 7;
         int slotSize = 20;
         int slotY = cy + Math.max(2, (ch - 2 - slotSize) / 2);
-        ResourceKey iconRes = iconResourceOf(step);
+        ComponentStackKey iconRes = iconResourceOf(step);
         CoPilotPaint.renderSlotItem(
             canvas,
             iconRes == null ? null : CoPilotPaint.stackOf(iconRes, 1L),
@@ -1097,19 +1097,19 @@ public class ExecutionChecklistWidget extends CompositeWidget<Widget> implements
         }
     }
 
-    private @Nullable ResourceKey iconResourceOf(PlanStep step) {
+    private @Nullable ComponentStackKey iconResourceOf(PlanStep step) {
         return switch (step) {
             case AcquireStep acquire -> acquire.resource();
             case LinePullStep pull -> pull.resource();
             case SetupLineStep setup -> setup.targetOutput();
-            case ProvisionMachineStep provision -> ResourceKey.item(provision.machineId());
+            case ProvisionMachineStep provision -> provision.machine().contentKey().orElse(null);
             case CraftStep craft -> {
                 StepNodeCardRenderer.StepVisuals visuals = StepNodeCardRenderer
                         .resolve(craft, resolvedGraph(), null, false);
                 if (visuals.primaryOutput() != null) {
                     yield visuals.primaryOutput();
                 }
-                yield craft.chosenMachineId().map(ResourceKey::item).orElse(null);
+                yield craft.chosenMachine().flatMap(m -> m.contentKey()).orElse(null);
             }
             case ConvertStep convert -> {
                 StepNodeCardRenderer.StepVisuals visuals = StepNodeCardRenderer
@@ -1150,7 +1150,7 @@ public class ExecutionChecklistWidget extends CompositeWidget<Widget> implements
                         .get(name + " ×" + WorkbenchFormatters.formatAmount(outQty)).getString();
             }
             case ProvisionMachineStep provision -> CirrusLangs.Workbench.Checklist.stepProvision.get(
-                StepNodeCardRenderer.machineNameOf(provision.machineId(), null).getString() + " ×"
+                StepNodeCardRenderer.machineNameOf(provision.machine(), null).getString() + " ×"
                         + provision.countToBuild()
             ).getString();
             case SetupLineStep setup -> CirrusLangs.Workbench.Checklist.stepSetupLine
@@ -1168,7 +1168,7 @@ public class ExecutionChecklistWidget extends CompositeWidget<Widget> implements
 
     private String humanSubtitleOf(PlanStep step) {
         if (step instanceof CraftStep craft) {
-            String machine = craft.chosenMachineId().map(id -> StepNodeCardRenderer.machineNameOf(id, null).getString())
+            String machine = craft.chosenMachine().map(m -> StepNodeCardRenderer.machineNameOf(m, null).getString())
                     .orElseGet(() -> CirrusLangs.Workbench.Flow.nodeHandCraft.get().getString());
             double human = craft.stepCost().humanActiveSeconds();
             double wait = craft.stepCost().passiveWaitSeconds();

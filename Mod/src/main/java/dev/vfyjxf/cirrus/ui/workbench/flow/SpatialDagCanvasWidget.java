@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledCycleMacro;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
@@ -12,7 +13,6 @@ import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RecipeRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CycleLoopStep;
@@ -69,6 +69,7 @@ import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.api.ui.event.InputEvents;
 import dev.vfyjxf.cloudlib.api.ui.style.UIStyles;
 import dev.vfyjxf.cloudlib.api.ui.texture.Easing;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
@@ -161,7 +162,7 @@ public class SpatialDagCanvasWidget extends CompositeWidget<Widget> implements O
     private boolean minimapUserVisible = true;
     private boolean locatorUserVisible = true;
     private @Nullable String anchorStepId;
-    private @Nullable ResourceKey anchorResource;
+    private @Nullable ComponentStackKey anchorResource;
     private Map<String, FloatPos> lastAppliedOffsets = Map.of();
     private long frameTimeMs;
     private long lastHoverPublishMs;
@@ -764,7 +765,7 @@ public class SpatialDagCanvasWidget extends CompositeWidget<Widget> implements O
         return layout;
     }
 
-    private record AnchorSnapshot(String stepId, @Nullable ResourceKey resource, float worldX, float worldY) {}
+    private record AnchorSnapshot(String stepId, @Nullable ComponentStackKey resource, float worldX, float worldY) {}
 
     private @Nullable AnchorSnapshot captureAnchor(
         PlanDagLayoutResult current,
@@ -810,7 +811,7 @@ public class SpatialDagCanvasWidget extends CompositeWidget<Widget> implements O
             return null;
         }
         StepNodeCardRenderer.StepVisuals v = currentVisuals.get(chosen.stepId());
-        ResourceKey res = v == null ? anchorResource : v.primaryOutput();
+        ComponentStackKey res = v == null ? anchorResource : v.primaryOutput();
         return new AnchorSnapshot(chosen.stepId(), res, chosen.centerX(), chosen.centerY());
     }
 
@@ -950,7 +951,7 @@ public class SpatialDagCanvasWidget extends CompositeWidget<Widget> implements O
         if (result.isEmpty()) {
             return Map.of();
         }
-        Map<String, ResourceKey> inferred = new TreeMap<>();
+        Map<String, ComponentStackKey> inferred = new TreeMap<>();
         Map<String, Long> produced = new TreeMap<>();
         for (DagEdgeRoute edge : result.edges()) {
             if (edge.kind() != DagEdgeRoute.EdgeKind.material || edge.resource() == null) {
@@ -1207,7 +1208,7 @@ public class SpatialDagCanvasWidget extends CompositeWidget<Widget> implements O
         if (node.step() instanceof ProvisionMachineStep provision) {
             DagHitTester.RectF owned = StepNodeCardRenderer.declareOwnedButton(node);
             if (owned.contains(world[0], world[1]) && feedbackSink != null) {
-                feedbackSink.send(new DeclareOwnedMachineFeedback(provision.machineId(), 1, false));
+                feedbackSink.send(new DeclareOwnedMachineFeedback(provision.machine(), 1, false));
                 return true;
             }
         }
@@ -1278,7 +1279,7 @@ public class SpatialDagCanvasWidget extends CompositeWidget<Widget> implements O
         return EventDispatch.consumed;
     }
 
-    private @Nullable ResourceKey draggedPrimaryResource() {
+    private @Nullable ComponentStackKey draggedPrimaryResource() {
         String anchor = drag.anchorStepId();
         if (anchor == null && !draggingStepIds.isEmpty()) {
             anchor = draggingStepIds.iterator().next();
@@ -2866,7 +2867,7 @@ public class SpatialDagCanvasWidget extends CompositeWidget<Widget> implements O
             DagNodeBox node = cell.nodes().get(k);
             StepNodeCardRenderer.StepVisuals data = visuals
                     .getOrDefault(node.stepId(), StepNodeCardRenderer.StepVisuals.empty());
-            ResourceKey icon = DagRichTooltips.primaryIconOf(node.step(), data);
+            ComponentStackKey icon = DagRichTooltips.primaryIconOf(node.step(), data);
             long amt = data.outputAmount() > 0L ? data.outputAmount() : data.count();
             OreUiSlotAmount.drawSlot(canvas, icon, amt, sx, sy, slotDim, palette);
             sx += step;
@@ -3842,22 +3843,22 @@ public class SpatialDagCanvasWidget extends CompositeWidget<Widget> implements O
         }
 
         @Override
-        public SystemAdmission admissionOf(String systemId) {
+        public SystemAdmission admissionOf(Namespace systemId) {
             return SystemAdmission.enabled;
         }
 
         @Override
-        public List<CompiledRecipe> producersOf(ResourceKey output) {
+        public List<CompiledRecipe> producersOf(ComponentStackKey output) {
             return List.of();
         }
 
         @Override
-        public List<CompiledRecipe> consumersOf(ResourceKey input) {
+        public List<CompiledRecipe> consumersOf(ComponentStackKey input) {
             return List.of();
         }
 
         @Override
-        public List<CompiledCycleMacro> cycleMacrosProducing(ResourceKey output) {
+        public List<CompiledCycleMacro> cycleMacrosProducing(ComponentStackKey output) {
             return List.of();
         }
 
@@ -3872,7 +3873,7 @@ public class SpatialDagCanvasWidget extends CompositeWidget<Widget> implements O
         }
 
         @Override
-        public Set<ResourceKey> allProducibleResources() {
+        public Set<ComponentStackKey> allProducibleResources() {
             return Set.of();
         }
 
@@ -3880,7 +3881,7 @@ public class SpatialDagCanvasWidget extends CompositeWidget<Widget> implements O
         public SccTopology sccTopology() {
             return new SccTopology() {
                 @Override
-                public int sccIdOf(ResourceKey resource) {
+                public int sccIdOf(ComponentStackKey resource) {
                     return 0;
                 }
 
@@ -3890,12 +3891,12 @@ public class SpatialDagCanvasWidget extends CompositeWidget<Widget> implements O
                 }
 
                 @Override
-                public boolean isInNonTrivialScc(ResourceKey resource) {
+                public boolean isInNonTrivialScc(ComponentStackKey resource) {
                     return false;
                 }
 
                 @Override
-                public Set<ResourceKey> membersOfScc(int sccId) {
+                public Set<ComponentStackKey> membersOfScc(int sccId) {
                     return Set.of();
                 }
 

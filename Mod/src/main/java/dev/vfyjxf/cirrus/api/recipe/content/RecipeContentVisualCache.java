@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.content.value.ContentKind;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.DurabilityContent;
 import dev.vfyjxf.cirrus.api.recipe.content.complex.FluidContainerContent;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.material.Fluid;
@@ -134,6 +135,7 @@ public final class RecipeContentVisualCache {
             case StackListContent stackList -> addStacks(out, stackList.stacks(), content.amount());
             case TypedStackListContent<?, ?> typedList -> addStacks(out, typedList.stacks(), content.amount());
             case TagStackContent<?> tagStack -> collectEnumerable(tagStack, out, content.amount());
+            case DurabilityContent durability -> collectVisualStacks(durability.ingredient(), out);
             case FluidContainerContent fluidContainer ->
                 addDecoratedStack(out, fluidContainer.sampleContainer(), content.amount());
             case ComplexContent complex -> collectEnumerable(complex, out, content.amount());
@@ -196,6 +198,9 @@ public final class RecipeContentVisualCache {
             case StackContent<?, ?> stackContent -> addStackKey(keys, stackContent.content(), content.amount());
             case StackListContent stackList -> addStackKeys(keys, stackList.stacks(), content.amount());
             case TypedStackListContent<?, ?> typedList -> addStackKeys(keys, typedList.stacks(), content.amount());
+            case DurabilityContent durability -> {
+                return simpleVisualKey(durability.ingredient());
+            }
             case FluidContainerContent fluidContainer ->
                 addStackKey(keys, fluidContainer.sampleContainer(), content.amount());
             default -> {

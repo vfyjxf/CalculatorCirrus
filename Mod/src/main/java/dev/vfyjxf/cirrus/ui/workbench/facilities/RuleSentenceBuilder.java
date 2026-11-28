@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.facilities;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.human.CostOverrideRule;
 import dev.vfyjxf.cirrus.api.planning.human.CycleBreakRule;
@@ -13,9 +14,12 @@ import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.model.PlanningTagKeys;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
 import net.minecraft.network.chat.Component;
+import net.minecraft.tags.TagKey;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -211,15 +215,15 @@ public final class RuleSentenceBuilder {
         return put(fieldStrength, strength);
     }
 
-    public RuleSentenceBuilder resource(ResourceKey resource) {
+    public RuleSentenceBuilder resource(ComponentStackKey resource) {
         return put(fieldResource, resource);
     }
 
-    public RuleSentenceBuilder targetResource(ResourceKey resource) {
+    public RuleSentenceBuilder targetResource(ComponentStackKey resource) {
         return put(fieldTargetResource, resource);
     }
 
-    public RuleSentenceBuilder preferredMember(ResourceKey resource) {
+    public RuleSentenceBuilder preferredMember(ComponentStackKey resource) {
         return put(fieldMember, resource);
     }
 
@@ -231,16 +235,16 @@ public final class RuleSentenceBuilder {
         return put(fieldBannedRecipe, recipeKey);
     }
 
-    public RuleSentenceBuilder machine(String machineId) {
-        return put(fieldMachine, machineId);
+    public RuleSentenceBuilder machine(MachineEntry machine) {
+        return put(fieldMachine, machine);
     }
 
-    public RuleSentenceBuilder system(String systemId) {
+    public RuleSentenceBuilder system(Namespace systemId) {
         return put(fieldSystem, systemId);
     }
 
-    public RuleSentenceBuilder tag(String tagId) {
-        return put(fieldTag, tagId);
+    public RuleSentenceBuilder tag(TagKey<?> tag) {
+        return put(fieldTag, tag);
     }
 
     public RuleSentenceBuilder mod(String modNamespace) {
@@ -308,42 +312,42 @@ public final class RuleSentenceBuilder {
                 ruleId,
                 scope,
                 strength,
-                (String) requiredValue(fieldSystem),
+                (Namespace) requiredValue(fieldSystem),
                 Boolean.TRUE.equals(values.get(fieldOptIn))
             );
             case machine -> new MachineRule(
                 ruleId,
                 scope,
                 strength,
-                (String) requiredValue(fieldMachine),
+                (MachineEntry) requiredValue(fieldMachine),
                 Boolean.TRUE.equals(values.get(fieldAllowBuild))
             );
             case resource -> new ResourceRule(
                 ruleId,
                 scope,
                 strength,
-                (ResourceKey) requiredValue(fieldResource),
+                (ComponentStackKey) requiredValue(fieldResource),
                 Boolean.TRUE.equals(values.get(fieldFreeBase))
             );
             case tagDefault -> new TagDefaultRule(
                 ruleId,
                 scope,
                 strength,
-                (String) requiredValue(fieldTag),
-                (ResourceKey) requiredValue(fieldMember)
+                (TagKey<?>) requiredValue(fieldTag),
+                (ComponentStackKey) requiredValue(fieldMember)
             );
             case cycleBreak -> new CycleBreakRule(
                 ruleId,
                 scope,
                 strength,
-                (ResourceKey) requiredValue(fieldTargetResource),
+                (ComponentStackKey) requiredValue(fieldTargetResource),
                 (CompiledRecipeKey) requiredValue(fieldBannedRecipe)
             );
             case costOverride -> new CostOverrideRule(
                 ruleId,
                 scope,
                 strength,
-                (ResourceKey) requiredValue(fieldResource),
+                (ComponentStackKey) requiredValue(fieldResource),
                 new CostVector(numberOf(fieldH), numberOf(fieldP), numberOf(fieldK), numberOf(fieldS), numberOf(fieldC))
             );
             case modNamespace -> new ModNamespaceRule(ruleId, scope, strength, (String) requiredValue(fieldMod));
@@ -376,8 +380,14 @@ public final class RuleSentenceBuilder {
         if (value instanceof RuleStrength strength) {
             return strengthLabel(strength);
         }
-        if (value instanceof ResourceKey resource) {
-            return Component.literal(resource.shortString());
+        if (value instanceof ComponentStackKey resource) {
+            return Component.literal(resource.displayId());
+        }
+        if (value instanceof MachineEntry machine) {
+            return Component.literal(machine.canonicalKey());
+        }
+        if (value instanceof TagKey<?> tag) {
+            return Component.literal(PlanningTagKeys.format(tag));
         }
         if (value instanceof CompiledRecipeKey recipeKey) {
             return Component.literal(recipeKey.shortString());
@@ -415,9 +425,9 @@ public final class RuleSentenceBuilder {
         switch (rule) {
             case RecipeRule r -> draft.recipe(r.recipeKey());
             case SystemRule r -> draft.system(r.systemId()).flag(fieldOptIn, r.optInEnabled());
-            case MachineRule r -> draft.machine(r.machineId()).flag(fieldAllowBuild, r.willingToBuildNew());
+            case MachineRule r -> draft.machine(r.machine()).flag(fieldAllowBuild, r.willingToBuildNew());
             case ResourceRule r -> draft.resource(r.resource()).flag(fieldFreeBase, r.treatAsFreeBaseSource());
-            case TagDefaultRule r -> draft.tag(r.tagId()).preferredMember(r.preferredMember());
+            case TagDefaultRule r -> draft.tag(r.tag()).preferredMember(r.preferredMember());
             case CycleBreakRule r ->
                 draft.targetResource(r.targetResource()).bannedSourceRecipe(r.bannedSourceRecipe());
             case CostOverrideRule r -> draft.resource(r.resource()).unitCost(r.overrideUnitCost());
@@ -461,9 +471,12 @@ public final class RuleSentenceBuilder {
     private static boolean matches(FieldType type, Object value) {
         return switch (type) {
             case strength -> value instanceof RuleStrength;
-            case resource -> value instanceof ResourceKey;
+            case resource -> value instanceof ComponentStackKey;
             case recipe -> value instanceof CompiledRecipeKey;
-            case machine, system, tag, mod -> value instanceof String text && !text.isBlank();
+            case machine -> value instanceof MachineEntry m && !m.isEmpty();
+            case system -> value instanceof Namespace;
+            case tag -> value instanceof TagKey<?>;
+            case mod -> value instanceof String text && !text.isBlank();
             case number ->
                 value instanceof Number number && Double.isFinite(number.doubleValue()) && number.doubleValue() >= 0.0;
             case bool -> value instanceof Boolean;

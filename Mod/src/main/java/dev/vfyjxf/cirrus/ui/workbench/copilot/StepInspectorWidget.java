@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.copilot;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.InputSlot;
@@ -16,7 +17,7 @@ import dev.vfyjxf.cirrus.api.planning.human.RejectStepFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.model.PlanningTagKeys;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
@@ -28,6 +29,7 @@ import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SlotBinding;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
@@ -49,6 +51,8 @@ import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -87,7 +91,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
         answer, applyRules, overrideStock, declareOwned, rejectStep, pinRecipe
     }
 
-    public record SlotRow(SlotKind kind, int slotIndex, ResourceKey chosen, List<ResourceKey> alternatives) {
+    public record SlotRow(SlotKind kind, int slotIndex, ComponentStackKey chosen, List<ComponentStackKey> alternatives) {
         public SlotRow {
             alternatives = alternatives == null ? List.of() : List.copyOf(alternatives);
         }
@@ -97,7 +101,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
     private List<ResolvedPrompt> prompts = List.of();
     private @Nullable CompiledRecipeGraph graph;
     private boolean persistToWorld;
-    private @Nullable Consumer<ResourceKey> recipeAssistantOpener;
+    private @Nullable Consumer<ComponentStackKey> recipeAssistantOpener;
 
     public StepInspectorWidget(CoPilotHost host) {
         this.host = Objects.requireNonNull(host, "host");
@@ -121,7 +125,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
         return this;
     }
 
-    public StepInspectorWidget onOpenRecipeAssistant(@Nullable Consumer<ResourceKey> opener) {
+    public StepInspectorWidget onOpenRecipeAssistant(@Nullable Consumer<ComponentStackKey> opener) {
         this.recipeAssistantOpener = opener;
         return this;
     }
@@ -203,8 +207,8 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
     private void addSlotRows(List<SlotRow> rows, Map<Integer, SlotBinding> bindings, @Nullable CompiledRecipe recipe) {
         for (Map.Entry<Integer, SlotBinding> entry : bindings.entrySet()) {
             int slotIndex = entry.getKey();
-            ResourceKey chosen = entry.getValue().chosenResource();
-            List<ResourceKey> alts = entry.getValue().equivalentAlternatives();
+            ComponentStackKey chosen = entry.getValue().chosenResource();
+            List<ComponentStackKey> alts = entry.getValue().equivalentAlternatives();
             if (alts.isEmpty() && recipe != null) {
                 alts = tagSlotAlternatives(recipe, slotIndex, chosen);
             }
@@ -212,13 +216,17 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
         }
     }
 
-    private static List<ResourceKey> tagSlotAlternatives(CompiledRecipe recipe, int slotIndex, ResourceKey chosen) {
+    private static List<ComponentStackKey> tagSlotAlternatives(
+        CompiledRecipe recipe,
+        int slotIndex,
+        ComponentStackKey chosen
+    ) {
         InputSlot slot = inputSlotByIndex(recipe, slotIndex);
         if (slot == null || slot.candidates().size() <= 1) {
             return List.of();
         }
-        List<ResourceKey> out = new ArrayList<>();
-        for (ResourceKey candidate : slot.candidates()) {
+        List<ComponentStackKey> out = new ArrayList<>();
+        for (ComponentStackKey candidate : slot.candidates()) {
             if (!candidate.equals(chosen)) {
                 out.add(candidate);
                 if (out.size() >= 4) {
@@ -244,8 +252,8 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
         return null;
     }
 
-    private void appendCatalystRows(List<SlotRow> rows, Map<Integer, ResourceKey> catalysts) {
-        for (Map.Entry<Integer, ResourceKey> entry : catalysts.entrySet()) {
+    private void appendCatalystRows(List<SlotRow> rows, Map<Integer, ComponentStackKey> catalysts) {
+        for (Map.Entry<Integer, ComponentStackKey> entry : catalysts.entrySet()) {
             rows.add(new SlotRow(SlotKind.catalyst, entry.getKey(), entry.getValue(), List.of()));
         }
     }
@@ -339,11 +347,11 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
     }
 
     private boolean declareOwned(PlanStep step) {
-        String machineId = machineOf(step);
-        if (machineId == null) {
+        MachineEntry machine = machineOf(step);
+        if (machine == null) {
             return false;
         }
-        host.refine(new DeclareOwnedMachineFeedback(machineId, 1, persistToWorld), null);
+        host.refine(new DeclareOwnedMachineFeedback(machine, 1, persistToWorld), null);
         return true;
     }
 
@@ -358,7 +366,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
 
     private boolean pinStepRecipe(PlanStep step) {
         CompiledRecipeKey key = recipeOf(step);
-        ResourceKey resource = outputResource(step);
+        ComponentStackKey resource = outputResource(step);
         if (key == null || resource == null) {
             return false;
         }
@@ -366,21 +374,21 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
         return true;
     }
 
-    public boolean swapSlot(int slotIndex, ResourceKey alternative) {
+    public boolean swapSlot(int slotIndex, ComponentStackKey alternative) {
         PlanStep step = selectedStep();
         if (step == null || alternative == null) {
             return false;
         }
         CompiledRecipe recipe = resolveRecipe(recipeOf(step));
         InputSlot slot = inputSlotByIndex(recipe, slotIndex);
-        if (slot != null && slot.tagId().isPresent()) {
-            String tagId = slot.tagId().get();
+        if (slot != null && slot.tagKey().isPresent()) {
+            TagKey<?> tag = slot.tagKey().get();
             GuidanceScope scope = persistToWorld ? GuidanceScope.worldSave : GuidanceScope.session;
             TagDefaultRule rule = new TagDefaultRule(
-                "rule:tag:" + tagId,
+                "rule:tag:" + PlanningTagKeys.format(tag),
                 scope,
                 RuleStrength.hardPin,
-                tagId,
+                tag,
                 alternative
             );
             host.refine(new ApplyRulesFeedback(List.of(rule), persistToWorld), null);
@@ -394,7 +402,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
         return true;
     }
 
-    private @Nullable CompiledRecipeKey alternativeRecipe(ResourceKey alternative, PlanStep step) {
+    private @Nullable CompiledRecipeKey alternativeRecipe(ComponentStackKey alternative, PlanStep step) {
         CompiledRecipeGraph graph = resolvedGraph();
         if (graph != null) {
             for (CompiledRecipe producer : graph.producersOf(alternative)) {
@@ -417,8 +425,8 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
         return null;
     }
 
-    public @Nullable ResourceKey outputResource(PlanStep step) {
-        ResourceKey direct = outputOf(step);
+    public @Nullable ComponentStackKey outputResource(PlanStep step) {
+        ComponentStackKey direct = outputOf(step);
         if (direct != null) {
             return direct;
         }
@@ -431,11 +439,11 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
                 .map(recipe -> recipe.outputs().get(0).resource()).orElse(null);
     }
 
-    public static @Nullable String machineOf(PlanStep step) {
+    public static @Nullable MachineEntry machineOf(PlanStep step) {
         return switch (step) {
-            case ProvisionMachineStep provision -> provision.machineId();
-            case CraftStep craft -> craft.chosenMachineId().orElse(null);
-            case SetupLineStep setup -> setup.primaryMachineId();
+            case ProvisionMachineStep provision -> provision.machine();
+            case CraftStep craft -> craft.chosenMachine().orElse(null);
+            case SetupLineStep setup -> setup.primaryMachine();
             default -> null;
         };
     }
@@ -450,7 +458,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
         };
     }
 
-    public static @Nullable ResourceKey outputOf(PlanStep step) {
+    public static @Nullable ComponentStackKey outputOf(PlanStep step) {
         return switch (step) {
             case AcquireStep acquire -> acquire.resource();
             case LinePullStep pull -> pull.resource();
@@ -459,7 +467,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
         };
     }
 
-    public @Nullable ResourceKey inspectedTargetResource() {
+    public @Nullable ComponentStackKey inspectedTargetResource() {
         PlanStep step = selectedStep();
         if (step != null) {
             return outputResource(step);
@@ -474,7 +482,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
 
     public List<CompiledRecipe> alternativeRecipes() {
         CompiledRecipeGraph resolved = resolvedGraph();
-        ResourceKey target = inspectedTargetResource();
+        ComponentStackKey target = inspectedTargetResource();
         if (resolved == null || target == null) {
             return List.of();
         }
@@ -536,7 +544,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
         for (int i = 0; i < slots.size(); i++) {
             if (slotRect(i).contains((int) localX, (int) localY)) {
                 SlotRow row = slots.get(i);
-                ResourceKey hoveredAlt = alternativeAt(row, (int) localX);
+                ComponentStackKey hoveredAlt = alternativeAt(row, (int) localX);
                 if (hoveredAlt != null) {
                     return OreUiRichTooltip.builder(CoPilotPaint.resourceName(hoveredAlt)).icon(hoveredAlt)
                             .badge("SUBSTITUTE", OreUiRichTooltip.Tone.costC)
@@ -564,9 +572,11 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
         for (int i = 0; i < alts.size(); i++) {
             if (alternativeRect(i).contains((int) localX, (int) localY)) {
                 CompiledRecipe recipe = alts.get(i);
-                String machine = recipe.machineRequirement().compatibleMachineIds().isEmpty()
+                String machine = recipe.machineRequirement().compatibleMachines().isEmpty()
                         ? "Hand / Crafting"
-                        : CoPilotPaint.humanizeId(recipe.machineRequirement().compatibleMachineIds().get(0));
+                        : StepNodeCardRenderer
+                                .machineNameOf(recipe.machineRequirement().compatibleMachines().get(0), null)
+                                .getString();
                 List<OreUiRichTooltip.ItemBadge> inputs = new ArrayList<>();
                 for (InputSlot in : recipe.inputs()) {
                     if (!in.candidates().isEmpty()) {
@@ -585,10 +595,14 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
                                 .of(out.resource(), out.amountPerBatch() > 1 ? "\u00d7" + out.amountPerBatch() : null)
                     );
                 }
-                ResourceKey outKey = recipe.outputs().isEmpty() ? null : recipe.outputs().get(0).resource();
+                ComponentStackKey outKey = recipe.outputs().isEmpty() ? null : recipe.outputs().get(0).resource();
                 return OreUiRichTooltip
                         .builder(
-                            CoPilotPaint.humanizeId(recipe.key().explicitRecipeId().orElse(recipe.key().systemId()))
+                            CoPilotPaint.humanizeId(
+                                recipe.key().explicitRecipeId()
+                                        .map(ResourceLocation::toString)
+                                        .orElseGet(() -> recipe.key().systemId().toString())
+                            )
                         ).icon(outKey).subtitle(machine).badge("ALTERNATIVE", OreUiRichTooltip.Tone.positive)
                         .itemFlow(Component.literal("Recipe"), inputs, outputs)
                         .footer("Click to pin this recipe for target").build();
@@ -598,7 +612,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
     }
 
     public boolean selectAlternativeRecipe(CompiledRecipeKey recipeKey) {
-        ResourceKey target = inspectedTargetResource();
+        ComponentStackKey target = inspectedTargetResource();
         if (target == null || recipeKey == null) {
             return false;
         }
@@ -668,7 +682,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
             if (!row.contains(localX, localY)) {
                 continue;
             }
-            ResourceKey alternative = alternativeAt(rows.get(index), localX);
+            ComponentStackKey alternative = alternativeAt(rows.get(index), localX);
             if (alternative != null) {
                 CirrusUiSound.playClickSound();
                 return swapSlot(rows.get(index).slotIndex(), alternative);
@@ -681,7 +695,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
     private static final int altSlotGap = 3;
     private static final int maxVisibleAlternatives = 4;
 
-    public @Nullable ResourceKey alternativeAt(SlotRow row, int localX) {
+    public @Nullable ComponentStackKey alternativeAt(SlotRow row, int localX) {
         if (row.alternatives().isEmpty()) {
             return null;
         }
@@ -815,10 +829,10 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
         );
 
         int sumY = headerBandHeight + 7;
-        String machine = machineOf(step);
-        ResourceKey iconRes = outputResource(step);
+        MachineEntry machine = machineOf(step);
+        ComponentStackKey iconRes = outputResource(step);
         if (iconRes == null && machine != null) {
-            iconRes = ResourceKey.item(machine);
+            iconRes = machine.contentKey().orElse(null);
         }
         CoPilotPaint.renderSlotItem(
             canvas,
@@ -844,12 +858,12 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
     }
 
     private Component humanStepTitle(PlanStep step) {
-        ResourceKey out = outputResource(step);
+        ComponentStackKey out = outputResource(step);
         if (out != null) {
             return CoPilotPaint.resourceName(out);
         }
         if (step instanceof ProvisionMachineStep provision) {
-            return StepNodeCardRenderer.machineNameOf(provision.machineId(), null);
+            return StepNodeCardRenderer.machineNameOf(provision.machine(), null);
         }
         return Component.literal(CoPilotPaint.humanizeId(step.stepId()));
     }
@@ -900,7 +914,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
                 int altStart = alternativesLeft(row);
                 int cursor = altStart;
                 for (int altIndex = 0; altIndex < altCount; altIndex++) {
-                    ResourceKey alternative = row.alternatives().get(altIndex);
+                    ComponentStackKey alternative = row.alternatives().get(altIndex);
                     OreUiSlotAmount.drawSlot(canvas, alternative, 1L, cursor, slotY, altSlotDim, palette);
                     cursor += altSlotDim + altSlotGap;
                 }
@@ -969,7 +983,7 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
             return "";
         }
         for (PlanStep candidate : plan.steps()) {
-            ResourceKey out = outputResource(candidate);
+            ComponentStackKey out = outputResource(candidate);
             if (row.chosen().equals(out)) {
                 return switch (candidate) {
                     case AcquireStep ignored -> "Gather";
@@ -1132,18 +1146,18 @@ public class StepInspectorWidget extends WidgetGroup<Widget> implements OreUiToo
             }
 
             int titleX = rect.x() + 6;
-            if (!candidate.machineRequirement().compatibleMachineIds().isEmpty()) {
-                String mId = candidate.machineRequirement().compatibleMachineIds().get(0);
-                var mStack = CoPilotPaint.stackOf(ResourceKey.item(mId), 1L);
+            if (!candidate.machineRequirement().compatibleMachines().isEmpty()) {
+                MachineEntry firstMachine = candidate.machineRequirement().compatibleMachines().get(0);
+                var mStack = firstMachine.contentKey().map(k -> CoPilotPaint.stackOf(k, 1L)).orElse(null);
                 if (mStack != null && !mStack.isEmpty()) {
                     CoPilotPaint.renderStack(canvas, mStack, titleX, rect.y() + 4, 11);
                     titleX += 14;
                 }
             }
-            String machineTitle = candidate.machineRequirement().compatibleMachineIds().isEmpty()
-                    ? CoPilotPaint.humanizeId(candidate.key().systemId())
+            String machineTitle = candidate.machineRequirement().compatibleMachines().isEmpty()
+                    ? CoPilotPaint.humanizeId(candidate.key().systemId().toString())
                     : StepNodeCardRenderer
-                            .machineNameOf(candidate.machineRequirement().compatibleMachineIds().get(0), null)
+                            .machineNameOf(candidate.machineRequirement().compatibleMachines().get(0), null)
                             .getString();
             CoPilotPaint.text(
                 canvas,

@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.chrome;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
@@ -74,7 +74,7 @@ public class SessionTabBarWidget extends Widget implements OreUiTooltipProvider 
             return amount;
         }
 
-        public @Nullable ResourceKey primaryResource() {
+        public @Nullable ComponentStackKey primaryResource() {
             return targets.isEmpty() ? null : targets.get(0).resource();
         }
     }
@@ -659,8 +659,8 @@ public class SessionTabBarWidget extends Widget implements OreUiTooltipProvider 
         if (view.targetCount() > 1) {
             return CirrusLangs.Workbench.Topbar.basket.get();
         }
-        ResourceKey resource = view.primaryResource();
-        return resource == null ? CirrusLangs.Workbench.Tab.newTab.get() : Component.literal(resource.shortString());
+        ComponentStackKey resource = view.primaryResource();
+        return resource == null ? CirrusLangs.Workbench.Tab.newTab.get() : Component.literal(resource.displayId());
     }
 
     private Component displayTitleOf(TabView view) {
@@ -670,7 +670,7 @@ public class SessionTabBarWidget extends Widget implements OreUiTooltipProvider 
         if (view.targetCount() > 1) {
             return CirrusLangs.Workbench.Topbar.basket.get();
         }
-        ResourceKey resource = view.primaryResource();
+        ComponentStackKey resource = view.primaryResource();
         return resource == null ? CirrusLangs.Workbench.Tab.newTab.get() : CoPilotPaint.resourceName(resource);
     }
 

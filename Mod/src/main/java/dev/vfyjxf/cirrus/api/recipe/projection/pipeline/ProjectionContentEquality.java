@@ -9,6 +9,7 @@ import dev.vfyjxf.cirrus.api.recipe.content.StackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TagStackContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TypedStackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.DurabilityContent;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -42,6 +43,9 @@ final class ProjectionContentEquality {
         if (a instanceof StackContent<?, ?> sa && b instanceof StackContent<?, ?> sb) {
             return sa.content().matches(sb.content(), MatchStrategy.identity);
         }
+        if (a instanceof DurabilityContent da && b instanceof DurabilityContent db) {
+            return sameIdentity(da.ingredient(), db.ingredient());
+        }
         return sameIdentityAndComponents(a, b);
     }
 
@@ -61,6 +65,10 @@ final class ProjectionContentEquality {
         }
         if (a instanceof ValueContent<?> va && b instanceof ValueContent<?> vb) {
             return va.type() == vb.type() && va.amount() == vb.amount();
+        }
+        if (a instanceof DurabilityContent da && b instanceof DurabilityContent db) {
+            return da.durabilityCost() == db.durabilityCost()
+                    && sameIdentityAndComponents(da.ingredient(), db.ingredient());
         }
         if (a instanceof ComplexContent) {
             return a.equals(b);

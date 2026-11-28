@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.planning.core.verify;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
+import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOption;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
 import dev.vfyjxf.cirrus.api.planning.context.AutomatedLine;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
@@ -7,6 +9,7 @@ import dev.vfyjxf.cirrus.api.planning.context.OwnedMachineGroup;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningContext;
 import dev.vfyjxf.cirrus.api.planning.cost.CostMetadataProvider;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
+import dev.vfyjxf.cirrus.api.planning.cost.PreferenceModifiers;
 import dev.vfyjxf.cirrus.api.planning.graph.CatalystSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledCycleMacro;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
@@ -18,7 +21,6 @@ import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
@@ -36,10 +38,12 @@ import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SlotBinding;
 import dev.vfyjxf.cirrus.api.planning.plan.VerificationCertificate;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.core.cost.DefaultCostMetadataProvider;
 import dev.vfyjxf.cirrus.planning.core.cost.PlanCosts;
 import dev.vfyjxf.cirrus.planning.core.graph.MachineCapabilityGroups;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -137,28 +141,33 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         FacilitySnapshot facilities = ctx.facilities();
         HumanGuidanceView guidance = ctx.guidance();
         AcquisitionOracle oracle = ctx.acquisitionOracle();
+        boolean ignoreStock = request.profile().modifiers().stockMode() == PreferenceModifiers.StockReferenceMode.ignore;
+        boolean forbidTrips = request.profile().modifiers().forbidFieldTrips();
 
-        Map<ResourceKey, Long> initialBefore = new TreeMap<>(ctx.inventory().allUsable());
+        Map<ComponentStackKey, Long> initialBefore = ignoreStock
+                ? new TreeMap<>()
+                : new TreeMap<>(ctx.inventory().allUsable());
         TwoPoolLedger ledger = new TwoPoolLedger(initialBefore);
 
-        Set<String> ownedMachines = new HashSet<>();
+        Set<MachineEntry> ownedMachines = new HashSet<>();
         Set<MachineCapabilityId> ownedCaps = new HashSet<>();
         for (OwnedMachineGroup g : facilities.ownedMachines()) {
             if (g.count() > 0) {
-                ownedMachines.add(g.machineId());
+                ownedMachines.add(g.machine());
                 ownedCaps.add(g.capability());
             }
         }
-        Set<String> automatedSystems = new HashSet<>();
-        Map<ResourceKey, Set<String>> dynamicLinesByOutput = new HashMap<>();
+        Set<Namespace> automatedSystems = new HashSet<>();
+        Map<ComponentStackKey, Set<String>> dynamicLinesByOutput = new HashMap<>();
 
-        Map<ResourceKey, Long> actualAcquired = new TreeMap<>();
-        Map<String, Integer> actualProvisioned = new TreeMap<>();
+        Map<ComponentStackKey, Long> actualAcquired = new TreeMap<>();
+        Map<MachineEntry, Integer> actualProvisioned = new TreeMap<>(MachineEntry.comparator);
         Set<String> actualLinesUsed = new TreeSet<>();
-        Set<ResourceKey> actualCatalysts = new TreeSet<>();
+        Set<ComponentStackKey> actualCatalysts = new TreeSet<>();
+        Map<ComponentStackKey, Long> cumulativeDurabilityUsed = new HashMap<>();
 
         // Provenance: resource -> compiled recipe keys that contributed to it (for CycleBreakRule).
-        Map<ResourceKey, Set<CompiledRecipeKey>> provenance = new HashMap<>();
+        Map<ComponentStackKey, Set<CompiledRecipeKey>> provenance = new HashMap<>();
         // Directed single-input conversions for plan-level round-trip detection.
         Set<ConversionPair> conversions = new HashSet<>();
 
@@ -173,15 +182,24 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                         break;
                     }
                     if (guidance.isResourceBanned(a.resource())) {
-                        violations.add(ErrorCodes.errBannedResource + ":" + a.resource().shortString());
+                        violations.add(ErrorCodes.errBannedResource + ":" + a.resource().displayId());
                         flags[1] = false;
                     }
-                    boolean acquirable = guidance.isResourceTreatedAsBase(a.resource())
-                            || guidance.overriddenUnitCost(a.resource()).isPresent()
-                            || oracle.assess(a.resource(), a.amount(), ctx.progression()).isPresent();
-                    if (!acquirable) {
-                        violations.add(ErrorCodes.errUnacquirableResource + ":" + a.resource().shortString());
+                    if (forbidTrips && a.acquisitionKind() == dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind.manualGather) {
+                        violations.add(ErrorCodes.errUnacquirableResource + ":forbid_field_trips:" + a.resource().displayId());
                         flags[1] = false;
+                    }
+                    boolean freeOrOverride = guidance.isResourceTreatedAsBase(a.resource())
+                            || guidance.overriddenUnitCost(a.resource()).isPresent();
+                    if (!freeOrOverride) {
+                        long newTotalAcq = SafeMath.addSaturating(actualAcquired.getOrDefault(a.resource(), 0L), a.amount());
+                        Optional<AcquisitionOption> opt = oracle.assess(a.resource(), newTotalAcq, ctx.progression());
+                        if (opt.isEmpty()
+                                || newTotalAcq > opt.get().guaranteedQuantity()
+                                || (forbidTrips && opt.get().requiresFieldTrip())) {
+                            violations.add(ErrorCodes.errUnacquirableResource + ":" + a.resource().displayId());
+                            flags[1] = false;
+                        }
                     }
                     if (SafeMath.willOverflowAdd(ledger.totalOf(a.resource()), a.amount())) {
                         violations.add(ErrorCodes.errStockOverflow + ":" + a.stepId());
@@ -222,27 +240,27 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                         flags[3] = false;
                         break;
                     }
-                    if (!guidance.isWillingToBuild(pm.machineId())) {
-                        violations.add(ErrorCodes.errBannedMachineBuild + ":" + pm.machineId());
+                    if (!guidance.isWillingToBuild(pm.machine())) {
+                        violations.add(ErrorCodes.errBannedMachineBuild + ":" + pm.machine().canonicalKey());
                         flags[2] = false;
                     }
                     if (pm.craftedByPredecessorSteps()) {
-                        ResourceKey mk = ResourceKey.item(pm.machineId());
-                        if (!ledger.consume(mk, pm.countToBuild())) {
-                            violations.add(ErrorCodes.errInsufficientMachineItem + ":" + pm.machineId());
+                        Optional<ComponentStackKey> mkOpt = pm.machine().contentKey();
+                        if (mkOpt.isEmpty() || !ledger.consume(mkOpt.get(), pm.countToBuild())) {
+                            violations.add(ErrorCodes.errInsufficientMachineItem + ":" + pm.machine().canonicalKey());
                             flags[1] = false;
                         }
                     }
-                    ownedMachines.add(pm.machineId());
+                    ownedMachines.add(pm.machine());
                     pm.satisfiedCapability().ifPresent(ownedCaps::add);
-                    actualProvisioned.merge(pm.machineId(), pm.countToBuild(), Integer::sum);
+                    actualProvisioned.merge(pm.machine(), pm.countToBuild(), Integer::sum);
                 }
                 case SetupLineStep sl -> {
-                    if (!guidance.isWillingToBuild(sl.primaryMachineId())) {
-                        violations.add(ErrorCodes.errBannedMachineBuild + ":" + sl.primaryMachineId());
+                    if (!guidance.isWillingToBuild(sl.primaryMachine())) {
+                        violations.add(ErrorCodes.errBannedMachineBuild + ":" + sl.primaryMachine().canonicalKey());
                         flags[2] = false;
                     }
-                    ownedMachines.add(sl.primaryMachineId());
+                    ownedMachines.add(sl.primaryMachine());
                     ownedCaps.add(MachineCapabilityGroups.capabilityOf(sl.systemId()));
                     automatedSystems.add(sl.systemId());
                     dynamicLinesByOutput.computeIfAbsent(sl.targetOutput(), ignored -> new HashSet<>())
@@ -260,6 +278,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                         violations,
                         flags,
                         actualCatalysts,
+                        cumulativeDurabilityUsed,
                         provenance,
                         conversions,
                         true
@@ -280,6 +299,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                         violations,
                         flags,
                         actualCatalysts,
+                        cumulativeDurabilityUsed,
                         provenance
                     );
                 }
@@ -289,26 +309,26 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         // 4. Plan-level round-trip check.
         for (ConversionPair pair : conversions) {
             if (conversions.contains(new ConversionPair(pair.to, pair.from))) {
-                violations.add(ErrorCodes.errRoundTrip + ":" + pair.from.shortString() + "<->" + pair.to.shortString());
+                violations.add(ErrorCodes.errRoundTrip + ":" + pair.from.displayId() + "<->" + pair.to.displayId());
                 flags[1] = false;
                 break;
             }
         }
 
         // 5. Goal satisfaction + CycleBreakRule provenance check.
-        Map<ResourceKey, Long> mergedTargets = new TreeMap<>();
+        Map<ComponentStackKey, Long> mergedTargets = new TreeMap<>();
         for (TargetDemand td : request.targets()) {
             mergedTargets.merge(td.resource(), td.amount(), SafeMath::addSaturating);
         }
         for (var e : mergedTargets.entrySet()) {
-            ResourceKey targetRes = e.getKey();
+            ComponentStackKey targetRes = e.getKey();
             long need = e.getValue();
             Set<CompiledRecipeKey> contributors = provenance.get(targetRes);
             if (contributors != null) {
                 for (CompiledRecipeKey rk : contributors) {
                     if (guidance.isRecipeBannedForTarget(targetRes, rk)) {
                         violations.add(
-                            ErrorCodes.errBannedRecipeForTarget + ":" + targetRes.shortString() + ":" + rk.shortString()
+                            ErrorCodes.errBannedRecipeForTarget + ":" + targetRes.displayId() + ":" + rk.shortString()
                         );
                         flags[1] = false;
                     }
@@ -316,7 +336,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             }
             if (!ledger.consume(targetRes, need)) {
                 violations.add(
-                    ErrorCodes.errGoalNotMet + ":" + targetRes.shortString() + " have=" + ledger.totalOf(targetRes)
+                    ErrorCodes.errGoalNotMet + ":" + targetRes.displayId() + " have=" + ledger.totalOf(targetRes)
                             + " need=" + need
                 );
                 flags[1] = false;
@@ -324,8 +344,8 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         }
 
         // 6. Strict two-pool FIFO surplus check.
-        Map<ResourceKey, Long> actualSurplus = ledger.remainingProducedTotals();
-        Map<ResourceKey, Long> declaredSurplus = new TreeMap<>();
+        Map<ComponentStackKey, Long> actualSurplus = ledger.remainingProducedTotals();
+        Map<ComponentStackKey, Long> declaredSurplus = new TreeMap<>();
         for (ByproductEntry bp : plan.surplusByproducts()) {
             if (!byId.containsKey(bp.producedByStepId())) {
                 violations.add(ErrorCodes.errSurplusMismatch + ":unknown_producer:" + bp.producedByStepId());
@@ -334,26 +354,30 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             declaredSurplus.merge(bp.resource(), bp.amount(), SafeMath::addSaturating);
         }
         if (!actualSurplus.equals(declaredSurplus)) {
-            Set<ResourceKey> union = new TreeSet<>(actualSurplus.keySet());
+            Set<ComponentStackKey> union = new TreeSet<>(actualSurplus.keySet());
             union.addAll(declaredSurplus.keySet());
-            for (ResourceKey rk : union) {
+            for (ComponentStackKey rk : union) {
                 long act = actualSurplus.getOrDefault(rk, 0L);
                 long dec = declaredSurplus.getOrDefault(rk, 0L);
                 if (act != dec) {
                     violations.add(
-                        ErrorCodes.errSurplusMismatch + ":" + rk.shortString() + " declared=" + dec + " actual=" + act
+                        ErrorCodes.errSurplusMismatch + ":" + rk.displayId() + " declared=" + dec + " actual=" + act
                     );
                     flags[4] = false;
                 }
             }
         }
 
-        // 7. PreparationSummary consistency check.
+        // 7. PreparationSummary consistency check (including catalysts & lines used).
         PreparationSummary prep = plan.preparation();
-        Map<ResourceKey, Long> actualConsumedInv = ledger.consumedFromInitial(initialBefore);
+        Map<ComponentStackKey, Long> actualConsumedInv = ledger.consumedFromInitial(initialBefore);
+        Set<ComponentStackKey> declaredCatalysts = new TreeSet<>(prep.catalystsRequired());
+        Set<String> declaredLines = new TreeSet<>(prep.existingLinesUsed());
         if (!actualConsumedInv.equals(prep.consumedFromInventory().entries())
                 || !actualAcquired.equals(prep.toAcquireFromWorld().entries())
-                || !actualProvisioned.equals(prep.machinesToProvision())) {
+                || !actualProvisioned.equals(prep.machinesToProvision())
+                || !actualCatalysts.equals(declaredCatalysts)
+                || !actualLinesUsed.equals(declaredLines)) {
             violations.add(ErrorCodes.errPreparationMismatch);
             flags[4] = false;
         }
@@ -372,15 +396,16 @@ public final class DefaultPlanVerifier implements PlanVerifier {
     private boolean verifyCraft(
         CraftStep cs,
         TwoPoolLedger ledger,
-        Set<String> ownedMachines,
+        Set<MachineEntry> ownedMachines,
         Set<MachineCapabilityId> ownedCaps,
-        Set<String> automatedSystems,
+        Set<Namespace> automatedSystems,
         FacilitySnapshot facilities,
         HumanGuidanceView guidance,
         List<String> violations,
         boolean[] flags,
-        Set<ResourceKey> actualCatalysts,
-        Map<ResourceKey, Set<CompiledRecipeKey>> provenance,
+        Set<ComponentStackKey> actualCatalysts,
+        Map<ComponentStackKey, Long> cumulativeDurabilityUsed,
+        Map<ComponentStackKey, Set<CompiledRecipeKey>> provenance,
         Set<ConversionPair> conversions,
         boolean recordConversion
     ) {
@@ -400,7 +425,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             violations.add(ErrorCodes.errBannedRecipe + ":" + cs.recipeKey().shortString());
             flags[1] = false;
         }
-        String sysId = rec.key().systemId();
+        Namespace sysId = rec.key().systemId();
         SystemAdmission adm = graph.admissionOf(sysId);
         boolean unlocked = facilities.unlockedSystems().contains(sysId);
         if (!guidance.isSystemEnabled(sysId, adm, unlocked)) {
@@ -410,7 +435,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
 
         MachineRequirement req = rec.machineRequirement();
         if (!req.handCraftable()) {
-            boolean hasM = cs.chosenMachineId().map(ownedMachines::contains).orElse(false);
+            boolean hasM = cs.chosenMachine().map(m -> ownedMachines.contains(m) || facilities.ownsMachineFor(m)).orElse(false);
             boolean hasC = req.capabilityId().map(ownedCaps::contains).orElse(false);
             if (!hasM && !hasC) {
                 violations.add(ErrorCodes.errMachineNotAvailable + ":" + cs.stepId());
@@ -427,13 +452,18 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         }
 
         for (CatalystSlot cat : rec.catalysts()) {
-            ResourceKey bound = cs.catalystBindings().get(cat.slotIndex());
-            long minNeeded = (cat.durabilityCostPerBatch() > 0 && cat.maxDurability() > 0)
-                    ? SafeMath.ceilDiv(
-                        SafeMath.mulSaturating(cs.batches(), cat.durabilityCostPerBatch()),
-                        cat.maxDurability()
-                    )
-                    : 1L;
+            ComponentStackKey bound = cs.catalystBindings().get(cat.slotIndex());
+            long minNeeded;
+            if (cat.durabilityCostPerBatch() > 0 && cat.maxDurability() > 0) {
+                long stepDur = SafeMath.mulSaturating(cs.batches(), cat.durabilityCostPerBatch());
+                long cumDur = bound == null ? stepDur : SafeMath.addSaturating(cumulativeDurabilityUsed.getOrDefault(bound, 0L), stepDur);
+                if (bound != null) {
+                    cumulativeDurabilityUsed.put(bound, cumDur);
+                }
+                minNeeded = SafeMath.ceilDiv(cumDur, cat.maxDurability());
+            } else {
+                minNeeded = 1L;
+            }
             if (bound == null || !cat.candidates().contains(bound) || ledger.totalOf(bound) < minNeeded) {
                 violations.add(ErrorCodes.errMissingCatalyst + ":" + cs.stepId() + ":" + cat.slotIndex());
                 flags[2] = false;
@@ -464,7 +494,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         HumanGuidanceView guidance,
         List<String> violations,
         boolean[] flags,
-        Map<ResourceKey, Set<CompiledRecipeKey>> provenance,
+        Map<ComponentStackKey, Set<CompiledRecipeKey>> provenance,
         Set<ConversionPair> conversions
     ) {
         if (conv.batches() <= 0L) {
@@ -487,7 +517,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             violations.add(ErrorCodes.errBannedRecipe + ":" + conv.conversionRecipeKey().shortString());
             flags[1] = false;
         }
-        String sysId = rec.key().systemId();
+        Namespace sysId = rec.key().systemId();
         if (!guidance.isSystemEnabled(sysId, graph.admissionOf(sysId), facilities.unlockedSystems().contains(sysId))) {
             violations.add(ErrorCodes.errBannedSystem + ":" + sysId);
             flags[2] = false;
@@ -516,14 +546,14 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         HumanGuidanceView guidance,
         List<String> violations,
         boolean[] flags,
-        Map<ResourceKey, Set<CompiledRecipeKey>> provenance,
+        Map<ComponentStackKey, Set<CompiledRecipeKey>> provenance,
         Set<ConversionPair> conversions,
         boolean recordConversion
     ) {
         boolean ok = true;
         Set<CompiledRecipeKey> inheritedProv = new HashSet<>();
         inheritedProv.add(rec.key());
-        ResourceKey singleInputChosen = null;
+        ComponentStackKey singleInputChosen = null;
 
         for (InputSlot slot : rec.inputs()) {
             SlotBinding b = bindings.get(slot.slotIndex());
@@ -534,7 +564,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                 continue;
             }
             if (guidance.isResourceBanned(b.chosenResource())) {
-                violations.add(ErrorCodes.errBannedResource + ":" + b.chosenResource().shortString());
+                violations.add(ErrorCodes.errBannedResource + ":" + b.chosenResource().displayId());
                 flags[1] = false;
                 ok = false;
             }
@@ -546,7 +576,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             }
             long need = batches * slot.amountPerBatch();
             if (!ledger.consume(b.chosenResource(), need)) {
-                violations.add(ErrorCodes.errNegativeStock + ":" + stepId + ":" + b.chosenResource().shortString());
+                violations.add(ErrorCodes.errNegativeStock + ":" + stepId + ":" + b.chosenResource().displayId());
                 flags[1] = false;
                 ok = false;
             }
@@ -584,42 +614,41 @@ public final class DefaultPlanVerifier implements PlanVerifier {
     private void verifyCycleLoop(
         CycleLoopStep loop,
         TwoPoolLedger ledger,
-        Set<String> ownedMachines,
+        Set<MachineEntry> ownedMachines,
         Set<MachineCapabilityId> ownedCaps,
-        Set<String> automatedSystems,
+        Set<Namespace> automatedSystems,
         FacilitySnapshot facilities,
         HumanGuidanceView guidance,
         List<String> violations,
         boolean[] flags,
-        Set<ResourceKey> actualCatalysts,
-        Map<ResourceKey, Set<CompiledRecipeKey>> provenance
+        Set<ComponentStackKey> actualCatalysts,
+        Map<ComponentStackKey, Long> cumulativeDurabilityUsed,
+        Map<ComponentStackKey, Set<CompiledRecipeKey>> provenance
     ) {
         if (loop.iterations() <= 0L || loop.singleIterationTemplate().isEmpty()) {
             violations.add(ErrorCodes.errInvalidCycleIter + ":" + loop.stepId());
             flags[3] = false;
             return;
         }
-        if (!graph.allCycleMacros().isEmpty()) {
-            Optional<CompiledCycleMacro> macroOpt = graph.cycleMacroByKey(loop.macroKey());
-            if (macroOpt.isEmpty()) {
-                violations.add(ErrorCodes.errUnknownCycleMacro + ":" + loop.macroKey().macroId());
+        Optional<CompiledCycleMacro> macroOpt = graph.cycleMacroByKey(loop.macroKey());
+        if (macroOpt.isEmpty()) {
+            violations.add(ErrorCodes.errUnknownCycleMacro + ":" + loop.macroKey().macroId());
+            flags[1] = false;
+        } else {
+            CompiledCycleMacro macro = macroOpt.get();
+            if (macro.innerRecipes().size() != loop.singleIterationTemplate().size()) {
+                violations.add(ErrorCodes.errUnknownCycleMacro + ":template_size:" + loop.macroKey().macroId());
                 flags[1] = false;
             } else {
-                CompiledCycleMacro macro = macroOpt.get();
-                if (macro.innerRecipes().size() != loop.singleIterationTemplate().size()) {
-                    violations.add(ErrorCodes.errUnknownCycleMacro + ":template_size:" + loop.macroKey().macroId());
-                    flags[1] = false;
-                } else {
-                    for (int i = 0; i < macro.innerRecipes().size(); i++) {
-                        CraftStep inner = loop.singleIterationTemplate().get(i);
-                        if (!inner.recipeKey().equals(macro.innerRecipes().get(i).key())
-                                || inner.batches() != macro.innerMultipliers().get(i)) {
-                            violations.add(
-                                ErrorCodes.errUnknownCycleMacro + ":template_mismatch:" + loop.macroKey().macroId()
-                            );
-                            flags[1] = false;
-                            break;
-                        }
+                for (int i = 0; i < macro.innerRecipes().size(); i++) {
+                    CraftStep inner = loop.singleIterationTemplate().get(i);
+                    if (!inner.recipeKey().equals(macro.innerRecipes().get(i).key())
+                            || inner.batches() != macro.innerMultipliers().get(i)) {
+                        violations.add(
+                            ErrorCodes.errUnknownCycleMacro + ":template_mismatch:" + loop.macroKey().macroId()
+                        );
+                        flags[1] = false;
+                        break;
                     }
                 }
             }
@@ -627,17 +656,18 @@ public final class DefaultPlanVerifier implements PlanVerifier {
 
         for (var e : loop.workingSeedAmounts().entrySet()) {
             if (e.getValue() <= 0L || ledger.totalOf(e.getKey()) < e.getValue()) {
-                violations.add(ErrorCodes.errMissingCycleSeed + ":" + loop.stepId() + ":" + e.getKey().shortString());
+                violations.add(ErrorCodes.errMissingCycleSeed + ":" + loop.stepId() + ":" + e.getKey().displayId());
                 flags[1] = false;
             }
         }
 
         // Sandbox simulation of 1 iteration sampling peakDraw after every input consumption.
-        Map<ResourceKey, Long> beforeMap = ledger.snapshotTotals();
-        Map<ResourceKey, Long> sim = new TreeMap<>(beforeMap);
-        Map<ResourceKey, Long> peakDraw = new HashMap<>();
-        Set<ResourceKey> touched = new TreeSet<>(loop.netDeltaPerIteration().keySet());
+        Map<ComponentStackKey, Long> beforeMap = ledger.snapshotTotals();
+        Map<ComponentStackKey, Long> sim = new TreeMap<>(beforeMap);
+        Map<ComponentStackKey, Long> peakDraw = new HashMap<>();
+        Set<ComponentStackKey> touched = new TreeSet<>(loop.netDeltaPerIteration().keySet());
         Set<CompiledRecipeKey> loopProv = new HashSet<>();
+        long iters = loop.iterations();
 
         for (CraftStep inner : loop.singleIterationTemplate()) {
             loopProv.add(inner.recipeKey());
@@ -657,7 +687,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                 violations.add(ErrorCodes.errBannedRecipe + ":" + inner.recipeKey().shortString());
                 flags[1] = false;
             }
-            String sysId = rec.key().systemId();
+            Namespace sysId = rec.key().systemId();
             if (!guidance
                     .isSystemEnabled(sysId, graph.admissionOf(sysId), facilities.unlockedSystems().contains(sysId))) {
                 violations.add(ErrorCodes.errBannedSystem + ":" + sysId);
@@ -665,7 +695,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             }
             MachineRequirement req = rec.machineRequirement();
             if (!req.handCraftable()) {
-                boolean hasM = inner.chosenMachineId().map(ownedMachines::contains).orElse(false);
+                boolean hasM = inner.chosenMachine().map(m -> ownedMachines.contains(m) || facilities.ownsMachineFor(m)).orElse(false);
                 boolean hasC = req.capabilityId().map(ownedCaps::contains).orElse(false);
                 if (!hasM && !hasC) {
                     violations.add(ErrorCodes.errMachineNotAvailable + ":" + inner.stepId());
@@ -673,13 +703,19 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                 }
             }
             for (CatalystSlot cat : rec.catalysts()) {
-                ResourceKey bound = inner.catalystBindings().get(cat.slotIndex());
-                long minNeeded = (cat.durabilityCostPerBatch() > 0 && cat.maxDurability() > 0)
-                        ? SafeMath.ceilDiv(
-                            SafeMath.mulSaturating(inner.batches(), cat.durabilityCostPerBatch()),
-                            cat.maxDurability()
-                        )
-                        : 1L;
+                ComponentStackKey bound = inner.catalystBindings().get(cat.slotIndex());
+                long minNeeded;
+                if (cat.durabilityCostPerBatch() > 0 && cat.maxDurability() > 0) {
+                    long totalBatches = SafeMath.mulSaturating(inner.batches(), iters);
+                    long stepDur = SafeMath.mulSaturating(totalBatches, cat.durabilityCostPerBatch());
+                    long cumDur = bound == null ? stepDur : SafeMath.addSaturating(cumulativeDurabilityUsed.getOrDefault(bound, 0L), stepDur);
+                    if (bound != null) {
+                        cumulativeDurabilityUsed.put(bound, cumDur);
+                    }
+                    minNeeded = SafeMath.ceilDiv(cumDur, cat.maxDurability());
+                } else {
+                    minNeeded = 1L;
+                }
                 if (bound == null || !cat.candidates().contains(bound) || sim.getOrDefault(bound, 0L) < minNeeded) {
                     violations.add(ErrorCodes.errMissingCatalyst + ":" + inner.stepId() + ":" + cat.slotIndex());
                     flags[2] = false;
@@ -695,15 +731,19 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                     continue;
                 }
                 if (guidance.isResourceBanned(b.chosenResource())) {
-                    violations.add(ErrorCodes.errBannedResource + ":" + b.chosenResource().shortString());
+                    violations.add(ErrorCodes.errBannedResource + ":" + b.chosenResource().displayId());
                     flags[1] = false;
                 }
+                Set<CompiledRecipeKey> inProv = provenance.get(b.chosenResource());
+                if (inProv != null) {
+                    loopProv.addAll(inProv);
+                }
                 long need = SafeMath.mulSaturating(inner.batches(), slot.amountPerBatch());
-                ResourceKey rk = b.chosenResource();
+                ComponentStackKey rk = b.chosenResource();
                 touched.add(rk);
                 long cur = sim.getOrDefault(rk, 0L);
                 if (cur < need) {
-                    violations.add(ErrorCodes.errNegativeStock + ":" + inner.stepId() + ":" + rk.shortString());
+                    violations.add(ErrorCodes.errNegativeStock + ":" + inner.stepId() + ":" + rk.displayId());
                     flags[1] = false;
                 }
                 long after = cur - need;
@@ -714,22 +754,21 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                 }
             }
             for (OutputSlot out : rec.outputs()) {
-                ResourceKey rk = out.resource();
+                ComponentStackKey rk = out.resource();
                 touched.add(rk);
                 long prod = SafeMath.mulSaturating(inner.batches(), out.amountPerBatch());
                 sim.put(rk, SafeMath.addSaturating(sim.getOrDefault(rk, 0L), prod));
             }
         }
 
-        // Bidirectional A16 delta check + N-iteration induction.
-        long iters = loop.iterations();
-        for (ResourceKey rk : touched) {
+        // Bidirectional delta check + N-iteration induction.
+        for (ComponentStackKey rk : touched) {
             long before = beforeMap.getOrDefault(rk, 0L);
             long actualDelta = sim.getOrDefault(rk, 0L) - before;
             long declaredDelta = loop.netDeltaPerIteration().getOrDefault(rk, 0L);
             if (actualDelta != declaredDelta) {
                 violations.add(
-                    ErrorCodes.errCycleDeltaMismatch + ":" + loop.stepId() + ":" + rk.shortString() + " actual="
+                    ErrorCodes.errCycleDeltaMismatch + ":" + loop.stepId() + ":" + rk.displayId() + " actual="
                             + actualDelta + " declared=" + declaredDelta
                 );
                 flags[1] = false;
@@ -738,7 +777,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             if (actualDelta >= 0L) {
                 if (before < peak) {
                     violations
-                            .add(ErrorCodes.errCycleInsufficientReagent + ":" + loop.stepId() + ":" + rk.shortString());
+                            .add(ErrorCodes.errCycleInsufficientReagent + ":" + loop.stepId() + ":" + rk.displayId());
                     flags[1] = false;
                 }
                 if (actualDelta > 0L) {
@@ -755,7 +794,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                 long neededTotal = SafeMath.addSaturating(SafeMath.mulSaturating(iters - 1L, negDelta), peak);
                 if (before < neededTotal) {
                     violations
-                            .add(ErrorCodes.errCycleInsufficientReagent + ":" + loop.stepId() + ":" + rk.shortString());
+                            .add(ErrorCodes.errCycleInsufficientReagent + ":" + loop.stepId() + ":" + rk.displayId());
                     flags[1] = false;
                 }
                 long totalConsume = SafeMath.mulSaturating(iters, negDelta);
@@ -764,12 +803,12 @@ public final class DefaultPlanVerifier implements PlanVerifier {
         }
     }
 
-    private static boolean matchesSlot(InputSlot slot, ResourceKey chosen) {
+    private static boolean matchesSlot(InputSlot slot, ComponentStackKey chosen) {
         if (slot.matchMode() == SlotMatchMode.identityAndComponent) {
             return slot.candidates().contains(chosen);
         }
-        for (ResourceKey c : slot.candidates()) {
-            if (c.sameBaseIdentity(chosen)) {
+        for (ComponentStackKey c : slot.candidates()) {
+            if (c.sameContent(chosen)) {
                 return true;
             }
         }
@@ -778,13 +817,14 @@ public final class DefaultPlanVerifier implements PlanVerifier {
 
     private static boolean costsClose(CostVector a, CostVector b) {
         return Math.abs(a.humanActiveSeconds() - b.humanActiveSeconds()) <= costTolerance
+                && Math.abs(a.tripActiveSeconds() - b.tripActiveSeconds()) <= costTolerance
                 && Math.abs(a.passiveWaitSeconds() - b.passiveWaitSeconds()) <= costTolerance
                 && Math.abs(a.machineSetupCapital() - b.machineSetupCapital()) <= costTolerance
                 && Math.abs(a.materialScarcity() - b.materialScarcity()) <= costTolerance
                 && Math.abs(a.cognitiveFriction() - b.cognitiveFriction()) <= costTolerance;
     }
 
-    private record ConversionPair(ResourceKey from, ResourceKey to) {}
+    private record ConversionPair(ComponentStackKey from, ComponentStackKey to) {}
 
     private static final class ProducedBatch {
         final String stepId;
@@ -798,26 +838,26 @@ public final class DefaultPlanVerifier implements PlanVerifier {
 
     private static final class TwoPoolLedger {
 
-        private final Map<ResourceKey, Long> initialPool;
-        private final Map<ResourceKey, Deque<ProducedBatch>> producedPool = new TreeMap<>();
-        private final Map<ResourceKey, Long> producedTotals = new TreeMap<>();
+        private final Map<ComponentStackKey, Long> initialPool;
+        private final Map<ComponentStackKey, Deque<ProducedBatch>> producedPool = new TreeMap<>();
+        private final Map<ComponentStackKey, Long> producedTotals = new TreeMap<>();
 
-        TwoPoolLedger(Map<ResourceKey, Long> initial) {
+        TwoPoolLedger(Map<ComponentStackKey, Long> initial) {
             this.initialPool = new TreeMap<>(initial);
         }
 
-        long totalOf(ResourceKey key) {
+        long totalOf(ComponentStackKey key) {
             return SafeMath.addSaturating(initialPool.getOrDefault(key, 0L), producedTotals.getOrDefault(key, 0L));
         }
 
-        void produce(ResourceKey key, long amount, String stepId) {
+        void produce(ComponentStackKey key, long amount, String stepId) {
             if (amount <= 0L) return;
             producedPool.computeIfAbsent(key, ignored -> new ArrayDeque<>()).addLast(new ProducedBatch(stepId, amount));
             producedTotals.merge(key, amount, SafeMath::addSaturating);
         }
 
         /** Consumes produced pool FIFO first, then initial stock. */
-        boolean consume(ResourceKey key, long amount) {
+        boolean consume(ComponentStackKey key, long amount) {
             if (amount <= 0L) return true;
             long have = totalOf(key);
             if (have < amount) {
@@ -856,16 +896,16 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             return true;
         }
 
-        Map<ResourceKey, Long> snapshotTotals() {
-            TreeMap<ResourceKey, Long> snap = new TreeMap<>(initialPool);
+        Map<ComponentStackKey, Long> snapshotTotals() {
+            TreeMap<ComponentStackKey, Long> snap = new TreeMap<>(initialPool);
             for (var e : producedTotals.entrySet()) {
                 snap.merge(e.getKey(), e.getValue(), SafeMath::addSaturating);
             }
             return snap;
         }
 
-        Map<ResourceKey, Long> remainingProducedTotals() {
-            TreeMap<ResourceKey, Long> out = new TreeMap<>();
+        Map<ComponentStackKey, Long> remainingProducedTotals() {
+            TreeMap<ComponentStackKey, Long> out = new TreeMap<>();
             for (var e : producedTotals.entrySet()) {
                 if (e.getValue() > 0L) {
                     out.put(e.getKey(), e.getValue());
@@ -874,8 +914,8 @@ public final class DefaultPlanVerifier implements PlanVerifier {
             return out;
         }
 
-        Map<ResourceKey, Long> consumedFromInitial(Map<ResourceKey, Long> initialBefore) {
-            TreeMap<ResourceKey, Long> consumed = new TreeMap<>();
+        Map<ComponentStackKey, Long> consumedFromInitial(Map<ComponentStackKey, Long> initialBefore) {
+            TreeMap<ComponentStackKey, Long> consumed = new TreeMap<>();
             for (var e : initialBefore.entrySet()) {
                 long rem = initialPool.getOrDefault(e.getKey(), 0L);
                 long used = e.getValue() - rem;

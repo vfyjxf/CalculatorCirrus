@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.api.planning.graph;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 
 import java.util.Collections;
 import java.util.Objects;
@@ -9,9 +10,9 @@ import java.util.TreeSet;
 
 public record CoupledComponent(
     CoupledKind kind,
-    Set<ResourceKey> resources,
+    Set<ComponentStackKey> resources,
     Set<Integer> recipeCompactIds,
-    Set<String> candidateNewMachines
+    Set<MachineEntry> candidateNewMachines
 ) {
 
     public CoupledComponent {
@@ -21,7 +22,15 @@ public record CoupledComponent(
         Objects.requireNonNull(candidateNewMachines, "candidateNewMachines");
         resources = sortedSet(resources);
         recipeCompactIds = sortedSet(recipeCompactIds);
-        candidateNewMachines = sortedSet(candidateNewMachines);
+        if (candidateNewMachines.isEmpty()) {
+            candidateNewMachines = Set.of();
+        } else {
+            TreeSet<MachineEntry> copy = new TreeSet<>(MachineEntry.comparator);
+            for (MachineEntry m : candidateNewMachines) {
+                copy.add(Objects.requireNonNull(m));
+            }
+            candidateNewMachines = Collections.unmodifiableSet(copy);
+        }
     }
 
     private static <T extends Comparable<T>> Set<T> sortedSet(Set<T> source) {

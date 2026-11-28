@@ -1,10 +1,10 @@
 package dev.vfyjxf.cirrus.ui.workbench.state;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.PlanningBudget;
 import dev.vfyjxf.cirrus.api.planning.context.ProgressionState;
 import dev.vfyjxf.cirrus.api.planning.cost.PlanningProfile;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
@@ -36,7 +36,7 @@ public final class SessionTabState {
     private @Nullable String comparePlanId;
     private Set<String> selectedStepIds = Set.of();
     private @Nullable String hoveredStepId;
-    private @Nullable ResourceKey hoveredResource;
+    private @Nullable ComponentStackKey hoveredResource;
     private Set<String> expandedLoopStepIds = Set.of();
     private Map<String, FloatPos> manualNodeOffsets = Map.of();
     private List<GuidanceRule> sessionRules = List.of();
@@ -48,7 +48,7 @@ public final class SessionTabState {
     private float cameraY;
     private float cameraZoom = 1.0f;
     private @Nullable String anchorStepId;
-    private @Nullable ResourceKey anchorResource;
+    private @Nullable ComponentStackKey anchorResource;
     private boolean leftDockCollapsed;
     private boolean rightDockCollapsed;
     private String leftDockMode = "cards";
@@ -230,11 +230,11 @@ public final class SessionTabState {
         this.hoveredStepId = hoveredStepId;
     }
 
-    public @Nullable ResourceKey hoveredResource() {
+    public @Nullable ComponentStackKey hoveredResource() {
         return hoveredResource;
     }
 
-    public void setHoveredResource(@Nullable ResourceKey hoveredResource) {
+    public void setHoveredResource(@Nullable ComponentStackKey hoveredResource) {
         this.hoveredResource = hoveredResource;
     }
 
@@ -352,11 +352,11 @@ public final class SessionTabState {
         return anchorStepId;
     }
 
-    public @Nullable ResourceKey anchorResource() {
+    public @Nullable ComponentStackKey anchorResource() {
         return anchorResource;
     }
 
-    public void setAnchor(@Nullable String stepId, @Nullable ResourceKey resource) {
+    public void setAnchor(@Nullable String stepId, @Nullable ComponentStackKey resource) {
         this.anchorStepId = stepId;
         this.anchorResource = resource;
     }

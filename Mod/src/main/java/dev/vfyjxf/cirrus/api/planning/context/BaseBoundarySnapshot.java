@@ -1,10 +1,8 @@
 package dev.vfyjxf.cirrus.api.planning.context;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 
-import java.util.ArrayDeque;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -15,19 +13,23 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * Composable 3-layer Base boundary snapshot (M4):
- * certified base contracts, user force-expand overrides, protected/forbidden-gather sets,
- * and declared relative price partial-order constraints (cheaper <= moreExpensive + delta).
+ * Composable base-supply boundary snapshot:
+ * certified base contracts, user force-expand overrides, protected rare sets,
+ * certified natural resources, and relative price partial-order constraints.
  */
 public record BaseBoundarySnapshot(
-    Map<ResourceKey, BaseContract> contracts,
-    Set<ResourceKey> forceExpandResources,
-    Set<ResourceKey> protectedRareResources,
-    Set<ResourceKey> certifiedNaturalResources,
+    Map<ComponentStackKey, BaseContract> contracts,
+    Set<ComponentStackKey> forceExpandResources,
+    Set<ComponentStackKey> protectedRareResources,
+    Set<ComponentStackKey> certifiedNaturalResources,
     List<PartialOrderConstraint> pricePartialOrders
 ) {
 
-    public record PartialOrderConstraint(ResourceKey cheaper, ResourceKey moreExpensive, double minDeltaSeconds) {
+    public record PartialOrderConstraint(
+        ComponentStackKey cheaper,
+        ComponentStackKey moreExpensive,
+        double minDeltaSeconds
+    ) {
         public PartialOrderConstraint {
             Objects.requireNonNull(cheaper, "cheaper");
             Objects.requireNonNull(moreExpensive, "moreExpensive");
@@ -65,30 +67,29 @@ public record BaseBoundarySnapshot(
         pricePartialOrders = List.copyOf(pricePartialOrders);
     }
 
-    public Optional<BaseContract> activeContractFor(ResourceKey resource) {
+    public Optional<BaseContract> activeContractFor(ComponentStackKey resource) {
         if (forceExpandResources.contains(resource)) {
             return Optional.empty();
         }
         return Optional.ofNullable(contracts.get(resource));
     }
 
-    public boolean isProtectedRare(ResourceKey resource) {
+    public boolean isProtectedRare(ComponentStackKey resource) {
         return protectedRareResources.contains(resource);
     }
 
-    public boolean isCertifiedNatural(ResourceKey resource) {
+    public boolean isCertifiedNatural(ComponentStackKey resource) {
         return certifiedNaturalResources.contains(resource);
     }
 
     /**
-     * Enforces declared partial order c_j >= c_i + delta_ij bottom-up on the DAG (M4).
+     * Enforces declared partial order c_j >= c_i + delta_ij bottom-up on the DAG.
      */
-    public Map<ResourceKey, Double> enforcePartialOrder(Map<ResourceKey, Double> baseUnitPrices) {
-        TreeMap<ResourceKey, Double> adjusted = new TreeMap<>(baseUnitPrices);
+    public Map<ComponentStackKey, Double> enforcePartialOrder(Map<ComponentStackKey, Double> baseUnitPrices) {
+        TreeMap<ComponentStackKey, Double> adjusted = new TreeMap<>(baseUnitPrices);
         if (pricePartialOrders.isEmpty()) {
             return adjusted;
         }
-        // Bellman-Ford style bounded relaxation over partial-order DAG (guards against accidental cycles).
         int maxRounds = Math.min(64, pricePartialOrders.size() + 1);
         for (int round = 0; round < maxRounds; round++) {
             boolean changed = false;
@@ -112,19 +113,19 @@ public record BaseBoundarySnapshot(
     }
 
     public BaseBoundarySnapshot mergeWith(BaseBoundarySnapshot overlay) {
-        if (overlay == null || overlay == empty) {
+        if (overlay == null || overlay.equals(empty)) {
             return this;
         }
-        TreeMap<ResourceKey, BaseContract> mergedContracts = new TreeMap<>(this.contracts);
+        TreeMap<ComponentStackKey, BaseContract> mergedContracts = new TreeMap<>(this.contracts);
         mergedContracts.putAll(overlay.contracts);
 
-        TreeSet<ResourceKey> mergedExpand = new TreeSet<>(this.forceExpandResources);
+        TreeSet<ComponentStackKey> mergedExpand = new TreeSet<>(this.forceExpandResources);
         mergedExpand.addAll(overlay.forceExpandResources);
 
-        TreeSet<ResourceKey> mergedRare = new TreeSet<>(this.protectedRareResources);
+        TreeSet<ComponentStackKey> mergedRare = new TreeSet<>(this.protectedRareResources);
         mergedRare.addAll(overlay.protectedRareResources);
 
-        TreeSet<ResourceKey> mergedNat = new TreeSet<>(this.certifiedNaturalResources);
+        TreeSet<ComponentStackKey> mergedNat = new TreeSet<>(this.certifiedNaturalResources);
         mergedNat.addAll(overlay.certifiedNaturalResources);
 
         Set<PartialOrderConstraint> seen = new HashSet<>(this.pricePartialOrders);

@@ -1,12 +1,14 @@
 package dev.vfyjxf.cirrus.api.planning.human;
 
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+
 import java.util.Objects;
 
 public record SystemRule(
     String ruleId,
     GuidanceScope scope,
     RuleStrength strength,
-    String systemId,
+    Namespace systemId,
     boolean optInEnabled
 ) implements GuidanceRule {
 

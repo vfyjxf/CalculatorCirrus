@@ -5,9 +5,11 @@ import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentVisual;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentVisualCache;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.DurabilityContent;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
 import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
+import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayContentHelper;
 import dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltip;
 import dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiTooltipProvider;
 import dev.vfyjxf.cirrus.util.NumberUtils;
@@ -214,11 +216,22 @@ public class RecipeContentSlotsWidget extends Widget implements OreUiTooltipProv
             if (content.isEmpty()) {
                 continue;
             }
+            int slotX = x + i * stride;
+            if (content instanceof DurabilityContent) {
+                batch.add(
+                    content,
+                    ExecutionOverlayContentHelper.currentVisualIndex(content),
+                    slotX + slotBorder,
+                    y + slotBorder,
+                    contentSize,
+                    contentSize
+                );
+                continue;
+            }
             RecipeContentVisual visual = visualCache.visual(content);
             if (visual.isEmpty()) {
                 continue;
             }
-            int slotX = x + i * stride;
             if (decorated) {
                 batch.addVisual(visual, slotX + slotBorder, y + slotBorder, contentSize, contentSize);
             } else {

@@ -46,6 +46,16 @@ public final class ContextAttributeView {
         return b.build();
     }
 
+    @Override
+    public boolean equals(Object o) {
+        return this == o || (o instanceof ContextAttributeView that && values.equals(that.values));
+    }
+
+    @Override
+    public int hashCode() {
+        return values.hashCode();
+    }
+
     public static final class Builder {
         private final TreeMap<ContextKey<?>, Object> values = new TreeMap<>();
 

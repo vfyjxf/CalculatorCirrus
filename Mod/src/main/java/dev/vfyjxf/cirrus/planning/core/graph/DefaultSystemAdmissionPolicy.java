@@ -6,6 +6,9 @@ import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
 import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmissionPolicy;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
 import dev.vfyjxf.cirrus.api.planning.tag.CanonicalRecipeTag;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.HashMap;
 import java.util.List;
@@ -14,18 +17,14 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Pure tag-driven SystemAdmissionPolicy (Pure JDK 21, ZERO hardcoded mod/item/regex wordlists!).
- * Driven solely by Cirrus RecipeSystemTags, 10 CanonicalRecipeTags, and external/classifier verdicts.
+ * Pure tag-driven SystemAdmissionPolicy (zero hardcoded mod/item/regex wordlists).
+ * Driven solely by Cirrus {@link RecipeSystemTags}, canonical recipe tags, and external/classifier verdicts.
  */
 public final class DefaultSystemAdmissionPolicy implements SystemAdmissionPolicy {
 
-    private static final String tagDisplayOnly = "calculator_cirrus:system/display_only";
-    private static final String tagMirrorDuplicate = "calculator_cirrus:system/mirror_duplicate";
-    private static final String tagOptIn = "calculator_cirrus:system/opt_in";
-
     private static final DefaultSystemAdmissionPolicy defaults = new DefaultSystemAdmissionPolicy();
 
-    private final Map<String, SystemAdmission> systemOverrides;
+    private final Map<Namespace, SystemAdmission> systemOverrides;
     private final Map<Long, SystemAdmission> externalRecipeAdmissions;
     private final Map<Long, RecipeAdvisory> externalRecipeAdvisories;
 
@@ -34,7 +33,7 @@ public final class DefaultSystemAdmissionPolicy implements SystemAdmissionPolicy
     }
 
     private DefaultSystemAdmissionPolicy(
-        Map<String, SystemAdmission> systemOverrides,
+        Map<Namespace, SystemAdmission> systemOverrides,
         Map<Long, SystemAdmission> externalRecipeAdmissions,
         Map<Long, RecipeAdvisory> externalRecipeAdvisories
     ) {
@@ -47,10 +46,10 @@ public final class DefaultSystemAdmissionPolicy implements SystemAdmissionPolicy
         return defaults;
     }
 
-    public DefaultSystemAdmissionPolicy withSystemOverride(String systemId, SystemAdmission admission) {
+    public DefaultSystemAdmissionPolicy withSystemOverride(Namespace systemId, SystemAdmission admission) {
         Objects.requireNonNull(systemId, "systemId");
         Objects.requireNonNull(admission, "admission");
-        Map<String, SystemAdmission> copy = new HashMap<>(systemOverrides);
+        Map<Namespace, SystemAdmission> copy = new HashMap<>(systemOverrides);
         copy.put(systemId, admission);
         return new DefaultSystemAdmissionPolicy(Map.copyOf(copy), externalRecipeAdmissions, externalRecipeAdvisories);
     }
@@ -67,7 +66,7 @@ public final class DefaultSystemAdmissionPolicy implements SystemAdmissionPolicy
     }
 
     @Override
-    public SystemAdmission classify(String systemId, String sourceKind) {
+    public SystemAdmission classify(Namespace systemId, String sourceKind) {
         SystemAdmission override = systemOverrides.get(systemId);
         if (override != null) {
             return override;
@@ -81,14 +80,14 @@ public final class DefaultSystemAdmissionPolicy implements SystemAdmissionPolicy
         if (sysAdm == SystemAdmission.excludedDisplay) {
             return SystemAdmission.excludedDisplay;
         }
-        Set<String> sysTags = record.systemTags();
-        if (sysTags.contains(tagDisplayOnly) || sysTags.contains(tagMirrorDuplicate)) {
+        Set<Namespace> sysTags = record.systemTags();
+        if (sysTags.contains(RecipeSystemTags.displayOnly) || sysTags.contains(RecipeSystemTags.mirrorDuplicate)) {
             return SystemAdmission.excludedDisplay;
         }
         if (record.canonicalTags().contains(CanonicalRecipeTag.junkOrDuplicate)) {
             return SystemAdmission.excludedDisplay;
         }
-        if (sysTags.contains(tagOptIn) && sysAdm == SystemAdmission.enabled) {
+        if (sysTags.contains(RecipeSystemTags.optIn) && sysAdm == SystemAdmission.enabled) {
             sysAdm = SystemAdmission.optInOnly;
         }
         if (!externalRecipeAdmissions.isEmpty() && record.sourceRef() != 0L) {
@@ -126,12 +125,12 @@ public final class DefaultSystemAdmissionPolicy implements SystemAdmissionPolicy
     }
 
     @Override
-    public MachineCapabilityId capabilityOf(String systemId) {
+    public MachineCapabilityId capabilityOf(Namespace systemId) {
         return MachineCapabilityGroups.capabilityOf(systemId);
     }
 
     @Override
-    public List<String> orderMachinesForCapability(String systemId, List<String> rawMachines) {
+    public List<MachineEntry> orderMachinesForCapability(Namespace systemId, List<MachineEntry> rawMachines) {
         return MachineCapabilityGroups.orderMachines(systemId, rawMachines);
     }
 }

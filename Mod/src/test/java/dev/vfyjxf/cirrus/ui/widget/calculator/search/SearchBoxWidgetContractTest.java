@@ -178,13 +178,60 @@ class SearchBoxWidgetContractTest {
     @Test
     void suggestionsUseFloatingLayerAbovePageControls() {
         assertEquals(2400, SearchBoxWidget.suggestionPopupZIndex());
-        assertEquals(16, SearchBoxWidget.suggestionPopupHeightForCount(1));
-        assertEquals(86, SearchBoxWidget.suggestionPopupHeightForCount(6));
-        assertEquals(86, SearchBoxWidget.suggestionPopupHeightForCount(48));
-        assertEquals(6, SearchBoxWidget.maxVisibleSuggestions());
-        assertEquals(2, SearchBoxWidget.visibleSuggestionRowsForAvailableHeight(6, 30));
-        assertEquals(0, SearchBoxWidget.visibleSuggestionRowsForAvailableHeight(6, 12));
-        assertEquals(44, SearchBoxWidget.suggestionPopupHeightForRows(3));
+        assertEquals(24, SearchBoxWidget.suggestionPopupHeightForCount(1));
+        assertEquals(164, SearchBoxWidget.suggestionPopupHeightForCount(8));
+        assertEquals(164, SearchBoxWidget.suggestionPopupHeightForCount(48));
+        assertEquals(8, SearchBoxWidget.maxVisibleSuggestions());
+        assertEquals(2, SearchBoxWidget.visibleSuggestionRowsForAvailableHeight(8, 44));
+        assertEquals(0, SearchBoxWidget.visibleSuggestionRowsForAvailableHeight(8, 18));
+        assertEquals(64, SearchBoxWidget.suggestionPopupHeightForRows(3));
+    }
+
+    @Test
+    void rightClickClearsSearchBoxAndTextInput() {
+        AtomicReference<String> searchObserved = new AtomicReference<>();
+        TestSearchBoxWidget search = new TestSearchBoxWidget();
+        search.onQueryChanged(searchObserved::set).setText("machine:Furnace");
+        AtomicReference<String> textObserved = new AtomicReference<>();
+        dev.vfyjxf.cirrus.ui.widget.common.CirrusTextInputWidget textInput = new dev.vfyjxf.cirrus.ui.widget.common.CirrusTextInputWidget()
+                .onTextChanged(textObserved::set)
+                .setText("iron");
+
+        WidgetGroup<Widget> root = new WidgetGroup<>();
+        root.useStyle(
+            sizeOf(260, 80),
+            dev.vfyjxf.cloudlib.api.ui.style.UIStyles.flexRow(),
+            dev.vfyjxf.cloudlib.api.ui.style.UIStyles.gap(8)
+        );
+        search.useStyle(sizeOf(120, 18));
+        textInput.useStyle(sizeOf(120, 18));
+        root.addWidget(search);
+        root.addWidget(textInput);
+        Scene scene = new Scene(root);
+        scene.init();
+        scene.mount(SceneContext.create(testSceneHost()));
+        try {
+            scene.setLayoutArea(260, 80);
+            scene.stabilize();
+            scene.layout();
+            root.applyLayout();
+
+            Rect searchRect = search.absoluteBounds();
+            Rect textRect = textInput.absoluteBounds();
+            assertTrue(scene.mouseClicked(searchRect.x() + 12, searchRect.y() + 8, 1)
+                    || scene.mouseReleased(searchRect.x() + 12, searchRect.y() + 8, 1));
+            scene.stabilize();
+            assertEquals("", search.text());
+            assertEquals("", searchObserved.get());
+
+            assertTrue(scene.mouseClicked(textRect.x() + 12, textRect.y() + 8, 1)
+                    || scene.mouseReleased(textRect.x() + 12, textRect.y() + 8, 1));
+            scene.stabilize();
+            assertEquals("", textInput.text());
+            assertEquals("", textObserved.get());
+        } finally {
+            scene.destroy();
+        }
     }
 
     @Test

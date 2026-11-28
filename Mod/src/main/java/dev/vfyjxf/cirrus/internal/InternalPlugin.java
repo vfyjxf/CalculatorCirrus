@@ -187,6 +187,20 @@ public class InternalPlugin implements CirrusPlugin, ModPlugin {
         register.registerSystemTagEntry(RecipeSystemTags.vanilla, GrindstoneRecipeSystem.systemId);
         register.registerSystemTagEntry(RecipeSystemTags.vanilla, WorldInteractionRecipeSystem.systemId);
 
+        register.registerSystemTagEntry(RecipeSystemTags.folderMinecraft, CraftingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.folderMinecraft, CookingRecipeSystem.smeltingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.folderMinecraft, CookingRecipeSystem.blastingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.folderMinecraft, CookingRecipeSystem.smokingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.folderMinecraft, CookingRecipeSystem.campfireCookingSystemId);
+        register.registerSystemTagEntry(RecipeSystemTags.folderMinecraft, StonecuttingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.folderMinecraft, SmithingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.folderMinecraft, BrewingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.folderMinecraft, CompostingRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.folderMinecraft, FuelRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.folderMinecraft, AnvilRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.folderMinecraft, GrindstoneRecipeSystem.systemId);
+        register.registerSystemTagEntry(RecipeSystemTags.folderMinecraft, WorldInteractionRecipeSystem.systemId);
+
         register.registerSystemTagEntry(RecipeSystemTags.displayOnly, FuelRecipeSystem.systemId);
 
         register.registerSystemTagEntry(RecipeSystemTags.handOperable, CraftingRecipeSystem.systemId);

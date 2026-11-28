@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.hosts;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchShellContext;
@@ -43,7 +43,7 @@ public final class ShellSpatialDagHost implements SpatialDagHost {
     /**
      * Full description of one hovered edge, so the shell can highlight it and show a hint.
      */
-    public record HoveredEdge(@Nullable String fromStepId, @Nullable String toStepId, @Nullable ResourceKey resource) {}
+    public record HoveredEdge(@Nullable String fromStepId, @Nullable String toStepId, @Nullable ComponentStackKey resource) {}
 
     /**
      * A drop request held while {@code CoPilotDnd} is not wired; the shell consumes it once wired.
@@ -132,7 +132,7 @@ public final class ShellSpatialDagHost implements SpatialDagHost {
     }
 
     @Override
-    public void onHoverEdge(@Nullable String fromStepId, @Nullable String toStepId, @Nullable ResourceKey resource) {
+    public void onHoverEdge(@Nullable String fromStepId, @Nullable String toStepId, @Nullable ComponentStackKey resource) {
         hoveredEdge = fromStepId == null && toStepId == null && resource == null
                 ? null
                 : new HoveredEdge(fromStepId, toStepId, resource);

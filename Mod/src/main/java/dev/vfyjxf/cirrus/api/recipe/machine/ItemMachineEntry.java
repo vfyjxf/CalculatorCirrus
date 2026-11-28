@@ -1,10 +1,14 @@
 package dev.vfyjxf.cirrus.api.recipe.machine;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.constraint.MachineConstraint;
 import dev.vfyjxf.cloudlib.util.Checks;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+
+import java.util.Objects;
+import java.util.Optional;
 
 public record ItemMachineEntry(ContentStack<Item, ItemStack> machineStack, MachineConstraint constraint)
         implements
@@ -41,15 +45,20 @@ public record ItemMachineEntry(ContentStack<Item, ItemStack> machineStack, Machi
     }
 
     @Override
-    public boolean equals(Object object) {
-        if (object == null || getClass() != object.getClass()) return false;
+    public Optional<ComponentStackKey> contentKey() {
+        return machineStack.isEmpty() ? Optional.empty() : Optional.of(machineStack.normalize().componentKey());
+    }
 
-        ItemMachineEntry that = (ItemMachineEntry) object;
-        return machineStack.equals(that.machineStack);
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) return true;
+        if (!(object instanceof ItemMachineEntry that)) return false;
+        return machineStack.componentKey().equals(that.machineStack.componentKey())
+                && Objects.equals(constraint, that.constraint);
     }
 
     @Override
     public int hashCode() {
-        return machineStack.hashCode();
+        return Objects.hash(machineStack.componentKey(), constraint);
     }
 }

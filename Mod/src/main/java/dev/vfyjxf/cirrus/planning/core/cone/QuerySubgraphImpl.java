@@ -1,10 +1,10 @@
 package dev.vfyjxf.cirrus.planning.core.cone;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CoupledComponent;
 import dev.vfyjxf.cirrus.api.planning.graph.EquivalenceClass;
 import dev.vfyjxf.cirrus.api.planning.graph.QuerySubgraph;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -13,7 +13,7 @@ import java.util.List;
 public final class QuerySubgraphImpl implements QuerySubgraph {
 
     private final ConeModel cone;
-    private @Nullable List<ResourceKey> cachedNodes;
+    private @Nullable List<ComponentStackKey> cachedNodes;
     private @Nullable List<CompiledRecipe> cachedRecipes;
 
     public QuerySubgraphImpl(ConeModel cone) {
@@ -25,9 +25,9 @@ public final class QuerySubgraphImpl implements QuerySubgraph {
     }
 
     @Override
-    public List<ResourceKey> activeNodes() {
+    public List<ComponentStackKey> activeNodes() {
         if (cachedNodes == null) {
-            List<ResourceKey> list = new ArrayList<>(cone.nodeCount);
+            List<ComponentStackKey> list = new ArrayList<>(cone.nodeCount);
             for (int u = 0; u < cone.nodeCount; u++) {
                 if (cone.tier[u] < ConeModel.infTier) {
                     list.add(cone.resKeys[u]);
@@ -53,7 +53,7 @@ public final class QuerySubgraphImpl implements QuerySubgraph {
     }
 
     @Override
-    public int acquisitionTierOf(ResourceKey resource) {
+    public int acquisitionTierOf(ComponentStackKey resource) {
         int u = cone.localRes(resource);
         return u < 0 ? ConeModel.infTier : cone.tier[u];
     }

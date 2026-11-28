@@ -1,12 +1,12 @@
 package dev.vfyjxf.cirrus.ui.workbench.copilot;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.InputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.OutputSlot;
 import dev.vfyjxf.cirrus.api.planning.human.PinResourceRecipeFeedback;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
@@ -45,7 +45,7 @@ public class AlternativeProducersDrawerWidget extends Widget {
     public static final int maxRows = 8;
 
     private final CoPilotHost host;
-    private @Nullable ResourceKey resource;
+    private @Nullable ComponentStackKey resource;
     private @Nullable CompiledRecipeGraph graph;
     private boolean persistToWorld;
     private @Nullable String dragHighlight;
@@ -71,7 +71,7 @@ public class AlternativeProducersDrawerWidget extends Widget {
         onMouseLeave((mouseX, mouseY, context) -> dragHighlight = null);
     }
 
-    public AlternativeProducersDrawerWidget resource(@Nullable ResourceKey resource) {
+    public AlternativeProducersDrawerWidget resource(@Nullable ComponentStackKey resource) {
         this.resource = resource;
         return this;
     }
@@ -86,7 +86,7 @@ public class AlternativeProducersDrawerWidget extends Widget {
         return this;
     }
 
-    public @Nullable ResourceKey resource() {
+    public @Nullable ComponentStackKey resource() {
         return resource;
     }
 
@@ -137,16 +137,16 @@ public class AlternativeProducersDrawerWidget extends Widget {
         return true;
     }
 
-    public List<ResourceKey> inputPreview(CompiledRecipe recipe) {
-        List<ResourceKey> inputs = new ArrayList<>();
+    public List<ComponentStackKey> inputPreview(CompiledRecipe recipe) {
+        List<ComponentStackKey> inputs = new ArrayList<>();
         for (InputSlot slot : recipe.inputs()) {
             inputs.add(slot.candidates().get(0));
         }
         return List.copyOf(inputs);
     }
 
-    public List<ResourceKey> outputPreview(CompiledRecipe recipe) {
-        List<ResourceKey> outputs = new ArrayList<>();
+    public List<ComponentStackKey> outputPreview(CompiledRecipe recipe) {
+        List<ComponentStackKey> outputs = new ArrayList<>();
         for (OutputSlot slot : recipe.outputs()) {
             outputs.add(slot.resource());
         }
@@ -184,7 +184,7 @@ public class AlternativeProducersDrawerWidget extends Widget {
         OreUiPaint.raisedCard(canvas, rect.x(), rect.y(), rect.width(), rect.height(), palette, hover, false);
         int cursor = rect.x() + 4;
         int iconY = rect.y() + Math.max(2, (rect.height() - 14) / 2);
-        for (ResourceKey input : inputPreview(recipe)) {
+        for (ComponentStackKey input : inputPreview(recipe)) {
             OreUiPaint.slot(canvas, cursor, iconY, 14, palette);
             CoPilotPaint.icon(canvas, CoPilotPaint.stackOf(input, 1L), cursor + 1, iconY + 1, 12, palette);
             cursor += 15;
@@ -192,7 +192,7 @@ public class AlternativeProducersDrawerWidget extends Widget {
         cursor += 2;
         canvas.fill(cursor, rect.y() + rect.height() / 2, 5, 1, palette.textMuted());
         cursor += 7;
-        for (ResourceKey output : outputPreview(recipe)) {
+        for (ComponentStackKey output : outputPreview(recipe)) {
             OreUiPaint.slot(canvas, cursor, iconY, 14, palette);
             CoPilotPaint.icon(canvas, CoPilotPaint.stackOf(output, 1L), cursor + 1, iconY + 1, 12, palette);
             cursor += 15;
@@ -220,10 +220,10 @@ public class AlternativeProducersDrawerWidget extends Widget {
             palette.textOnAccent()
         );
         if (cursor + 6 < pillX) {
-            String machine = recipe.machineRequirement().compatibleMachineIds().isEmpty()
-                    ? CoPilotPaint.humanizeId(recipe.key().systemId())
+            String machine = recipe.machineRequirement().compatibleMachines().isEmpty()
+                    ? CoPilotPaint.humanizeId(recipe.key().systemId().toString())
                     : StepNodeCardRenderer
-                            .machineNameOf(recipe.machineRequirement().compatibleMachineIds().get(0), null).getString();
+                            .machineNameOf(recipe.machineRequirement().compatibleMachines().get(0), null).getString();
             CoPilotPaint.text(
                 canvas,
                 CoPilotPaint.fit(canvas, Component.literal(machine), pillX - cursor - 6),

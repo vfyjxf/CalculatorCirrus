@@ -5,7 +5,11 @@ import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.DurabilityContent;
 import dev.vfyjxf.cirrus.api.recipe.content.complex.FluidContainerContent;
+import dev.vfyjxf.cirrus.planning.bridge.CirrusContentBridge;
 import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContext;
 import dev.vfyjxf.cirrus.api.recipe.projection.ExecutionContextKey;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectedRecipe;
@@ -32,10 +36,13 @@ import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.recipe.projection.BuiltinProjectionEffects;
 import dev.vfyjxf.cirrus.recipe.system.BasicRecipeSystem;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.Unbreakable;
 import net.neoforged.testframework.junit.EphemeralTestServerProvider;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
@@ -106,29 +113,31 @@ public class ProjectionEffectPipelineTest {
         assertTrue(containerDiff.after() instanceof FluidContainerContent);
         FluidContainerContent containerReq = (FluidContainerContent) Objects.requireNonNull(containerDiff.after());
         assertFalse(containerReq.isEnumerable());
+        assertEquals(Items.BUCKET, containerReq.sampleContainer().value().getItem());
+        assertTrue(containerReq.satisfy(ContentStack.fromStack(new ItemStack(Items.BUCKET))));
         assertTrue(containerReq.satisfy(ContentStack.fromStack(new ItemStack(Items.WATER_BUCKET))));
+        assertFalse(containerReq.satisfy(ContentStack.fromStack(new ItemStack(Items.STICK))));
     }
 
     @Test
-    void durabilityCostRemovesBreakingToolAtGridCellAndRetainsHealthyTool(MinecraftServer server) {
-        ItemStack breaking = new ItemStack(Items.IRON_PICKAXE);
-        breaking.setDamageValue(Math.max(0, breaking.getMaxDamage() - 1));
-        ItemStack healthy = new ItemStack(Items.IRON_PICKAXE);
+    void durabilityCostTransformsToolsIntoDedicatedDurabilityContent(MinecraftServer server) {
+        ItemStack ironPick = new ItemStack(Items.IRON_PICKAXE);
+        ItemStack diamondPick = new ItemStack(Items.DIAMOND_PICKAXE);
 
         RecipeProjection raw = RecipeProjection.builder(testSystem, dummyRecipe)
                 .inputGrid(3, 3)
                 .inputCell(
                     0,
                     0,
-                    InputContent.fromItemStack(breaking),
-                    ProjectionAttributes.of(ProjectionKeys.durabilityCost, 1),
+                    InputContent.fromItemStack(diamondPick),
+                    ProjectionAttributes.of(ProjectionKeys.durabilityCost, 4),
                     ProjectionTags.of(ProjectionKeys.Tags.durabilityTool)
                 )
                 .inputCell(
                     2,
                     0,
-                    InputContent.fromItemStack(healthy),
-                    ProjectionAttributes.of(ProjectionKeys.durabilityCost, 1),
+                    InputContent.fromItemStack(ironPick),
+                    ProjectionAttributes.empty(),
                     ProjectionTags.of(ProjectionKeys.Tags.durabilityTool)
                 )
                 .output(OutputContent.fromItemStack(new ItemStack(Items.IRON_NUGGET)))
@@ -137,14 +146,73 @@ public class ProjectionEffectPipelineTest {
         ProjectionResult result = ProjectionPipeline.of(BuiltinProjectionEffects.durabilityCost)
                 .trace(new ExecutionContext(), raw);
 
-        assertEquals(1, result.projectedRecipe().inputs().size());
+        // Neither tool is deleted; both transform in place into dedicated DurabilityContent requirements
+        assertEquals(2, result.projectedRecipe().inputs().size());
         GridDiff grid = result.diff().inputGridDiff();
         assertNotNull(grid);
-        assertEquals(SlotDiff.DiffStatus.removed, grid.cell(0, 0).status());
-        assertEquals("\u00d7", grid.cell(0, 0).deltaBadge());
-        assertNull(grid.cell(0, 0).after());
-        assertNotNull(grid.cell(0, 0).before());
-        assertEquals(SlotDiff.DiffStatus.unchanged, grid.cell(2, 0).status());
+        assertEquals(SlotDiff.DiffStatus.transformed, grid.cell(0, 0).status());
+        assertEquals(SlotDiff.DiffStatus.transformed, grid.cell(2, 0).status());
+
+        var explicitSlot = result.projected().slot(SlotAddress.inputGrid(0, 0, 3));
+        var defaultSlot = result.projected().slot(SlotAddress.inputGrid(2, 0, 3));
+        assertNotNull(explicitSlot);
+        assertNotNull(defaultSlot);
+        assertTrue(explicitSlot.content() instanceof DurabilityContent);
+        assertTrue(defaultSlot.content() instanceof DurabilityContent);
+
+        DurabilityContent explicitReq = (DurabilityContent) explicitSlot.content();
+        DurabilityContent defaultReq = (DurabilityContent) defaultSlot.content();
+        assertEquals(4, explicitReq.durabilityCost());
+        assertEquals(1, defaultReq.durabilityCost());
+        assertEquals(RecipeContent.MAX_CHANCE, explicitReq.chance());
+        assertEquals(RecipeContent.MAX_CHANCE, defaultReq.chance());
+        assertEquals(Integer.valueOf(1), defaultSlot.attribute(ProjectionKeys.durabilityCost));
+
+        // Underlying tool stays undamaged for clean display
+        assertTrue(explicitReq.ingredient() instanceof StackContent<?, ?>);
+        StackContent<?, ?> underlying = (StackContent<?, ?>) explicitReq.ingredient();
+        assertEquals(0, underlying.<Item, ItemStack>cast().content().value().getDamageValue());
+
+        // satisfy checks tool identity + sufficient remaining durability (or unbreakable)
+        ItemStack freshDiamond = new ItemStack(Items.DIAMOND_PICKAXE);
+        ItemStack wornOk = new ItemStack(Items.DIAMOND_PICKAXE);
+        wornOk.setDamageValue(wornOk.getMaxDamage() - 4);
+        ItemStack wornTooLow = new ItemStack(Items.DIAMOND_PICKAXE);
+        wornTooLow.setDamageValue(wornTooLow.getMaxDamage() - 3);
+        ItemStack unbreakableDiamond = new ItemStack(Items.DIAMOND_PICKAXE);
+        unbreakableDiamond.setDamageValue(unbreakableDiamond.getMaxDamage() - 1);
+        unbreakableDiamond.set(DataComponents.UNBREAKABLE, new Unbreakable(true));
+
+        assertTrue(explicitReq.satisfy(ContentStack.fromStack(freshDiamond)));
+        assertTrue(explicitReq.satisfy(ContentStack.fromStack(wornOk)));
+        assertFalse(explicitReq.satisfy(ContentStack.fromStack(wornTooLow)));
+        assertTrue(explicitReq.satisfy(ContentStack.fromStack(unbreakableDiamond)));
+        assertFalse(explicitReq.satisfy(ContentStack.fromStack(new ItemStack(Items.IRON_PICKAXE))));
+        assertFalse(explicitReq.satisfy(ContentStack.fromStack(new ItemStack(Items.STICK))));
+
+        // Planner bridge maps DurabilityContent directly into durability-consuming RawIngredientSlot
+        CirrusContentBridge.InputMapping mapped = CirrusContentBridge.mapInput(explicitReq, 0);
+        assertNull(mapped.dropReason());
+        assertNotNull(mapped.slot());
+        assertEquals(4, mapped.slot().durabilityCostPerBatch());
+        assertEquals(freshDiamond.getMaxDamage(), mapped.slot().maxDurability());
+        assertNull(mapped.catalystReturnOutput());
+
+        // Also supports multi-tool candidate lists (e.g. any pickaxe with durability cost)
+        InputContent multiTools = InputContent.fromStackList(
+            List.of(ContentStack.fromStack(ironPick), ContentStack.fromStack(diamondPick)),
+            1L
+        );
+        InputContent multiDur = DurabilityContent.from(multiTools, 3);
+        assertTrue(multiDur instanceof DurabilityContent);
+        DurabilityContent multiDurReq = (DurabilityContent) multiDur;
+        assertEquals(3, multiDurReq.durabilityCost());
+        assertTrue(multiDurReq.isEnumerable());
+        assertTrue(multiDurReq.satisfy(ContentStack.fromStack(new ItemStack(Items.IRON_PICKAXE))));
+        assertTrue(multiDurReq.satisfy(ContentStack.fromStack(new ItemStack(Items.DIAMOND_PICKAXE))));
+        ItemStack ironLow = new ItemStack(Items.IRON_PICKAXE);
+        ironLow.setDamageValue(ironLow.getMaxDamage() - 2);
+        assertFalse(multiDurReq.satisfy(ContentStack.fromStack(ironLow)));
     }
 
     @Test

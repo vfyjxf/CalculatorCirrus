@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.graph.CatalystSlot;
@@ -9,7 +10,6 @@ import dev.vfyjxf.cirrus.api.planning.graph.InputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.OutputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -19,6 +19,7 @@ import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SlotBinding;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
@@ -37,6 +38,7 @@ import dev.vfyjxf.cirrus.ui.workbench.state.PlanVisualResolver;
 import dev.vfyjxf.cirrus.ui.workbench.value.ValueTypeGaugeRenderer;
 import dev.vfyjxf.cirrus.ui.workbench.value.ValueTypeVisualRegistry;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
@@ -72,30 +74,30 @@ public final class StepNodeCardRenderer {
 
     private StepNodeCardRenderer() {}
 
-    public record InputAmount(ResourceKey resource, long amount) {}
+    public record InputAmount(ComponentStackKey resource, long amount) {}
 
-    public record ValueTelemetry(String typeId, long totalAmount, long perBatchAmount) {}
+    public record ValueTelemetry(Namespace typeId, long totalAmount, long perBatchAmount) {}
 
     public record StepVisuals(
-        @Nullable ResourceKey primaryOutput,
-        List<ResourceKey> outputs,
-        List<ResourceKey> inputs,
+        @Nullable ComponentStackKey primaryOutput,
+        List<ComponentStackKey> outputs,
+        List<ComponentStackKey> inputs,
         List<InputAmount> inputAmounts,
-        List<ResourceKey> catalysts,
+        List<ComponentStackKey> catalysts,
         List<ValueTelemetry> recipeValues,
         @Nullable RecipeAdvisory advisory,
-        @Nullable String machineId,
+        @Nullable MachineEntry machine,
         boolean auto,
         boolean hardPinned,
         long batchCount,
         long count,
         long outputAmount,
         @Nullable AcquisitionKind acquisitionKind,
-        @Nullable String systemId,
+        @Nullable Namespace systemId,
         @Nullable String lineId,
         long iterations,
-        Map<ResourceKey, Long> workingSeed,
-        Map<ResourceKey, Long> netDelta
+        Map<ComponentStackKey, Long> workingSeed,
+        Map<ComponentStackKey, Long> netDelta
     ) {
 
         public StepVisuals {
@@ -156,33 +158,36 @@ public final class StepNodeCardRenderer {
     public static StepVisuals resolve(
         PlanStep step,
         @Nullable CompiledRecipeGraph graph,
-        @Nullable ResourceKey inferredOutput,
+        @Nullable ComponentStackKey inferredOutput,
         boolean hardPinned
     ) {
         if (step == null) {
             return StepVisuals.empty();
         }
         RecipeAdvisory advisory = RecipeAdvisory.none;
-        List<ResourceKey> inputs = new ArrayList<>();
+        List<ComponentStackKey> inputs = new ArrayList<>();
         List<InputAmount> inputAmounts = new ArrayList<>();
-        List<ResourceKey> outputs = new ArrayList<>();
-        List<ResourceKey> catalysts = new ArrayList<>();
+        List<ComponentStackKey> outputs = new ArrayList<>();
+        List<ComponentStackKey> catalysts = new ArrayList<>();
         List<ValueTelemetry> recipeValues = new ArrayList<>();
-        String machineId = null;
+        MachineEntry machine = null;
         long batches = 0L;
         long outputAmount = countOf(step);
         switch (step) {
             case AcquireStep acquire -> outputs.add(acquire.resource());
             case LinePullStep pull -> outputs.add(pull.resource());
-            case SetupLineStep setup -> outputs.add(setup.targetOutput());
+            case SetupLineStep setup -> {
+                machine = setup.primaryMachine().isEmpty() ? null : setup.primaryMachine();
+                outputs.add(setup.targetOutput());
+            }
             case ProvisionMachineStep provision -> {
-                machineId = provision.machineId();
-                outputs.add(ResourceKey.item(provision.machineId()));
+                machine = provision.machine().isEmpty() ? null : provision.machine();
+                provision.machine().contentKey().ifPresent(outputs::add);
             }
             case CraftStep craft -> {
                 batches = craft.batches();
-                machineId = craft.chosenMachineId().orElse(null);
-                for (ResourceKey catalyst : craft.catalystBindings().values()) {
+                machine = craft.chosenMachine().filter(m -> !m.isEmpty()).orElse(null);
+                for (ComponentStackKey catalyst : craft.catalystBindings().values()) {
                     if (catalyst != null && !catalysts.contains(catalyst)) {
                         catalysts.add(catalyst);
                     }
@@ -190,8 +195,11 @@ public final class StepNodeCardRenderer {
                 CompiledRecipe recipe = recipeOf(graph, craft.recipeKey());
                 if (recipe != null) {
                     advisory = recipe.advisory();
-                    if (machineId == null && !recipe.machineRequirement().compatibleMachineIds().isEmpty()) {
-                        machineId = recipe.machineRequirement().compatibleMachineIds().get(0);
+                    if (machine == null && !recipe.machineRequirement().compatibleMachines().isEmpty()) {
+                        MachineEntry first = recipe.machineRequirement().compatibleMachines().get(0);
+                        if (!first.isEmpty()) {
+                            machine = first;
+                        }
                     }
                     collectInputs(craft.slotBindings(), recipe.inputs(), batches, inputs, inputAmounts);
                     collectRecipeValues(recipe.recipeValues(), batches, recipeValues);
@@ -233,11 +241,11 @@ public final class StepNodeCardRenderer {
             }
             case CycleLoopStep loop -> {
                 batches = loop.iterations();
-                for (Map.Entry<ResourceKey, Long> seed : loop.workingSeedAmounts().entrySet()) {
+                for (Map.Entry<ComponentStackKey, Long> seed : loop.workingSeedAmounts().entrySet()) {
                     inputs.add(seed.getKey());
                     inputAmounts.add(new InputAmount(seed.getKey(), seed.getValue()));
                 }
-                for (Map.Entry<ResourceKey, Long> delta : loop.netDeltaPerIteration().entrySet()) {
+                for (Map.Entry<ComponentStackKey, Long> delta : loop.netDeltaPerIteration().entrySet()) {
                     if (!outputs.contains(delta.getKey())) {
                         outputs.add(delta.getKey());
                     }
@@ -247,7 +255,7 @@ public final class StepNodeCardRenderer {
                 }
             }
         }
-        ResourceKey primary = outputs.isEmpty() ? inferredOutput : outputs.get(0);
+        ComponentStackKey primary = outputs.isEmpty() ? inferredOutput : outputs.get(0);
         return new StepVisuals(
             primary,
             outputs,
@@ -256,7 +264,7 @@ public final class StepNodeCardRenderer {
             catalysts,
             recipeValues,
             advisory,
-            machineId,
+            machine,
             step instanceof CraftStep craft && craft.executedByAutomation(),
             hardPinned,
             batches,
@@ -271,12 +279,12 @@ public final class StepNodeCardRenderer {
         );
     }
 
-    private static void collectRecipeValues(Map<String, Double> rawValues, long batches, List<ValueTelemetry> out) {
+    private static void collectRecipeValues(Map<Namespace, Double> rawValues, long batches, List<ValueTelemetry> out) {
         if (rawValues == null || rawValues.isEmpty()) {
             return;
         }
         long safeBatches = Math.max(1L, batches);
-        for (Map.Entry<String, Double> entry : rawValues.entrySet()) {
+        for (Map.Entry<Namespace, Double> entry : rawValues.entrySet()) {
             Double raw = entry.getValue();
             if (raw == null || !Double.isFinite(raw) || raw <= 0.0) {
                 continue;
@@ -290,12 +298,12 @@ public final class StepNodeCardRenderer {
         Map<Integer, SlotBinding> bindings,
         List<InputSlot> slots,
         long batches,
-        List<ResourceKey> inputs,
+        List<ComponentStackKey> inputs,
         List<InputAmount> inputAmounts
     ) {
         long safeBatches = Math.max(1L, batches);
         for (InputSlot slot : slots) {
-            ResourceKey chosen = resolveInput(bindings, slot);
+            ComponentStackKey chosen = resolveInput(bindings, slot);
             if (chosen == null) {
                 continue;
             }
@@ -400,7 +408,7 @@ public final class StepNodeCardRenderer {
         int slotDim = Math.min(34, Math.max(22, height - pad * 2));
         int slotX = x + pad;
         int slotY = y + Math.max(pad, (height - slotDim) / 2);
-        ResourceKey iconRes = DagRichTooltips.primaryIconOf(node.step(), visuals);
+        ComponentStackKey iconRes = DagRichTooltips.primaryIconOf(node.step(), visuals);
         long amount = visuals.outputAmount() > 0L ? visuals.outputAmount() : visuals.count();
         if (amount <= 0L) {
             amount = visuals.batchCount();
@@ -459,7 +467,7 @@ public final class StepNodeCardRenderer {
         Component title = iconRes != null
                 ? nameOf(iconRes, resolver)
                 : node.step() instanceof ProvisionMachineStep prov
-                        ? CoPilotPaint.machineName(ResourceKey.item(prov.machineId()), prov.machineId())
+                        ? machineNameOf(prov.machine(), resolver)
                         : Component.literal(CoPilotPaint.humanizeId(node.stepId()));
         int midY = y + Math.max(topRowY - y + 13, height / 2 - 2);
         ChromeText.draw(
@@ -472,8 +480,8 @@ public final class StepNodeCardRenderer {
 
         if (height >= 48) {
             int botY = y + height - pad - 9;
-            String sub = visuals.machineId() != null && !visuals.machineId().isBlank()
-                    ? CoPilotPaint.humanizeId(visuals.machineId())
+            String sub = visuals.machine() != null && !visuals.machine().isEmpty()
+                    ? machineNameOf(visuals.machine(), resolver).getString()
                     : visuals.inputs().isEmpty()
                             ? DagRichTooltips.kindTag(node.step()).getString()
                             : visuals.inputs().size() + " in";
@@ -697,15 +705,15 @@ public final class StepNodeCardRenderer {
                     cursorRight = pillX - 4;
                 }
                 int machineMaxW = Math.max(8, cursorRight - afterKind - 13);
-                Component machine = visuals.machineId() == null
+                Component machine = visuals.machine() == null || visuals.machine().isEmpty()
                         ? Component.translatable(keyHandCraft)
-                        : machineNameOf(visuals.machineId(), resolver);
+                        : machineNameOf(visuals.machine(), resolver);
                 String fitted = ellipsize(canvas.font(), machine.getString(), machineMaxW);
                 int textStartX = cursorRight - canvas.font().width(fitted);
-                if (visuals.machineId() != null && textStartX - 13 >= afterKind) {
+                if (visuals.machine() != null && !visuals.machine().isEmpty() && textStartX - 13 >= afterKind) {
                     drawResource(
                         canvas,
-                        ResourceKey.item(visuals.machineId()),
+                        visuals.machine().contentKey().orElse(null),
                         resolver,
                         palette,
                         textStartX - 13,
@@ -768,7 +776,11 @@ public final class StepNodeCardRenderer {
             }
             case setup -> {
                 if (visuals.systemId() != null) {
-                    String fitted = ellipsize(canvas.font(), CoPilotPaint.humanizeId(visuals.systemId()), rightMaxW);
+                    String fitted = ellipsize(
+                        canvas.font(),
+                        CoPilotPaint.humanizeId(visuals.systemId().toString()),
+                        rightMaxW
+                    );
                     canvas.drawString(
                         Component.literal(fitted),
                         rightEdge - canvas.font().width(fitted),
@@ -969,7 +981,7 @@ public final class StepNodeCardRenderer {
         for (int i = 0; i < values.size(); i++) {
             ValueTelemetry telemetry = values.get(i);
             ValueTypeGaugeRenderer.ValueEntry entry = new ValueTypeGaugeRenderer.ValueEntry(
-                telemetry.typeId(),
+                telemetry.typeId().toString(),
                 telemetry.totalAmount(),
                 ValueTypeGaugeRenderer.Direction.neutral,
                 1.0f
@@ -1211,7 +1223,7 @@ public final class StepNodeCardRenderer {
         drawSlot(canvas, palette, slotX, slotY, slotLarge, fade);
         drawResource(
             canvas,
-            ResourceKey.item(provision.machineId()),
+            provision.machine().contentKey().orElse(null),
             resolver,
             palette,
             slotX + 1,
@@ -1221,7 +1233,7 @@ public final class StepNodeCardRenderer {
         int textX = slotX + slotLarge + 6;
         int textW = Math.max(8, x + width - textInset - textX);
 
-        Component title = machineNameOf(provision.machineId(), resolver);
+        Component title = machineNameOf(provision.machine(), resolver);
         canvas.drawString(
             Component.literal(ellipsize(canvas.font(), title.getString(), textW)),
             textX,
@@ -1483,8 +1495,8 @@ public final class StepNodeCardRenderer {
         int my = Math.round(machine.y());
         int mw = Math.round(machine.width());
         canvas.fill(mx, my, mw, Math.round(machine.height()), withAlpha(tint.tintBg(), fade));
-        if (visuals.machineId() != null) {
-            drawResource(canvas, ResourceKey.item(visuals.machineId()), resolver, palette, mx, my, mw);
+        if (visuals.machine() != null && !visuals.machine().isEmpty()) {
+            drawResource(canvas, visuals.machine().contentKey().orElse(null), resolver, palette, mx, my, mw);
         } else {
             canvas.fill(
                 mx + 4,
@@ -1513,8 +1525,8 @@ public final class StepNodeCardRenderer {
         }
     }
 
-    private static @Nullable ResourceKey resourceOf(StepVisuals visuals, DagHitTester.InlineSlot slot) {
-        List<ResourceKey> list = slot.side() == DagHitTester.SlotSide.input ? visuals.inputs() : visuals.outputs();
+    private static @Nullable ComponentStackKey resourceOf(StepVisuals visuals, DagHitTester.InlineSlot slot) {
+        List<ComponentStackKey> list = slot.side() == DagHitTester.SlotSide.input ? visuals.inputs() : visuals.outputs();
         return slot.index() >= 0 && slot.index() < list.size() ? list.get(slot.index()) : null;
     }
 
@@ -1530,7 +1542,7 @@ public final class StepNodeCardRenderer {
 
     private static void drawResource(
         SceneCanvas canvas,
-        @Nullable ResourceKey resource,
+        @Nullable ComponentStackKey resource,
         @Nullable PlanVisualResolver resolver,
         CirrusPalette palette,
         int x,
@@ -1543,7 +1555,7 @@ public final class StepNodeCardRenderer {
                 if (ValueTypeVisualRegistry.isValueResourceKey(resource)) {
                     ValueTypeGaugeRenderer.drawMiniEmblem(
                         canvas,
-                        resource.contentTypeId(),
+                        resource.contentTypeId().toString(),
                         x,
                         y,
                         size,
@@ -1564,7 +1576,7 @@ public final class StepNodeCardRenderer {
     }
 
     public static @Nullable ContentStack<?, ?> contentStackOf(
-        @Nullable ResourceKey resource,
+        @Nullable ComponentStackKey resource,
         @Nullable PlanVisualResolver resolver
     ) {
         if (resource == null) {
@@ -1580,15 +1592,15 @@ public final class StepNodeCardRenderer {
     }
 
     public static Component titleOf(DagNodeBox node, StepVisuals visuals, @Nullable PlanVisualResolver resolver) {
-        ResourceKey resource = visuals == null ? null : visuals.primaryOutput();
+        ComponentStackKey resource = visuals == null ? null : visuals.primaryOutput();
         if (resource != null) {
             return nameOf(resource, resolver);
         }
         if (node.step() instanceof ProvisionMachineStep provision) {
-            return machineNameOf(provision.machineId(), resolver);
+            return machineNameOf(provision.machine(), resolver);
         }
         if (node.step() instanceof SetupLineStep setup) {
-            return Component.literal(setup.systemId());
+            return Component.literal(setup.systemId().toString());
         }
         if (node.step() instanceof CycleLoopStep loop) {
             return Component.translatable(keyIterations, loop.iterations());
@@ -1596,7 +1608,7 @@ public final class StepNodeCardRenderer {
         return Component.literal(node.stepId());
     }
 
-    public static Component nameOf(@Nullable ResourceKey resource, @Nullable PlanVisualResolver resolver) {
+    public static Component nameOf(@Nullable ComponentStackKey resource, @Nullable PlanVisualResolver resolver) {
         if (resource == null) {
             return Component.empty();
         }
@@ -1611,17 +1623,17 @@ public final class StepNodeCardRenderer {
         }
         ContentStack<?, ?> stack = contentStackOf(resource, resolver);
         if (stack != null && !stack.isEmpty()) {
-            return CoPilotPaint.stackName(stack, Component.literal(CoPilotPaint.humanizeId(resource.resourceId())));
+            return CoPilotPaint.stackName(stack, Component.literal(CoPilotPaint.humanizeId(resource.displayId())));
         }
-        return Component.literal(CoPilotPaint.humanizeId(resource.resourceId()));
+        return Component.literal(CoPilotPaint.humanizeId(resource.displayId()));
     }
 
-    public static Component machineNameOf(@Nullable String machineId, @Nullable PlanVisualResolver resolver) {
-        if (machineId == null || machineId.isBlank()) {
+    public static Component machineNameOf(@Nullable MachineEntry machine, @Nullable PlanVisualResolver resolver) {
+        if (machine == null || machine.isEmpty()) {
             return Component.empty();
         }
         if (resolver != null) {
-            Component resolved = resolver.machineNameOf(machineId);
+            Component resolved = resolver.machineNameOf(machine);
             if (resolved != null && !resolved.getString().isBlank()) {
                 String clean = CoPilotPaint.stripBrackets(resolved.getString());
                 if (!looksLikeRawId(clean)) {
@@ -1629,11 +1641,15 @@ public final class StepNodeCardRenderer {
                 }
             }
         }
-        ContentStack<?, ?> stack = contentStackOf(ResourceKey.item(machineId), resolver);
-        if (stack != null && !stack.isEmpty()) {
-            return CoPilotPaint.stackName(stack, Component.literal(CoPilotPaint.humanizeId(machineId)));
+        ComponentStackKey key = machine.contentKey().orElse(null);
+        if (key != null) {
+            ContentStack<?, ?> stack = contentStackOf(key, resolver);
+            if (stack != null && !stack.isEmpty()) {
+                return CoPilotPaint.stackName(stack, Component.literal(CoPilotPaint.humanizeId(key.displayId())));
+            }
+            return Component.literal(CoPilotPaint.humanizeId(key.displayId()));
         }
-        return Component.literal(CoPilotPaint.humanizeId(machineId));
+        return Component.literal(CoPilotPaint.humanizeId(machine.canonicalKey()));
     }
 
     private static boolean looksLikeRawId(String value) {
@@ -1670,7 +1686,7 @@ public final class StepNodeCardRenderer {
         return graph.recipeByKey(key).orElse(null);
     }
 
-    private static @Nullable ResourceKey resolveInput(Map<Integer, SlotBinding> bindings, InputSlot slot) {
+    private static @Nullable ComponentStackKey resolveInput(Map<Integer, SlotBinding> bindings, InputSlot slot) {
         SlotBinding binding = bindings.get(slot.slotIndex());
         if (binding != null) {
             return binding.chosenResource();
@@ -1690,7 +1706,7 @@ public final class StepNodeCardRenderer {
         };
     }
 
-    private static @Nullable String systemOf(PlanStep step) {
+    private static @Nullable Namespace systemOf(PlanStep step) {
         return switch (step) {
             case CraftStep craft -> craft.recipeKey().systemId();
             case ConvertStep convert -> convert.conversionRecipeKey().systemId();
@@ -1699,15 +1715,17 @@ public final class StepNodeCardRenderer {
         };
     }
 
-    private static int contentTypeColor(@Nullable String contentTypeId, CirrusPalette palette) {
+    private static int contentTypeColor(@Nullable Namespace contentTypeId, CirrusPalette palette) {
         if (contentTypeId == null) {
             return palette.hairlineBorder();
         }
-        return switch (contentTypeId) {
-            case "minecraft:fluid" -> palette.costP();
-            case "minecraft:energy" -> palette.costH();
-            default -> palette.hairlineBorder();
-        };
+        if (Namespace.ofMc("fluid").equals(contentTypeId)) {
+            return palette.costP();
+        }
+        if (contentTypeId.path().contains("energy")) {
+            return palette.costH();
+        }
+        return palette.hairlineBorder();
     }
 
     public static String ellipsize(Font font, String text, int maxWidth) {

@@ -1,10 +1,10 @@
 package dev.vfyjxf.cirrus.planning.core.cost;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.InventoryTier;
 import dev.vfyjxf.cirrus.api.planning.cost.PreferenceModifiers;
 import dev.vfyjxf.cirrus.api.planning.cost.ScoreBreakdown;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -14,12 +14,12 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * M2.2 Pass B Inventory Economic Optimizer (Pure JDK 21):
+ * Pass B Inventory Economic Optimizer:
  * - Smooth-ramp split penalty s_h(q, D) = min(1, q/h, (D-q)/h) eliminating the I -> D cliff.
  * - Single-channel exact analytic endpoint solution (q* in {0, M}).
  * - Integer-batch breakpoint optimization (q = D - j*b +/- 1).
  * - Exact 4-tier channel subset / vertex solver over {hand, network, nearby, remote}.
- * - Rare-stock protection inequality and strict genericTag barrier (d^{genericTag}_{v,l} = 0).
+ * - Rare-stock protection inequality and strict genericTag barrier.
  */
 public final class PassBInventoryModel {
 
@@ -294,10 +294,10 @@ public final class PassBInventoryModel {
     }
 
     /**
-     * Checks whether generic Tag substitution is forbidden for a resource under current stock mode (M2.2).
+     * Checks whether generic Tag substitution is forbidden for a resource under current stock mode.
      */
     public static boolean isForbiddenForGenericTag(
-        ResourceKey resource,
+        ComponentStackKey resource,
         InventorySnapshot inventory,
         PreferenceModifiers.StockReferenceMode stockMode
     ) {
@@ -328,7 +328,7 @@ public final class PassBInventoryModel {
     }
 
     public static List<ChannelSpec> buildChannelsForResource(
-        ResourceKey resource,
+        ComponentStackKey resource,
         InventorySnapshot inventory,
         double expectedUnitPriceVExp,
         PreferenceModifiers.StockReferenceMode stockMode

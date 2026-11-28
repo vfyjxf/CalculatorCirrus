@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.copilot;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.human.ConflictDiagnosis;
 import dev.vfyjxf.cirrus.api.planning.human.CostOverrideRule;
 import dev.vfyjxf.cirrus.api.planning.human.CycleBreakRule;
@@ -10,7 +11,7 @@ import dev.vfyjxf.cirrus.api.planning.human.RecipeRule;
 import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.model.PlanningTagKeys;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningDiagnostics;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
@@ -86,7 +87,7 @@ public class ConflictDiagnosisOverlayWidget extends Widget {
         return diagnostics == null ? null : diagnostics.conflictDiagnosis().orElse(null);
     }
 
-    public @Nullable ResourceKey blockedResource() {
+    public @Nullable ComponentStackKey blockedResource() {
         ConflictDiagnosis diagnosis = diagnosis();
         return diagnosis == null ? null : diagnosis.blockedResource();
     }
@@ -164,12 +165,14 @@ public class ConflictDiagnosisOverlayWidget extends Widget {
     public static String subjectOf(GuidanceRule rule) {
         return switch (rule) {
             case RecipeRule r -> r.recipeKey().shortString();
-            case SystemRule r -> r.systemId();
-            case MachineRule r -> r.machineId();
-            case ResourceRule r -> r.resource().shortString();
-            case TagDefaultRule r -> r.tagId();
-            case CycleBreakRule r -> r.targetResource().shortString();
-            case CostOverrideRule r -> r.resource().shortString();
+            case SystemRule r -> r.systemId().toString();
+            case MachineRule r -> r.machine().contentKey()
+                    .map(ComponentStackKey::displayId)
+                    .orElse(r.machine().canonicalKey());
+            case ResourceRule r -> r.resource().displayId();
+            case TagDefaultRule r -> PlanningTagKeys.format(r.tag());
+            case CycleBreakRule r -> r.targetResource().displayId();
+            case CostOverrideRule r -> r.resource().displayId();
             case ModNamespaceRule r -> r.modNamespace();
         };
     }
@@ -308,7 +311,7 @@ public class ConflictDiagnosisOverlayWidget extends Widget {
     }
 
     private void renderHeader(SceneCanvas canvas, CirrusPalette palette, int width) {
-        ResourceKey blocked = blockedResource();
+        ComponentStackKey blocked = blockedResource();
         OreUiPaint.slot(canvas, pad, pad, CoPilotPaint.iconMedium, palette);
         CoPilotPaint.icon(
             canvas,

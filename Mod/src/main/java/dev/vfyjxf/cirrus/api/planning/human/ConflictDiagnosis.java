@@ -1,12 +1,12 @@
 package dev.vfyjxf.cirrus.api.planning.human;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 
 import java.util.List;
 import java.util.Objects;
 
 public record ConflictDiagnosis(
-    ResourceKey blockedResource,
+    ComponentStackKey blockedResource,
     List<String> minimalConflictRuleIds,
     String suggestedResolutionKey
 ) {

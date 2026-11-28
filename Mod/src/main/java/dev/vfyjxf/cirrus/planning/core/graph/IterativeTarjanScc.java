@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.planning.core.graph;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.SccTopology;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -17,11 +17,11 @@ public final class IterativeTarjanScc implements SccTopology {
     private final int[] sccSizes;
     private final int largestSize;
 
-    public IterativeTarjanScc(Map<ResourceKey, List<ResourceKey>> adjacency) {
+    public IterativeTarjanScc(Map<ComponentStackKey, List<ComponentStackKey>> adjacency) {
         ResourceDictionary.Builder db = new ResourceDictionary.Builder();
         for (var e : adjacency.entrySet()) {
             db.intern(e.getKey());
-            for (ResourceKey target : e.getValue()) {
+            for (ComponentStackKey target : e.getValue()) {
                 db.intern(target);
             }
         }
@@ -42,7 +42,7 @@ public final class IterativeTarjanScc implements SccTopology {
         int[] cursor = Arrays.copyOf(start, n);
         for (var e : adjacency.entrySet()) {
             int u = dict.idOf(e.getKey());
-            for (ResourceKey target : e.getValue()) {
+            for (ComponentStackKey target : e.getValue()) {
                 succ[cursor[u]++] = dict.idOf(target);
             }
         }
@@ -213,7 +213,7 @@ public final class IterativeTarjanScc implements SccTopology {
     }
 
     @Override
-    public int sccIdOf(ResourceKey resource) {
+    public int sccIdOf(ComponentStackKey resource) {
         int resId = dict.idOf(resource);
         return sccIdOf(resId);
     }
@@ -224,17 +224,17 @@ public final class IterativeTarjanScc implements SccTopology {
     }
 
     @Override
-    public boolean isInNonTrivialScc(ResourceKey resource) {
+    public boolean isInNonTrivialScc(ComponentStackKey resource) {
         int id = sccIdOf(resource);
         return id >= 0 && sccSizes[id] > 1;
     }
 
     @Override
-    public Set<ResourceKey> membersOfScc(int sccId) {
+    public Set<ComponentStackKey> membersOfScc(int sccId) {
         if (sccId < 0 || sccId >= sccSizes.length) {
             return Set.of();
         }
-        TreeSet<ResourceKey> members = new TreeSet<>();
+        TreeSet<ComponentStackKey> members = new TreeSet<>();
         for (int i = 0; i < sccIdByRes.length; i++) {
             if (sccIdByRes[i] == sccId) {
                 members.add(dict.keyOf(i));

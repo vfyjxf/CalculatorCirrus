@@ -3,6 +3,9 @@ package dev.vfyjxf.cirrus.api.planning.graph;
 import dev.vfyjxf.cirrus.api.planning.tag.CanonicalRecipeTag;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeEvidenceTier;
 import dev.vfyjxf.cirrus.api.planning.tag.RecipeSemanticKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.Collections;
 import java.util.EnumSet;
@@ -15,15 +18,15 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 public record RawRecipeRecord(
-    String systemId,
+    Namespace systemId,
     String sourceKind,
-    Optional<String> explicitId,
-    List<String> machineIds,
+    Optional<ResourceLocation> explicitId,
+    List<MachineEntry> machines,
     List<RawIngredientSlot> inputs,
     List<RawOutputSlot> outputs,
-    Map<String, Double> recipeValues,
+    Map<Namespace, Double> recipeValues,
     long sourceRef,
-    Set<String> systemTags,
+    Set<Namespace> systemTags,
     Set<CanonicalRecipeTag> canonicalTags,
     RecipeEvidenceTier evidenceTier,
     double structuralFidelity,
@@ -32,19 +35,19 @@ public record RawRecipeRecord(
 ) {
 
     public RawRecipeRecord(
-        String systemId,
+        Namespace systemId,
         String sourceKind,
-        Optional<String> explicitId,
-        List<String> machineIds,
+        Optional<ResourceLocation> explicitId,
+        List<MachineEntry> machines,
         List<RawIngredientSlot> inputs,
         List<RawOutputSlot> outputs,
-        Map<String, Double> recipeValues
+        Map<Namespace, Double> recipeValues
     ) {
         this(
             systemId,
             sourceKind,
             explicitId,
-            machineIds,
+            machines,
             inputs,
             outputs,
             recipeValues,
@@ -59,20 +62,20 @@ public record RawRecipeRecord(
     }
 
     public RawRecipeRecord(
-        String systemId,
+        Namespace systemId,
         String sourceKind,
-        Optional<String> explicitId,
-        List<String> machineIds,
+        Optional<ResourceLocation> explicitId,
+        List<MachineEntry> machines,
         List<RawIngredientSlot> inputs,
         List<RawOutputSlot> outputs,
-        Map<String, Double> recipeValues,
+        Map<Namespace, Double> recipeValues,
         long sourceRef
     ) {
         this(
             systemId,
             sourceKind,
             explicitId,
-            machineIds,
+            machines,
             inputs,
             outputs,
             recipeValues,
@@ -90,7 +93,7 @@ public record RawRecipeRecord(
         Objects.requireNonNull(systemId, "systemId");
         Objects.requireNonNull(sourceKind, "sourceKind");
         Objects.requireNonNull(explicitId, "explicitId");
-        Objects.requireNonNull(machineIds, "machineIds");
+        Objects.requireNonNull(machines, "machines");
         Objects.requireNonNull(inputs, "inputs");
         Objects.requireNonNull(outputs, "outputs");
         Objects.requireNonNull(recipeValues, "recipeValues");
@@ -101,13 +104,13 @@ public record RawRecipeRecord(
         if (!Double.isFinite(structuralFidelity) || structuralFidelity < 0.0 || structuralFidelity > 1.0) {
             throw new IllegalArgumentException("structuralFidelity must be in [0, 1], got " + structuralFidelity);
         }
-        machineIds = List.copyOf(machineIds);
+        machines = List.copyOf(machines);
         inputs = List.copyOf(inputs);
         outputs = List.copyOf(outputs);
         if (recipeValues.isEmpty()) {
             recipeValues = Map.of();
         } else {
-            TreeMap<String, Double> sorted = new TreeMap<>();
+            TreeMap<Namespace, Double> sorted = new TreeMap<>();
             for (var e : recipeValues.entrySet()) {
                 sorted.put(Objects.requireNonNull(e.getKey()), Objects.requireNonNull(e.getValue()));
             }

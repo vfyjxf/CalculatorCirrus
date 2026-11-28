@@ -3,6 +3,7 @@ package dev.vfyjxf.cirrus.ui.workbench.chrome;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusTextures;
 import dev.vfyjxf.cirrus.ui.CirrusThemeIcons;
+import dev.vfyjxf.cirrus.ui.OreUiTextures;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchBreakpoint;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchMode;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchShellContext;
@@ -190,11 +191,9 @@ public class LeftModeRailWidget extends Widget implements OreUiTooltipProvider {
         if (shellContext.mode() == mode || hovered) {
             return 0xFFFFFFFF;
         }
-        CirrusPalette palette = shellContext.palette();
-        if (mode == WorkbenchMode.database && !OreUiPaint.isDark(palette)) {
-            return palette.textMuted();
-        }
-        return OreUiPaint.withAlpha(0xFFFFFFFF, 0.88f);
+        return OreUiPaint.isDark(shellContext.palette())
+                ? OreUiPaint.withAlpha(0xFFFFFFFF, 0.88f)
+                : 0xFFFFFFFF;
     }
 
     public WorkbenchShellContext shellContext() {
@@ -247,11 +246,22 @@ public class LeftModeRailWidget extends Widget implements OreUiTooltipProvider {
         if (iconSize <= 0) {
             return;
         }
+        boolean dark = OreUiPaint.isDark(palette);
         if (shellContext.zenMode()) {
             int boxW = Math.max(12, width() - 2);
             int boxH = Math.max(12, height() - 2);
             boolean hover = ChromeText.hit(mouseX, mouseY, 0, 0, width(), height());
-            OreUiPaint.raisedCard(canvas, 1, 1, boxW, boxH, palette, hover, true);
+            if (dark) {
+                OreUiPaint.raisedCard(canvas, 1, 1, boxW, boxH, palette, hover, true);
+            } else {
+                canvas.texture(
+                    hover ? OreUiTextures.Light.railActiveHover : OreUiTextures.Light.railActive,
+                    1,
+                    1,
+                    boxW,
+                    boxH
+                );
+            }
             int drawSize = Math.min(14, Math.max(8, Math.min(boxW, boxH) - 8));
             int drawX = 1 + (boxW - drawSize) / 2;
             int drawY = 1 + Math.max(2, (boxH - 2 - drawSize) / 2);
@@ -272,7 +282,17 @@ public class LeftModeRailWidget extends Widget implements OreUiTooltipProvider {
         int glideY = Math.round(activeTileY.update(targetActiveY, 20f));
         boolean activeHover = ChromeText.hit(mouseX, mouseY, tileX, targetActiveY, tileW, tileH);
         if (glideY + tileH <= height() + 4) {
-            OreUiPaint.raisedCard(canvas, tileX, glideY, tileW, tileH, palette, activeHover, true);
+            if (dark) {
+                OreUiPaint.raisedCard(canvas, tileX, glideY, tileW, tileH, palette, activeHover, true);
+            } else {
+                canvas.texture(
+                    activeHover ? OreUiTextures.Light.railActiveHover : OreUiTextures.Light.railActive,
+                    tileX,
+                    glideY,
+                    tileW,
+                    tileH
+                );
+            }
         }
         for (int index = 0; index < modes.length; index++) {
             WorkbenchMode mode = modes[index];
@@ -284,7 +304,11 @@ public class LeftModeRailWidget extends Widget implements OreUiTooltipProvider {
             int tileY = Math.max(2, y - 3);
             boolean hover = ChromeText.hit(mouseX, mouseY, tileX, tileY, tileW, tileH);
             if (!active && hover) {
-                OreUiPaint.raisedButton(canvas, tileX, tileY, tileW, tileH, palette, false, true, false, false);
+                if (dark) {
+                    OreUiPaint.raisedButton(canvas, tileX, tileY, tileW, tileH, palette, false, true, false, false);
+                } else {
+                    canvas.texture(OreUiTextures.Light.railHover, tileX, tileY, tileW, tileH);
+                }
             }
             int drawIconSize = Math.min(16, iconSize);
             int drawX = tileX + Math.max(2, (tileW - drawIconSize) / 2);

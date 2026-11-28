@@ -3,6 +3,10 @@ package dev.vfyjxf.cirrus.recipe.content;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.BatchableRecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.ComplexContent;
+import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
+import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.DurabilityContent;
 import dev.vfyjxf.cirrus.api.recipe.content.complex.FluidContainerContent;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
@@ -20,6 +24,9 @@ public final class ComplexRecipeContentRenderer implements BatchableRecipeConten
 
     @Override
     public int visualCount(ComplexContent content) {
+        if (content instanceof DurabilityContent durability) {
+            return ingredientRenderer(durability).visualCount(durability.ingredient());
+        }
         if (content instanceof FluidContainerContent fluidContainer && fluidContainer.sampleContainer().notEmpty()) {
             return 1;
         }
@@ -49,6 +56,10 @@ public final class ComplexRecipeContentRenderer implements BatchableRecipeConten
         int height,
         float delta
     ) {
+        if (content instanceof DurabilityContent durability) {
+            renderDurabilityAt(graphics, durability, visualIndex, x, y, width, height, delta);
+            return;
+        }
         if (content instanceof FluidContainerContent fluidContainer) {
             RecipeContentRenderSupport
                     .renderBaseStackAt(graphics, fluidContainer.sampleContainer(), x, y, width, height, delta);
@@ -85,6 +96,10 @@ public final class ComplexRecipeContentRenderer implements BatchableRecipeConten
         int height,
         float delta
     ) {
+        if (content instanceof DurabilityContent durability) {
+            renderDurabilityAt(graphics, durability, visualIndex, x, y, width, height, delta);
+            return;
+        }
         if (content instanceof FluidContainerContent fluidContainer) {
             RecipeContentRenderSupport.renderStackAt(
                 graphics,
@@ -106,6 +121,10 @@ public final class ComplexRecipeContentRenderer implements BatchableRecipeConten
 
     @Override
     public void submit(Batch batch, ComplexContent content, int visualIndex, int x, int y, int width, int height) {
+        if (content instanceof DurabilityContent) {
+            batch.renderImmediate(this, content, visualIndex, x, y, width, height);
+            return;
+        }
         if (content instanceof FluidContainerContent fluidContainer) {
             RecipeContentRenderSupport.submitBaseStack(batch, fluidContainer.sampleContainer(), x, y, width, height);
             return;
@@ -128,6 +147,10 @@ public final class ComplexRecipeContentRenderer implements BatchableRecipeConten
         int width,
         int height
     ) {
+        if (content instanceof DurabilityContent) {
+            batch.renderDecoratedImmediate(this, content, visualIndex, x, y, width, height);
+            return;
+        }
         if (content instanceof FluidContainerContent fluidContainer) {
             RecipeContentRenderSupport.submitStack(
                 batch,
@@ -148,6 +171,19 @@ public final class ComplexRecipeContentRenderer implements BatchableRecipeConten
 
     @Override
     public @Nullable Tooltip tooltip(ComplexContent content, int visualIndex, TooltipContext context) {
+        if (content instanceof DurabilityContent durability) {
+            Tooltip tooltip = ingredientRenderer(durability).tooltip(durability.ingredient(), visualIndex, context);
+            if (tooltip == null) {
+                tooltip = Tooltip.create();
+            }
+            tooltip.add(CirrusLangs.Content.durabilityCost.component(), Tooltip.title);
+            tooltip.add(CirrusLangs.Content.durabilityCostDesc.component(durability.durabilityCost()));
+            int maxDur = durability.maxDurability();
+            if (maxDur > 0) {
+                tooltip.add(CirrusLangs.Content.durabilityCostUses.component(durability.usesPerTool(), maxDur));
+            }
+            return tooltip;
+        }
         if (content instanceof FluidContainerContent fluidContainer) {
             Tooltip tooltip = RecipeContentRenderSupport
                     .tooltipForStack(fluidContainer.sampleContainer().copyWithAmount(content.amount()), context);
@@ -174,6 +210,9 @@ public final class ComplexRecipeContentRenderer implements BatchableRecipeConten
 
     @Override
     public @Nullable TooltipStack<?> tooltipStack(ComplexContent content, int visualIndex) {
+        if (content instanceof DurabilityContent durability) {
+            return ingredientRenderer(durability).tooltipStack(durability.ingredient(), visualIndex);
+        }
         if (content instanceof FluidContainerContent fluidContainer) {
             return RecipeContentRenderSupport
                     .tooltipStackForStack(fluidContainer.sampleContainer().copyWithAmount(content.amount()));
@@ -190,9 +229,35 @@ public final class ComplexRecipeContentRenderer implements BatchableRecipeConten
 
     @Override
     public Component getName(ComplexContent content) {
+        if (content instanceof DurabilityContent durability) {
+            Component baseName = ingredientRenderer(durability).getName(durability.ingredient());
+            return CirrusLangs.Content.durabilityCostName.component(baseName, durability.durabilityCost());
+        }
         if (content instanceof FluidContainerContent) {
             return CirrusLangs.Content.fluidContainer.component();
         }
         return Component.literal(RecipeContentRenderSupport.labelForEnumeratedInput(content));
+    }
+
+    private static void renderDurabilityAt(
+        GuiGraphics graphics,
+        DurabilityContent durability,
+        int visualIndex,
+        int x,
+        int y,
+        int width,
+        int height,
+        float delta
+    ) {
+        DurabilityContentVisual.renderUnderlay(graphics, durability, x, y, width, height);
+        ingredientRenderer(durability)
+                .renderAt(graphics, durability.ingredient(), visualIndex, x, y, width, height, delta);
+        DurabilityContentVisual.renderOverlay(graphics, durability, x, y, width, height);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static RecipeContentRenderer<InputContent> ingredientRenderer(DurabilityContent durability) {
+        return (RecipeContentRenderer<InputContent>) (RecipeContentRenderer<?>) RecipeContentRenderer
+                .getRenderer((RecipeContent) durability.ingredient());
     }
 }

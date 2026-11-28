@@ -14,6 +14,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.material.Fluid;
 import net.neoforged.neoforge.capabilities.Capabilities.FluidHandler;
 import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.impl.factory.Lists;
 import org.jetbrains.annotations.Range;
@@ -138,7 +139,13 @@ public final class FluidContainerContent implements ComplexContent {
                     found += candidate.amount();
                 }
             }
-            if (found < required.amount()) {
+            if (found >= required.amount()) {
+                continue;
+            }
+            // Also accept empty / fillable containers capable of holding the required fluid (e.g. empty Bucket).
+            FluidStack probe = required.value().copyWithAmount((int) Math.min(Integer.MAX_VALUE, required.amount()));
+            int accepted = handler.fill(probe, IFluidHandler.FluidAction.SIMULATE);
+            if (accepted < probe.getAmount()) {
                 return false;
             }
         }

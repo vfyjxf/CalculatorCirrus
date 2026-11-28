@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.ui.widget.common;
 
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
+import dev.vfyjxf.cirrus.ui.CirrusUiSound;
 import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
 import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
@@ -116,6 +117,17 @@ public class CirrusTextInputWidget extends Widget {
 
     private void setupEvents() {
         onMouseClick((input, clickCount, context) -> {
+            if (input.isRightClick()) {
+                if (!text.isEmpty()) {
+                    replaceText("", 0);
+                    CirrusUiSound.playClickSound();
+                } else {
+                    clearSelection();
+                }
+                cursorBlinkEpoch = System.currentTimeMillis();
+                context.consume();
+                return EventDispatch.consumed;
+            }
             if (!input.isLeftClick()) {
                 return EventDispatch.pass;
             }

@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.planning.offline;
 
 import com.google.gson.JsonObject;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
@@ -8,7 +9,6 @@ import dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory;
 import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
@@ -19,6 +19,7 @@ import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -54,7 +55,7 @@ public record ChainMetrics(
         int actions = steps.size();
         int crafts = 0;
         Set<CompiledRecipeKey> recipesSeen = new HashSet<>();
-        Set<ResourceKey> rawResources = new HashSet<>();
+        Set<ComponentStackKey> rawResources = new HashSet<>();
         int machines = 0;
         int discouraged = 0;
         int lastResort = 0;
@@ -65,8 +66,8 @@ public record ChainMetrics(
         int maxDepth = 0;
 
         Set<SinglePair> forwardConversions = new HashSet<>();
-        Map<ResourceKey, Long> convIn = new HashMap<>();
-        Map<ResourceKey, Long> convOut = new HashMap<>();
+        Map<ComponentStackKey, Long> convIn = new HashMap<>();
+        Map<ComponentStackKey, Long> convOut = new HashMap<>();
 
         HumanGuidanceView guidance = request.context().guidance();
         FacilitySnapshot facilities = request.context().facilities();
@@ -90,7 +91,7 @@ public record ChainMetrics(
                             boolean anyActive = false;
                             boolean anyOptInLocked = false;
                             for (CompiledRecipe producer : producers) {
-                                String sys = producer.key().systemId();
+                                Namespace sys = producer.key().systemId();
                                 SystemAdmission adm = graph.admissionOf(sys);
                                 boolean unlocked = facilities.unlockedSystems().contains(sys);
                                 boolean sysEnabled = guidance.isSystemEnabled(sys, adm, unlocked);
@@ -129,9 +130,9 @@ public record ChainMetrics(
                         if (rec.inputs().size() == 1
                                 && rec.outputs().size() == 1
                                 && craft.slotBindings().containsKey(rec.inputs().get(0).slotIndex())) {
-                            ResourceKey inKey = craft.slotBindings().get(rec.inputs().get(0).slotIndex())
+                            ComponentStackKey inKey = craft.slotBindings().get(rec.inputs().get(0).slotIndex())
                                     .chosenResource();
-                            ResourceKey outKey = rec.outputs().get(0).resource();
+                            ComponentStackKey outKey = rec.outputs().get(0).resource();
                             if (!inKey.equals(outKey)) {
                                 forwardConversions.add(new SinglePair(inKey, outKey));
                             }
@@ -152,9 +153,9 @@ public record ChainMetrics(
                         if (rec.inputs().size() == 1
                                 && rec.outputs().size() == 1
                                 && conv.slotBindings().containsKey(rec.inputs().get(0).slotIndex())) {
-                            ResourceKey inKey = conv.slotBindings().get(rec.inputs().get(0).slotIndex())
+                            ComponentStackKey inKey = conv.slotBindings().get(rec.inputs().get(0).slotIndex())
                                     .chosenResource();
-                            ResourceKey outKey = rec.outputs().get(0).resource();
+                            ComponentStackKey outKey = rec.outputs().get(0).resource();
                             if (!inKey.equals(outKey)) {
                                 forwardConversions.add(new SinglePair(inKey, outKey));
                             }
@@ -237,5 +238,5 @@ public record ChainMetrics(
         return obj;
     }
 
-    private record SinglePair(ResourceKey from, ResourceKey to) {}
+    private record SinglePair(ComponentStackKey from, ComponentStackKey to) {}
 }

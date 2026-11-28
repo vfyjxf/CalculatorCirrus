@@ -24,9 +24,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.flexShrink;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.heightOf;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.insetBottom;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.insetLeft;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.insetRight;
 import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.minWidth;
+import static dev.vfyjxf.cloudlib.api.ui.style.UIStyles.positionAbsolute;
 
 /**
  * Collapsible bottom drawer presenting structured error/safety-stop diagnostics with one-click recovery alongside live execution telemetry and an audit event log.
@@ -154,7 +157,9 @@ public final class ExecutionDiagnosticsDrawerWidget extends Widget implements Or
                 ctx.consume();
                 return EventDispatch.consumed;
             }
-            return EventDispatch.pass;
+            // Intercept stray clicks inside the expanded upward sheet so they never click through to underlying panels.
+            ctx.consume();
+            return EventDispatch.consumed;
         });
 
         onMouseScrolled((mouseX, mouseY, scrollX, scrollYDelta, ctx) -> {
@@ -183,6 +188,13 @@ public final class ExecutionDiagnosticsDrawerWidget extends Widget implements Or
         }
     }
 
+    /** Immediately snaps the drawer height to its current collapsed/expanded target within panel bounds. */
+    public void snapHeightToTarget() {
+        int target = expanded ? Math.min(expandedHeight, maxExpandedBudget()) : collapsedHeight;
+        smoothHeight.snap(target, System.nanoTime());
+        applyHeightPx(target);
+    }
+
     public Tab activeTab() {
         return activeTab;
     }
@@ -192,7 +204,11 @@ public final class ExecutionDiagnosticsDrawerWidget extends Widget implements Or
     }
 
     private int maxExpandedBudget() {
-        return Math.max(collapsedHeight + 48, Math.min(280, Math.round(cockpit.panelHeightBudget() * 0.45f)));
+        int panelH = cockpit.panelHeightBudget();
+        int topClearance = cockpit.topFixedHeight() + 6;
+        int available = Math.max(collapsedHeight, panelH - topClearance - 2);
+        int proportional = Math.max(collapsedHeight + 48, Math.round(panelH * 0.56f));
+        return Math.max(collapsedHeight, Math.min(280, Math.min(available, proportional)));
     }
 
     private void applyHeightStyle() {
@@ -207,7 +223,14 @@ public final class ExecutionDiagnosticsDrawerWidget extends Widget implements Or
         int clamped = Math.max(collapsedHeight, Math.min(maxExpandedBudget(), heightPx));
         if (lastAppliedHeight != clamped) {
             lastAppliedHeight = clamped;
-            useStyle(heightOf(clamped), flexShrink(0), minWidth(0));
+            useStyle(
+                positionAbsolute(),
+                insetLeft(1f),
+                insetRight(1f),
+                insetBottom(1f),
+                heightOf(clamped),
+                minWidth(0)
+            );
         }
     }
 
@@ -280,7 +303,12 @@ public final class ExecutionDiagnosticsDrawerWidget extends Widget implements Or
         filterInfoRect = null;
 
         canvas.fill(0, 0, w, h, p.dockSurface());
-        canvas.fill(0, 0, w, 1, OreUiPaint.cardDivider(p));
+        if (h > collapsedHeight + 2) {
+            canvas.strokeRect(0, 0, w, h, OreUiPaint.withAlpha(p.focusRing(), 0.78f), 1);
+            canvas.fill(1, 1, Math.max(0, w - 2), 1, p.hairlineHighlight());
+        } else {
+            canvas.fill(0, 0, w, 1, OreUiPaint.cardDivider(p));
+        }
 
         ExecutionAuditLog.Event activeDiag = log.activeDiagnostic();
         int issueCount = log.errorAndWarnCount();

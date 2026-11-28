@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.chrome;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusThemeIcons;
 import dev.vfyjxf.cirrus.ui.workbench.copilot.CoPilotPaint;
@@ -199,7 +199,7 @@ public final class ChromeButtons {
 
     public static void drawMiniItem(
         SceneCanvas canvas,
-        @Nullable ResourceKey resource,
+        @Nullable ComponentStackKey resource,
         CirrusPalette palette,
         int x,
         int y,

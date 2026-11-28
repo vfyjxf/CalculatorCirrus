@@ -11,6 +11,7 @@ import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cirrus.planning.bridge.WorldFacilityRegistry;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.network.chat.Component;
 import net.neoforged.fml.loading.FMLPaths;
 import org.slf4j.Logger;
@@ -20,6 +21,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,7 +48,7 @@ public interface FacilitiesHost {
 
     Optional<CompiledRecipeGraph> graph();
 
-    List<String> systemIds();
+    List<Namespace> systemIds();
 
     List<GuidanceRule> rules();
 
@@ -118,12 +120,12 @@ public interface FacilitiesHost {
         }
 
         @Override
-        public List<String> systemIds() {
-            TreeSet<String> ids = new TreeSet<>();
+        public List<Namespace> systemIds() {
+            TreeSet<Namespace> ids = new TreeSet<>(Comparator.comparing(Namespace::toString));
             try {
                 for (RecipeSystem<?> system : RecipeApi.instance().allSystems()) {
                     if (system != null) {
-                        ids.add(system.systemId().toString());
+                        ids.add(system.systemId());
                     }
                 }
             } catch (RuntimeException | LinkageError error) {
@@ -299,7 +301,7 @@ public interface FacilitiesHost {
         }
 
         @Override
-        public List<String> systemIds() {
+        public List<Namespace> systemIds() {
             return List.of();
         }
 

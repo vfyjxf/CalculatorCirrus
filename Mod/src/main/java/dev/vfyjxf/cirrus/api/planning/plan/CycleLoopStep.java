@@ -1,8 +1,8 @@
 package dev.vfyjxf.cirrus.api.planning.plan;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledCycleMacroKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 
 import java.util.Collections;
 import java.util.List;
@@ -15,9 +15,9 @@ public record CycleLoopStep(
     List<String> dependsOnStepIds,
     CompiledCycleMacroKey macroKey,
     long iterations,
-    Map<ResourceKey, Long> workingSeedAmounts,
+    Map<ComponentStackKey, Long> workingSeedAmounts,
     List<CraftStep> singleIterationTemplate,
-    Map<ResourceKey, Long> netDeltaPerIteration,
+    Map<ComponentStackKey, Long> netDeltaPerIteration,
     CostVector stepCost
 ) implements PlanStep {
 
@@ -35,9 +35,9 @@ public record CycleLoopStep(
         netDeltaPerIteration = sortedResourceMap(netDeltaPerIteration);
     }
 
-    private static Map<ResourceKey, Long> sortedResourceMap(Map<ResourceKey, Long> source) {
+    private static Map<ComponentStackKey, Long> sortedResourceMap(Map<ComponentStackKey, Long> source) {
         if (source.isEmpty()) return Map.of();
-        TreeMap<ResourceKey, Long> sorted = new TreeMap<>();
+        TreeMap<ComponentStackKey, Long> sorted = new TreeMap<>();
         for (var e : source.entrySet()) {
             sorted.put(Objects.requireNonNull(e.getKey()), Objects.requireNonNull(e.getValue()));
         }

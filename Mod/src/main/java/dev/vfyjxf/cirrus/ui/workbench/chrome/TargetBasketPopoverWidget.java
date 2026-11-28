@@ -1,12 +1,12 @@
 package dev.vfyjxf.cirrus.ui.workbench.chrome;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.InputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.OutputSlot;
 import dev.vfyjxf.cirrus.api.planning.human.PinResourceRecipeFeedback;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
@@ -110,9 +110,9 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
     private final List<PickerCardHit> pickerCardHits = new ArrayList<>();
     private @Nullable Rect wellCompareRect;
 
-    private record RecipePinHit(Rect cardRect, Rect pinRect, ResourceKey target, CompiledRecipe recipe) {}
+    private record RecipePinHit(Rect cardRect, Rect pinRect, ComponentStackKey target, CompiledRecipe recipe) {}
 
-    private record PickerCardHit(Rect cardRect, ResourceKey resource) {}
+    private record PickerCardHit(Rect cardRect, ComponentStackKey resource) {}
 
     public TargetBasketPopoverWidget(WorkbenchShellContext context) {
         this.shellContext = Objects.requireNonNull(context, "context");
@@ -129,6 +129,18 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         search = TextFieldWidget.create().setMaxLength(64)
                 .setPlaceholder(CirrusLangs.Workbench.Topbar.addTarget.string()).onTextChanged(this::setSearchQuery)
                 .onEnterPressed(text -> addSearchResult(0));
+        search.onMouseClicked((input, clickCtx) -> {
+            if (!input.isRightClick()) {
+                return EventDispatch.pass;
+            }
+            if (!search.text().isEmpty()) {
+                search.setText("");
+                setSearchQuery("");
+                CirrusUiSound.playClickSound();
+            }
+            clickCtx.consume();
+            return EventDispatch.consumed;
+        });
         search.useStyle(
             positionAbsolute(),
             insetLeft(pad),
@@ -342,7 +354,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         return true;
     }
 
-    public boolean addResource(@Nullable ResourceKey resource) {
+    public boolean addResource(@Nullable ComponentStackKey resource) {
         if (resource == null) {
             return false;
         }
@@ -376,7 +388,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         if (item == null) {
             return false;
         }
-        ResourceKey resource = resourceOf(item);
+        ComponentStackKey resource = resourceOf(item);
         if (resource == null || !addResource(resource)) {
             return false;
         }
@@ -386,7 +398,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         return true;
     }
 
-    private static @Nullable ResourceKey resourceOf(PaletteItem item) {
+    private static @Nullable ComponentStackKey resourceOf(PaletteItem item) {
         return switch (item.primaryAction()) {
             case PaletteAction.SetTarget setTarget -> setTarget.resource();
             case PaletteAction.AddToBasket addToBasket -> addToBasket.resource();
@@ -606,7 +618,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
             return added;
         }
         if (searchResults.isEmpty()) {
-            List<ResourceKey> suggestions = quickSuggestions();
+            List<ComponentStackKey> suggestions = quickSuggestions();
             int visible = Math.min(resultLimit, Math.max(0, suggestions.size() - searchScroll));
             for (int index = 0; index < visible; index++) {
                 if (contains(resultRect(index), localX, localY)) {
@@ -654,7 +666,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         }
         Rect cmpRect = wellCompareRect;
         if (cmpRect != null && contains(cmpRect, localX, localY)) {
-            ResourceKey selectedRes = inspectedResource();
+            ComponentStackKey selectedRes = inspectedResource();
             if (selectedRes != null && shellContext instanceof WorkbenchShellWidget shell) {
                 shell.openRecipeAssistant(selectedRes);
                 CirrusUiSound.playClickSound();
@@ -690,7 +702,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         return false;
     }
 
-    private @Nullable ResourceKey inspectedResource() {
+    private @Nullable ComponentStackKey inspectedResource() {
         if (draft.isEmpty()) {
             return null;
         }
@@ -698,7 +710,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         return draft.get(idx).resource();
     }
 
-    private List<CompiledRecipe> filteredRecipesFor(@Nullable ResourceKey resource) {
+    private List<CompiledRecipe> filteredRecipesFor(@Nullable ComponentStackKey resource) {
         CompiledRecipeGraph graph = shellContext.activeGraph();
         if (graph == null || resource == null) {
             return List.of();
@@ -709,7 +721,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         }
         List<CompiledRecipe> out = new ArrayList<>(raw.size());
         for (CompiledRecipe recipe : raw) {
-            boolean hand = recipe.machineRequirement().compatibleMachineIds().isEmpty();
+            boolean hand = recipe.machineRequirement().compatibleMachines().isEmpty();
             if ((recipeFilter == 1 && hand) || (recipeFilter == 2 && !hand)) {
                 out.add(recipe);
             }
@@ -725,10 +737,10 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         for (RecipePinHit hit : wellPinHits) {
             if (contains(hit.cardRect(), localX, localY)) {
                 CompiledRecipe recipe = hit.recipe();
-                String machine = recipe.machineRequirement().compatibleMachineIds().isEmpty()
+                String machine = recipe.machineRequirement().compatibleMachines().isEmpty()
                         ? "Hand / Crafting"
                         : StepNodeCardRenderer
-                                .machineNameOf(recipe.machineRequirement().compatibleMachineIds().get(0), null)
+                                .machineNameOf(recipe.machineRequirement().compatibleMachines().get(0), null)
                                 .getString();
                 List<OreUiRichTooltip.ItemBadge> ins = new ArrayList<>();
                 for (InputSlot in : recipe.inputs()) {
@@ -753,7 +765,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         }
         int searchIdx = searchResultAt(localX, localY);
         if (searchIdx >= 0 && searchIdx < searchResults.size()) {
-            ResourceKey res = resourceOf(searchResults.get(searchIdx));
+            ComponentStackKey res = resourceOf(searchResults.get(searchIdx));
             if (res != null) {
                 return resourceCandidateTooltip(res);
             }
@@ -771,11 +783,11 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         return null;
     }
 
-    private OreUiRichTooltip resourceCandidateTooltip(ResourceKey resource) {
+    private OreUiRichTooltip resourceCandidateTooltip(ComponentStackKey resource) {
         CompiledRecipeGraph graph = shellContext.activeGraph();
         List<CompiledRecipe> producers = graph == null ? List.of() : graph.producersOf(resource);
         OreUiRichTooltip.Builder builder = OreUiRichTooltip.builder(CoPilotPaint.resourceName(resource))
-                .subtitle(resource.resourceId()).icon(resource)
+                .subtitle(resource.displayId()).icon(resource)
                 .badge(producers.size() + " RECIPES", OreUiRichTooltip.Tone.positive);
         if (!producers.isEmpty()) {
             CompiledRecipe first = producers.get(0);
@@ -794,11 +806,11 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         return builder.footer("Click to add as planning target").build();
     }
 
-    private List<ResourceKey> pickerCandidates() {
+    private List<ComponentStackKey> pickerCandidates() {
         if (!searchResults.isEmpty()) {
-            List<ResourceKey> out = new ArrayList<>(searchResults.size());
+            List<ComponentStackKey> out = new ArrayList<>(searchResults.size());
             for (PaletteItem item : searchResults) {
-                ResourceKey res = resourceOf(item);
+                ComponentStackKey res = resourceOf(item);
                 if (res != null && !containsDraft(res)) {
                     out.add(res);
                 }
@@ -811,11 +823,11 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         return quickSuggestions();
     }
 
-    private List<ResourceKey> quickSuggestions() {
+    private List<ComponentStackKey> quickSuggestions() {
         List<PaletteItem> catalog = CommandPaletteEngine.queryResources("", shellContext.activeGraph(), 500);
-        List<ResourceKey> out = new ArrayList<>(catalog.size());
+        List<ComponentStackKey> out = new ArrayList<>(catalog.size());
         for (PaletteItem item : catalog) {
-            ResourceKey candidate = resourceOf(item);
+            ComponentStackKey candidate = resourceOf(item);
             if (candidate != null && !containsDraft(candidate)) {
                 out.add(candidate);
             }
@@ -823,7 +835,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         return out;
     }
 
-    private boolean containsDraft(ResourceKey candidate) {
+    private boolean containsDraft(ComponentStackKey candidate) {
         for (TargetDemand demand : draft) {
             if (candidate.equals(demand.resource())) {
                 return true;
@@ -1024,7 +1036,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
     ) {
         OreUiPaint.searchField(canvas, x, y, w, h, palette, false);
         CompiledRecipeGraph graph = shellContext.activeGraph();
-        List<ResourceKey> candidates = pickerCandidates();
+        List<ComponentStackKey> candidates = pickerCandidates();
         int totalCatalog = CommandPaletteEngine.fullCatalog(graph).size();
         int headerH = 16;
         ChromeText.drawFitted(
@@ -1082,7 +1094,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
                 if (idx >= candidates.size()) {
                     break;
                 }
-                ResourceKey resource = candidates.get(idx);
+                ComponentStackKey resource = candidates.get(idx);
                 int cx = x + 5 + col * (cellW + gapX);
                 Rect card = new Rect(cx, cy, cellW, cellH);
                 boolean hovered = contains(card, mouseX, mouseY);
@@ -1127,7 +1139,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
         int y,
         int w,
         int h,
-        ResourceKey target,
+        ComponentStackKey target,
         int mouseX,
         int mouseY
     ) {
@@ -1232,10 +1244,10 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
             boolean cardHover = contains(card, mouseX, mouseY);
             OreUiPaint.raisedCard(canvas, card.x(), card.y(), card.width(), card.height(), palette, cardHover, false);
 
-            String machine = recipe.machineRequirement().compatibleMachineIds().isEmpty()
+            String machine = recipe.machineRequirement().compatibleMachines().isEmpty()
                     ? "Hand Craft"
                     : StepNodeCardRenderer
-                            .machineNameOf(recipe.machineRequirement().compatibleMachineIds().get(0), null).getString();
+                            .machineNameOf(recipe.machineRequirement().compatibleMachines().get(0), null).getString();
             Component pinComp = Component.literal("Pin");
             int pinW = ChromeText.width(canvas, pinComp) + 10;
             Rect pinRect = new Rect(card.right() - pinW - 4, card.y() + 3, pinW, 13);
@@ -1346,14 +1358,14 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
             }
             return;
         }
-        List<ResourceKey> suggestions = quickSuggestions();
+        List<ComponentStackKey> suggestions = quickSuggestions();
         int maxScroll = Math.max(0, suggestions.size() - resultLimit);
         searchScroll = Math.max(0, Math.min(maxScroll, searchScroll));
         int visible = Math.min(resultLimit, Math.max(0, suggestions.size() - searchScroll));
         CompiledRecipeGraph graph = shellContext.activeGraph();
         for (int index = 0; index < visible; index++) {
             Rect rect = resultRect(index);
-            ResourceKey resource = suggestions.get(searchScroll + index);
+            ComponentStackKey resource = suggestions.get(searchScroll + index);
             boolean hovered = ChromeText.hit(mouseX, mouseY, rect.x(), rect.y(), rect.width(), rect.height());
             canvas.fill(
                 rect.x(),
@@ -1476,7 +1488,7 @@ public class TargetBasketPopoverWidget extends WidgetGroup<Widget> implements Or
 
     private static void drawResourceIcon(
         SceneCanvas canvas,
-        @Nullable ResourceKey resource,
+        @Nullable ComponentStackKey resource,
         CirrusPalette palette,
         int x,
         int y,

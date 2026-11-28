@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.ui.workbench.copilot;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.human.HumanFeedback;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.state.HistoryEntry;
 import dev.vfyjxf.cirrus.ui.workbench.state.WorkbenchUiSnapshot;
@@ -36,7 +36,7 @@ public interface CoPilotHost {
 
     void focusStepInDag(String stepId);
 
-    void openAlternativesFor(ResourceKey resource);
+    void openAlternativesFor(ComponentStackKey resource);
 
     void toast(LangEntry message);
 

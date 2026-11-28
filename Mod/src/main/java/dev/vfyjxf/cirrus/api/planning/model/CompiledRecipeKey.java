@@ -1,21 +1,18 @@
 package dev.vfyjxf.cirrus.api.planning.model;
 
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
+
 import java.util.Objects;
 import java.util.Optional;
 
-public record CompiledRecipeKey(String systemId, Optional<String> explicitRecipeId, long structuralHash64)
+public record CompiledRecipeKey(Namespace systemId, Optional<ResourceLocation> explicitRecipeId, long structuralHash64)
         implements
             Comparable<CompiledRecipeKey> {
 
     public CompiledRecipeKey {
         Objects.requireNonNull(systemId, "systemId");
         Objects.requireNonNull(explicitRecipeId, "explicitRecipeId");
-        if (systemId.isEmpty()) {
-            throw new IllegalArgumentException("systemId must not be empty");
-        }
-        if (explicitRecipeId.isPresent() && explicitRecipeId.get().isEmpty()) {
-            explicitRecipeId = Optional.empty();
-        }
     }
 
     public String shortString() {
@@ -27,8 +24,14 @@ public record CompiledRecipeKey(String systemId, Optional<String> explicitRecipe
     public int compareTo(CompiledRecipeKey other) {
         int c = systemId.compareTo(other.systemId);
         if (c != 0) return c;
-        c = explicitRecipeId.orElse("").compareTo(other.explicitRecipeId.orElse(""));
-        if (c != 0) return c;
+        boolean aPresent = explicitRecipeId.isPresent();
+        boolean bPresent = other.explicitRecipeId.isPresent();
+        if (aPresent && bPresent) {
+            c = explicitRecipeId.get().compareTo(other.explicitRecipeId.get());
+            if (c != 0) return c;
+        } else if (aPresent != bPresent) {
+            return aPresent ? 1 : -1;
+        }
         return Long.compare(structuralHash64, other.structuralHash64);
     }
 }

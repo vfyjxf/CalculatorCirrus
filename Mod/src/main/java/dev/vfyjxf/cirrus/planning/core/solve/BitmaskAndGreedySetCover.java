@@ -1,10 +1,11 @@
 package dev.vfyjxf.cirrus.planning.core.solve;
 
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -12,9 +13,9 @@ import java.util.TreeSet;
 
 public final class BitmaskAndGreedySetCover {
 
-    public record CandidateMachine(String machineId, BitSet coverBits, double setupScalarCost) {
+    public record CandidateMachine(MachineEntry machine, BitSet coverBits, double setupScalarCost) {
         public CandidateMachine {
-            Objects.requireNonNull(machineId, "machineId");
+            Objects.requireNonNull(machine, "machine");
             Objects.requireNonNull(coverBits, "coverBits");
             coverBits = (BitSet) coverBits.clone();
             if (!Double.isFinite(setupScalarCost) || setupScalarCost < 0.0) {
@@ -28,7 +29,7 @@ public final class BitmaskAndGreedySetCover {
 
     public BitmaskAndGreedySetCover() {}
 
-    public Set<String> solve(int kSteps, List<CandidateMachine> candidates) {
+    public Set<MachineEntry> solve(int kSteps, List<CandidateMachine> candidates) {
         if (kSteps <= 0 || candidates == null || candidates.isEmpty()) {
             return Set.of();
         }
@@ -37,14 +38,14 @@ public final class BitmaskAndGreedySetCover {
             if (cm != null && cm.coverBits().nextSetBit(0) >= 0 && cm.coverBits().nextSetBit(0) < kSteps) {
                 BitSet clipped = cm.coverBits().get(0, kSteps);
                 if (!clipped.isEmpty()) {
-                    sorted.add(new CandidateMachine(cm.machineId(), clipped, cm.setupScalarCost()));
+                    sorted.add(new CandidateMachine(cm.machine(), clipped, cm.setupScalarCost()));
                 }
             }
         }
         if (sorted.isEmpty()) {
             return Set.of();
         }
-        sorted.sort(Comparator.comparing(CandidateMachine::machineId));
+        sorted.sort((a, b) -> MachineEntry.comparator.compare(a.machine(), b.machine()));
 
         BitSet union = new BitSet(kSteps);
         for (CandidateMachine cm : sorted) {
@@ -60,7 +61,7 @@ public final class BitmaskAndGreedySetCover {
         return solveGreedyBitSetLocalSearch(kSteps, sorted);
     }
 
-    private static Set<String> solveExactDp(int kSteps, List<CandidateMachine> cands) {
+    private static Set<MachineEntry> solveExactDp(int kSteps, List<CandidateMachine> cands) {
         int fullMask = (1 << kSteps) - 1;
         int m = cands.size();
         int[] masks = new int[m];
@@ -103,18 +104,18 @@ public final class BitmaskAndGreedySetCover {
         if (!Double.isFinite(dp[fullMask])) {
             return Set.of();
         }
-        TreeSet<String> chosen = new TreeSet<>();
+        TreeSet<MachineEntry> chosen = new TreeSet<>(MachineEntry.comparator);
         int cur = fullMask;
         while (cur != 0) {
             int idx = pickedIdx[cur];
             if (idx < 0) break;
-            chosen.add(cands.get(idx).machineId());
+            chosen.add(cands.get(idx).machine());
             cur = prevMask[cur];
         }
         return Collections.unmodifiableSet(chosen);
     }
 
-    private static Set<String> solveGreedyBitSetLocalSearch(int kSteps, List<CandidateMachine> cands) {
+    private static Set<MachineEntry> solveGreedyBitSetLocalSearch(int kSteps, List<CandidateMachine> cands) {
         int m = cands.size();
         BitSet uncovered = new BitSet(kSteps);
         uncovered.set(0, kSteps);
@@ -192,10 +193,10 @@ public final class BitmaskAndGreedySetCover {
             }
         }
 
-        TreeSet<String> result = new TreeSet<>();
+        TreeSet<MachineEntry> result = new TreeSet<>(MachineEntry.comparator);
         for (int i = 0; i < m; i++) {
             if (selected[i]) {
-                result.add(cands.get(i).machineId());
+                result.add(cands.get(i).machine());
             }
         }
         return Collections.unmodifiableSet(result);

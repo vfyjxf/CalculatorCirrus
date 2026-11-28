@@ -1,14 +1,15 @@
 package dev.vfyjxf.cirrus.planning.core.graph;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledCycleMacro;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory;
 import dev.vfyjxf.cirrus.api.planning.graph.RecipeRole;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledCycleMacroKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.planning.core.lang.Fnv1a64;
 import dev.vfyjxf.cirrus.planning.core.lang.SafeMath;
+import net.minecraft.resources.ResourceLocation;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -342,8 +343,8 @@ final class CycleMacroMiner {
             }
         }
 
-        Map<ResourceKey, Long> netDelta = new TreeMap<>();
-        Map<ResourceKey, Long> seeds = new TreeMap<>();
+        Map<ComponentStackKey, Long> netDelta = new TreeMap<>();
+        Map<ComponentStackKey, Long> seeds = new TreeMap<>();
         Set<Integer> allTouched = new HashSet<>(running.keySet());
         allTouched.addAll(peakDraw.keySet());
         allTouched.addAll(catalystMin.keySet());
@@ -353,7 +354,7 @@ final class CycleMacroMiner {
 
         for (int resId : allTouched) {
             long delta = running.getOrDefault(resId, 0L);
-            ResourceKey rk = dict.keyOf(resId);
+            ComponentStackKey rk = dict.keyOf(resId);
             if (delta != 0L
                     || peakDraw.containsKey(resId)
                     || catalystMin.containsKey(resId)
@@ -386,9 +387,9 @@ final class CycleMacroMiner {
         for (int i = 0; i < inner.size(); i++) {
             CompiledRecipeKey rk = inner.get(i).key();
             h = Fnv1a64.mixByte(h, '|');
-            h = Fnv1a64.mixString(h, rk.systemId());
+            h = Fnv1a64.mixString(h, rk.systemId().toString());
             h = Fnv1a64.mixByte(h, ':');
-            h = Fnv1a64.mixString(h, rk.explicitRecipeId().orElse(""));
+            h = Fnv1a64.mixString(h, rk.explicitRecipeId().map(ResourceLocation::toString).orElse(""));
             h = Fnv1a64.mixByte(h, '#');
             h = Fnv1a64.mixString(h, Long.toHexString(rk.structuralHash64()));
             h = Fnv1a64.mixByte(h, '*');
@@ -406,13 +407,13 @@ final class CycleMacroMiner {
         return false;
     }
 
-    private static boolean hasPositiveExternalOutput(CompiledCycleMacro macro, ResourceKey... cycleCarrierKeys) {
+    private static boolean hasPositiveExternalOutput(CompiledCycleMacro macro, ComponentStackKey... cycleCarrierKeys) {
         for (var e : macro.netDeltaPerIter().entrySet()) {
             if (e.getValue() <= 0L) {
                 continue;
             }
             boolean isCarrier = false;
-            for (ResourceKey carrier : cycleCarrierKeys) {
+            for (ComponentStackKey carrier : cycleCarrierKeys) {
                 if (carrier.equals(e.getKey())) {
                     isCarrier = true;
                     break;

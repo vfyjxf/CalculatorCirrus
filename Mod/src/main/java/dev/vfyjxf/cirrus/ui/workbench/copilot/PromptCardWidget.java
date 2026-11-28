@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.copilot;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.InputSlot;
@@ -18,11 +19,12 @@ import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.planning.model.PlanningTagKeys;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.bridge.CirrusPlanningRuntime;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
@@ -49,10 +51,14 @@ import dev.vfyjxf.cloudlib.ui.widget.RingWidget;
 import dev.vfyjxf.cloudlib.ui.widget.ToggleWidget;
 import dev.vfyjxf.taffy.style.TaffyDimension;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -96,9 +102,9 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
     public record PreviewSubject(
         PreviewKind kind,
         Set<String> stepIds,
-        @Nullable String machineId,
+        @Nullable MachineEntry machine,
         @Nullable CompiledRecipeKey recipeKey,
-        @Nullable ResourceKey resource
+        @Nullable ComponentStackKey resource
     ) {
         public PreviewSubject {
             stepIds = stepIds == null ? Set.of() : Set.copyOf(stepIds);
@@ -109,7 +115,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         void onPreview(@Nullable PreviewSubject subject);
     }
 
-    public record RecipePreview(List<ResourceKey> inputs, List<ResourceKey> outputs) {
+    public record RecipePreview(List<ComponentStackKey> inputs, List<ComponentStackKey> outputs) {
         public RecipePreview {
             inputs = inputs == null ? List.of() : List.copyOf(inputs);
             outputs = outputs == null ? List.of() : List.copyOf(outputs);
@@ -133,9 +139,12 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
     private static final int maxVisibleTagRows = 4;
     private static final int inlineControlHeight = 16;
     private static final int altRecipeRowHeight = 18;
+    private static final int explanationLineHeight = 10;
+    private static final int maxExplanationLines = 4;
+    private static final int wrappedOptionHeight = 33;
 
     private @Nullable PreviewListener previewListener;
-    private @Nullable Consumer<String> candidateRequestListener;
+    private @Nullable Consumer<TagKey<?>> candidateRequestListener;
     private @Nullable CompiledRecipeGraph graph;
     private boolean persistToWorld;
     private boolean allCandidatesExpanded;
@@ -145,7 +154,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
     private @Nullable Rect tagSearchRect;
     private @Nullable Rect tagSearchClearRect;
     private @Nullable Rect tagGridViewportRect;
-    private @Nullable ResourceKey pickedTagMember;
+    private @Nullable ComponentStackKey pickedTagMember;
     private int ownedMachineCount = 1;
     private long declaredStockAmount = -1L;
     private @Nullable PreviewSubject firedPreview;
@@ -154,6 +163,10 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
     private long hoverStartedAtMs;
     private int renderedMouseX = -1;
     private int renderedMouseY = -1;
+    private int measuredExplanationHeight = 24;
+    private int[] measuredOptionHeights = new int[0];
+    private int lastMeasuredWidth = -1;
+    private int lastSyncedHeight = -1;
     private final long createdAtMs = OreUiMotion.nowMs();
     private final OreUiMotion.SmoothValue scopeIndicatorX = new OreUiMotion.SmoothValue();
 
@@ -195,11 +208,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         this.costRing = RingWidget.of(this::costShare).setThickness(3);
         costRing.addStyleClass("warn");
         costRing.useStyle(positionAbsolute(), insetRight(pad + 4), insetTop(bodyTop() + 4), sizeOf(22, 22));
-        costRing.setVisible(
-            kind() == DecisionPromptKind.baseOrSupplyBoundary
-                    || kind() == DecisionPromptKind.reusableCatalystCheck
-                    || kind() == DecisionPromptKind.fieldTripConfirm
-        );
+        costRing.setVisible(false);
         addWidget(costRing);
 
         this.rocker = ToggleWidget.create(persistToWorld)
@@ -214,12 +223,30 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         addWidget(rocker);
 
         onMouseClick((input, clickCount, context) -> {
-            if (!input.isLeftClick()) {
-                return EventDispatch.pass;
-            }
             FloatPos local = input.mouseRelative(this);
             int lx = (int) local.x();
             int ly = (int) local.y();
+            if (input.isRightClick()) {
+                if (kind() == DecisionPromptKind.materialFamilyAnchor
+                        && tagSearchRect != null
+                        && tagSearchRect.contains(lx, ly)) {
+                    if (!tagSearchQuery.isEmpty()) {
+                        tagSearchQuery = "";
+                        tagScrollY = 0;
+                        CirrusUiSound.playClickSound();
+                    }
+                    tagSearchFocused = true;
+                    if (scene() != null) {
+                        scene().requestFocus(this);
+                    }
+                    context.consume();
+                    return EventDispatch.consumed;
+                }
+                return EventDispatch.pass;
+            }
+            if (!input.isLeftClick()) {
+                return EventDispatch.pass;
+            }
             int footerTop = preferredHeight() - 2 - footerHeight;
             if (ly >= footerTop) {
                 int midX = cardWidth() / 2;
@@ -241,7 +268,12 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
             return EventDispatch.consumed;
         });
         onMouseScrolled((mouseX, mouseY, scrollX, scrollYDelta, ctx) -> {
-            if (kind() != DecisionPromptKind.materialFamilyAnchor || tagGridViewportRect == null) {
+            Rect viewport = tagGridViewportRect;
+            if (kind() != DecisionPromptKind.materialFamilyAnchor || viewport == null) {
+                return EventDispatch.pass;
+            }
+            FloatPos local = sceneToLocal(mouseX, mouseY);
+            if (!viewport.contains(local.x(), local.y())) {
                 return EventDispatch.pass;
             }
             int maxScroll = tagGridMaxScroll();
@@ -249,7 +281,11 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
                 return EventDispatch.pass;
             }
             int delta = scrollYDelta > 0 ? -(tagSlotSize + tagSlotGap) : (tagSlotSize + tagSlotGap);
-            tagScrollY = Math.max(0, Math.min(maxScroll, tagScrollY + delta));
+            int next = Math.max(0, Math.min(maxScroll, tagScrollY + delta));
+            if (next == tagScrollY) {
+                return EventDispatch.pass;
+            }
+            tagScrollY = next;
             ctx.consume();
             return EventDispatch.consumed;
         });
@@ -312,20 +348,20 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
     public @Nullable OreUiRichTooltip richTooltipAt(double localX, double localY) {
         CirrusPalette palette = host.palette();
         double impact = PromptDeltaFormat.leverageFraction(prompt.raw().leverageScore());
-        ResourceKey subjectIcon = prompt.primaryResource() != null
+        ComponentStackKey subjectIcon = prompt.primaryResource() != null
                 ? prompt.primaryResource()
-                : prompt.primaryMachineId() != null ? ResourceKey.item(prompt.primaryMachineId()) : null;
+                : prompt.primaryMachine() != null ? prompt.primaryMachine().contentKey().orElse(null) : null;
         Component subjectName = prompt.primaryResource() != null
                 ? CoPilotPaint.resourceName(prompt.primaryResource())
-                : prompt.primaryMachineId() != null
-                        ? CoPilotPaint.machineName(subjectIcon, prompt.primaryMachineId())
+                : prompt.primaryMachine() != null
+                        ? CoPilotPaint.machineName(prompt.primaryMachine())
                         : Component.literal(CoPilotPaint.humanizeId(kind().name()));
         if (kind() == DecisionPromptKind.materialFamilyAnchor) {
-            ResourceKey hoveredCandidate = tagCandidateAt((int) localX, (int) localY);
+            ComponentStackKey hoveredCandidate = tagCandidateAt((int) localX, (int) localY);
             if (hoveredCandidate != null) {
-                String tag = prompt.tagId() == null ? "-" : prompt.tagId();
+                String tag = prompt.tag() == null ? "-" : PlanningTagKeys.format(prompt.tag());
                 return OreUiRichTooltip.builder(CoPilotPaint.resourceName(hoveredCandidate)).icon(hoveredCandidate)
-                        .badge("#" + tag, OreUiRichTooltip.Tone.accent).subtitle(hoveredCandidate.resourceId())
+                        .badge("#" + tag, OreUiRichTooltip.Tone.accent).subtitle(hoveredCandidate.displayId())
                         .text(
                             CirrusLangs.Workbench.Copilot.tagCandidateTooltip.get(tag),
                             OreUiRichTooltip.Tone.secondary
@@ -335,8 +371,13 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         int optIndex = optionIndexAt((int) localX, (int) localY);
         if (optIndex >= 0 && optIndex < prompt.options().size()) {
             ResolvedPromptOption opt = prompt.options().get(optIndex);
-            OreUiRichTooltip.Builder builder = OreUiRichTooltip.builder(Component.translatable(opt.raw().labelKey()))
-                    .icon(subjectIcon).badge("CHOICE", OreUiRichTooltip.Tone.accent).subtitle(subjectName);
+            OreUiRichTooltip.Builder builder = OreUiRichTooltip.builder(optionLabel(optIndex))
+                    .icon(subjectIcon)
+                    .badge(
+                        CirrusLangs.Workbench.Copilot.tooltipChoiceBadge.get().getString(),
+                        OreUiRichTooltip.Tone.accent
+                    )
+                    .subtitle(subjectName);
             List<OreUiRichTooltip.Pill> pills = new ArrayList<>();
             for (PromptDeltaFormat.Chip chip : PromptDeltaFormat.deltaChips(opt.delta())) {
                 pills.add(OreUiRichTooltip.Pill.colored(chip.label(), CoPilotPaint.inkFor(palette, chip.styleClass())));
@@ -345,44 +386,63 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
                 builder.pills(pills);
             }
             builder.keyValue(
-                Component.literal("Rule Scope"),
-                Component.literal(persistToWorld ? "World Save" : "This Session"),
+                CirrusLangs.Workbench.Copilot.tooltipRuleScope.get(),
+                persistToWorld
+                        ? CirrusLangs.Workbench.Copilot.tooltipScopeWorld.get()
+                        : CirrusLangs.Workbench.Copilot.tooltipScopeSession.get(),
                 persistToWorld ? OreUiRichTooltip.Tone.positive : OreUiRichTooltip.Tone.accent
             );
-            builder.footer("Click to apply decision & replan immediately");
+            builder.footer(CirrusLangs.Workbench.Copilot.tooltipClickApply.get());
             return builder.build();
+        }
+        if ((kind() == DecisionPromptKind.baseOrSupplyBoundary
+                || kind() == DecisionPromptKind.reusableCatalystCheck
+                || kind() == DecisionPromptKind.fieldTripConfirm)
+                && localY >= stockBarY()
+                && localY < stockBarY() + inlineControlHeight) {
+            return OreUiRichTooltip.builder(CirrusLangs.Workbench.Copilot.tooltipStockBarTitle.get())
+                    .icon(subjectIcon)
+                    .subtitle(subjectName)
+                    .text(CirrusLangs.Workbench.Copilot.tooltipStockBarDesc.get(), OreUiRichTooltip.Tone.secondary)
+                    .build();
         }
         int footerTop = preferredHeight() - 2 - footerHeight;
         if (localY >= footerTop) {
-            return OreUiRichTooltip.builder(persistToWorld ? "World Save Scope" : "Session Scope")
+            return OreUiRichTooltip.builder(
+                        persistToWorld
+                                ? CirrusLangs.Workbench.Copilot.tooltipScopeWorldTitle.get()
+                                : CirrusLangs.Workbench.Copilot.tooltipScopeSessionTitle.get()
+                    )
                     .badge(
-                        persistToWorld ? "PERSISTENT" : "TEMPORARY",
+                        (persistToWorld
+                                ? CirrusLangs.Workbench.Copilot.tooltipScopeWorldBadge.get()
+                                : CirrusLangs.Workbench.Copilot.tooltipScopeSessionBadge.get()).getString(),
                         persistToWorld ? OreUiRichTooltip.Tone.positive : OreUiRichTooltip.Tone.accent
                     )
                     .text(
                         persistToWorld
-                                ? "Saves this decision rule into your world facility config."
-                                : "Applies only to the active planning tab until promoted.",
+                                ? CirrusLangs.Workbench.Copilot.tooltipScopeWorldDesc.get()
+                                : CirrusLangs.Workbench.Copilot.tooltipScopeSessionDesc.get(),
                         OreUiRichTooltip.Tone.secondary
-                    ).footer("Click Session or World Save to toggle scope").build();
+                    )
+                    .footer(CirrusLangs.Workbench.Copilot.tooltipScopeFooter.get())
+                    .build();
         }
+        String impactPct = Long.toString(Math.round(impact * 100.0));
         OreUiRichTooltip.Builder builder = OreUiRichTooltip.builder(subjectName).icon(subjectIcon)
                 .badge(
-                    Math.round(impact * 100.0) + "% IMPACT",
+                    CirrusLangs.Workbench.Copilot.impactPercent.get(impactPct).getString(),
                     impact >= 0.65 ? OreUiRichTooltip.Tone.warning : OreUiRichTooltip.Tone.accent
-                ).subtitle(CoPilotPaint.humanizeId(kind().name()));
+                )
+                .subtitle(title())
+                .text(subtitle(), OreUiRichTooltip.Tone.secondary);
         builder.meter(
-            Component.literal("Decision Leverage"),
+            CirrusLangs.Workbench.Copilot.leverage.get(),
             impact,
-            Component.literal(Math.round(impact * 100.0) + "%"),
+            Component.literal(impactPct + "%"),
             impact >= 0.65 ? OreUiRichTooltip.Tone.warning : OreUiRichTooltip.Tone.accent
         );
-        builder.keyValue(
-            Component.literal("Options"),
-            Component.literal(prompt.options().size() + " available"),
-            OreUiRichTooltip.Tone.primary
-        );
-        builder.footer("Hover an option to preview impact \u00b7 Click to apply");
+        builder.footer(CirrusLangs.Workbench.Copilot.tooltipCardFooter.get());
         return builder.build();
     }
 
@@ -395,7 +455,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         return this;
     }
 
-    public PromptCardWidget candidateRequestListener(@Nullable Consumer<String> listener) {
+    public PromptCardWidget candidateRequestListener(@Nullable Consumer<TagKey<?>> listener) {
         this.candidateRequestListener = listener;
         return this;
     }
@@ -434,14 +494,34 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         return kind() == DecisionPromptKind.materialFamilyAnchor ? 0 : prompt.options().size();
     }
 
+    private int optionRowHeight(int index) {
+        if (index >= 0 && index < measuredOptionHeights.length && measuredOptionHeights[index] > 0) {
+            return measuredOptionHeights[index];
+        }
+        return optionHeight;
+    }
+
+    private int totalOptionsHeight() {
+        int count = optionRowCount();
+        int sum = 0;
+        for (int i = 0; i < count; i++) {
+            sum += optionRowHeight(i);
+        }
+        return sum;
+    }
+
     public int preferredHeight() {
-        int optionsH = optionRowCount() * optionHeight;
+        int optionsH = totalOptionsHeight();
         return optionTop() + optionsH + footerHeight + (optionsH > 0 ? 8 : 4);
     }
 
     public Rect optionRect(int index) {
         int width = Math.max(24, cardWidth() - pad * 2);
-        return new Rect(pad, optionTop() + index * optionHeight, width, optionHeight - 3);
+        int y = optionTop();
+        for (int i = 0; i < index; i++) {
+            y += optionRowHeight(i);
+        }
+        return new Rect(pad, y, width, optionRowHeight(index) - 3);
     }
 
     public int optionIndexAt(int localX, int localY) {
@@ -489,7 +569,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
             int count = kind() == DecisionPromptKind.machineAvailability
                     ? Math.max(1, ownedMachineCount)
                     : owned.ownedCount();
-            return new DeclareOwnedMachineFeedback(owned.machineId(), count, persistToWorld);
+            return new DeclareOwnedMachineFeedback(owned.machine(), count, persistToWorld);
         }
         return feedback;
     }
@@ -510,15 +590,21 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         return declaredStockAmount;
     }
 
-    public void pickTagCandidate(ResourceKey member) {
-        String tagId = prompt.tagId();
-        if (tagId == null || member == null) {
+    public void pickTagCandidate(ComponentStackKey member) {
+        TagKey<?> tag = prompt.tag();
+        if (tag == null || member == null) {
             return;
         }
         pickedTagMember = member;
         GuidanceScope scope = persistToWorld ? GuidanceScope.worldSave : GuidanceScope.session;
-        TagDefaultRule rule = new TagDefaultRule("rule:tag:" + tagId, scope, RuleStrength.hardPin, tagId, member);
-        answeredOptionId = "pick:" + member.shortString();
+        TagDefaultRule rule = new TagDefaultRule(
+            "rule:tag:" + PlanningTagKeys.format(tag),
+            scope,
+            RuleStrength.hardPin,
+            tag,
+            member
+        );
+        answeredOptionId = "pick:" + member.canonicalKey();
         host.refine(new ApplyRulesFeedback(List.of(rule), persistToWorld), null);
     }
 
@@ -527,9 +613,9 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
             allCandidatesExpanded = !allCandidatesExpanded;
             syncCardHeight();
         }
-        String tagId = prompt.tagId();
-        if (candidateRequestListener != null && tagId != null) {
-            candidateRequestListener.accept(tagId);
+        TagKey<?> tag = prompt.tag();
+        if (candidateRequestListener != null && tag != null) {
+            candidateRequestListener.accept(tag);
         }
     }
 
@@ -552,11 +638,11 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         for (GuidanceRule rule : option.raw().compiledRules()) {
             if (rule instanceof MachineRule machineRule) {
                 PreviewKind kind = machineRule.willingToBuildNew() ? PreviewKind.buildMachine : PreviewKind.ownMachine;
-                return new PreviewSubject(kind, anchors, machineRule.machineId(), null, null);
+                return new PreviewSubject(kind, anchors, machineRule.machine(), null, null);
             }
         }
         if (option.raw().followUp().orElse(null) instanceof DeclareOwnedMachineFeedback owned) {
-            return new PreviewSubject(PreviewKind.ownMachine, anchors, owned.machineId(), null, null);
+            return new PreviewSubject(PreviewKind.ownMachine, anchors, owned.machine(), null, null);
         }
         if (option.variantResource() != null) {
             return new PreviewSubject(PreviewKind.pickVariant, anchors, null, null, option.variantResource());
@@ -573,8 +659,8 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         if (prompt.recipeKey() != null) {
             return new PreviewSubject(PreviewKind.banRecipe, anchors, null, prompt.recipeKey(), null);
         }
-        if (prompt.primaryMachineId() != null) {
-            return new PreviewSubject(PreviewKind.ownMachine, anchors, prompt.primaryMachineId(), null, null);
+        if (prompt.primaryMachine() != null) {
+            return new PreviewSubject(PreviewKind.ownMachine, anchors, prompt.primaryMachine(), null, null);
         }
         if (prompt.primaryResource() != null) {
             return new PreviewSubject(PreviewKind.treatFree, anchors, null, null, prompt.primaryResource());
@@ -616,14 +702,14 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
     }
 
     public long gatherTotal() {
-        ResourceKey resource = prompt.primaryResource();
+        ComponentStackKey resource = prompt.primaryResource();
         Optional<ProductionPlan> plan = host.snapshot().selectedPlan();
         if (resource == null || plan.isEmpty()) {
             return 0L;
         }
         long total = 0L;
         for (PlanStep step : plan.get().steps()) {
-            if (step instanceof AcquireStep acquire && acquire.resource().sameBaseIdentity(resource)) {
+            if (step instanceof AcquireStep acquire && acquire.resource().sameContent(resource)) {
                 total += acquire.amount();
             }
         }
@@ -631,26 +717,28 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
     }
 
     public double costShare() {
-        ResourceKey resource = prompt.primaryResource();
+        ComponentStackKey resource = prompt.primaryResource();
         Optional<ProductionPlan> plan = host.snapshot().selectedPlan();
         if (resource == null || plan.isEmpty()) {
             return 0.0;
         }
-        double total = plan.get().totalCost().humanActiveSeconds();
-        if (!(total > 0.0)) {
-            return 0.0;
-        }
-        double gathered = 0.0;
+        double totalActive = plan.get().totalCost().totalActiveSeconds();
+        double totalScarcity = plan.get().totalCost().materialScarcity();
+        double gatheredActive = 0.0;
+        double gatheredScarcity = 0.0;
         for (PlanStep step : plan.get().steps()) {
-            if (step instanceof AcquireStep acquire && acquire.resource().sameBaseIdentity(resource)) {
-                gathered += acquire.stepCost().humanActiveSeconds();
+            if (step instanceof AcquireStep acquire && acquire.resource().sameContent(resource)) {
+                gatheredActive += acquire.stepCost().totalActiveSeconds();
+                gatheredScarcity += acquire.stepCost().materialScarcity();
             }
         }
-        return ParetoGeometry.clamp01(gathered / total);
+        double activeShare = totalActive > 0.0 ? gatheredActive / totalActive : 0.0;
+        double scarcityShare = totalScarcity > 0.0 ? gatheredScarcity / totalScarcity : 0.0;
+        return ParetoGeometry.clamp01(Math.max(activeShare, scarcityShare));
     }
 
-    public List<ResourceKey> tagCandidates() {
-        Set<ResourceKey> candidates = new LinkedHashSet<>();
+    public List<ComponentStackKey> tagCandidates() {
+        Set<ComponentStackKey> candidates = new LinkedHashSet<>();
         for (ResolvedPromptOption option : prompt.options()) {
             if (option.variantResource() != null) {
                 candidates.add(option.variantResource());
@@ -661,31 +749,35 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
                 }
             }
         }
-        String tagId = prompt.tagId();
+        TagKey<?> tag = prompt.tag();
         CompiledRecipeGraph resolved = resolvedGraph();
-        if (tagId != null && resolved != null) {
+        if (tag != null && resolved != null) {
             Optional<ProductionPlan> activePlan = host.snapshot().selectedPlan();
             if (activePlan.isPresent()) {
                 for (PlanStep step : activePlan.get().steps()) {
                     if (step instanceof CraftStep craft) {
                         resolved.recipeByKey(craft.recipeKey())
-                                .ifPresent(recipe -> collectTagSlotCandidates(recipe, tagId, candidates));
+                                .ifPresent(recipe -> collectTagSlotCandidates(recipe, tag, candidates));
                     }
                 }
             }
             if (!candidates.isEmpty()) {
-                ResourceKey seed = candidates.iterator().next();
+                ComponentStackKey seed = candidates.iterator().next();
                 for (CompiledRecipe consumer : resolved.consumersOf(seed)) {
-                    collectTagSlotCandidates(consumer, tagId, candidates);
+                    collectTagSlotCandidates(consumer, tag, candidates);
                 }
             }
         }
         return List.copyOf(candidates);
     }
 
-    private static void collectTagSlotCandidates(CompiledRecipe recipe, String tagId, Set<ResourceKey> out) {
+    private static void collectTagSlotCandidates(
+        CompiledRecipe recipe,
+        TagKey<?> tag,
+        Set<ComponentStackKey> out
+    ) {
         for (InputSlot slot : recipe.inputs()) {
-            if (slot.tagId().isPresent() && tagId.equals(slot.tagId().get())) {
+            if (slot.tagKey().isPresent() && tag.equals(slot.tagKey().get())) {
                 out.addAll(slot.candidates());
             }
         }
@@ -701,7 +793,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         if (currentOpt.isEmpty() || currentOpt.get().outputs().isEmpty()) {
             return List.of();
         }
-        ResourceKey primaryOutput = currentOpt.get().outputs().get(0).resource();
+        ComponentStackKey primaryOutput = currentOpt.get().outputs().get(0).resource();
         List<CompiledRecipe> alts = new ArrayList<>();
         for (CompiledRecipe producer : resolved.producersOf(primaryOutput)) {
             if (!producer.key().equals(currentKey)) {
@@ -724,11 +816,11 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         if (recipe.isEmpty()) {
             return new RecipePreview(List.of(), List.of());
         }
-        List<ResourceKey> inputs = new ArrayList<>();
+        List<ComponentStackKey> inputs = new ArrayList<>();
         for (InputSlot slot : recipe.get().inputs()) {
             inputs.add(slot.candidates().get(0));
         }
-        List<ResourceKey> outputs = new ArrayList<>();
+        List<ComponentStackKey> outputs = new ArrayList<>();
         for (OutputSlot slot : recipe.get().outputs()) {
             outputs.add(slot.resource());
         }
@@ -748,18 +840,45 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
     }
 
     private int bodyTop() {
-        return headerBandHeight + headerIcon + 16;
+        return headerBandHeight + headerIcon + 18;
+    }
+
+    private int explanationBlockHeight() {
+        return Math.max(0, measuredExplanationHeight);
+    }
+
+    private int bodyContentTop() {
+        return bodyTop() + 5 + explanationBlockHeight();
+    }
+
+    private int ownedStepperY() {
+        return bodyContentTop() + 18;
+    }
+
+    private int stockBarY() {
+        return bodyContentTop() + 14;
+    }
+
+    private int altRecipeStartY() {
+        return bodyContentTop() + 20;
+    }
+
+    private int tagGridTopY() {
+        return bodyContentTop() + (showTagSearchBar() ? tagSearchHeight + 4 : 0);
     }
 
     private int bodyHeight() {
+        int expH = explanationBlockHeight();
         return switch (kind()) {
-            case machineAvailability -> 54;
+            case machineAvailability -> 5 + expH + 18 + inlineControlHeight + 5;
             case materialFamilyAnchor -> {
                 int searchSpace = showTagSearchBar() ? tagSearchHeight + 4 : 0;
-                yield 8 + searchSpace + tagGridVisibleRows() * (tagSlotSize + tagSlotGap) + 2;
+                yield 5 + expH + searchSpace + tagGridVisibleRows() * (tagSlotSize + tagSlotGap) + 5;
             }
-            case baseOrSupplyBoundary, reusableCatalystCheck, fieldTripConfirm -> 64;
-            case suspiciousJeiVerify, ruleConflictResolution -> 40 + alternativeRecipes().size() * altRecipeRowHeight;
+            case baseOrSupplyBoundary, reusableCatalystCheck, fieldTripConfirm ->
+                5 + expH + 14 + inlineControlHeight + 5;
+            case suspiciousJeiVerify, ruleConflictResolution ->
+                5 + expH + 20 + alternativeRecipes().size() * altRecipeRowHeight + 5;
         };
     }
 
@@ -767,15 +886,15 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         return kind() == DecisionPromptKind.materialFamilyAnchor && tagCandidates().size() > tagGridColumns();
     }
 
-    private List<ResourceKey> filteredTagCandidates() {
-        List<ResourceKey> all = tagCandidates();
+    private List<ComponentStackKey> filteredTagCandidates() {
+        List<ComponentStackKey> all = tagCandidates();
         if (tagSearchQuery.isBlank()) {
             return all;
         }
         String needle = tagSearchQuery.trim().toLowerCase(Locale.ROOT);
-        List<ResourceKey> out = new ArrayList<>();
-        for (ResourceKey candidate : all) {
-            String id = candidate.resourceId().toLowerCase(Locale.ROOT);
+        List<ComponentStackKey> out = new ArrayList<>();
+        for (ComponentStackKey candidate : all) {
+            String id = candidate.displayId().toLowerCase(Locale.ROOT);
             String name = CoPilotPaint.resourceName(candidate).getString().toLowerCase(Locale.ROOT);
             if (id.contains(needle) || name.contains(needle)) {
                 out.add(candidate);
@@ -800,7 +919,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
     }
 
     private int tagGridMaxScroll() {
-        List<ResourceKey> filtered = filteredTagCandidates();
+        List<ComponentStackKey> filtered = filteredTagCandidates();
         int cols = tagGridColumns();
         int totalRows = Math.max(1, (filtered.size() + cols - 1) / cols);
         int visibleRows = tagGridVisibleRows();
@@ -814,6 +933,53 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         return entry.get().getString().length() * 5;
     }
 
+    private static List<FormattedCharSequence> wrapLines(
+        SceneCanvas canvas,
+        Component text,
+        int maxWidth,
+        int maxLines
+    ) {
+        if (text == null || text.getString().isEmpty()) {
+            return List.of();
+        }
+        List<FormattedCharSequence> split = canvas.font().split(text, Math.max(36, maxWidth));
+        if (split.size() <= maxLines) {
+            return split;
+        }
+        return split.subList(0, maxLines);
+    }
+
+    private void syncDynamicMetrics(SceneCanvas canvas, int width) {
+        int count = optionRowCount();
+        if (width == lastMeasuredWidth && measuredOptionHeights.length == count) {
+            return;
+        }
+        int bodyInnerW = Math.max(48, width - pad * 2 - 10);
+        List<FormattedCharSequence> expLines = wrapLines(canvas, subtitle(), bodyInnerW, maxExplanationLines);
+        measuredExplanationHeight = expLines.isEmpty() ? 0 : expLines.size() * explanationLineHeight + 5;
+
+        int[] optHeights = new int[count];
+        Arrays.fill(optHeights, optionHeight);
+        int optInnerW = Math.max(24, width - pad * 2 - 12);
+        for (int i = 0; i < count; i++) {
+            Component label = i >= prompt.options().size()
+                    ? (allCandidatesExpanded
+                            ? CirrusLangs.Workbench.Copilot.collapseTagCandidates.get()
+                            : CirrusLangs.Workbench.Copilot.allTagCandidates.get())
+                    : optionLabel(i);
+            if (canvas.font().width(label) > optInnerW) {
+                optHeights[i] = wrappedOptionHeight;
+            }
+        }
+        measuredOptionHeights = optHeights;
+        lastMeasuredWidth = width;
+        int wanted = preferredHeight();
+        if (wanted != lastSyncedHeight) {
+            lastSyncedHeight = wanted;
+            syncCardHeight();
+        }
+    }
+
     @Override
     protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
         renderedMouseX = mouseX;
@@ -823,6 +989,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         if (width <= 0 || height <= 0) {
             return;
         }
+        syncDynamicMetrics(canvas, width);
         CirrusPalette palette = host.palette();
         boolean high = PromptDeltaFormat.isHighLeverage(prompt.raw().leverageScore());
         OreUiPaint.raisedCard(canvas, 0, 0, width, height, palette, false, false);
@@ -846,13 +1013,13 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         );
 
         int iconX = pad + 1;
-        int iconY = headerBandHeight + 8;
+        int iconY = headerBandHeight + 7;
         renderSubjectIcon(canvas, palette, iconX, iconY);
         int textLeft = iconX + headerIcon + 7;
         int textWidth = Math.max(10, width - textLeft - pad);
         if (kind() == DecisionPromptKind.materialFamilyAnchor) {
-            String tag = prompt.tagId() == null ? "-" : prompt.tagId();
-            List<ResourceKey> all = tagCandidates();
+            String tag = prompt.tag() == null ? "-" : PlanningTagKeys.format(prompt.tag());
+            List<ComponentStackKey> all = tagCandidates();
             Component countBadge = Component.literal(Integer.toString(all.size()));
             int countW = canvas.font().width(countBadge) + 8;
             int countX = Math.max(textLeft + 24, width - pad - countW);
@@ -866,22 +1033,30 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
             );
             Component sub = pickedTagMember != null
                     ? CoPilotPaint.resourceName(pickedTagMember)
-                    : CirrusLangs.Workbench.Copilot.tagSelectHint.get();
+                    : title();
             CoPilotPaint.text(
                 canvas,
                 CoPilotPaint.fit(canvas, sub, textWidth),
                 textLeft,
-                iconY + 13,
+                iconY + 12,
                 pickedTagMember != null ? palette.costS() : palette.textSecondary()
             );
         } else {
-            CoPilotPaint
-                    .text(canvas, CoPilotPaint.fit(canvas, title(), textWidth), textLeft, iconY, palette.textPrimary());
-            int barFrameX = pad + headerIcon + 7;
-            int barFrameY = headerBandHeight + 21;
-            int barFrameW = Math.max(16, width - barFrameX - pad);
-            int barFrameH = leverageHeight + 4;
-            renderLeverageMeter(canvas, barFrameX, barFrameY, barFrameW, barFrameH, palette);
+            CoPilotPaint.text(
+                canvas,
+                CoPilotPaint.fit(canvas, subjectDisplayName(), textWidth),
+                textLeft,
+                iconY - 1,
+                palette.textPrimary()
+            );
+            CoPilotPaint.text(
+                canvas,
+                CoPilotPaint.fit(canvas, title(), textWidth),
+                textLeft,
+                iconY + 10,
+                palette.textSecondary()
+            );
+            renderLeverageMeter(canvas, textLeft, iconY + 21, textWidth, 5, palette);
         }
 
         // Structured recessed well for the prompt detail body
@@ -895,12 +1070,34 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         renderFooter(canvas, palette, mouseX, mouseY);
     }
 
+    private Component subjectDisplayName() {
+        if (kind() == DecisionPromptKind.materialFamilyAnchor) {
+            return Component.literal("#" + (prompt.tag() == null ? "-" : PlanningTagKeys.format(prompt.tag())));
+        }
+        if (prompt.primaryResource() != null) {
+            return CoPilotPaint.resourceName(prompt.primaryResource());
+        }
+        if (prompt.primaryMachine() != null) {
+            return CoPilotPaint.machineName(prompt.primaryMachine());
+        }
+        RecipePreview preview = recipePreview();
+        if (!preview.outputs().isEmpty()) {
+            return CoPilotPaint.resourceName(preview.outputs().get(0));
+        }
+        CompiledRecipeKey key = prompt.recipeKey();
+        if (key != null) {
+            return Component.literal(key.explicitRecipeId().map(ResourceLocation::toString).orElseGet(key::shortString));
+        }
+        return title();
+    }
+
     private Component kindLabel() {
         return switch (kind()) {
             case machineAvailability -> CirrusLangs.Workbench.Copilot.promptKindMachine.get();
             case materialFamilyAnchor -> CirrusLangs.Workbench.Copilot.promptKindTag.get();
-            case baseOrSupplyBoundary, reusableCatalystCheck, fieldTripConfirm ->
-                CirrusLangs.Workbench.Copilot.promptKindLeaf.get();
+            case baseOrSupplyBoundary -> CirrusLangs.Workbench.Copilot.promptKindLeaf.get();
+            case reusableCatalystCheck -> CirrusLangs.Workbench.Copilot.promptKindCatalyst.get();
+            case fieldTripConfirm -> CirrusLangs.Workbench.Copilot.promptKindTrip.get();
             case suspiciousJeiVerify, ruleConflictResolution -> CirrusLangs.Workbench.Copilot.promptKindRecipe.get();
         };
     }
@@ -923,7 +1120,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
     }
 
     private void renderSubjectIcon(SceneCanvas canvas, CirrusPalette palette, int x, int y) {
-        ResourceKey resource = subjectResource();
+        ComponentStackKey resource = subjectResource();
         if (resource != null) {
             CoPilotPaint.renderSlotItem(canvas, CoPilotPaint.stackOf(resource, 1L), x, y, headerIcon, palette);
             return;
@@ -938,12 +1135,12 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         );
     }
 
-    private @Nullable ResourceKey subjectResource() {
+    private @Nullable ComponentStackKey subjectResource() {
         if (kind() == DecisionPromptKind.materialFamilyAnchor) {
             if (pickedTagMember != null) {
                 return pickedTagMember;
             }
-            List<ResourceKey> candidates = tagCandidates();
+            List<ComponentStackKey> candidates = tagCandidates();
             if (!candidates.isEmpty()) {
                 return candidates.get(0);
             }
@@ -951,9 +1148,8 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         if (prompt.primaryResource() != null) {
             return prompt.primaryResource();
         }
-        if (prompt.primaryMachineId() != null) {
-            ResourceKey resolved = machineIcon(prompt.primaryMachineId());
-            return resolved != null ? resolved : ResourceKey.item(prompt.primaryMachineId());
+        if (prompt.primaryMachine() != null) {
+            return prompt.primaryMachine().contentKey().orElse(null);
         }
         if (prompt.recipeKey() != null) {
             RecipePreview preview = recipePreview();
@@ -964,27 +1160,18 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         return null;
     }
 
-    private @Nullable ResourceKey machineIcon(@Nullable String machineId) {
-        CompiledRecipeGraph resolved = resolvedGraph();
-        if (resolved == null) {
-            return null;
-        }
-        for (ResourceKey candidate : resolved.allProducibleResources()) {
-            if (candidate.resourceId().equals(machineId)) {
-                return candidate;
-            }
-        }
-        return null;
-    }
-
     private void renderBody(SceneCanvas canvas, CirrusPalette palette, int mouseX, int mouseY) {
         int left = pad + 5;
-        int top = bodyTop() + 4;
+        int expTop = bodyTop() + 5;
         int width = Math.max(24, cardWidth() - pad * 2 - 10);
+        List<FormattedCharSequence> expLines = wrapLines(canvas, subtitle(), width, maxExplanationLines);
+        for (int i = 0; i < expLines.size(); i++) {
+            canvas.drawString(expLines.get(i), left, expTop + i * explanationLineHeight, palette.textSecondary(), false);
+        }
+        int contentTop = bodyContentTop();
         switch (kind()) {
             case machineAvailability -> {
-                Component machine = CoPilotPaint
-                        .machineName(machineIcon(prompt.primaryMachineId()), prompt.primaryMachineId());
+                Component machine = CoPilotPaint.machineName(prompt.primaryMachine());
                 RecipePreview preview = recipePreview();
                 boolean showMini = !preview.isEmpty() && width >= 140;
                 int titleMaxW = showMini ? Math.max(48, width - 76) : width;
@@ -992,62 +1179,39 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
                     canvas,
                     CoPilotPaint.fit(canvas, Component.literal(machine.getString()), titleMaxW),
                     left,
-                    top,
+                    contentTop + 2,
                     palette.textPrimary()
                 );
                 if (showMini) {
-                    renderMiniInlineFlow(canvas, palette, preview, left + width, top - 1);
+                    renderMiniInlineFlow(canvas, palette, preview, left + width, contentTop);
                 }
-                renderChips(canvas, palette, left, top + 13, width);
-                renderOwnedMachineStepper(canvas, palette, left, top + 30, width, mouseX, mouseY);
+                renderOwnedMachineStepper(canvas, palette, left, ownedStepperY(), width, mouseX, mouseY);
             }
             case materialFamilyAnchor -> {
-                int gridY = top;
                 tagSearchRect = null;
                 tagSearchClearRect = null;
                 if (showTagSearchBar()) {
-                    renderTagSearchBar(canvas, palette, left, top, width, mouseX, mouseY);
-                    gridY = top + tagSearchHeight + 4;
+                    renderTagSearchBar(canvas, palette, left, contentTop, width, mouseX, mouseY);
                 }
-                renderTagMembers(canvas, palette, left, gridY, width, mouseX, mouseY);
+                renderTagMembers(canvas, palette, left, tagGridTopY(), width, mouseX, mouseY);
             }
             case baseOrSupplyBoundary, reusableCatalystCheck, fieldTripConfirm -> {
-                int textW = Math.max(24, width - 28);
+                long gather = gatherTotal();
+                Component summary = gather > 0L
+                        ? CirrusLangs.Workbench.Copilot.needGatherLine.get(WorkbenchFormatters.formatAmount(gather))
+                        : subjectDisplayName();
                 CoPilotPaint.text(
                     canvas,
-                    CoPilotPaint.fit(
-                        canvas,
-                        CoPilotPaint.withSubject(
-                            CirrusLangs.Workbench.Ledger.acquire,
-                            WorkbenchFormatters.formatAmount(gatherTotal())
-                        ),
-                        textW
-                    ),
+                    CoPilotPaint.fit(canvas, summary, width),
                     left,
-                    top,
+                    contentTop,
                     palette.textPrimary()
                 );
-                CoPilotPaint.text(
-                    canvas,
-                    CoPilotPaint.fit(
-                        canvas,
-                        CoPilotPaint.withSubject(
-                            CirrusLangs.Workbench.Ledger.stockCoverage,
-                            CoPilotPaint.percent(costShare())
-                        ),
-                        textW
-                    ),
-                    left,
-                    top + 11,
-                    palette.textSecondary()
-                );
-                renderChips(canvas, palette, left, top + 23, width);
-                renderStockOverrideBar(canvas, palette, left, top + 40, width, mouseX, mouseY);
+                renderStockOverrideBar(canvas, palette, left, stockBarY(), width, mouseX, mouseY);
             }
             case suspiciousJeiVerify, ruleConflictResolution -> {
-                renderRecipePreview(canvas, palette, left, top, width);
-                renderChips(canvas, palette, left, top + 20, width);
-                renderAlternativeRecipes(canvas, palette, left, top + 34, width, mouseX, mouseY);
+                renderRecipePreview(canvas, palette, left, contentTop, width);
+                renderAlternativeRecipes(canvas, palette, left, altRecipeStartY(), width, mouseX, mouseY);
             }
         }
     }
@@ -1191,7 +1355,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         int mouseX,
         int mouseY
     ) {
-        List<ResourceKey> candidates = filteredTagCandidates();
+        List<ComponentStackKey> candidates = filteredTagCandidates();
         int cols = tagGridColumns();
         int visibleRows = tagGridVisibleRows();
         int viewportH = visibleRows * (tagSlotSize + tagSlotGap);
@@ -1224,14 +1388,14 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
                 if (sy + tagSlotSize < y || sy > y + viewportH) {
                     continue;
                 }
-                ResourceKey candidate = candidates.get(index);
+                ComponentStackKey candidate = candidates.get(index);
                 boolean hover = mouseX >= sx
                         && mouseX < sx + tagSlotSize
                         && mouseY >= sy
                         && mouseY < sy + tagSlotSize
                         && mouseY >= y
                         && mouseY < y + viewportH;
-                boolean picked = Objects.equals(answeredOptionId, "pick:" + candidate.shortString());
+                boolean picked = Objects.equals(answeredOptionId, "pick:" + candidate.canonicalKey());
                 CoPilotPaint.renderSlotItem(canvas, CoPilotPaint.stackOf(candidate, 1L), sx, sy, tagSlotSize, palette);
                 if (picked) {
                     canvas.strokeRect(sx, sy, tagSlotSize, tagSlotSize, palette.costS(), 1);
@@ -1250,17 +1414,17 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         }
     }
 
-    private @Nullable ResourceKey tagCandidateAt(int localX, int localY) {
+    private @Nullable ComponentStackKey tagCandidateAt(int localX, int localY) {
         if (kind() != DecisionPromptKind.materialFamilyAnchor) {
             return null;
         }
         int x = pad + 5;
-        int y = bodyTop() + 4 + (showTagSearchBar() ? tagSearchHeight + 4 : 0);
+        int y = tagGridTopY();
         int viewportH = tagGridVisibleRows() * (tagSlotSize + tagSlotGap);
         if (localY < y || localY >= y + viewportH) {
             return null;
         }
-        List<ResourceKey> candidates = filteredTagCandidates();
+        List<ComponentStackKey> candidates = filteredTagCandidates();
         int cols = tagGridColumns();
         for (int index = 0; index < candidates.size(); index++) {
             int col = index % cols;
@@ -1325,10 +1489,11 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         int mouseY
     ) {
         Rect[] controls = stockOverrideRects(x, y, width);
-        Component value = Component.literal(WorkbenchFormatters.formatAmount(declaredStockAmount()));
+        Component value = CirrusLangs.Workbench.Copilot.declareStockShort
+                .get(WorkbenchFormatters.formatAmount(declaredStockAmount()));
         CoPilotPaint.text(
             canvas,
-            CoPilotPaint.fit(canvas, value, Math.max(18, controls[0].x() - x - 4)),
+            CoPilotPaint.fit(canvas, value, Math.max(24, controls[0].x() - x - 4)),
             x,
             ChromeText.centeredY(y, inlineControlHeight, canvas),
             palette.textPrimary()
@@ -1383,7 +1548,9 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
                 false
             );
             Component prefix = CirrusLangs.Workbench.Copilot.switchAltRecipe.get();
-            String recipeName = alt.key().explicitRecipeId().orElseGet(() -> alt.key().shortString());
+            String recipeName = alt.key().explicitRecipeId()
+                    .map(ResourceLocation::toString)
+                    .orElseGet(() -> alt.key().shortString());
             String label = prefix.getString() + ": " + recipeName;
             CoPilotPaint.text(
                 canvas,
@@ -1449,7 +1616,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
                     yield true;
                 }
                 tagSearchFocused = false;
-                ResourceKey member = tagCandidateAt(lx, ly);
+                ComponentStackKey member = tagCandidateAt(lx, ly);
                 if (member != null) {
                     pickTagCandidate(member);
                     yield true;
@@ -1457,7 +1624,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
                 yield false;
             }
             case machineAvailability -> {
-                Rect[] controls = ownedStepperRects(left, top + 30, width);
+                Rect[] controls = ownedStepperRects(left, ownedStepperY(), width);
                 if (controls[0].contains(lx, ly)) {
                     ownedMachineCount = Math.max(1, ownedMachineCount - 1);
                     yield true;
@@ -1466,10 +1633,10 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
                     ownedMachineCount = Math.min(64, ownedMachineCount + 1);
                     yield true;
                 }
-                if (controls[2].contains(lx, ly) && prompt.primaryMachineId() != null) {
+                if (controls[2].contains(lx, ly) && prompt.primaryMachine() != null) {
                     answeredOptionId = "declare_owned:" + ownedMachineCount;
                     host.refine(
-                        new DeclareOwnedMachineFeedback(prompt.primaryMachineId(), ownedMachineCount, persistToWorld),
+                        new DeclareOwnedMachineFeedback(prompt.primaryMachine(), ownedMachineCount, persistToWorld),
                         null
                     );
                     yield true;
@@ -1477,7 +1644,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
                 yield false;
             }
             case baseOrSupplyBoundary, reusableCatalystCheck, fieldTripConfirm -> {
-                Rect[] controls = stockOverrideRects(left, top + 40, width);
+                Rect[] controls = stockOverrideRects(left, stockBarY(), width);
                 if (controls[0].contains(lx, ly)) {
                     declaredStockAmount = declaredStockAmount() + 16L;
                     yield true;
@@ -1495,12 +1662,13 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
             }
             case suspiciousJeiVerify, ruleConflictResolution -> {
                 List<CompiledRecipe> alts = alternativeRecipes();
+                int altStart = altRecipeStartY();
                 for (int index = 0; index < alts.size(); index++) {
-                    Rect row = new Rect(left, top + 34 + index * altRecipeRowHeight, width, altRecipeRowHeight - 2);
+                    Rect row = new Rect(left, altStart + index * altRecipeRowHeight, width, altRecipeRowHeight - 2);
                     if (row.contains(lx, ly)) {
                         CompiledRecipe alt = alts.get(index);
                         if (!alt.outputs().isEmpty()) {
-                            ResourceKey output = alt.outputs().get(0).resource();
+                            ComponentStackKey output = alt.outputs().get(0).resource();
                             answeredOptionId = "pin_alt:" + alt.key().shortString();
                             host.refine(new PinResourceRecipeFeedback(output, alt.key(), persistToWorld), null);
                             yield true;
@@ -1530,7 +1698,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         }
         int cursor = x;
         int limit = x + maxWidth;
-        for (ResourceKey input : preview.inputs()) {
+        for (ComponentStackKey input : preview.inputs()) {
             if (cursor + CoPilotPaint.iconSmall > limit - 28) {
                 break;
             }
@@ -1543,7 +1711,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
             canvas.fill(cursor + 4, y + 5, 1, 5, palette.textMuted());
             cursor += 10;
         }
-        for (ResourceKey output : preview.outputs()) {
+        for (ComponentStackKey output : preview.outputs()) {
             if (cursor + CoPilotPaint.iconSmall > limit) {
                 break;
             }
@@ -1551,7 +1719,7 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
             cursor += CoPilotPaint.iconSmall + 1;
         }
         if (prompt.systemId() != null) {
-            Component sys = Component.literal(prompt.systemId());
+            Component sys = Component.literal(prompt.systemId().toString());
             int chipW = CoPilotPaint.chipWidth(canvas, sys);
             if (cursor + 4 + chipW <= limit) {
                 CoPilotPaint.chip(canvas, cursor + 4, y + 2, sys, palette, "danger");
@@ -1594,25 +1762,36 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
                     false
                 );
             }
-            int rawDeltaReserve = isPseudo ? 0 : optionDeltaReserve(canvas, index);
-            boolean showDelta = !isPseudo
-                    && !isAnswered
-                    && rawDeltaReserve > 0
-                    && rect.width() - rawDeltaReserve - 12 >= 56;
-            int deltaReserve = isAnswered ? 44 : showDelta ? rawDeltaReserve : 0;
             Component label = isPseudo
                     ? (allCandidatesExpanded
                             ? CirrusLangs.Workbench.Copilot.collapseTagCandidates.get()
                             : CirrusLangs.Workbench.Copilot.allTagCandidates.get())
                     : optionLabel(index);
             int ink = isAnswered ? palette.textOnAccent() : isPseudo ? palette.textMuted() : palette.textPrimary();
-            CoPilotPaint.text(
-                canvas,
-                CoPilotPaint.fit(canvas, label, Math.max(12, rect.width() - deltaReserve - 12)),
-                rect.x() + 6,
-                ChromeText.centeredButtonY(rect.y(), rect.height(), canvas),
-                ink
-            );
+            int innerW = Math.max(12, rect.width() - 12);
+            int labelW = canvas.font().width(label);
+            Component timeBadge = (!isPseudo && !isAnswered) ? optionTimeSavingBadge(index) : null;
+            int badgeW = timeBadge != null ? CoPilotPaint.chipWidth(canvas, timeBadge) : 0;
+            boolean showTimeBadge = timeBadge != null && labelW + badgeW + 10 <= innerW;
+            int appliedReserve = isAnswered ? canvas.font().width(CirrusLangs.Workbench.Copilot.appliedOption.get()) + 10 : 0;
+            int textMaxW = Math.max(12, innerW - (isAnswered ? appliedReserve : showTimeBadge ? badgeW + 6 : 0));
+
+            if (labelW <= textMaxW) {
+                CoPilotPaint.text(
+                    canvas,
+                    label,
+                    rect.x() + 6,
+                    ChromeText.centeredButtonY(rect.y(), rect.height(), canvas),
+                    ink
+                );
+            } else {
+                List<FormattedCharSequence> lines = wrapLines(canvas, label, textMaxW, 2);
+                int totalTextH = lines.size() * 9 + Math.max(0, lines.size() - 1);
+                int startY = rect.y() + Math.max(2, (rect.height() - 2 - totalTextH) / 2);
+                for (int li = 0; li < lines.size(); li++) {
+                    canvas.drawString(lines.get(li), rect.x() + 6, startY + li * 10, ink, false);
+                }
+            }
             if (!isPseudo) {
                 if (isAnswered) {
                     CoPilotPaint.textRight(
@@ -1622,44 +1801,29 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
                         ChromeText.centeredButtonY(rect.y(), rect.height(), canvas),
                         palette.textOnAccent()
                     );
-                } else if (showDelta) {
-                    renderOptionDelta(canvas, palette, index, rect);
+                } else if (showTimeBadge && timeBadge != null) {
+                    CoPilotPaint.chip(
+                        canvas,
+                        rect.x() + rect.width() - badgeW - 5,
+                        rect.y() + Math.max(2, (rect.height() - 2 - CoPilotPaint.chipHeight) / 2),
+                        timeBadge,
+                        palette,
+                        "h"
+                    );
                 }
             }
         }
     }
 
-    private int optionDeltaReserve(SceneCanvas canvas, int index) {
-        ResolvedPromptOption option = prompt.options().get(index);
-        List<PromptDeltaFormat.Chip> chips = PromptDeltaFormat.deltaChips(option.raw().estimatedDelta());
-        if (chips.isEmpty()) {
-            return 0;
+    private @Nullable Component optionTimeSavingBadge(int index) {
+        if (index < 0 || index >= prompt.options().size()) {
+            return null;
         }
-        int pick = Math.min(index, chips.size() - 1);
-        return CoPilotPaint.chipWidth(canvas, chips.get(pick).label()) + 10;
-    }
-
-    private void renderOptionDelta(SceneCanvas canvas, CirrusPalette palette, int index, Rect rect) {
-        ResolvedPromptOption option = prompt.options().get(index);
-        List<PromptDeltaFormat.Chip> chips = PromptDeltaFormat.deltaChips(option.raw().estimatedDelta());
-        if (chips.isEmpty()) {
-            return;
+        double savedSec = prompt.options().get(index).raw().estimatedDelta().totalActiveSeconds();
+        if (savedSec < 1.0) {
+            return null;
         }
-        int pick = Math.min(index, chips.size() - 1);
-        PromptDeltaFormat.Chip chip = chips.get(pick);
-        int chipWidth = CoPilotPaint.chipWidth(canvas, chip.label());
-        int x = rect.x() + rect.width() - chipWidth - 5;
-        if (x <= rect.x() + 8) {
-            return;
-        }
-        CoPilotPaint.chip(
-            canvas,
-            x,
-            rect.y() + Math.max(2, (rect.height() - 2 - CoPilotPaint.chipHeight) / 2),
-            chip.label(),
-            palette,
-            chip.styleClass()
-        );
+        return Component.literal("-" + Math.round(savedSec) + "s");
     }
 
     private Component optionLabel(int index) {
@@ -1668,9 +1832,6 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         if (option.variantResource() != null) {
             base = base.copy().append(Component.literal(": "))
                     .append(CoPilotPaint.resourceName(option.variantResource()));
-        }
-        if (option.raw().followUp().isPresent()) {
-            return base.copy().append(Component.literal(" *"));
         }
         return base;
     }

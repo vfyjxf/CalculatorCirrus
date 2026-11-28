@@ -1,12 +1,14 @@
 package dev.vfyjxf.cirrus.planning.core.cost;
 
 import dev.vfyjxf.cirrus.api.planning.cost.SystemCostTier;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.Set;
 
 /**
- * Pure tag-driven system cost tier mapping (ZERO hardcoded mod/system names!).
- * Uses Cirrus RecipeSystemTags passed via recipe metadata.
+ * Pure tag-driven system cost tier mapping (zero hardcoded mod/system names).
+ * Uses Cirrus {@link RecipeSystemTags} passed via recipe metadata.
  */
 public final class SystemCostTiers {
 
@@ -25,34 +27,28 @@ public final class SystemCostTiers {
     private static final TierDefaults t3 = new TierDefaults(1.0, 4.0, 180.0, 300.0, 220.0, 360.0);
     private static final TierDefaults t4 = new TierDefaults(5.0, 20.0, 500.0, 900.0, 600.0, 1000.0);
 
-    private static final String tagHandOperable = "calculator_cirrus:system/hand_operable";
-    private static final String tagVanilla = "calculator_cirrus:system/vanilla";
-    private static final String tagAutomatable = "calculator_cirrus:system/automatable";
-    private static final String tagHeavyMultiblock = "calculator_cirrus:system/heavy_multiblock";
-    private static final String tagOptIn = "calculator_cirrus:system/opt_in";
-
     private SystemCostTiers() {}
 
-    public static SystemCostTier tierOfSystemTags(Set<String> systemTags) {
+    public static SystemCostTier tierOfSystemTags(Set<Namespace> systemTags) {
         if (systemTags == null || systemTags.isEmpty()) {
             return SystemCostTier.t2MidTechSingleMachine;
         }
-        if (systemTags.contains(tagHeavyMultiblock) || systemTags.contains(tagOptIn)) {
+        if (systemTags.contains(RecipeSystemTags.heavyMultiblock) || systemTags.contains(RecipeSystemTags.optIn)) {
             return SystemCostTier.t4HeavySpecialized;
         }
-        if (systemTags.contains(tagHandOperable)) {
+        if (systemTags.contains(RecipeSystemTags.handOperable)) {
             return SystemCostTier.t0HandWorkshop;
         }
-        if (systemTags.contains(tagVanilla)) {
+        if (systemTags.contains(RecipeSystemTags.vanilla)) {
             return SystemCostTier.t1BasicStaticMachine;
         }
-        if (systemTags.contains(tagAutomatable)) {
+        if (systemTags.contains(RecipeSystemTags.automatable)) {
             return SystemCostTier.t3AutomatedFactoryLine;
         }
         return SystemCostTier.t2MidTechSingleMachine;
     }
 
-    public static SystemCostTier tierOfSystem(String systemId) {
+    public static SystemCostTier tierOfSystem(Namespace systemId) {
         return tierOfSystemTags(Set.of());
     }
 
@@ -66,17 +62,13 @@ public final class SystemCostTiers {
         };
     }
 
-    public static int systemPriority(Set<String> systemTags) {
+    public static int systemPriority(Set<Namespace> systemTags) {
         if (systemTags == null || systemTags.isEmpty()) {
             return 3;
         }
-        if (systemTags.contains(tagHandOperable) && systemTags.contains(tagVanilla)) return 0;
-        if (systemTags.contains(tagVanilla)) return 1;
-        if (systemTags.contains(tagHandOperable)) return 2;
+        if (systemTags.contains(RecipeSystemTags.handOperable) && systemTags.contains(RecipeSystemTags.vanilla)) return 0;
+        if (systemTags.contains(RecipeSystemTags.vanilla)) return 1;
+        if (systemTags.contains(RecipeSystemTags.handOperable)) return 2;
         return 3;
-    }
-
-    public static int systemPriority(String systemId) {
-        return 2;
     }
 }

@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.planning.plan;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 
 import java.util.List;
 import java.util.Objects;
@@ -10,7 +10,7 @@ public record LinePullStep(
     String stepId,
     List<String> dependsOnStepIds,
     String lineId,
-    ResourceKey resource,
+    ComponentStackKey resource,
     long amount,
     CostVector stepCost
 ) implements PlanStep {

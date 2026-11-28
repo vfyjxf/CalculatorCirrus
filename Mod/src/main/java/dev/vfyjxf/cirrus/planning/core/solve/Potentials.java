@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.planning.core.solve;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOption;
 import dev.vfyjxf.cirrus.api.planning.context.AutomatedLine;
@@ -9,17 +10,19 @@ import dev.vfyjxf.cirrus.api.planning.cost.CostMetadataProvider;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
 import dev.vfyjxf.cirrus.api.planning.cost.CostWeights;
 import dev.vfyjxf.cirrus.api.planning.cost.PreferenceModifiers;
-import dev.vfyjxf.cirrus.planning.core.cost.PassBInventoryModel;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledCycleMacro;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.human.HumanGuidanceView;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.core.cone.ConeModel;
+import dev.vfyjxf.cirrus.planning.core.cost.PassBInventoryModel;
 import dev.vfyjxf.cirrus.planning.core.cost.StepCosts;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.tags.TagKey;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
@@ -38,13 +41,13 @@ public final class Potentials {
         SourceKind kind,
         int localRecipe,
         @Nullable CompiledCycleMacro macro,
-        @Nullable String chosenMachine
+        @Nullable MachineEntry chosenMachine
     ) {
         public static final SourceChoice none = new SourceChoice(SourceKind.none, -1, null, null);
         public static final SourceChoice acquire = new SourceChoice(SourceKind.acquire, -1, null, null);
         public static final SourceChoice line = new SourceChoice(SourceKind.line, -1, null, null);
 
-        public static SourceChoice recipe(int localR, @Nullable String machine) {
+        public static SourceChoice recipe(int localR, @Nullable MachineEntry machine) {
             return new SourceChoice(SourceKind.recipe, localR, null, machine);
         }
 
@@ -65,7 +68,7 @@ public final class Potentials {
     public final double[] prodCost;
     public final SourceChoice[] prodChoice;
     public final int[] bestSlotRep;
-    public final String[] bestMachine;
+    public final MachineEntry[] bestMachine;
 
     private Potentials(
         int[] potInAdv,
@@ -74,7 +77,7 @@ public final class Potentials {
         double[] prodCost,
         SourceChoice[] prodChoice,
         int[] bestSlotRep,
-        String[] bestMachine
+        MachineEntry[] bestMachine
     ) {
         this.potInAdv = potInAdv;
         this.potInCost = potInCost;
@@ -90,13 +93,14 @@ public final class Potentials {
         PlanningRequest request,
         CostWeights weights,
         CostMetadataProvider meta,
-        Set<String> forcedOwnedMachines,
-        Set<String> disallowedNewMachines
+        Set<MachineEntry> forcedOwnedMachines,
+        Set<MachineEntry> disallowedNewMachines
     ) {
         int n = cone.nodeCount;
         int rCount = cone.recipeCount;
         FacilitySnapshot fac = request.context().facilities();
         HumanGuidanceView guidance = request.context().guidance();
+        PreferenceModifiers.StockReferenceMode stockMode = request.profile().modifiers().stockMode();
 
         long demandScale = 0L;
         for (TargetDemand td : request.targets()) {
@@ -104,15 +108,15 @@ public final class Potentials {
         }
         demandScale = Math.max(1L, demandScale);
 
-        Set<String> ownedMachines = new HashSet<>(forcedOwnedMachines == null ? Set.of() : forcedOwnedMachines);
+        Set<MachineEntry> ownedMachines = new HashSet<>(forcedOwnedMachines == null ? Set.of() : forcedOwnedMachines);
         Set<MachineCapabilityId> ownedCaps = new HashSet<>();
         for (OwnedMachineGroup g : fac.ownedMachines()) {
             if (g.count() > 0) {
-                ownedMachines.add(g.machineId());
+                ownedMachines.add(g.machine());
                 ownedCaps.add(g.capability());
             }
         }
-        Set<String> disallowed = disallowedNewMachines == null ? Set.of() : disallowedNewMachines;
+        Set<MachineEntry> disallowed = disallowedNewMachines == null ? Set.of() : disallowedNewMachines;
 
         int[] potInAdv = new int[n];
         double[] potInCost = new double[n];
@@ -155,8 +159,7 @@ public final class Potentials {
                 }
             }
 
-            // M2.2 Smooth Pass B blended inventory valuation (eliminates binary cliff & preserves expected-first).
-            PreferenceModifiers.StockReferenceMode stockMode = request.profile().modifiers().stockMode();
+            // Smooth Pass B blended inventory valuation (eliminates binary cliff & preserves expected-first).
             if (cone.usableStock[u] > 0L
                     && stockMode != PreferenceModifiers.StockReferenceMode.ignore
                     && Double.isFinite(prodCost[u])) {
@@ -201,12 +204,12 @@ public final class Potentials {
             }
             if (!cone.recHandCraftable[r] && cone.recCompatMachines[r] != null) {
                 int minMachTier = ConeModel.infTier;
-                for (String mid : cone.recCompatMachines[r]) {
-                    if (ownedMachines.contains(mid)) {
+                for (MachineEntry m : cone.recCompatMachines[r]) {
+                    if (ownedMachines.contains(m) || fac.ownsMachineFor(m)) {
                         minMachTier = 0;
                         break;
                     }
-                    int mu = cone.localRes(ResourceKey.item(mid));
+                    int mu = m.contentKey().map(cone::localRes).orElse(-1);
                     if (mu >= 0 && cone.tier[mu] < minMachTier) {
                         minMachTier = cone.tier[mu];
                     }
@@ -223,7 +226,7 @@ public final class Potentials {
         int totalInSlots = cone.inStart[rCount];
         int[] bestSlotRep = new int[totalInSlots];
         Arrays.fill(bestSlotRep, -1);
-        String[] bestMachine = new String[rCount];
+        MachineEntry[] bestMachine = new MachineEntry[rCount];
         boolean[] oneHopFromPinnedTags = computeOneHopFromPinnedTags(cone, guidance);
 
         // 3. Relax in tier order until fixed-point convergence (capped for safety on cyclic cones).
@@ -237,10 +240,11 @@ public final class Potentials {
                 boolean pinned = cone.recPinned[r];
 
                 // Select best machine if needed.
-                String chosenM = selectBestMachine(
+                MachineEntry chosenM = selectBestMachine(
                     cone,
                     r,
                     rec,
+                    fac,
                     weights,
                     meta,
                     guidance,
@@ -272,29 +276,51 @@ public final class Potentials {
                         feasible = false;
                         break;
                     }
-                    String tagId = cone.inTagId[pos];
-                    ResourceKey prefMember = tagId != null ? guidance.preferredTagMember(tagId).orElse(null) : null;
-                    boolean tagHardPinned = tagId != null && guidance.isTagHardPinned(tagId);
-                    double tagMult = tagId != null ? guidance.tagSoftMultiplier(tagId) : 1.0;
+                    TagKey<?> tag = cone.inTag[pos];
+                    ComponentStackKey prefMember = tag != null ? guidance.preferredTagMember(tag).orElse(null) : null;
+                    boolean tagHardPinned = tag != null && guidance.isTagHardPinned(tag);
+                    double tagMult = tag != null ? guidance.tagSoftMultiplier(tag) : 1.0;
 
                     int pickRep = -1;
                     int pickAdv = infAdv;
                     double pickCost = Double.POSITIVE_INFINITY;
 
-                    for (int cid = cs; cid < ce; cid++) {
-                        int rep = cone.classRep[cid];
-                        int a = potInAdv[rep];
-                        double c = potInCost[rep];
-                        if (!Double.isFinite(c)) continue;
-                        if (prefMember != null && prefMember.equals(cone.resKeys[rep])) {
-                            c *= tagHardPinned ? Math.min(tagMult, 0.01) : tagMult;
-                        } else if (tagId != null && oneHopFromPinnedTags != null && oneHopFromPinnedTags[rep]) {
-                            c *= 0.99;
+                    // When tagHardPinned is active and the preferred member is present in this slot,
+                    // enforce it strictly as a hard constraint rather than a soft multiplier.
+                    if (tagHardPinned && prefMember != null) {
+                        for (int cid = cs; cid < ce; cid++) {
+                            int rep = cone.classRep[cid];
+                            if (prefMember.equals(cone.resKeys[rep]) && Double.isFinite(potInCost[rep])) {
+                                pickRep = rep;
+                                pickAdv = potInAdv[rep];
+                                pickCost = potInCost[rep];
+                                break;
+                            }
                         }
-                        if (isBetter(a, c, pickAdv, pickCost)) {
-                            pickAdv = a;
-                            pickCost = c;
-                            pickRep = rep;
+                    }
+
+                    if (pickRep < 0) {
+                        for (int cid = cs; cid < ce; cid++) {
+                            int rep = cone.classRep[cid];
+                            boolean blockGenericStock = tag != null
+                                    && PassBInventoryModel.isForbiddenForGenericTag(
+                                        cone.resKeys[rep],
+                                        request.context().inventory(),
+                                        stockMode
+                                    );
+                            int a = blockGenericStock ? prodAdv[rep] : potInAdv[rep];
+                            double c = blockGenericStock ? prodCost[rep] : potInCost[rep];
+                            if (!Double.isFinite(c)) continue;
+                            if (prefMember != null && prefMember.equals(cone.resKeys[rep])) {
+                                c *= tagMult;
+                            } else if (tag != null && oneHopFromPinnedTags != null && oneHopFromPinnedTags[rep]) {
+                                c *= 0.99;
+                            }
+                            if (isBetter(a, c, pickAdv, pickCost)) {
+                                pickAdv = a;
+                                pickCost = c;
+                                pickRep = rep;
+                            }
                         }
                     }
                     if (pickRep < 0) {
@@ -357,11 +383,12 @@ public final class Potentials {
                 double execCost = weights.scalarize(runVec);
 
                 double setupAmortized = 0.0;
-                if (!cone.recHandCraftable[r] && !isMachineAlreadyOwned(cone, r, chosenM, ownedMachines, ownedCaps)) {
+                if (!cone.recHandCraftable[r] && !isMachineAlreadyOwned(cone, r, chosenM, fac, ownedMachines, ownedCaps)) {
                     if (chosenM == null) continue;
-                    double setupVecCost = weights
-                            .scalarize(StepCosts.provisionMachineCost(chosenM, rec.key().systemId(), 1, meta));
-                    int mLocal = cone.localRes(ResourceKey.item(chosenM));
+                    double setupVecCost = weights.scalarize(
+                        StepCosts.provisionMachineCost(chosenM, rec.key().systemId(), rec.systemTags(), 1, meta)
+                    );
+                    int mLocal = chosenM.contentKey().map(cone::localRes).orElse(-1);
                     double mItemCost = (mLocal >= 0 && Double.isFinite(potInCost[mLocal]))
                             ? potInCost[mLocal]
                             : setupVecCost * 2.0 + 50.0;
@@ -430,9 +457,9 @@ public final class Potentials {
                 for (int i = 0; i < macro.innerRecipes().size(); i++) {
                     CompiledRecipe inner = macro.innerRecipes().get(i);
                     long mult = macro.innerMultipliers().get(i);
-                    Optional<String> mOpt = inner.machineRequirement().compatibleMachineIds().isEmpty()
+                    Optional<MachineEntry> mOpt = inner.machineRequirement().compatibleMachines().isEmpty()
                             ? Optional.empty()
-                            : Optional.of(inner.machineRequirement().compatibleMachineIds().get(0));
+                            : Optional.of(inner.machineRequirement().compatibleMachines().get(0));
                     double innerSoft = guidance.softCostMultiplier(inner.key(), mOpt);
                     runIterCost += weights.scalarize(StepCosts.craftCost(inner, mult, mOpt, false, fac, meta))
                             * innerSoft;
@@ -440,8 +467,8 @@ public final class Potentials {
                         boolean owned = inner.machineRequirement().capabilityId().map(ownedCaps::contains)
                                 .orElse(false);
                         if (!owned) {
-                            for (String mid : inner.machineRequirement().compatibleMachineIds()) {
-                                if (ownedMachines.contains(mid)) {
+                            for (MachineEntry m : inner.machineRequirement().compatibleMachines()) {
+                                if (ownedMachines.contains(m) || fac.ownsMachineFor(m)) {
                                     owned = true;
                                     break;
                                 }
@@ -453,7 +480,13 @@ public final class Potentials {
                                 break;
                             }
                             runIterCost += weights.scalarize(
-                                StepCosts.provisionMachineCost(mOpt.get(), inner.key().systemId(), 1, meta)
+                                StepCosts.provisionMachineCost(
+                                    mOpt.get(),
+                                    inner.key().systemId(),
+                                    inner.systemTags(),
+                                    1,
+                                    meta
+                                )
                             ) / demandScale;
                         }
                     }
@@ -486,30 +519,31 @@ public final class Potentials {
         return new Potentials(potInAdv, potInCost, prodAdv, prodCost, prodChoice, bestSlotRep, bestMachine);
     }
 
-    private static @Nullable String selectBestMachine(
+    private static @Nullable MachineEntry selectBestMachine(
         ConeModel cone,
         int r,
         CompiledRecipe rec,
+        FacilitySnapshot fac,
         CostWeights weights,
         CostMetadataProvider meta,
         HumanGuidanceView guidance,
-        Set<String> ownedMachines,
+        Set<MachineEntry> ownedMachines,
         Set<MachineCapabilityId> ownedCaps,
-        Set<String> disallowed,
+        Set<MachineEntry> disallowed,
         int[] potInAdv,
         double[] potInCost,
         long demandScale
     ) {
-        List<String> compat = cone.recCompatMachines[r];
+        List<MachineEntry> compat = cone.recCompatMachines[r];
         if (cone.recHandCraftable[r]) {
-            for (String m : compat) {
-                if (ownedMachines.contains(m)) return m;
+            for (MachineEntry m : compat) {
+                if (ownedMachines.contains(m) || fac.ownsMachineFor(m)) return m;
             }
             return null;
         }
         // Prefer an already-owned compatible machine.
-        for (String m : compat) {
-            if (ownedMachines.contains(m)) {
+        for (MachineEntry m : compat) {
+            if (ownedMachines.contains(m) || fac.ownsMachineFor(m)) {
                 return m;
             }
         }
@@ -517,16 +551,17 @@ public final class Potentials {
             return compat.isEmpty() ? null : compat.get(0);
         }
         // Choose cheapest willing-to-build compatible machine (setup + item potential).
-        String best = null;
+        MachineEntry best = null;
         double bestScore = Double.POSITIVE_INFINITY;
-        String sysId = rec.key().systemId();
+        Namespace sysId = rec.key().systemId();
+        Set<Namespace> sysTags = rec.systemTags();
         for (int idx = 0; idx < compat.size(); idx++) {
-            String m = compat.get(idx);
+            MachineEntry m = compat.get(idx);
             if (!guidance.isWillingToBuild(m) || disallowed.contains(m)) {
                 continue;
             }
-            double setup = weights.scalarize(StepCosts.provisionMachineCost(m, sysId, 1, meta));
-            int mLocal = cone.localRes(ResourceKey.item(m));
+            double setup = weights.scalarize(StepCosts.provisionMachineCost(m, sysId, sysTags, 1, meta));
+            int mLocal = m.contentKey().map(cone::localRes).orElse(-1);
             double itemPot = (mLocal >= 0 && Double.isFinite(potInCost[mLocal]))
                     ? potInCost[mLocal]
                     : setup * 2.0 + 50.0 + idx * 5.0;
@@ -543,11 +578,12 @@ public final class Potentials {
     private static boolean isMachineAlreadyOwned(
         ConeModel cone,
         int r,
-        @Nullable String chosenM,
-        Set<String> ownedMachines,
+        @Nullable MachineEntry chosenM,
+        FacilitySnapshot fac,
+        Set<MachineEntry> ownedMachines,
         Set<MachineCapabilityId> ownedCaps
     ) {
-        if (chosenM != null && ownedMachines.contains(chosenM)) return true;
+        if (chosenM != null && (ownedMachines.contains(chosenM) || fac.ownsMachineFor(chosenM))) return true;
         return cone.recCapability[r] != null && ownedCaps.contains(cone.recCapability[r]);
     }
 
@@ -572,7 +608,7 @@ public final class Potentials {
         boolean[] pinned = null;
         for (var rule : guidance.allRules()) {
             if (!(rule instanceof TagDefaultRule tagRule)) continue;
-            ResourceKey target = tagRule.preferredMember();
+            ComponentStackKey target = tagRule.preferredMember();
             for (int u = 0; u < cone.nodeCount; u++) {
                 if (target.equals(cone.resKeys[u])) {
                     if (pinned == null) {

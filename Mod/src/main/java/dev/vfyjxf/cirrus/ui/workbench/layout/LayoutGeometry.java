@@ -8,8 +8,11 @@ import dev.vfyjxf.cirrus.api.planning.plan.LinePullStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.plan.SetupLineStep;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Comparator;
 import java.util.TreeMap;
 
 final class LayoutGeometry {
@@ -101,7 +104,7 @@ final class LayoutGeometry {
     }
 
     @Nullable
-    static String systemIdOf(PlanStep step) {
+    static Namespace systemIdOf(PlanStep step) {
         return switch (step) {
             case CraftStep craft -> craft.recipeKey().systemId();
             case ConvertStep convert -> convert.conversionRecipeKey().systemId();
@@ -113,12 +116,12 @@ final class LayoutGeometry {
         };
     }
 
-    private static String dominantLoopSystemId(CycleLoopStep loop) {
-        TreeMap<String, Integer> counts = new TreeMap<>();
+    private static @Nullable Namespace dominantLoopSystemId(CycleLoopStep loop) {
+        TreeMap<Namespace, Integer> counts = new TreeMap<>(Comparator.comparing(Namespace::toString));
         for (CraftStep template : loop.singleIterationTemplate()) {
             counts.merge(template.recipeKey().systemId(), 1, Integer::sum);
         }
-        String best = null;
+        Namespace best = null;
         int bestCount = -1;
         for (var entry : counts.entrySet()) {
             if (entry.getValue() > bestCount) {
@@ -126,15 +129,15 @@ final class LayoutGeometry {
                 bestCount = entry.getValue();
             }
         }
-        return best != null ? best : loop.macroKey().macroId();
+        return best;
     }
 
     @Nullable
-    static String primaryMachineIdOf(PlanStep step) {
+    static MachineEntry primaryMachineOf(PlanStep step) {
         return switch (step) {
-            case CraftStep craft -> craft.chosenMachineId().orElse(null);
-            case ProvisionMachineStep provision -> provision.machineId();
-            case SetupLineStep setup -> setup.primaryMachineId();
+            case CraftStep craft -> craft.chosenMachine().orElse(null);
+            case ProvisionMachineStep provision -> provision.machine();
+            case SetupLineStep setup -> setup.primaryMachine();
             case AcquireStep ignored -> null;
             case LinePullStep ignored -> null;
             case ConvertStep ignored -> null;

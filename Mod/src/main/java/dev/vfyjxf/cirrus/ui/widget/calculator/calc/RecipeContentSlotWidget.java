@@ -8,6 +8,8 @@ import dev.vfyjxf.cirrus.api.recipe.content.StackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TagStackContent;
 import dev.vfyjxf.cirrus.api.recipe.content.TypedStackListContent;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.DurabilityContent;
+import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusUiTheme;
 import dev.vfyjxf.cirrus.ui.execution.support.ExecutionOverlayContentHelper;
 import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiSlotAmount;
@@ -78,6 +80,9 @@ public class RecipeContentSlotWidget extends Widget implements OreUiTooltipProvi
         if (content == null || content.isEmpty()) {
             return null;
         }
+        if (content instanceof DurabilityContent durability) {
+            return previewStack(durability.ingredient());
+        }
         if (content instanceof StackContent<?, ?> stackContent) {
             ContentStack<?, ?> stack = stackContent.content();
             return stack.isEmpty() ? null : stack;
@@ -109,6 +114,9 @@ public class RecipeContentSlotWidget extends Widget implements OreUiTooltipProvi
     ) {
         if (content == null || content.isEmpty()) {
             return null;
+        }
+        if (content instanceof DurabilityContent durability) {
+            return durabilityRichTooltip(durability, roleBadge);
         }
         String name = ExecutionOverlayContentHelper.label(content);
         ContentStack<?, ?> stack = previewStack(content);
@@ -148,6 +156,59 @@ public class RecipeContentSlotWidget extends Widget implements OreUiTooltipProvi
                 builder.subtitle(location.toString());
             }
         }
+        return builder.build();
+    }
+
+    private static OreUiRichTooltip durabilityRichTooltip(
+        DurabilityContent durability,
+        @Nullable String roleBadge
+    ) {
+        RecipeContent underlying = durability.ingredient();
+        String baseName = ExecutionOverlayContentHelper.label(underlying);
+        ContentStack<?, ?> stack = previewStack(underlying);
+        OreUiRichTooltip.Tone durTone = durability.consumesWholeTool()
+                ? OreUiRichTooltip.Tone.danger
+                : OreUiRichTooltip.Tone.warning;
+        String durBadge = "-" + durability.durabilityCost() + " DUR";
+        OreUiRichTooltip.Builder builder = OreUiRichTooltip.builder(baseName)
+                .badge(roleBadge == null || roleBadge.isBlank() ? durBadge : roleBadge + " " + durBadge, durTone);
+        if (stack != null) {
+            builder.icon(stack);
+            if (stack.isItem()) {
+                var location = stack.kind().getLocation();
+                if (location != null) {
+                    builder.subtitle(location.toString());
+                }
+            }
+        }
+        builder.keyValue(
+            CirrusLangs.Content.durabilityCost.component().getString(),
+            "-" + durability.durabilityCost() + " / craft",
+            durTone
+        );
+        int maxDur = durability.maxDurability();
+        if (maxDur > 0) {
+            builder.keyValue(
+                "Tool Life",
+                durability.usesPerTool() + " crafts / tool (" + maxDur + " max)",
+                OreUiRichTooltip.Tone.secondary
+            );
+        }
+        if (durability.amount() > 1L) {
+            builder.keyValue(
+                "Tools Required",
+                "\u00d7" + NumberUtils.toSuffix(durability.amount()),
+                OreUiRichTooltip.Tone.primary
+            );
+        }
+        if (underlying instanceof TagStackContent<?> tagContent) {
+            builder.keyValue("Tag", "#" + tagContent.tagKey().location(), OreUiRichTooltip.Tone.secondary);
+        } else if (underlying instanceof StackListContent listContent && listContent.stacks().size() > 1) {
+            builder.keyValue("Alternatives", listContent.stacks().size() + " items", OreUiRichTooltip.Tone.secondary);
+        } else if (underlying instanceof TypedStackListContent<?, ?> typedList && typedList.stacks().size() > 1) {
+            builder.keyValue("Alternatives", typedList.stacks().size() + " items", OreUiRichTooltip.Tone.secondary);
+        }
+        builder.footer(CirrusLangs.Content.durabilityCostDesc.component(durability.durabilityCost()).getString());
         return builder.build();
     }
 
@@ -212,6 +273,19 @@ public class RecipeContentSlotWidget extends Widget implements OreUiTooltipProvi
             return;
         }
         var graphics = canvas.layeredGraphics();
+        if (content instanceof DurabilityContent) {
+            renderer.renderDecoratedAt(
+                graphics,
+                content,
+                currentVisualIndex(count),
+                slotBorder,
+                slotBorder,
+                contentSize,
+                contentSize,
+                partialTicks
+            );
+            return;
+        }
         if (decorated && content.amount() <= 1L) {
             renderer.renderDecoratedAt(
                 graphics,

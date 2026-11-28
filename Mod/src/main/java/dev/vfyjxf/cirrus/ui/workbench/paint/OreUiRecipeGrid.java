@@ -1,10 +1,10 @@
 package dev.vfyjxf.cirrus.ui.workbench.paint;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.InputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.OutputSlot;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.chrome.ChromeText;
 import dev.vfyjxf.cirrus.ui.workbench.copilot.CoPilotPaint;
@@ -26,9 +26,9 @@ public final class OreUiRecipeGrid {
 
     private OreUiRecipeGrid() {}
 
-    public record SlotEntry(@Nullable ResourceKey resource, @Nullable ContentStack<?, ?> stack, long amount) {
+    public record SlotEntry(@Nullable ComponentStackKey resource, @Nullable ContentStack<?, ?> stack, long amount) {
 
-        public static SlotEntry of(@Nullable ResourceKey resource, long amount) {
+        public static SlotEntry of(@Nullable ComponentStackKey resource, long amount) {
             return new SlotEntry(resource, null, amount);
         }
 
@@ -68,7 +68,7 @@ public final class OreUiRecipeGrid {
     public static List<SlotEntry> inputsOf(CompiledRecipe recipe) {
         List<SlotEntry> list = new ArrayList<>(recipe.inputs().size());
         for (InputSlot slot : recipe.inputs()) {
-            ResourceKey res = slot.candidates().isEmpty() ? null : slot.candidates().get(0);
+            ComponentStackKey res = slot.candidates().isEmpty() ? null : slot.candidates().get(0);
             list.add(SlotEntry.of(res, Math.max(1L, slot.amountPerBatch())));
         }
         return List.copyOf(list);

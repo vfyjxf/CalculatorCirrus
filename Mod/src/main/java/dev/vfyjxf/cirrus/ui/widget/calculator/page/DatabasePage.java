@@ -9,10 +9,13 @@ import dev.vfyjxf.cirrus.api.recipe.content.BatchableRecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
+import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentVisual;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentVisualCache;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
+import dev.vfyjxf.cirrus.api.recipe.content.complex.DurabilityContent;
 import dev.vfyjxf.cirrus.api.recipe.database.CustomRecipeDatabase;
+import dev.vfyjxf.cirrus.api.recipe.database.DatabaseCategoryTree;
 import dev.vfyjxf.cirrus.api.recipe.database.DatabaseDefinition;
 import dev.vfyjxf.cirrus.api.recipe.database.DatabaseKind;
 import dev.vfyjxf.cirrus.api.recipe.database.DatabaseRecipeRef;
@@ -105,8 +108,13 @@ import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiMotion;
 import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiPaint;
 import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiRecipeGrid;
 import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiSlotAmount;
+import dev.vfyjxf.cirrus.ui.workbench.projection.ProjectionDiffTemplate;
+import dev.vfyjxf.cirrus.ui.workbench.projection.ProjectionDiffTemplates;
 import dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltip;
 import dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiTooltipProvider;
+import dev.vfyjxf.cirrus.ui.workbench.value.ValueTypeGaugeRenderer;
+import dev.vfyjxf.cirrus.ui.workbench.value.ValueTypeVisual;
+import dev.vfyjxf.cirrus.ui.workbench.value.ValueTypeVisualRegistry;
 import dev.vfyjxf.cirrus.util.NumberUtils;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.math.Rect;
@@ -395,10 +403,15 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
     private int visibleRecipeDetailSectionCount;
     private boolean visibleRecipeDetailJeiPreview;
     private boolean projectionEffectsMerged = true;
+    private boolean projectionDiffShowAll = true;
     private Map<Namespace, List<ProjectionContextOption<?>>> visibleProjectionOptionsByPlugin = Map.of();
     private @Nullable String activeCategoryFilter;
     private QuickFeatureFilter quickFeatureFilter = QuickFeatureFilter.all;
     private final List<Runnable> explorerListeners = new ArrayList<>();
+    private @Nullable RecipeDatabaseIndex cachedTreeIndex;
+    private List<DatabaseCategoryTree.CategoryNode> cachedSystemTree = List.of();
+    private List<DatabaseCategoryTree.CategoryNode> cachedTagTree = List.of();
+    private List<DatabaseCategoryTree.CategoryNode> cachedModTree = List.of();
 
     public record ExplorerCategorySummary(String key, String label, int count, String namespace) {}
 
@@ -481,6 +494,57 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         }
     }
 
+    private void ensureCategoryTreesCached() {
+        if (cachedTreeIndex == index) {
+            return;
+        }
+        cachedTreeIndex = index;
+        if (index == null || index.records().isEmpty()) {
+            cachedSystemTree = List.of();
+            cachedTagTree = List.of();
+            cachedModTree = List.of();
+            return;
+        }
+        cachedSystemTree = DatabaseCategoryTree.buildSystemTree(index.records());
+        cachedTagTree = DatabaseCategoryTree.buildTagTree(index.records());
+        cachedModTree = DatabaseCategoryTree.buildModTree(index.records());
+    }
+
+    public List<DatabaseCategoryTree.CategoryNode> systemCategoryTree() {
+        ensureCategoryTreesCached();
+        return cachedSystemTree;
+    }
+
+    public List<DatabaseCategoryTree.CategoryNode> tagCategoryTree() {
+        ensureCategoryTreesCached();
+        return cachedTagTree;
+    }
+
+    public List<DatabaseCategoryTree.CategoryNode> modCategoryTree() {
+        ensureCategoryTreesCached();
+        return cachedModTree;
+    }
+
+    public String categoryBreadcrumb(@Nullable String filterKey) {
+        if (filterKey == null || filterKey.isBlank()) {
+            return "All Recipes";
+        }
+        ensureCategoryTreesCached();
+        String found = DatabaseCategoryTree.findBreadcrumb(cachedSystemTree, filterKey);
+        if (found != null) {
+            return found;
+        }
+        found = DatabaseCategoryTree.findBreadcrumb(cachedTagTree, filterKey);
+        if (found != null) {
+            return "Tag: " + found;
+        }
+        found = DatabaseCategoryTree.findBreadcrumb(cachedModTree, filterKey);
+        if (found != null) {
+            return "Mod: " + found;
+        }
+        return filterKey;
+    }
+
     public List<ExplorerCategorySummary> systemCategories() {
         if (index == null || index.records().isEmpty()) {
             return List.of();
@@ -548,21 +612,11 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
     }
 
     private static String namespaceOfRecord(RecipeDatabaseRecord record) {
-        ResourceLocation id = record.recipe().id();
-        return id != null ? id.getNamespace() : record.recipe().systemId().root();
+        return DatabaseCategoryTree.ownerNamespace(record);
     }
 
     private static boolean matchesCategoryFilter(RecipeDatabaseRecord record, @Nullable String categoryFilter) {
-        if (categoryFilter == null || categoryFilter.isBlank()) {
-            return true;
-        }
-        if (categoryFilter.startsWith("sys:")) {
-            return record.recipe().systemId().toString().equals(categoryFilter.substring(4));
-        }
-        if (categoryFilter.startsWith("mod:")) {
-            return namespaceOfRecord(record).equals(categoryFilter.substring(4));
-        }
-        return true;
+        return DatabaseCategoryTree.matchesFilter(record, categoryFilter);
     }
 
     private static boolean matchesFeatureFilter(RecipeDatabaseRecord record, QuickFeatureFilter filter) {
@@ -1143,6 +1197,19 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
 
     public void debugSetProjectionEffectsMerged(boolean merged) {
         setProjectionEffectsMerged(merged);
+    }
+
+    public boolean debugProjectionDiffShowAll() {
+        return projectionDiffShowAll;
+    }
+
+    public void debugSetProjectionDiffShowAll(boolean showAll) {
+        if (projectionDiffShowAll == showAll) {
+            return;
+        }
+        projectionDiffShowAll = showAll;
+        preserveScrollOnNextApply = true;
+        requestApplyQuery();
     }
 
     public @Nullable String debugSelectedRecipeDetail() {
@@ -2464,7 +2531,14 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                     - detailProjectionPanelGap
                     - detailProjectionControlMarginLeft
         );
-        Widget overview = projectionOverviewPanel(projection, result, detailPlugins, selected, selectedSummary);
+        Widget overview = projectionOverviewPanel(
+            projection,
+            result,
+            detailPlugins,
+            selected,
+            selectedSummary,
+            maxOverviewWidth - 16
+        );
         overview.useStyle(
             flexGrow(1),
             flexShrink(1),
@@ -2493,21 +2567,28 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         @Nullable ProjectionResult result,
         List<ProjectionPlugin> detailPlugins,
         @Nullable ProjectionPlugin selected,
-        ProjectionResult.@Nullable PluginSummary selectedSummary
+        ProjectionResult.@Nullable PluginSummary selectedSummary,
+        int preferredPipelineWidth
     ) {
         WidgetGroup<Widget> panel = detailSubPanel(CirrusLangs.Calculator.Database.effects.component());
+        boolean showAll = projectionDiffShowAll && detailPlugins.size() > 1;
         panel.addWidget(
             new ProjectionPipelineWidget(
                 projection,
                 result,
                 detailPlugins,
-                selected,
+                showAll ? null : selected,
                 this::projectionPluginEnabled,
-                this::selectProjectionPlugin
+                this::selectProjectionDiffScope,
+                preferredPipelineWidth
             )
         );
-        if (selected != null) {
-            panel.addWidget(projectionSelectedHeader(selected, selectedSummary));
+        if (showAll) {
+            int totalAllChanges = result == null ? 0 : result.allChanges().size();
+            panel.addWidget(projectionScopeHeader(null, totalAllChanges, true, detailPlugins.size() > 1));
+        } else if (selected != null) {
+            int selectedCount = selectedSummary == null ? 0 : selectedSummary.totalChangeCount();
+            panel.addWidget(projectionScopeHeader(selected, selectedCount, false, detailPlugins.size() > 1));
         }
 
         ProjectionRecipeViewWidget projectionView = result != null
@@ -2517,63 +2598,71 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             panel.addWidget(projectionView);
         }
 
-        if (result == null || selected == null || selectedSummary == null || !selectedSummary.hasChanges()) {
+        boolean hasVisibleChanges = result != null && (showAll
+                ? !result.allChanges().isEmpty()
+                : (selected != null && selectedSummary != null && selectedSummary.hasChanges()));
+        if (!hasVisibleChanges || result == null) {
             panel.addWidget(
                 CirrusWrappedTextWidget.muted(CirrusLangs.Calculator.Database.effectsNone).padding(2).maxLines(2)
             ).useStyle(heightOf(20), minWidth(0));
         } else {
             panel.addWidget(projectionEffectMergeRow());
-            panel.addWidget(effectSummaryStrip(selectedSummary));
-            ProjectionDisplayModel selectedModel = result.toDisplayModel(
-                new ProjectionDisplayModel.Options(true, projectionEffectsMerged, selected.id())
+            ProjectionDisplayModel displayModel = result.toDisplayModel(
+                new ProjectionDisplayModel.Options(
+                    true,
+                    projectionEffectsMerged,
+                    showAll || selected == null ? null : selected.id()
+                )
             );
-            addEffectGroup(
-                panel,
-                CirrusLangs.Calculator.Database.detailInputs.component(),
-                changeRowsToData(selectedModel.changeRows(SlotChannel.input))
-            );
-            addEffectGroup(
-                panel,
-                CirrusLangs.Calculator.Database.detailOutputs.component(),
-                changeRowsToData(selectedModel.changeRows(SlotChannel.output))
-            );
-            addEffectGroup(
-                panel,
-                CirrusLangs.Calculator.Database.effects.component(),
-                changeRowsToData(selectedModel.metaChangeRows())
-            );
+            List<EffectRowData> inputRows = changeRowsToData(displayModel.changeRows(SlotChannel.input));
+            List<EffectRowData> outputRows = changeRowsToData(displayModel.changeRows(SlotChannel.output));
+            List<EffectRowData> metaRows = changeRowsToData(displayModel.metaChangeRows());
+            panel.addWidget(effectSummaryStrip(inputRows.size(), outputRows.size(), metaRows.size()));
+            addEffectGroup(panel, CirrusLangs.Calculator.Database.detailInputs.component(), inputRows);
+            addEffectGroup(panel, CirrusLangs.Calculator.Database.detailOutputs.component(), outputRows);
+            addEffectGroup(panel, CirrusLangs.Calculator.Database.effects.component(), metaRows);
         }
         return panel;
     }
 
-    private Widget projectionSelectedHeader(
-        ProjectionPlugin selected,
-        ProjectionResult.@Nullable PluginSummary selectedSummary
+    private Widget projectionScopeHeader(
+        @Nullable ProjectionPlugin selected,
+        int effectCount,
+        boolean showAll,
+        boolean multiPlugin
     ) {
         WidgetGroup<Widget> header = new WidgetGroup<>();
-        header.useStyle(flexRow(), alignItemsCenter(), gap(3), minWidth(0), minHeight(20));
+        header.useStyle(flexRow(), alignItemsCenter(), gap(4), minWidth(0), minHeight(20));
 
-        CirrusWrappedTextWidget label = CirrusWrappedTextWidget.primary(Component.translatable(selected.labelKey()))
-                .padding(1).maxLines(2);
+        Component titleText = showAll || selected == null
+                ? CirrusLangs.Calculator.Database.pipelineAllChanges.component()
+                : Component.translatable(selected.labelKey());
+        CirrusWrappedTextWidget label = CirrusWrappedTextWidget.primary(titleText).padding(1).maxLines(2);
         label.useStyle(flexGrow(1), minWidth(0), minHeight(20));
         header.addWidget(label);
 
-        if (selectedSummary != null) {
-            int effectCount = selectedSummary.totalChangeCount();
-            CirrusFittedTextWidget count = new CirrusFittedTextWidget(
-                Component.literal(String.valueOf(effectCount)),
-                effectCount == 0 ? CirrusPalette::textMuted : CirrusPalette::focusRing
-            ).align(CirrusFittedTextWidget.Align.center);
-            count.useStyle(widthOf(22), heightOf(14), flexShrink(0));
-            bindThemedSurface(count, "cirrus-page", CirrusThemeTextures::inset);
-            count.onHoverTooltip((mouseX, mouseY) -> {
-                Tooltip tooltip = Tooltip.create();
-                tooltip.add(CirrusLangs.Calculator.Database.effects.component(), Tooltip.title);
-                tooltip.add(CirrusLangs.Calculator.Database.pluginEffects.component(effectCount));
-                return tooltip;
-            });
-            header.addWidget(count);
+        if (multiPlugin && !showAll) {
+            CirrusButtonWidget showAllBtn = new CirrusButtonWidget(40, 15)
+                    .label(CirrusLangs.Calculator.Database.pipelineAll.component())
+                    .clickSound(true)
+                    .onPress(this::selectAllProjectionChanges);
+            showAllBtn.useStyle(sizeOf(40, 15), flexShrink(0));
+            header.addWidget(showAllBtn);
         }
+
+        CirrusFittedTextWidget count = new CirrusFittedTextWidget(
+            Component.literal(String.valueOf(effectCount)),
+            effectCount == 0 ? CirrusPalette::textMuted : CirrusPalette::focusRing
+        ).align(CirrusFittedTextWidget.Align.center);
+        count.useStyle(widthOf(24), heightOf(14), flexShrink(0));
+        bindThemedSurface(count, "cirrus-page", CirrusThemeTextures::inset);
+        count.onHoverTooltip((mouseX, mouseY) -> {
+            Tooltip tooltip = Tooltip.create();
+            tooltip.add(CirrusLangs.Calculator.Database.effects.component(), Tooltip.title);
+            tooltip.add(CirrusLangs.Calculator.Database.pluginEffects.component(effectCount));
+            return tooltip;
+        });
+        header.addWidget(count);
 
         return header;
     }
@@ -2609,7 +2698,7 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
 
         viewport.addWidget(projectionPluginPanel(result, detailPlugins));
         if (selected != null) {
-            viewport.addWidget(projectionConfigurationPanel(selected, projection));
+            viewport.addWidget(projectionConfigurationPanel(selected, detailPlugins, projection));
         }
         return viewport;
     }
@@ -2625,14 +2714,37 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         return row;
     }
 
+    private static ToIntFunction<CirrusPalette> projectionPluginAccent(
+        ProjectionPlugin plugin,
+        List<ProjectionPlugin> detailPlugins
+    ) {
+        if (plugin.id().equals(ProjectionPlugin.builtin.id())) {
+            return CirrusPalette::costS;
+        }
+        int idx = 0;
+        for (int i = 0; i < detailPlugins.size(); i++) {
+            if (detailPlugins.get(i).id().equals(plugin.id())) {
+                idx = i;
+                break;
+            }
+        }
+        return switch (idx % 4) {
+            case 0 -> CirrusPalette::focusRing;
+            case 1 -> CirrusPalette::costC;
+            case 2 -> CirrusPalette::costH;
+            default -> CirrusPalette::costP;
+        };
+    }
+
     private Widget projectionPluginPanel(@Nullable ProjectionResult result, List<ProjectionPlugin> detailPlugins) {
         WidgetGroup<Widget> panel = detailSubPanel(CirrusLangs.Calculator.Database.plugins.component());
         WidgetGroup<Widget> pluginColumn = new WidgetGroup<>();
-        pluginColumn.useStyle(flexColumn(), gap(2), minWidth(0));
+        pluginColumn.useStyle(flexColumn(), gap(3), minWidth(0));
         for (ProjectionPlugin plugin : detailPlugins) {
             pluginColumn.addWidget(
                 projectionPluginRow(
                     plugin,
+                    detailPlugins,
                     result == null ? ProjectionResult.PluginSummary.empty(plugin) : result.pluginSummary(plugin)
                 )
             );
@@ -2643,9 +2755,12 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
 
     private Widget projectionConfigurationPanel(
         ProjectionPlugin selected,
+        List<ProjectionPlugin> detailPlugins,
         @Nullable RecipeProjection projection
     ) {
         WidgetGroup<Widget> parameters = detailSubPanel(CirrusLangs.Calculator.Database.parameters.component());
+        ToIntFunction<CirrusPalette> accent = projectionPluginAccent(selected, detailPlugins);
+        parameters.addWidget(new SelectedPluginBannerWidget(Component.translatable(selected.labelKey()), accent));
         List<ProjectionContextOption<?>> options = optionsForPlugin(selected, projection);
         if (options.isEmpty()) {
             parameters.addWidget(
@@ -2690,22 +2805,42 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         );
     }
 
-    private Widget projectionPluginRow(ProjectionPlugin plugin, ProjectionResult.PluginSummary summary) {
-        CirrusRowWidget row = CirrusRowWidget.selectable(detailProjectionPluginRowHeight, 4)
-                .selected(() -> Objects.equals(plugin.id(), selectedProjectionPluginId))
-                .onPress(input -> selectProjectionPlugin(plugin.id()));
-        row.useStyle(minWidth(0), padding(detailProjectionRowPadding), boxSizingBorderBox());
+    private Widget projectionPluginRow(
+        ProjectionPlugin plugin,
+        List<ProjectionPlugin> detailPlugins,
+        ProjectionResult.PluginSummary summary
+    ) {
+        BooleanSupplier isSelected = () -> Objects.equals(plugin.id(), selectedProjectionPluginId);
+        ToIntFunction<CirrusPalette> accent = projectionPluginAccent(plugin, detailPlugins);
+        ProjectionPluginRowWidget row = new ProjectionPluginRowWidget(
+            isSelected,
+            accent,
+            () -> selectProjectionPlugin(plugin.id())
+        );
+        row.useStyle(
+            flexRow(),
+            alignItemsCenter(),
+            gap(4),
+            minWidth(0),
+            minHeight(detailProjectionPluginRowHeight),
+            padding(detailProjectionRowPadding, 6),
+            boxSizingBorderBox()
+        );
         row.onHoverTooltip((mouseX, mouseY) -> projectionPluginTooltip(plugin, summary));
 
-        CirrusWrappedTextWidget label = CirrusWrappedTextWidget.primary(Component.translatable(plugin.labelKey()))
-                .padding(1).maxLines(2);
+        row.addWidget(new PluginAccentDotWidget(accent, () -> projectionPluginEnabled(plugin)));
+
+        CirrusWrappedTextWidget label = new CirrusWrappedTextWidget(
+            Component.translatable(plugin.labelKey()),
+            palette -> isSelected.getAsBoolean() ? palette.textPrimary() : palette.textSecondary()
+        ).padding(1).maxLines(2);
         label.useStyle(flexGrow(1), minHeight(18), minWidth(0));
         row.addWidget(label);
 
         int changeCount = summary.totalChangeCount();
         CirrusFittedTextWidget effects = new CirrusFittedTextWidget(
             Component.literal(String.valueOf(changeCount)),
-            changeCount == 0 ? CirrusPalette::textMuted : CirrusPalette::focusRing
+            changeCount == 0 ? CirrusPalette::textMuted : accent
         );
         effects.textPadding(1, 1);
         effects.useStyle(widthOf(18), heightOf(12), flexShrink(0));
@@ -2722,6 +2857,100 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         row.addWidget(toggle);
 
         return row;
+    }
+
+    /**
+     * Selectable OreUI projection plugin row using standard raised-card chrome with a clean
+     * highlight border when selected.
+     */
+    private static final class ProjectionPluginRowWidget extends WidgetGroup<Widget> {
+        private final BooleanSupplier selected;
+
+        private ProjectionPluginRowWidget(
+            BooleanSupplier selected,
+            ToIntFunction<CirrusPalette> accent,
+            Runnable onSelect
+        ) {
+            this.selected = selected;
+            setInteractive(true);
+            onMouseClick((input, clickCount, ctx) -> {
+                if (!input.isLeftClick()) {
+                    return EventDispatch.pass;
+                }
+                onSelect.run();
+                CirrusUiSound.playClickSound();
+                ctx.consume();
+                return EventDispatch.consumed;
+            });
+        }
+
+        @Override
+        protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
+            int w = width();
+            int h = height();
+            if (w <= 0 || h <= 0) {
+                return;
+            }
+            CirrusPalette p = CirrusUiTheme.palette(this);
+            boolean sel = selected.getAsBoolean();
+            boolean hover = hovered();
+            if (sel) {
+                OreUiPaint.raisedCard(canvas, 0, 0, w, h, p, hover, true);
+            } else {
+                OreUiPaint.raisedButton(canvas, 0, 0, w, h, p, false, hover, false, false);
+            }
+            super.renderInternal(canvas, mouseX, mouseY, partialTicks);
+        }
+    }
+
+    private static final class PluginAccentDotWidget extends Widget {
+        private final ToIntFunction<CirrusPalette> accent;
+        private final BooleanSupplier enabled;
+
+        private PluginAccentDotWidget(ToIntFunction<CirrusPalette> accent, BooleanSupplier enabled) {
+            this.accent = accent;
+            this.enabled = enabled;
+            useStyle(sizeOf(6, 12), flexShrink(0));
+        }
+
+        @Override
+        protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
+            CirrusPalette p = CirrusUiTheme.palette(this);
+            int color = enabled.getAsBoolean() ? accent.applyAsInt(p) : p.textDisabled();
+            canvas.fill(1, Math.max(0, (height() - 5) / 2), 5, 5, color);
+        }
+    }
+
+    /**
+     * Standard OreUI title band at the top of the Parameters panel showing the active
+     * {@link ProjectionPlugin}'s name.
+     */
+    private static final class SelectedPluginBannerWidget extends Widget {
+        private final Component label;
+
+        private SelectedPluginBannerWidget(Component label, ToIntFunction<CirrusPalette> accent) {
+            this.label = label;
+            useStyle(widthOf(TaffyDimension.percent(1f)), heightOf(18), minWidth(0), flexShrink(0));
+        }
+
+        @Override
+        protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
+            int w = width();
+            int h = height();
+            if (w <= 4 || h <= 4) {
+                return;
+            }
+            CirrusPalette p = CirrusUiTheme.palette(this);
+            OreUiPaint.headerBand(canvas, 0, 0, w, h, p, false);
+            ChromeText.drawFitted(
+                canvas,
+                label,
+                6,
+                ChromeText.centeredY(0, h, canvas),
+                Math.max(16, w - 12),
+                p.textPrimary()
+            );
+        }
     }
 
     private Widget projectionSwitchRow(
@@ -2760,21 +2989,29 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         return panel;
     }
 
-    private Widget effectSummaryStrip(ProjectionResult.PluginSummary summary) {
+    private Widget effectSummaryStrip(int inputCount, int outputCount, int metaCount) {
         WidgetGroup<Widget> row = new WidgetGroup<>();
         row.useStyle(flexRow(), alignItemsCenter(), gap(6), minWidth(0), heightOf(18));
         row.addWidget(
             detailTinyMetric(
-                CirrusLangs.Calculator.Database.effectInputChanges.component(summary.inputChangeCount()),
-                summary.changesInputs() ? CirrusPalette::focusRing : CirrusPalette::textMuted
+                CirrusLangs.Calculator.Database.effectInputChanges.component(inputCount),
+                inputCount > 0 ? CirrusPalette::focusRing : CirrusPalette::textMuted
             )
         );
         row.addWidget(
             detailTinyMetric(
-                CirrusLangs.Calculator.Database.effectOutputChanges.component(summary.outputChangeCount()),
-                summary.changesOutputs() ? CirrusPalette::costS : CirrusPalette::textMuted
+                CirrusLangs.Calculator.Database.effectOutputChanges.component(outputCount),
+                outputCount > 0 ? CirrusPalette::costS : CirrusPalette::textMuted
             )
         );
+        if (metaCount > 0) {
+            row.addWidget(
+                detailTinyMetric(
+                    Component.literal(metaCount + " meta"),
+                    CirrusPalette::costC
+                )
+            );
+        }
         return row;
     }
 
@@ -2888,10 +3125,25 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         requestApplyQuery();
     }
 
+    private void selectProjectionDiffScope(@Nullable Namespace pluginId) {
+        if (pluginId == null) {
+            selectAllProjectionChanges();
+        } else {
+            selectProjectionPlugin(pluginId);
+        }
+    }
+
+    private void selectAllProjectionChanges() {
+        projectionDiffShowAll = true;
+        preserveScrollOnNextApply = true;
+        requestApplyQuery();
+    }
+
     private void selectProjectionPlugin(Namespace pluginId) {
         for (ProjectionPlugin plugin : projectionPlugins) {
             if (plugin.id().equals(pluginId)) {
                 selectedProjectionPluginId = pluginId;
+                projectionDiffShowAll = false;
                 preserveScrollOnNextApply = true;
                 requestApplyQuery();
                 return;
@@ -4917,7 +5169,11 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                     List<RecipeContent> ins = card.card().inputs();
                     int inCount = Math.min(ins.size(), card.formulaInShown());
                     for (int k = 0; k < inCount; k++) {
-                        long amt = ins.get(k).amount();
+                        RecipeContent inContent = ins.get(k);
+                        if (inContent instanceof DurabilityContent) {
+                            continue;
+                        }
+                        long amt = inContent.amount();
                         if (amt > 1L) {
                             OreUiSlotAmount.drawInSlot(
                                 canvas,
@@ -6280,7 +6536,8 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                 this.hasPolicy = proj != null && !proj.localEffects().isEmpty();
                 this.hasDurability = proj != null && proj.inputs()
                         .anySatisfy(
-                            s -> s.attributes().has(ProjectionKeys.durabilityCost)
+                            s -> s.content() instanceof DurabilityContent
+                                    || s.attributes().has(ProjectionKeys.durabilityCost)
                                     || s.tags().has(ProjectionKeys.Tags.durabilityTool)
                         );
             }
@@ -6450,8 +6707,20 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                     return;
                 }
                 ensureFormulaVisuals(inShown, outShown);
+                List<RecipeContent> inList = inputs();
                 int inVis = Math.min(formulaInCount, Math.max(0, inShown));
                 for (int i = 0; i < inVis; i++) {
+                    if (i < inList.size() && inList.get(i) instanceof DurabilityContent durability) {
+                        batch.add(
+                            durability,
+                            ExecutionOverlayContentHelper.currentVisualIndex(durability),
+                            inX + i * stride + RecipeContentSlotsWidget.slotBorder,
+                            y + RecipeContentSlotsWidget.slotBorder,
+                            RecipeContentSlotsWidget.contentSize,
+                            RecipeContentSlotsWidget.contentSize
+                        );
+                        continue;
+                    }
                     RecipeContentVisual visual = formulaInVisuals[i];
                     if (visual != null && visual.notEmpty()) {
                         batch.addVisual(
@@ -6657,29 +6926,51 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
     }
 
     private EffectRowData toEffectRowData(ProjectionDisplayModel.ChangeRow row) {
-        if (row.isMeta()) {
+        if (row.isMeta() || row.address() == null) {
             String target = row.address() == null
                     ? ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.projection)
                     : row.address().shortLabel();
             String summary = row.metaSummary() == null ? row.badge() : row.metaSummary();
             return new EffectRowData(
+                SlotDiff.DiffStatus.unchanged,
                 null,
                 null,
                 CirrusTextures.Icon.setting,
                 Component.literal(target),
+                Component.literal(formatShortEffectIds(row.effectIds())),
                 Component.literal(summary),
                 CirrusPalette::textMuted,
-                changeRowTooltip(row)
+                changeRowTooltip(row),
+                changeRowRichTooltip(row)
             );
         }
+        ProjectionDiffTemplate.DiffInput input = new ProjectionDiffTemplate.DiffInput(
+            row.address(),
+            row.status(),
+            row.before(),
+            row.after(),
+            row.movedFrom(),
+            row.badge()
+        );
+        ProjectionDiffTemplate template = ProjectionDiffTemplates.resolve(input);
+        String source = formatShortEffectIds(row.effectIds());
+        String detail = template.formatDetail(input);
+        String subtitle = source.isEmpty() ? detail : detail.isEmpty() ? source : source + " \u00b7 " + detail;
+        String badge = template.formatBadge(input);
+        if (badge.isEmpty()) {
+            badge = changeRowSummary(row);
+        }
         return new EffectRowData(
+            row.status(),
             row.before(),
             row.after(),
             changeRowActionIcon(row),
-            Component.literal(changeRowLabel(row)),
-            Component.literal(changeRowSummary(row)),
-            changeRowColor(row),
-            changeRowTooltip(row)
+            Component.literal(template.formatHeader(input)),
+            Component.literal(subtitle),
+            Component.literal(badge),
+            palette -> template.accentColor(input, palette),
+            changeRowTooltip(row),
+            changeRowRichTooltip(row)
         );
     }
 
@@ -6714,25 +7005,21 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
     }
 
     private Widget effectRow(EffectRowData data) {
-        WidgetGroup<Widget> row = new WidgetGroup<>();
+        EffectRowWidget row = new EffectRowWidget(data);
         row.useStyle(
             flexRow(),
             alignItemsCenter(),
             gap(8),
-            padding(4, 7),
+            padding(5, 7),
             boxSizingBorderBox(),
             widthOf(TaffyDimension.percent(1f)),
-            heightOf(detailEffectRowHeight),
+            minHeight(detailEffectRowHeight),
             minWidth(0),
             flexShrink(0)
         );
         bindThemedSurface(row, "cirrus-card", CirrusThemeTextures::cardSurface);
         row.addWidget(effectVisualStrip(data));
-
-        CirrusFittedTextWidget label = CirrusFittedTextWidget.primary(data.title());
-        label.textPadding(2, 1);
-        label.useStyle(flexGrow(1), heightOf(14), minWidth(0));
-        row.addWidget(label);
+        row.addWidget(new EffectTextBlockWidget(data.title(), data.subtitle()));
 
         CirrusFittedTextWidget deltaBadge = new CirrusFittedTextWidget(data.summary(), data.color())
                 .align(CirrusFittedTextWidget.Align.center);
@@ -6741,12 +7028,190 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         bindThemedSurface(deltaBadge, "cirrus-page", CirrusThemeTextures::inset);
         row.addWidget(deltaBadge);
 
-        row.onHoverTooltip((mouseX, mouseY) -> data.tooltip());
         return row;
     }
 
+    /**
+     * Self-measuring two-tier wrapped text block (title + muted attribution/transition subtitle).
+     *
+     * <p>Unlike bare {@link CirrusWrappedTextWidget} (which does not self-measure Taffy height),
+     * this widget always reserves exact wrapped line height so title and subtitle never overlap
+     * and long descriptions expand cleanly across multiple lines.
+     */
+    private static final class EffectTextBlockWidget extends Widget {
+        private static final int lineH = 10;
+        private static final int blockGap = 3;
+        private final String title;
+        private final String subtitle;
+        private int laidOutWidth = -1;
+        private int currentHeight;
+
+        private EffectTextBlockWidget(Component title, Component subtitle) {
+            this.title = title.getString();
+            this.subtitle = subtitle.getString();
+            this.currentHeight = estimateHeight(280);
+            useStyle(flexGrow(1), flexShrink(1), minWidth(0), heightOf(currentHeight));
+        }
+
+        private int estimateHeight(int availableWidth) {
+            int maxChars = Math.max(14, availableWidth / 6);
+            int titleLines = title.isEmpty() ? 0 : Math.max(1, (title.length() + maxChars - 1) / maxChars);
+            int subLines = subtitle.isEmpty() ? 0 : Math.max(1, (subtitle.length() + maxChars - 1) / maxChars);
+            int total = titleLines * lineH + subLines * lineH;
+            if (titleLines > 0 && subLines > 0) {
+                total += blockGap;
+            }
+            return Math.max(lineH, total);
+        }
+
+        private static List<String> wrapLines(Font font, String text, int maxWidth) {
+            if (text.isEmpty()) {
+                return List.of();
+            }
+            int limit = Math.max(24, maxWidth);
+            List<String> out = new ArrayList<>();
+            int start = 0;
+            int len = text.length();
+            while (start < len) {
+                while (start < len && text.charAt(start) == ' ') {
+                    start++;
+                }
+                if (start >= len) {
+                    break;
+                }
+                if (font.width(text.substring(start)) <= limit) {
+                    out.add(text.substring(start));
+                    break;
+                }
+                int end = start;
+                int lastBreak = -1;
+                while (end < len) {
+                    char c = text.charAt(end);
+                    if (font.width(text.substring(start, end + 1)) > limit) {
+                        break;
+                    }
+                    if (c == ' ' || c == '/' || c == ':' || c == '_' || c == '\u00b7') {
+                        lastBreak = end + 1;
+                    }
+                    end++;
+                }
+                if (end == start) {
+                    end = Math.min(len, start + 1);
+                } else if (lastBreak > start && end < len) {
+                    end = lastBreak;
+                }
+                String line = text.substring(start, end).trim();
+                if (!line.isEmpty()) {
+                    out.add(line);
+                }
+                start = end;
+            }
+            return out.isEmpty() ? List.of(text) : out;
+        }
+
+        @Override
+        protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
+            int w = width();
+            int h = height();
+            if (w <= 4 || h <= 0) {
+                return;
+            }
+            Font font = canvas.font();
+            List<String> titleLines = wrapLines(font, title, w);
+            List<String> subLines = wrapLines(font, subtitle, w);
+            int needed = titleLines.size() * lineH + subLines.size() * lineH
+                    + (!titleLines.isEmpty() && !subLines.isEmpty() ? blockGap : 0);
+            needed = Math.max(lineH, needed);
+            if (laidOutWidth != w || needed != currentHeight) {
+                laidOutWidth = w;
+                if (needed != currentHeight) {
+                    currentHeight = needed;
+                    useStyle(flexGrow(1), flexShrink(1), minWidth(0), heightOf(currentHeight));
+                }
+            }
+            CirrusPalette palette = CirrusUiTheme.palette(this);
+            int y = Math.max(0, (h - needed) / 2);
+            int titleInk = palette.textPrimary();
+            for (String line : titleLines) {
+                ChromeText.draw(canvas, Component.literal(line), 0, y, titleInk);
+                y += lineH;
+            }
+            if (!titleLines.isEmpty() && !subLines.isEmpty()) {
+                y += blockGap;
+            }
+            int subInk = palette.textMuted();
+            for (String line : subLines) {
+                ChromeText.draw(canvas, Component.literal(line), 0, y, subInk);
+                y += lineH;
+            }
+        }
+    }
+
+    /**
+     * Effect diff row using {@link OreUiTooltipProvider} in the Workbench shell (never stacking a
+     * vanilla {@link Tooltip} over child {@link RecipeContentSlotWidget} rich tooltips).
+     */
+    private static final class EffectRowWidget extends WidgetGroup<Widget> implements OreUiTooltipProvider {
+        private final EffectRowData data;
+
+        private EffectRowWidget(EffectRowData data) {
+            this.data = data;
+            onHoverTooltip((mouseX, mouseY) -> {
+                if (CirrusUiTheme.shellContext(this) != null) {
+                    return null;
+                }
+                return data.tooltip();
+            });
+        }
+
+        @Override
+        public @Nullable Tooltip hoverTooltip(int mouseX, int mouseY) {
+            if (CirrusUiTheme.shellContext(this) != null) {
+                return null;
+            }
+            return super.hoverTooltip(mouseX, mouseY);
+        }
+
+        @Override
+        public @Nullable OreUiRichTooltip richTooltipAt(double localX, double localY) {
+            return data.richTooltip();
+        }
+    }
+
     private Widget effectVisualStrip(EffectRowData data) {
+        RecipeContent before = data.before();
+        RecipeContent after = data.after();
+        if (before instanceof ValueContent<?> || after instanceof ValueContent<?>) {
+            return new ValueDiffVisualWidget(before, after);
+        }
         WidgetGroup<Widget> strip = new WidgetGroup<>();
+        if (data.status() == SlotDiff.DiffStatus.moved || before == null || after == null) {
+            strip.useStyle(
+                flexRow(),
+                alignItemsCenter(),
+                gap(4),
+                widthOf(56),
+                heightOf(22),
+                flexShrink(0)
+            );
+            if (data.status() == SlotDiff.DiffStatus.moved && after != null) {
+                strip.addWidget(new DiffSignWidget("\u2192", CirrusPalette::costP));
+                strip.addWidget(effectSlot(after));
+                return strip;
+            }
+            if (before == null && after != null) {
+                strip.addWidget(new DiffSignWidget("+", CirrusPalette::diffAdded));
+                strip.addWidget(effectSlot(after));
+                return strip;
+            }
+            if (before != null && after == null) {
+                strip.addWidget(new DiffSignWidget("\u2212", CirrusPalette::diffRemoved));
+                strip.addWidget(effectSlot(before));
+                return strip;
+            }
+            strip.addWidget(new TextureIconWidget(data.actionIcon(), 14));
+            return strip;
+        }
         strip.useStyle(
             flexRow(),
             alignItemsCenter(),
@@ -6756,28 +7221,104 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             heightOf(22),
             flexShrink(0)
         );
-        if (data.before() == null && data.after() != null) {
-            strip.addWidget(new TextureIconWidget(data.actionIcon(), 14));
-            strip.addWidget(effectSlot(data.after()));
-            return strip;
-        }
-        if (data.before() != null && data.after() == null) {
-            strip.addWidget(effectSlot(data.before()));
-            strip.addWidget(new TextureIconWidget(data.actionIcon(), 14));
-            return strip;
-        }
-        if (data.before() != null) {
-            strip.addWidget(effectSlot(data.before()));
-        }
-        if (data.before() != null && data.after() != null) {
-            strip.addWidget(new SleekArrowWidget(16, 18));
-        } else {
-            strip.addWidget(new TextureIconWidget(data.actionIcon(), 14));
-        }
-        if (data.after() != null) {
-            strip.addWidget(effectSlot(data.after()));
-        }
+        strip.addWidget(effectSlot(before));
+        strip.addWidget(new SleekArrowWidget(16, 18));
+        strip.addWidget(effectSlot(after));
         return strip;
+    }
+
+    /**
+     * Left-aligned OreUI action sign chip ({@code +}, {@code −}, {@code →}) matching
+     * {@link ProjectionDiffTemplates#drawUnaryActionGlyph} for visual consistency across the
+     * pipeline visualizer and Database diff list.
+     */
+    private static final class DiffSignWidget extends Widget {
+        private final String symbol;
+        private final ToIntFunction<CirrusPalette> color;
+
+        private DiffSignWidget(String symbol, ToIntFunction<CirrusPalette> color) {
+            this.symbol = symbol;
+            this.color = color;
+            useStyle(sizeOf(13, 18), marginLeft(3), flexShrink(0));
+        }
+
+        @Override
+        protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
+            CirrusPalette palette = CirrusUiTheme.palette(this);
+            ProjectionDiffTemplates.drawUnaryActionGlyph(
+                canvas,
+                symbol,
+                0,
+                0,
+                height(),
+                color.applyAsInt(palette),
+                palette
+            );
+        }
+    }
+
+    /**
+     * Compact telemetry visual for {@link ValueContent} rows inside the Database diff breakdown:
+     * renders the value type emblem, unit tag, and proportional before→after mini bar instead of
+     * empty item slots.
+     */
+    private static final class ValueDiffVisualWidget extends Widget {
+        private final @Nullable RecipeContent before;
+        private final @Nullable RecipeContent after;
+
+        private ValueDiffVisualWidget(@Nullable RecipeContent before, @Nullable RecipeContent after) {
+            this.before = before;
+            this.after = after;
+            useStyle(sizeOf(56, 26), flexShrink(0));
+        }
+
+        @Override
+        protected void renderInternal(SceneCanvas canvas, int mouseX, int mouseY, float partialTicks) {
+            ValueContent<?> primary = after instanceof ValueContent<?> va
+                    ? va
+                    : (before instanceof ValueContent<?> vb ? vb : null);
+            if (primary == null || width() <= 8 || height() <= 8) {
+                return;
+            }
+            CirrusPalette palette = CirrusUiTheme.palette(this);
+            var theme = CirrusUiTheme.mode(this);
+            ValueTypeVisual visual = ValueTypeVisualRegistry.resolve(primary.type());
+            int accent = visual.accentColor(palette);
+            boolean dark = OreUiPaint.isDark(palette);
+
+            int w = width();
+            int h = height();
+            canvas.fill(0, 0, w, h, OreUiPaint.withAlpha(accent, dark ? 0.14f : 0.10f));
+            canvas.strokeRect(0, 0, w, h, OreUiPaint.withAlpha(accent, 0.68f), 1);
+            canvas.fill(0, 0, 2, h, accent);
+
+            ValueTypeGaugeRenderer.drawIcon(canvas, visual, 6, 4, 9, accent, theme, 1.0f);
+            Component unitComp = Component.literal(visual.unit());
+            int ink = dark ? OreUiPaint.lighten(accent, 0.28f) : accent;
+            ChromeText.drawFitted(canvas, unitComp, 18, 4, Math.max(10, w - 21), ink);
+
+            int barX = 5;
+            int barW = Math.max(10, w - 9);
+            if (before instanceof ValueContent<?> vb && after instanceof ValueContent<?> va) {
+                long bAmt = Math.max(0L, vb.amount());
+                long aAmt = Math.max(0L, va.amount());
+                long maxAmt = Math.max(1L, Math.max(bAmt, aAmt));
+                float bFrac = Math.max(0.08f, Math.min(1.0f, (float) bAmt / (float) maxAmt));
+                float aFrac = Math.max(0.08f, Math.min(1.0f, (float) aAmt / (float) maxAmt));
+                canvas.fill(barX, h - 9, barW, 2, OreUiPaint.meterTrack(palette));
+                canvas.fill(
+                    barX,
+                    h - 9,
+                    Math.max(2, Math.round(barW * bFrac)),
+                    2,
+                    OreUiPaint.withAlpha(palette.textMuted(), 0.78f)
+                );
+                ValueTypeGaugeRenderer.drawSegmentedBar(canvas, barX, h - 6, barW, 3, aFrac, accent, palette, 1.0f);
+            } else {
+                float frac = visual.gaugeFraction(Math.max(0L, primary.amount()));
+                ValueTypeGaugeRenderer.drawSegmentedBar(canvas, barX, h - 7, barW, 4, frac, accent, palette, 1.0f);
+            }
+        }
     }
 
     private static final class SleekArrowWidget extends Widget {
@@ -6801,13 +7342,16 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
     }
 
     private record EffectRowData(
+        SlotDiff.DiffStatus status,
         @Nullable RecipeContent before,
         @Nullable RecipeContent after,
         SizedTexture actionIcon,
         Component title,
+        Component subtitle,
         Component summary,
         ToIntFunction<CirrusPalette> color,
-        Tooltip tooltip
+        Tooltip tooltip,
+        OreUiRichTooltip richTooltip
     ) {}
 
     private void activateRecipeCard(RecipeDatabaseRecord record, ResultCardAction action, boolean clickSound) {
@@ -8267,6 +8811,17 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
         return sb.toString();
     }
 
+    private static String formatShortEffectIds(Iterable<Namespace> ids) {
+        StringBuilder sb = new StringBuilder();
+        for (Namespace id : ids) {
+            if (!sb.isEmpty()) {
+                sb.append(", ");
+            }
+            sb.append("calculator_cirrus".equals(id.root()) ? id.path() : id.toString());
+        }
+        return sb.toString();
+    }
+
     private Tooltip projectionEffectMergeTooltip() {
         Tooltip tooltip = Tooltip.create();
         tooltip.add(CirrusLangs.Calculator.Database.effectsMerge.component(), Tooltip.title);
@@ -8279,6 +8834,75 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             )
         );
         return tooltip;
+    }
+
+    private OreUiRichTooltip changeRowRichTooltip(ProjectionDisplayModel.ChangeRow row) {
+        String title = row.isMeta()
+                ? (row.metaSummary() == null ? "Metadata" : row.metaSummary())
+                : changeRowLabel(row);
+        OreUiRichTooltip.Tone tone = switch (row.status()) {
+            case added -> OreUiRichTooltip.Tone.positive;
+            case removed -> OreUiRichTooltip.Tone.danger;
+            case transformed -> OreUiRichTooltip.Tone.warning;
+            case moved -> OreUiRichTooltip.Tone.costP;
+            case adjusted -> OreUiRichTooltip.Tone.accent;
+            case unchanged -> OreUiRichTooltip.Tone.secondary;
+        };
+        String badge = row.status().name().toUpperCase()
+                + (row.badge().isEmpty() ? "" : " " + row.badge());
+        OreUiRichTooltip.Builder builder = OreUiRichTooltip.builder(Component.literal(title))
+                .badge(badge, tone);
+        if (!row.effectIds().isEmpty()) {
+            builder.keyValue(
+                ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectSource),
+                formatEffectIds(row.effectIds()),
+                OreUiRichTooltip.Tone.muted
+            );
+        }
+        if (row.mergedStepCount() > 1) {
+            builder.keyValue(
+                ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effects),
+                Integer.toString(row.mergedStepCount()),
+                OreUiRichTooltip.Tone.accent
+            );
+        }
+        if (!row.isMeta()) {
+            builder.keyValue(
+                ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectBefore),
+                row.before() == null ? "(empty)" : describeContent(row.before()),
+                OreUiRichTooltip.Tone.secondary
+            );
+            builder.keyValue(
+                ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectAfter),
+                row.after() == null ? "(removed)" : describeContent(row.after()),
+                tone
+            );
+            if (row.status() == SlotDiff.DiffStatus.adjusted) {
+                long beforeAmt = amountOf(row.before());
+                long afterAmt = amountOf(row.after());
+                builder.keyValue(
+                    ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectDelta),
+                    Long.toString(afterAmt - beforeAmt),
+                    tone
+                );
+                Double factor = amountFactor(beforeAmt, afterAmt);
+                if (factor != null) {
+                    builder.keyValue(
+                        ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectFactor),
+                        trimDouble(factor) + "x",
+                        OreUiRichTooltip.Tone.accent
+                    );
+                }
+            }
+            if (row.movedFrom() != null) {
+                builder.keyValue("Moved From", row.movedFrom().shortLabel(), OreUiRichTooltip.Tone.costP);
+            }
+        }
+        return builder.build();
+    }
+
+    private static String describeContent(RecipeContent content) {
+        return ProjectionDiffTemplates.describeContent(content);
     }
 
     private Tooltip changeRowTooltip(ProjectionDisplayModel.ChangeRow row) {
@@ -8305,34 +8929,36 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             );
         }
         if (!row.isMeta()) {
-            long beforeAmt = amountOf(row.before());
-            long afterAmt = amountOf(row.after());
             builder.kv(
                 ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectBefore),
                 ExecutionOverlayUi.tooltipTextSecondary,
-                Long.toString(beforeAmt),
+                row.before() == null ? "(empty)" : describeContent(row.before()),
                 ExecutionOverlayUi.tooltipTextPrimary
             );
             builder.kv(
                 ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectAfter),
                 ExecutionOverlayUi.tooltipTextSecondary,
-                Long.toString(afterAmt),
+                row.after() == null ? "(removed)" : describeContent(row.after()),
                 ExecutionOverlayUi.tooltipTextPrimary
             );
-            builder.kv(
-                ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectDelta),
-                ExecutionOverlayUi.tooltipTextSecondary,
-                Long.toString(afterAmt - beforeAmt),
-                changeRowColor(row).applyAsInt(CirrusUiTheme.palette(this))
-            );
-            Double factor = amountFactor(beforeAmt, afterAmt);
-            if (factor != null) {
+            if (row.status() == SlotDiff.DiffStatus.adjusted) {
+                long beforeAmt = amountOf(row.before());
+                long afterAmt = amountOf(row.after());
                 builder.kv(
-                    ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectFactor),
+                    ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectDelta),
                     ExecutionOverlayUi.tooltipTextSecondary,
-                    trimDouble(factor),
-                    ExecutionOverlayUi.tooltipAccent
+                    Long.toString(afterAmt - beforeAmt),
+                    changeRowColor(row).applyAsInt(CirrusUiTheme.palette(this))
                 );
+                Double factor = amountFactor(beforeAmt, afterAmt);
+                if (factor != null) {
+                    builder.kv(
+                        ExecutionOverlayUi.tr(CirrusLangs.Calculator.Database.effectFactor),
+                        ExecutionOverlayUi.tooltipTextSecondary,
+                        trimDouble(factor),
+                        ExecutionOverlayUi.tooltipAccent
+                    );
+                }
             }
             if (row.movedFrom() != null) {
                 builder.kv(

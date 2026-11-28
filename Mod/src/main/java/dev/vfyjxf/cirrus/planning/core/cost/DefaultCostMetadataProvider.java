@@ -3,35 +3,45 @@ package dev.vfyjxf.cirrus.planning.core.cost;
 import dev.vfyjxf.cirrus.api.planning.cost.CostMetadataProvider;
 import dev.vfyjxf.cirrus.api.planning.cost.SystemCostTier;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cirrus.util.CirrusNamespaces;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public final class DefaultCostMetadataProvider implements CostMetadataProvider {
 
     public static final DefaultCostMetadataProvider instance = new DefaultCostMetadataProvider();
-    public static final String timeValueKey = "calculator_cirrus:time";
+    public static final Namespace timeValueKey = CirrusNamespaces.ofMod("time");
 
     public DefaultCostMetadataProvider() {}
 
     @Override
-    public SystemCostTier tierOfSystem(String systemId) {
-        return SystemCostTiers.tierOfSystem(systemId);
+    public SystemCostTier tierOfSystem(Namespace systemId, Set<Namespace> systemTags) {
+        return SystemCostTiers.tierOfSystemTags(systemTags);
     }
 
     @Override
-    public double estimateHumanSecondsPerBatch(String systemId, Optional<String> machineId, boolean automated) {
+    public double estimateHumanSecondsPerBatch(
+        Namespace systemId,
+        Set<Namespace> systemTags,
+        Optional<MachineEntry> machine,
+        boolean automated
+    ) {
         if (automated) {
             return 0.5;
         }
-        return SystemCostTiers.defaultsFor(tierOfSystem(systemId)).humanSecondsPerBatch();
+        return SystemCostTiers.defaultsFor(tierOfSystem(systemId, systemTags)).humanSecondsPerBatch();
     }
 
     @Override
     public double estimatePassiveSecondsPerBatch(
-        String systemId,
-        Optional<String> machineId,
-        Map<String, Double> recipeValues
+        Namespace systemId,
+        Set<Namespace> systemTags,
+        Optional<MachineEntry> machine,
+        Map<Namespace, Double> recipeValues
     ) {
         if (recipeValues != null) {
             Double ticks = recipeValues.get(timeValueKey);
@@ -39,26 +49,34 @@ public final class DefaultCostMetadataProvider implements CostMetadataProvider {
                 return ticks / 20.0;
             }
         }
-        return SystemCostTiers.defaultsFor(tierOfSystem(systemId)).passiveSecondsPerBatch();
+        return SystemCostTiers.defaultsFor(tierOfSystem(systemId, systemTags)).passiveSecondsPerBatch();
     }
 
     @Override
-    public double estimateMachineSetupHumanSeconds(String machineId, String systemId) {
-        return SystemCostTiers.defaultsFor(tierOfSystem(systemId)).machineSetupHumanSeconds();
+    public double estimateMachineSetupHumanSeconds(MachineEntry machine, Namespace systemId, Set<Namespace> systemTags) {
+        return SystemCostTiers.defaultsFor(tierOfSystem(systemId, systemTags)).machineSetupHumanSeconds();
     }
 
     @Override
-    public double estimateMachineSetupCapital(String machineId, String systemId) {
-        return SystemCostTiers.defaultsFor(tierOfSystem(systemId)).machineSetupCapital();
+    public double estimateMachineSetupCapital(MachineEntry machine, Namespace systemId, Set<Namespace> systemTags) {
+        return SystemCostTiers.defaultsFor(tierOfSystem(systemId, systemTags)).machineSetupCapital();
     }
 
     @Override
-    public double estimateLineSetupHumanSeconds(String systemId, MachineCapabilityId capability) {
-        return SystemCostTiers.defaultsFor(tierOfSystem(systemId)).lineSetupHumanSeconds();
+    public double estimateLineSetupHumanSeconds(
+        Namespace systemId,
+        Set<Namespace> systemTags,
+        MachineCapabilityId capability
+    ) {
+        return SystemCostTiers.defaultsFor(tierOfSystem(systemId, systemTags)).lineSetupHumanSeconds();
     }
 
     @Override
-    public double estimateLineSetupCapital(String systemId, MachineCapabilityId capability) {
-        return SystemCostTiers.defaultsFor(tierOfSystem(systemId)).lineSetupCapital();
+    public double estimateLineSetupCapital(
+        Namespace systemId,
+        Set<Namespace> systemTags,
+        MachineCapabilityId capability
+    ) {
+        return SystemCostTiers.defaultsFor(tierOfSystem(systemId, systemTags)).lineSetupCapital();
     }
 }

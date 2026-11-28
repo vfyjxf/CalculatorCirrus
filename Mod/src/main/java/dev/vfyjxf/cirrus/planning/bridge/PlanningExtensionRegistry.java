@@ -15,7 +15,7 @@ import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Thread-safe runtime registry for Planning v3 plugin SPIs registered via {@link dev.vfyjxf.cirrus.api.plugin.CirrusPlugin}.
+ * Thread-safe runtime registry for planning plugin SPIs registered via {@link dev.vfyjxf.cirrus.api.plugin.CirrusPlugin}.
  */
 public final class PlanningExtensionRegistry implements PlanningExtensionRegister {
 

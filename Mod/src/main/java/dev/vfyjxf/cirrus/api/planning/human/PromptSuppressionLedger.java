@@ -8,7 +8,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * Idempotent prompt deduplication, exponential backoff (b0 * 2^j), and strict zero-repeat ledger (M9.1).
+ * Idempotent prompt deduplication, exponential backoff (b0 * 2^j), and strict zero-repeat ledger.
  */
 public final class PromptSuppressionLedger {
 

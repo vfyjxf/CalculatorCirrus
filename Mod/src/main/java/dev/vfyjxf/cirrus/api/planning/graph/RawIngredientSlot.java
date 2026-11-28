@@ -1,15 +1,16 @@
 package dev.vfyjxf.cirrus.api.planning.graph;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
+import net.minecraft.tags.TagKey;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 public record RawIngredientSlot(
-    Optional<String> tagId,
-    List<ResourceKey> candidates,
+    Optional<TagKey<?>> tagKey,
+    List<ComponentStackKey> candidates,
     long amount,
     SlotMatchMode matchMode,
     int durabilityCostPerBatch,
@@ -17,16 +18,16 @@ public record RawIngredientSlot(
 ) {
 
     public RawIngredientSlot(
-        Optional<String> tagId,
-        List<ResourceKey> candidates,
+        Optional<TagKey<?>> tagKey,
+        List<ComponentStackKey> candidates,
         long amount,
         SlotMatchMode matchMode
     ) {
-        this(tagId, candidates, amount, matchMode, 0, 0);
+        this(tagKey, candidates, amount, matchMode, 0, 0);
     }
 
     public RawIngredientSlot {
-        Objects.requireNonNull(tagId, "tagId");
+        Objects.requireNonNull(tagKey, "tagKey");
         Objects.requireNonNull(candidates, "candidates");
         Objects.requireNonNull(matchMode, "matchMode");
         candidates = List.copyOf(candidates);

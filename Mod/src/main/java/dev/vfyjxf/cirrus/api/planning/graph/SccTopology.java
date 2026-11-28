@@ -1,18 +1,18 @@
 package dev.vfyjxf.cirrus.api.planning.graph;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 
 import java.util.Set;
 
 public interface SccTopology {
 
-    int sccIdOf(ResourceKey resource);
+    int sccIdOf(ComponentStackKey resource);
 
     int sccSize(int sccId);
 
-    boolean isInNonTrivialScc(ResourceKey resource);
+    boolean isInNonTrivialScc(ComponentStackKey resource);
 
-    Set<ResourceKey> membersOfScc(int sccId);
+    Set<ComponentStackKey> membersOfScc(int sccId);
 
     int largestSccSize();
 }

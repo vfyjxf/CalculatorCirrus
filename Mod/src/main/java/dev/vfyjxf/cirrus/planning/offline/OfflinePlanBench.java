@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.OwnedMachineGroup;
@@ -16,8 +17,6 @@ import dev.vfyjxf.cirrus.api.planning.cost.PlanningProfile;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.GraphCompilationStats;
 import dev.vfyjxf.cirrus.api.planning.human.DecisionPrompt;
-import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ConvertStep;
@@ -33,13 +32,15 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningDiagnostics;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
-import dev.vfyjxf.cirrus.planning.adapter.CanonicalJson;
 import dev.vfyjxf.cirrus.planning.adapter.DropReason;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.core.cost.DefaultAcquisitionOracle;
 import dev.vfyjxf.cirrus.planning.core.cost.DefaultCostMetadataProvider;
 import dev.vfyjxf.cirrus.planning.core.graph.DefaultRecipeGraphCompiler;
+import dev.vfyjxf.cirrus.planning.core.graph.MachineCapabilityGroups;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.planning.core.service.DefaultPlanningService;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -52,7 +53,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.SplittableRandom;
 
@@ -65,11 +65,11 @@ public final class OfflinePlanBench {
     private static final Gson prettyGson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
     private static final List<TargetDemand> defaultTargets = List.of(
-        new TargetDemand(ResourceKey.item("minecraft:hopper"), 1L),
-        new TargetDemand(ResourceKey.item("minecraft:stone_bricks"), 5L),
-        new TargetDemand(ResourceKey.item("minecraft:piston"), 1L),
-        new TargetDemand(ResourceKey.item("minecraft:observer"), 1L),
-        new TargetDemand(ResourceKey.item("ae2:controller"), 1L)
+        new TargetDemand(OfflineContentTypes.item("minecraft:hopper"), 1L),
+        new TargetDemand(OfflineContentTypes.item("minecraft:stone_bricks"), 5L),
+        new TargetDemand(OfflineContentTypes.item("minecraft:piston"), 1L),
+        new TargetDemand(OfflineContentTypes.item("minecraft:observer"), 1L),
+        new TargetDemand(OfflineContentTypes.item("ae2:controller"), 1L)
     );
 
     public record BenchConfig(
@@ -260,11 +260,11 @@ public final class OfflinePlanBench {
                     long elapsedMs = (pt1 - pt0) / 1_000_000L;
                     totalPlanMs += elapsedMs;
 
-                    String firstCanonical = CanonicalJson.canonicalize(resultPlansToJson(first, graph, req));
+                    String firstCanonical = OfflineContentTypes.canonicalizeJson(resultPlansToJson(first, graph, req));
                     boolean deterministicOk = true;
                     for (int r = 1; r < cfg.repeat(); r++) {
                         PlanningResult again = service.planOnce(req);
-                        String againCanonical = CanonicalJson.canonicalize(resultPlansToJson(again, graph, req));
+                        String againCanonical = OfflineContentTypes.canonicalizeJson(resultPlansToJson(again, graph, req));
                         if (!firstCanonical.equals(againCanonical)) {
                             deterministicOk = false;
                             deterministicFailures++;
@@ -290,7 +290,7 @@ public final class OfflinePlanBench {
                     }
 
                     JsonObject tr = new JsonObject();
-                    tr.addProperty("target", td.resource().shortString());
+                    tr.addProperty("target", td.resource().displayId());
                     tr.addProperty("amount", td.amount());
                     tr.addProperty("status", first.status().name());
                     tr.addProperty("planTimeMs", elapsedMs);
@@ -357,15 +357,15 @@ public final class OfflinePlanBench {
         return new FacilitySnapshot(
             List.of(
                 new OwnedMachineGroup(
-                    "minecraft:crafting_table",
-                    new MachineCapabilityId("cirrus:capability/crafting"),
+                    OfflineContentTypes.machine("minecraft:crafting_table"),
+                    MachineCapabilityGroups.capabilityOf(Namespace.ofMc("crafting")),
                     1,
                     1.0,
                     false
                 ),
                 new OwnedMachineGroup(
-                    "minecraft:furnace",
-                    new MachineCapabilityId("cirrus:capability/smelting"),
+                    OfflineContentTypes.machine("minecraft:furnace"),
+                    MachineCapabilityGroups.capabilityOf(Namespace.ofMc("smelting")),
                     1,
                     1.0,
                     false
@@ -399,10 +399,10 @@ public final class OfflinePlanBench {
         if (cfg.perPackMode() != null && !cfg.perPackMode().isBlank()) {
             return sampleTargets(cfg.perPackMode(), graph);
         }
-        Set<ResourceKey> producible = graph.allProducibleResources();
+        Set<ComponentStackKey> producible = graph.allProducibleResources();
         List<TargetDemand> chosen = new ArrayList<>();
         for (TargetDemand td : defaultTargets) {
-            if (td.resource().resourceId().startsWith("minecraft:") || producible.contains(td.resource())) {
+            if ("minecraft".equals(td.resource().namespace()) || producible.contains(td.resource())) {
                 chosen.add(td);
             }
         }
@@ -410,7 +410,7 @@ public final class OfflinePlanBench {
     }
 
     private static List<TargetDemand> sampleTargets(String mode, CompiledRecipeGraph graph) {
-        List<ResourceKey> all = new ArrayList<>(graph.allProducibleResources());
+        List<ComponentStackKey> all = new ArrayList<>(graph.allProducibleResources());
         Collections.sort(all);
         if (all.isEmpty()) {
             return List.of();
@@ -431,14 +431,14 @@ public final class OfflinePlanBench {
             return all.stream().map(k -> new TargetDemand(k, 1L)).toList();
         }
         SplittableRandom rng = new SplittableRandom(seed);
-        List<ResourceKey> shuffled = new ArrayList<>(all);
+        List<ComponentStackKey> shuffled = new ArrayList<>(all);
         for (int i = shuffled.size() - 1; i > 0; i--) {
             int j = rng.nextInt(i + 1);
-            ResourceKey tmp = shuffled.get(i);
+            ComponentStackKey tmp = shuffled.get(i);
             shuffled.set(i, shuffled.get(j));
             shuffled.set(j, tmp);
         }
-        List<ResourceKey> picked = new ArrayList<>(shuffled.subList(0, limit));
+        List<ComponentStackKey> picked = new ArrayList<>(shuffled.subList(0, limit));
         Collections.sort(picked);
         return picked.stream().map(k -> new TargetDemand(k, 1L)).toList();
     }
@@ -450,12 +450,12 @@ public final class OfflinePlanBench {
         if (id.startsWith("[")) {
             int close = id.indexOf(']');
             if (close > 1) {
-                String contentType = id.substring(1, close);
+                Namespace contentType = OfflineContentTypes.parseNamespace(id.substring(1, close));
                 String resId = id.substring(close + 1);
-                return new TargetDemand(new ResourceKey(contentType, resId, Optional.empty()), qty);
+                return new TargetDemand(OfflineContentTypes.bare(contentType, resId), qty);
             }
         }
-        return new TargetDemand(ResourceKey.item(id), qty);
+        return new TargetDemand(OfflineContentTypes.item(id), qty);
     }
 
     private static Path resolvePackOutputPath(Path outPath, String pack, boolean multiPack) {
@@ -470,7 +470,7 @@ public final class OfflinePlanBench {
         if (parent != null) {
             Files.createDirectories(parent);
         }
-        String canonical = CanonicalJson.canonicalize(obj);
+        String canonical = OfflineContentTypes.canonicalizeJson(obj);
         JsonObject sorted = JsonParser.parseString(canonical).getAsJsonObject();
         Files.writeString(file, prettyGson.toJson(sorted) + "\n", StandardCharsets.UTF_8);
     }
@@ -533,6 +533,7 @@ public final class OfflinePlanBench {
     private static JsonObject costToJson(CostVector c) {
         JsonObject obj = new JsonObject();
         obj.addProperty("humanActiveSeconds", round6(c.humanActiveSeconds()));
+        obj.addProperty("tripActiveSeconds", round6(c.tripActiveSeconds()));
         obj.addProperty("passiveWaitSeconds", round6(c.passiveWaitSeconds()));
         obj.addProperty("machineSetupCapital", round6(c.machineSetupCapital()));
         obj.addProperty("materialScarcity", round6(c.materialScarcity()));
@@ -562,27 +563,27 @@ public final class OfflinePlanBench {
         obj.addProperty("kind", step.getClass().getSimpleName());
         switch (step) {
             case AcquireStep s -> {
-                obj.addProperty("resource", s.resource().shortString());
+                obj.addProperty("resource", s.resource().displayId());
                 obj.addProperty("amount", s.amount());
                 obj.addProperty("acquisitionKind", s.acquisitionKind().name());
             }
             case ProvisionMachineStep s -> {
-                obj.addProperty("machineId", s.machineId());
+                obj.addProperty("machine", s.machine().canonicalKey());
                 obj.addProperty("countToBuild", s.countToBuild());
             }
             case SetupLineStep s -> {
-                obj.addProperty("systemId", s.systemId());
-                obj.addProperty("primaryMachineId", s.primaryMachineId());
-                obj.addProperty("targetOutput", s.targetOutput().shortString());
+                obj.addProperty("systemId", s.systemId().toString());
+                obj.addProperty("primaryMachine", s.primaryMachine().canonicalKey());
+                obj.addProperty("targetOutput", s.targetOutput().displayId());
             }
             case CraftStep s -> {
                 obj.addProperty("recipeKey", s.recipeKey().shortString());
                 obj.addProperty("batches", s.batches());
-                s.chosenMachineId().ifPresent(m -> obj.addProperty("chosenMachineId", m));
+                s.chosenMachine().ifPresent(m -> obj.addProperty("chosenMachine", m.canonicalKey()));
             }
             case LinePullStep s -> {
                 obj.addProperty("lineId", s.lineId());
-                obj.addProperty("resource", s.resource().shortString());
+                obj.addProperty("resource", s.resource().displayId());
                 obj.addProperty("amount", s.amount());
             }
             case ConvertStep s -> {
@@ -621,7 +622,7 @@ public final class OfflinePlanBench {
         obj.addProperty("truncatedByNodeBudget", d.truncatedByNodeBudget());
         if (!d.unmetResources().isEmpty()) {
             JsonObject unmet = new JsonObject();
-            d.unmetResources().forEach((k, v) -> unmet.addProperty(k.shortString(), v));
+            d.unmetResources().forEach((k, v) -> unmet.addProperty(k.displayId(), v));
             obj.add("unmetResources", unmet);
         }
         return obj;

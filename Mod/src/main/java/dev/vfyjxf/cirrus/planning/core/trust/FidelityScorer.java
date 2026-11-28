@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * M8 Contamination-Proof Structural Fidelity & Cost-Floor Lifter (Pure JDK 21, zero wordlists).
+ * Contamination-proof structural fidelity scorer & cost-floor lifter (zero wordlists).
  *
  * <p>Anchors sibling unit cost via lineage-deduplicated group medians with strict layer weights:
  * Layer A (verified native/execution) total weight = 1.0, Layer B <= 0.25, Layer C (JEI display) = 0.0.

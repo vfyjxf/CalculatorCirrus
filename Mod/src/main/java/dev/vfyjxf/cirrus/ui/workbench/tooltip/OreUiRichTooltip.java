@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.ui.workbench.tooltip;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.copilot.CoPilotPaint;
 import dev.vfyjxf.cloudlib.api.ui.texture.ImageTexture;
@@ -61,7 +61,7 @@ public final class OreUiRichTooltip {
 
     public record ItemBadge(@Nullable ContentStack<?, ?> stack, @Nullable Component countLabel) {
 
-        public static ItemBadge of(@Nullable ResourceKey resource, @Nullable String countLabel) {
+        public static ItemBadge of(@Nullable ComponentStackKey resource, @Nullable String countLabel) {
             return new ItemBadge(
                 CoPilotPaint.stackOf(resource, 1L),
                 countLabel == null ? null : Component.literal(countLabel)
@@ -87,7 +87,7 @@ public final class OreUiRichTooltip {
         }
 
         public static ItemEntry of(
-            @Nullable ResourceKey resource,
+            @Nullable ComponentStackKey resource,
             Component name,
             @Nullable Component trailing,
             Tone tone
@@ -160,7 +160,47 @@ public final class OreUiRichTooltip {
             }
         }
 
+        record ItemGrid(
+            @Nullable Component heading,
+            List<ContentStack<?, ?>> items,
+            int maxColumns,
+            int maxRows,
+            int activeIndex,
+            @Nullable GridInteraction interaction
+        ) implements Block {
+
+            public ItemGrid {
+                items = items == null ? List.of() : List.copyOf(items);
+                maxColumns = Math.max(1, maxColumns);
+                maxRows = Math.max(1, maxRows);
+            }
+
+            public boolean isInteractive() {
+                return interaction != null && !items.isEmpty();
+            }
+        }
+
         record FooterHint(Component hint) implements Block {}
+    }
+
+    /**
+     * JEI-style interaction hooks for an embedded {@link Block.ItemGrid} once the tooltip is pinned
+     * via {@code Shift}: supplies per-slot rich tooltips on hover and handles slot activation.
+     */
+    public interface GridInteraction {
+
+        @Nullable
+        OreUiRichTooltip tooltipForItem(int index, ContentStack<?, ?> item);
+
+        default void onItemClick(int index, ContentStack<?, ?> item) {}
+
+        default Component pinnedFooterHint(boolean scrollable) {
+            return Component.literal(
+                scrollable
+                    ? "Hover slot · Scroll · Click to filter"
+                    : "Hover slot to inspect · Click to filter"
+            );
+        }
     }
 
     private final Component title;
@@ -232,6 +272,19 @@ public final class OreUiRichTooltip {
         return title.getString().isEmpty() && blocks.isEmpty();
     }
 
+    public Block.@Nullable ItemGrid interactiveGrid() {
+        for (Block block : blocks) {
+            if (block instanceof Block.ItemGrid grid && grid.isInteractive()) {
+                return grid;
+            }
+        }
+        return null;
+    }
+
+    public boolean hasInteractiveGrid() {
+        return interactiveGrid() != null;
+    }
+
     public static final class Builder {
 
         private final Component title;
@@ -257,7 +310,7 @@ public final class OreUiRichTooltip {
             return this;
         }
 
-        public Builder icon(@Nullable ResourceKey resource) {
+        public Builder icon(@Nullable ComponentStackKey resource) {
             this.iconStack = CoPilotPaint.stackOf(resource, 1L);
             return this;
         }
@@ -374,6 +427,36 @@ public final class OreUiRichTooltip {
                 blocks.add(new Block.ItemList(heading, entries, maxVisible));
             }
             return this;
+        }
+
+        public Builder itemGrid(
+            @Nullable Component heading,
+            List<? extends ContentStack<?, ?>> items,
+            int maxColumns,
+            int maxRows,
+            int activeIndex,
+            @Nullable GridInteraction interaction
+        ) {
+            if (items != null && !items.isEmpty()) {
+                List<ContentStack<?, ?>> copy = new ArrayList<>(items.size());
+                for (ContentStack<?, ?> item : items) {
+                    if (item != null && !item.isEmpty()) {
+                        copy.add(item);
+                    }
+                }
+                if (!copy.isEmpty()) {
+                    blocks.add(new Block.ItemGrid(heading, copy, maxColumns, maxRows, activeIndex, interaction));
+                }
+            }
+            return this;
+        }
+
+        public Builder itemGrid(
+            @Nullable Component heading,
+            List<? extends ContentStack<?, ?>> items,
+            @Nullable GridInteraction interaction
+        ) {
+            return itemGrid(heading, items, 10, 4, -1, interaction);
         }
 
         public Builder footer(Component hint) {

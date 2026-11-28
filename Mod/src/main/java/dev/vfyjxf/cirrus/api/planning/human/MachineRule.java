@@ -1,12 +1,14 @@
 package dev.vfyjxf.cirrus.api.planning.human;
 
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+
 import java.util.Objects;
 
 public record MachineRule(
     String ruleId,
     GuidanceScope scope,
     RuleStrength strength,
-    String machineId,
+    MachineEntry machine,
     boolean willingToBuildNew
 ) implements GuidanceRule {
 
@@ -14,6 +16,6 @@ public record MachineRule(
         Objects.requireNonNull(ruleId, "ruleId");
         Objects.requireNonNull(scope, "scope");
         Objects.requireNonNull(strength, "strength");
-        Objects.requireNonNull(machineId, "machineId");
+        Objects.requireNonNull(machine, "machine");
     }
 }

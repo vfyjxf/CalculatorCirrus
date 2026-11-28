@@ -151,6 +151,10 @@ public final class CirrusLangs {
     public static final class Content {
         public static final LangEntry fluidContainer = ui("content.fluid_container");
         public static final LangEntry fluidContainerDesc = ui("content.fluid_container.desc");
+        public static final LangEntry durabilityCost = ui("content.durability_cost");
+        public static final LangEntry durabilityCostName = ui("content.durability_cost.name");
+        public static final LangEntry durabilityCostDesc = ui("content.durability_cost.desc");
+        public static final LangEntry durabilityCostUses = ui("content.durability_cost.uses");
 
         private Content() {}
     }
@@ -160,9 +164,14 @@ public final class CirrusLangs {
 
         public static final class Acquire {
             public static final LangEntry base = key("cirrus.acquire.base");
+            public static final LangEntry baseContract = key("cirrus.acquire.base_contract");
+            public static final LangEntry certifiedNatural = key("cirrus.acquire.certified_natural");
             public static final LangEntry costOverride = key("cirrus.acquire.cost_override");
             public static final LangEntry natural = key("cirrus.acquire.natural");
+            public static final LangEntry playerBase = key("cirrus.acquire.player_base");
             public static final LangEntry playerFree = key("cirrus.acquire.player_free");
+            public static final LangEntry rareNatural = key("cirrus.acquire.rare_natural");
+            public static final LangEntry spi = key("cirrus.acquire.spi");
             public static final LangEntry unknown = key("cirrus.acquire.unknown");
 
             private Acquire() {}
@@ -220,6 +229,88 @@ public final class CirrusLangs {
 
                 private Suspicious() {}
             }
+
+            public static final class MachineAvailability {
+                public static final LangEntry title = key("cirrus.prompt.machine_availability.title");
+                public static final LangEntry explanation = key("cirrus.prompt.machine_availability.explanation");
+                public static final LangEntry optionAlreadyOwned = key(
+                    "cirrus.prompt.machine_availability.option.already_owned"
+                );
+                public static final LangEntry optionAcceptBuild = key(
+                    "cirrus.prompt.machine_availability.option.accept_build"
+                );
+                public static final LangEntry optionRejectMachine = key(
+                    "cirrus.prompt.machine_availability.option.reject_machine"
+                );
+                public static final LangEntry optionSkipSystem = key(
+                    "cirrus.prompt.machine_availability.option.skip_system"
+                );
+
+                private MachineAvailability() {}
+            }
+
+            public static final class SupplyBoundary {
+                public static final LangEntry title = key("cirrus.prompt.supply_boundary.title");
+                public static final LangEntry explanation = key("cirrus.prompt.supply_boundary.explanation");
+                public static final LangEntry optionSetBase = key("cirrus.prompt.supply_boundary.option.set_base");
+                public static final LangEntry optionAvoidResource = key(
+                    "cirrus.prompt.supply_boundary.option.avoid_resource"
+                );
+                public static final LangEntry optionKeepCurrent = key(
+                    "cirrus.prompt.supply_boundary.option.keep_current"
+                );
+
+                private SupplyBoundary() {}
+            }
+
+            public static final class ReusableCatalyst {
+                public static final LangEntry title = key("cirrus.prompt.reusable_catalyst.title");
+                public static final LangEntry explanation = key("cirrus.prompt.reusable_catalyst.explanation");
+                public static final LangEntry optionAlreadyOwn = key(
+                    "cirrus.prompt.reusable_catalyst.option.already_own"
+                );
+                public static final LangEntry optionCraftWithPlan = key(
+                    "cirrus.prompt.reusable_catalyst.option.craft_with_plan"
+                );
+
+                private ReusableCatalyst() {}
+            }
+
+            public static final class TagDefault {
+                public static final LangEntry title = key("cirrus.prompt.tag_default.title");
+                public static final LangEntry explanation = key("cirrus.prompt.tag_default.explanation");
+                public static final LangEntry optionAnchorWorld = key(
+                    "cirrus.prompt.tag_default.option.anchor_world"
+                );
+
+                private TagDefault() {}
+            }
+
+            public static final class UnverifiedRecipe {
+                public static final LangEntry title = key("cirrus.prompt.unverified_recipe.title");
+                public static final LangEntry explanation = key("cirrus.prompt.unverified_recipe.explanation");
+                public static final LangEntry optionConfirmTrusted = key(
+                    "cirrus.prompt.unverified_recipe.option.confirm_trusted"
+                );
+                public static final LangEntry optionBanRecipe = key(
+                    "cirrus.prompt.unverified_recipe.option.ban_recipe"
+                );
+                public static final LangEntry optionBanSystem = key(
+                    "cirrus.prompt.unverified_recipe.option.ban_system"
+                );
+
+                private UnverifiedRecipe() {}
+            }
+
+            public static final class FieldTrip {
+                public static final LangEntry title = key("cirrus.prompt.field_trip.title");
+                public static final LangEntry explanation = key("cirrus.prompt.field_trip.explanation");
+                public static final LangEntry optionStayInBase = key("cirrus.prompt.field_trip.option.stay_in_base");
+                public static final LangEntry optionAlreadyBase = key("cirrus.prompt.field_trip.option.already_base");
+                public static final LangEntry optionAcceptTrip = key("cirrus.prompt.field_trip.option.accept_trip");
+
+                private FieldTrip() {}
+            }
         }
 
         public static final class Strategy {
@@ -229,6 +320,13 @@ public final class CirrusLangs {
             public static final LangEntry minRawMaterials = key("cirrus.strategy.min_raw_materials");
             public static final LangEntry investAutomation = key("cirrus.strategy.invest_automation");
             public static final LangEntry alternative = key("cirrus.strategy.alternative");
+            public static final LangEntry autoSmart = key("cirrus.strategy.auto_smart");
+            public static final LangEntry stayAtBase = key("cirrus.strategy.stay_at_base");
+            public static final LangEntry quickHandcraft = key("cirrus.strategy.quick_handcraft");
+            public static final LangEntry factoryScale = key("cirrus.strategy.factory_scale");
+            public static final LangEntry frugalMaterials = key("cirrus.strategy.frugal_materials");
+            public static final LangEntry lowCognitive = key("cirrus.strategy.low_cognitive");
+            public static final LangEntry alternativeBranch = key("cirrus.strategy.alternative_branch");
 
             private Strategy() {}
         }
@@ -511,7 +609,26 @@ public final class CirrusLangs {
             public static final LangEntry promptKindMachine = ui("workbench.copilot.prompt_kind.machine");
             public static final LangEntry promptKindTag = ui("workbench.copilot.prompt_kind.tag");
             public static final LangEntry promptKindLeaf = ui("workbench.copilot.prompt_kind.leaf");
+            public static final LangEntry promptKindCatalyst = ui("workbench.copilot.prompt_kind.catalyst");
+            public static final LangEntry promptKindTrip = ui("workbench.copilot.prompt_kind.trip");
             public static final LangEntry promptKindRecipe = ui("workbench.copilot.prompt_kind.recipe");
+            public static final LangEntry needGatherLine = ui("workbench.copilot.need_gather_line");
+            public static final LangEntry declareStockShort = ui("workbench.copilot.declare_stock_short");
+            public static final LangEntry tooltipChoiceBadge = ui("workbench.copilot.tooltip.choice_badge");
+            public static final LangEntry tooltipRuleScope = ui("workbench.copilot.tooltip.rule_scope");
+            public static final LangEntry tooltipScopeSession = ui("workbench.copilot.tooltip.scope_session");
+            public static final LangEntry tooltipScopeWorld = ui("workbench.copilot.tooltip.scope_world");
+            public static final LangEntry tooltipClickApply = ui("workbench.copilot.tooltip.click_apply");
+            public static final LangEntry tooltipScopeSessionTitle = ui("workbench.copilot.tooltip.scope_session_title");
+            public static final LangEntry tooltipScopeWorldTitle = ui("workbench.copilot.tooltip.scope_world_title");
+            public static final LangEntry tooltipScopeSessionBadge = ui("workbench.copilot.tooltip.scope_session_badge");
+            public static final LangEntry tooltipScopeWorldBadge = ui("workbench.copilot.tooltip.scope_world_badge");
+            public static final LangEntry tooltipScopeSessionDesc = ui("workbench.copilot.tooltip.scope_session_desc");
+            public static final LangEntry tooltipScopeWorldDesc = ui("workbench.copilot.tooltip.scope_world_desc");
+            public static final LangEntry tooltipScopeFooter = ui("workbench.copilot.tooltip.scope_footer");
+            public static final LangEntry tooltipStockBarTitle = ui("workbench.copilot.tooltip.stock_bar_title");
+            public static final LangEntry tooltipStockBarDesc = ui("workbench.copilot.tooltip.stock_bar_desc");
+            public static final LangEntry tooltipCardFooter = ui("workbench.copilot.tooltip.card_footer");
             public static final LangEntry tagSearchPlaceholder = ui("workbench.copilot.tag_search_placeholder");
             public static final LangEntry tagSelectHint = ui("workbench.copilot.tag_select_hint");
             public static final LangEntry tagNoMatch = ui("workbench.copilot.tag_no_match");
@@ -1065,6 +1182,8 @@ public final class CirrusLangs {
             public static final LangEntry pipelinePassThrough = ui("calculator.database.pipeline.pass_through");
             public static final LangEntry pipelineChanges = ui("calculator.database.pipeline.changes");
             public static final LangEntry pipelineBlocked = ui("calculator.database.pipeline.blocked");
+            public static final LangEntry pipelineAll = ui("calculator.database.pipeline.all");
+            public static final LangEntry pipelineAllChanges = ui("calculator.database.pipeline.all_changes");
         }
 
         public static final class Rules {
@@ -1680,6 +1799,10 @@ public final class CirrusLangs {
             Summary.specs,
             Content.fluidContainer,
             Content.fluidContainerDesc,
+            Content.durabilityCost,
+            Content.durabilityCostName,
+            Content.durabilityCostDesc,
+            Content.durabilityCostUses,
             Calculator.open,
             Calculator.Jei.Open.tooltip,
             Calculator.Jei.Target.tooltip,
@@ -1838,6 +1961,8 @@ public final class CirrusLangs {
             Calculator.Database.pipelinePassThrough,
             Calculator.Database.pipelineChanges,
             Calculator.Database.pipelineBlocked,
+            Calculator.Database.pipelineAll,
+            Calculator.Database.pipelineAllChanges,
             Calculator.Rules.empty,
             Calculator.Rules.sectionSummary,
             Calculator.Rules.sectionProfile,
@@ -2047,6 +2172,12 @@ public final class CirrusLangs {
             Planning.Prompt.TagChoice.title,
             Planning.Prompt.ExpensiveLeaf.title,
             Planning.Prompt.Suspicious.title,
+            Planning.Prompt.MachineAvailability.title,
+            Planning.Prompt.SupplyBoundary.title,
+            Planning.Prompt.ReusableCatalyst.title,
+            Planning.Prompt.TagDefault.title,
+            Planning.Prompt.UnverifiedRecipe.title,
+            Planning.Prompt.FieldTrip.title,
             Planning.Strategy.balanced,
             Workbench.Mode.planner,
             Workbench.Theme.obsidianBlueprint,

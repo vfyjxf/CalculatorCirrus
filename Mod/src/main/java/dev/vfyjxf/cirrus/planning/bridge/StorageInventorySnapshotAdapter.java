@@ -1,10 +1,10 @@
 package dev.vfyjxf.cirrus.planning.bridge;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.content.value.ContentVariant;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.InventoryTier;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageApi;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageSource;
@@ -42,7 +42,7 @@ public final class StorageInventorySnapshotAdapter {
     public static InventorySnapshot capture(
         @Nullable Player player,
         StockLedger reserved,
-        Set<ResourceKey> protectedFromGenericTags
+        Set<ComponentStackKey> protectedFromGenericTags
     ) {
         Objects.requireNonNull(reserved, "reserved");
         List<ItemStack> playerStacks = collectPlayerStacks(player);
@@ -75,19 +75,19 @@ public final class StorageInventorySnapshotAdapter {
         Iterable<ItemStack> playerStacks,
         Iterable<? extends StorageSource> storageProviders,
         StockLedger reserved,
-        Set<ResourceKey> protectedFromGenericTags
+        Set<ComponentStackKey> protectedFromGenericTags
     ) {
         Objects.requireNonNull(reserved, "reserved");
-        EnumMap<InventoryTier, Map<ResourceKey, Long>> byTier = new EnumMap<>(InventoryTier.class);
+        EnumMap<InventoryTier, Map<ComponentStackKey, Long>> byTier = new EnumMap<>(InventoryTier.class);
         EnumSet<InventoryTier> openTiers = EnumSet.of(InventoryTier.hand);
 
         if (playerStacks != null) {
-            Map<ResourceKey, Long> handMap = byTier.computeIfAbsent(InventoryTier.hand, k -> new HashMap<>());
+            Map<ComponentStackKey, Long> handMap = byTier.computeIfAbsent(InventoryTier.hand, k -> new HashMap<>());
             for (ItemStack stack : playerStacks) {
                 if (stack == null || stack.isEmpty() || stack.getCount() <= 0) {
                     continue;
                 }
-                CirrusContentBridge.toResourceKey(stack)
+                ComponentStackKey.fromItemStack(stack)
                         .ifPresent(key -> handMap.merge(key, (long) stack.getCount(), SafeMath::addSaturating));
             }
         }
@@ -105,7 +105,7 @@ public final class StorageInventorySnapshotAdapter {
                     if (source.accessibility().accessible() && tier == InventoryTier.network) {
                         openTiers.add(InventoryTier.network);
                     }
-                    Map<ResourceKey, Long> tierMap = byTier.computeIfAbsent(tier, k -> new HashMap<>());
+                    Map<ComponentStackKey, Long> tierMap = byTier.computeIfAbsent(tier, k -> new HashMap<>());
                     for (ContentVariant variant : source.contents()) {
                         if (!(variant instanceof ContentStack<?, ?> contentStack)) {
                             continue;
@@ -113,8 +113,8 @@ public final class StorageInventorySnapshotAdapter {
                         if (contentStack.isEmpty() || contentStack.amount() <= 0L) {
                             continue;
                         }
-                        CirrusContentBridge.toConcreteResourceKey(contentStack)
-                                .ifPresent(key -> tierMap.merge(key, contentStack.amount(), SafeMath::addSaturating));
+                        ComponentStackKey key = ComponentStackKey.ofNormalized(contentStack);
+                        tierMap.merge(key, contentStack.amount(), SafeMath::addSaturating);
                     }
                 } catch (RuntimeException | LinkageError ignored) {}
             }

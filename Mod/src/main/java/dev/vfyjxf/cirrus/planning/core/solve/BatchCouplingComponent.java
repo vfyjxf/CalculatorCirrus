@@ -1,13 +1,13 @@
 package dev.vfyjxf.cirrus.planning.core.solve;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 
 import java.util.List;
 import java.util.Objects;
 
 public record BatchCouplingComponent(
-    ResourceKey targetResource,
+    ComponentStackKey targetResource,
     long demand,
     List<CandidateRecipe> candidates,
     double seedUpperBoundCost

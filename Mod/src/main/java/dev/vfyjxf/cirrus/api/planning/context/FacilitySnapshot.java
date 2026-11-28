@@ -1,8 +1,10 @@
 package dev.vfyjxf.cirrus.api.planning.context;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
 import dev.vfyjxf.cirrus.api.planning.model.MachineCapabilityId;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -16,7 +18,7 @@ public record FacilitySnapshot(
     List<OwnedMachineGroup> ownedMachines,
     List<AutomatedLine> automatedLines,
     List<AutomatedRecipeCapability> automatedRecipes,
-    Set<String> unlockedSystems
+    Set<Namespace> unlockedSystems
 ) {
 
     public static final FacilitySnapshot empty = new FacilitySnapshot(List.of(), List.of(), List.of(), Set.of());
@@ -32,8 +34,8 @@ public record FacilitySnapshot(
         if (unlockedSystems.isEmpty()) {
             unlockedSystems = Set.of();
         } else {
-            TreeSet<String> sorted = new TreeSet<>();
-            for (String s : unlockedSystems) {
+            TreeSet<Namespace> sorted = new TreeSet<>();
+            for (Namespace s : unlockedSystems) {
                 sorted.add(Objects.requireNonNull(s));
             }
             unlockedSystems = Collections.unmodifiableSet(sorted);
@@ -51,18 +53,18 @@ public record FacilitySnapshot(
         return out;
     }
 
-    public int ownedCountOf(String machineId) {
-        Objects.requireNonNull(machineId, "machineId");
+    public int ownedCountOf(MachineEntry machine) {
+        Objects.requireNonNull(machine, "machine");
         int sum = 0;
         for (OwnedMachineGroup g : ownedMachines) {
-            if (g.machineId().equals(machineId)) {
+            if (g.machine().equals(machine)) {
                 sum += g.count();
             }
         }
         return sum;
     }
 
-    public List<AutomatedLine> automatedLinesFor(ResourceKey output) {
+    public List<AutomatedLine> automatedLinesFor(ComponentStackKey output) {
         Objects.requireNonNull(output, "output");
         List<AutomatedLine> out = new ArrayList<>();
         for (AutomatedLine line : automatedLines) {

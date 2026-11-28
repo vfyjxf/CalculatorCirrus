@@ -2,8 +2,8 @@ package dev.vfyjxf.cirrus.internal.integration.jei;
 
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.vfyjxf.cirrus.api.content.render.StackRenderer;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.config.ExecutionOverlayClientConfig;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
@@ -414,7 +414,7 @@ final class PlanFlowRenderHelper {
         int y,
         int w,
         int h,
-        @Nullable ResourceKey resource,
+        @Nullable ComponentStackKey resource,
         String expectedText,
         String missingText,
         double haveRatio,
@@ -457,7 +457,7 @@ final class PlanFlowRenderHelper {
         int y,
         int w,
         int h,
-        @Nullable ResourceKey resource,
+        @Nullable ComponentStackKey resource,
         String amountText,
         int accent,
         boolean done,
@@ -560,7 +560,7 @@ final class PlanFlowRenderHelper {
     @SuppressWarnings({"rawtypes", "unchecked"})
     static void renderContent(
         GuiGraphics g,
-        @Nullable ResourceKey resource,
+        @Nullable ComponentStackKey resource,
         int x,
         int y,
         int size,
@@ -581,7 +581,7 @@ final class PlanFlowRenderHelper {
             }
         }
         if (ValueTypeVisualRegistry.isValueResourceKey(resource)) {
-            drawValueEmblem(g, resource.contentTypeId(), x, y, size, p, theme);
+            drawValueEmblem(g, resource.contentTypeId().toString(), x, y, size, p, theme);
             return;
         }
         var fallback = JeiPlanBookmarkBridge.resolveDisplayStack(resource);
@@ -599,7 +599,7 @@ final class PlanFlowRenderHelper {
 
     static void drawSlotContent(
         GuiGraphics g,
-        @Nullable ResourceKey resource,
+        @Nullable ComponentStackKey resource,
         int slotX,
         int slotY,
         int slotSize,

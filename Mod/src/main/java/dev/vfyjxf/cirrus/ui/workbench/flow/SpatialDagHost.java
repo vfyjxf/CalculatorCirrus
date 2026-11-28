@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.state.DagLayoutMode;
 import dev.vfyjxf.cirrus.ui.workbench.state.DragPayload;
@@ -27,7 +27,7 @@ public interface SpatialDagHost {
 
     void onHoverStep(@Nullable String stepId);
 
-    void onHoverEdge(@Nullable String fromStepId, @Nullable String toStepId, @Nullable ResourceKey resource);
+    void onHoverEdge(@Nullable String fromStepId, @Nullable String toStepId, @Nullable ComponentStackKey resource);
 
     void onInlineBeaconClick(String promptId, String stepId);
 

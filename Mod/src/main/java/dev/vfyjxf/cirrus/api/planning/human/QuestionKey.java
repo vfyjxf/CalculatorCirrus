@@ -3,7 +3,7 @@ package dev.vfyjxf.cirrus.api.planning.human;
 import java.util.Objects;
 
 /**
- * Idempotent deduplication key for human prompts (M9.1):
+ * Idempotent deduplication key for human prompts:
  * ignores irrelevant inventory fluctuations and maps recipes sharing a capability to one key.
  */
 public record QuestionKey(

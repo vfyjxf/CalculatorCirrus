@@ -1,10 +1,11 @@
 package dev.vfyjxf.cirrus.api.planning.telemetry;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.cost.ObjectivePreset;
 import dev.vfyjxf.cirrus.api.planning.human.DecisionPromptKind;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.tag.CanonicalRecipeTag;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 
 import java.util.List;
 import java.util.Map;
@@ -35,7 +36,7 @@ public sealed interface PlanningTelemetryEvent permits
         long timestampEpochMs,
         String worldFingerprint,
         String packFingerprint,
-        ResourceKey primaryTarget,
+        ComponentStackKey primaryTarget,
         long targetAmount,
         ObjectivePreset preset,
         String chosenPlanId,
@@ -59,7 +60,7 @@ public sealed interface PlanningTelemetryEvent permits
         }
     }
 
-    /** 2. H1-H7 decision prompt interaction, chosen option, dismissal, and scope. */
+    /** 2. Decision prompt interaction, chosen option, dismissal, and scope. */
     record HumanDecisionEvent(
         String eventId,
         long timestampEpochMs,
@@ -93,7 +94,7 @@ public sealed interface PlanningTelemetryEvent permits
         String actionKind,
         int affectedRecipeCount,
         int orphanExemptedCount,
-        List<String> affectedSystemIds,
+        List<Namespace> affectedSystemIds,
         List<CanonicalRecipeTag> appliedTags,
         GuidanceScope scope
     ) implements PlanningTelemetryEvent {
@@ -137,7 +138,7 @@ public sealed interface PlanningTelemetryEvent permits
         String worldFingerprint,
         String packFingerprint,
         String recipeSemanticKey,
-        String systemId,
+        Namespace systemId,
         String conditionSignature,
         String adapterVersion,
         long batchesCompleted,

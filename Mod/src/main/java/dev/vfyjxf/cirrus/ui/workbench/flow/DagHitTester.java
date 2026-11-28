@@ -1,6 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.flow;
 
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.ui.workbench.layout.DagEdgeRoute;
 import dev.vfyjxf.cirrus.ui.workbench.layout.DagNodeBox;
 import dev.vfyjxf.cirrus.ui.workbench.state.DagEdgeStyle;
@@ -70,7 +70,13 @@ public final class DagHitTester {
         }
     }
 
-    public record InlineSlot(String stepId, SlotSide side, int index, RectF bounds, @Nullable ResourceKey resource) {}
+    public record InlineSlot(
+        String stepId,
+        SlotSide side,
+        int index,
+        RectF bounds,
+        @Nullable ComponentStackKey resource
+    ) {}
 
     public static @Nullable DagNodeBox nodeAt(double worldX, double worldY, List<DagNodeBox> nodes) {
         if (nodes == null || nodes.isEmpty()) {
@@ -116,7 +122,11 @@ public final class DagHitTester {
                 && worldY <= node.maxY();
     }
 
-    public static List<InlineSlot> inlineSlots(DagNodeBox node, List<ResourceKey> inputs, List<ResourceKey> outputs) {
+    public static List<InlineSlot> inlineSlots(
+        DagNodeBox node,
+        List<ComponentStackKey> inputs,
+        List<ComponentStackKey> outputs
+    ) {
         if (node == null) {
             return List.of();
         }

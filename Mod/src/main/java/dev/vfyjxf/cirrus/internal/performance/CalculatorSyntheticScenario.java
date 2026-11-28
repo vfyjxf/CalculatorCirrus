@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.internal.performance;
 
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentResource;
 import dev.vfyjxf.cirrus.api.content.value.ContentValue;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
@@ -10,7 +11,6 @@ import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeCatalogSnapshot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeRecord;
 import dev.vfyjxf.cirrus.api.planning.graph.RecipeAdvisory;
 import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.SlotMatchMode;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
@@ -24,6 +24,7 @@ import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.system.RoutingRecipeView;
+import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.core.graph.DefaultRecipeGraphCompiler;
 import dev.vfyjxf.cirrus.planning.core.graph.DefaultSystemAdmissionPolicy;
 import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
@@ -375,15 +376,17 @@ public final class CalculatorSyntheticScenario {
         RecipeEntry<SyntheticRecipe> target,
         ContentResource targetOutput
     ) {
-        public ResourceKey targetResourceKey() {
+        private static final Namespace syntheticContentType = Namespace.of("custom", "synthetic");
+
+        public ComponentStackKey targetResourceKey() {
             if (targetOutput instanceof ContentValue<?> value) {
-                return new ResourceKey("custom:synthetic", value.type().typeId().toString(), Optional.empty());
+                return OfflineContentTypes.bare(syntheticContentType, value.type().typeId().toString());
             }
-            return new ResourceKey("custom:synthetic", "bench:" + target.recipe().id(), Optional.empty());
+            return OfflineContentTypes.bare(syntheticContentType, "bench:" + target.recipe().id());
         }
 
         public CompiledRecipeGraph compileGraph() {
-            String sysId = system.systemId().toString();
+            Namespace sysId = system.systemId();
             List<RawRecipeRecord> records = new ArrayList<>();
             Map<Long, SystemAdmission> admissions = new HashMap<>();
             Map<Long, RecipeAdvisory> advisories = new HashMap<>();
@@ -392,24 +395,18 @@ public final class CalculatorSyntheticScenario {
                 List<RawIngredientSlot> ins = new ArrayList<>(recipe.inputs().size());
                 for (InputContent in : recipe.inputs()) {
                     if (in instanceof ValueContent<?> vc && vc.amount() > 0L) {
-                        ResourceKey key = new ResourceKey(
-                            "custom:synthetic",
-                            vc.type().typeId().toString(),
-                            Optional.empty()
-                        );
+                        ComponentStackKey key = OfflineContentTypes
+                                .bare(syntheticContentType, vc.type().typeId().toString());
                         ins.add(
-                            new RawIngredientSlot(Optional.empty(), List.of(key), vc.amount(), SlotMatchMode.identity)
+                            new RawIngredientSlot(Optional.empty(), List.of(key), vc.amount(), SlotMatchMode.identityOnly)
                         );
                     }
                 }
                 List<RawOutputSlot> outs = new ArrayList<>(recipe.outputs().size());
                 for (OutputContent out : recipe.outputs()) {
                     if (out instanceof ValueContent<?> vc && vc.amount() > 0L) {
-                        ResourceKey key = new ResourceKey(
-                            "custom:synthetic",
-                            vc.type().typeId().toString(),
-                            Optional.empty()
-                        );
+                        ComponentStackKey key = OfflineContentTypes
+                                .bare(syntheticContentType, vc.type().typeId().toString());
                         outs.add(new RawOutputSlot(key, vc.amount()));
                     }
                 }
@@ -421,7 +418,7 @@ public final class CalculatorSyntheticScenario {
                     new RawRecipeRecord(
                         sysId,
                         "custom",
-                        Optional.ofNullable(id).map(ResourceLocation::toString),
+                        Optional.ofNullable(id),
                         List.of(),
                         ins,
                         outs,

@@ -1,7 +1,7 @@
 package dev.vfyjxf.cirrus.api.planning.human;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.cost.CostVector;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 
 import java.util.Objects;
 
@@ -9,7 +9,7 @@ public record CostOverrideRule(
     String ruleId,
     GuidanceScope scope,
     RuleStrength strength,
-    ResourceKey resource,
+    ComponentStackKey resource,
     CostVector overrideUnitCost
 ) implements GuidanceRule {
 

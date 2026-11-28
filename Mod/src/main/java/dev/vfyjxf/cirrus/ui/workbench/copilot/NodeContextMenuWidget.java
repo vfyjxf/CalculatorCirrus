@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.copilot;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.human.ApplyRulesFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.CycleBreakRule;
 import dev.vfyjxf.cirrus.api.planning.human.DeclareOwnedMachineFeedback;
@@ -12,7 +13,7 @@ import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.SystemRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusUiSound;
@@ -27,8 +28,10 @@ import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import dev.vfyjxf.cloudlib.api.ui.floating.FloatingEffect;
 import dev.vfyjxf.cloudlib.api.ui.floating.FloatingPlacement;
 import dev.vfyjxf.cloudlib.api.ui.style.UIStyles;
+import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.data.lang.LangEntry;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -85,9 +88,9 @@ public class NodeContextMenuWidget extends Widget {
     private final List<Item> items;
     private final @Nullable String stepId;
     private final @Nullable CompiledRecipeKey recipeKey;
-    private final @Nullable ResourceKey resource;
-    private final @Nullable String machineId;
-    private final @Nullable String systemId;
+    private final @Nullable ComponentStackKey resource;
+    private final @Nullable MachineEntry machine;
+    private final @Nullable Namespace systemId;
     private boolean persistToWorld;
     private @Nullable Consumer<Action> commandSink;
     private @Nullable Widget scrim;
@@ -97,16 +100,16 @@ public class NodeContextMenuWidget extends Widget {
         MenuKind kind,
         @Nullable String stepId,
         @Nullable CompiledRecipeKey recipeKey,
-        @Nullable ResourceKey resource,
-        @Nullable String machineId,
-        @Nullable String systemId
+        @Nullable ComponentStackKey resource,
+        @Nullable MachineEntry machine,
+        @Nullable Namespace systemId
     ) {
         this.host = Objects.requireNonNull(host, "host");
         this.kind = Objects.requireNonNull(kind, "kind");
         this.stepId = stepId;
         this.recipeKey = recipeKey;
         this.resource = resource;
-        this.machineId = machineId;
+        this.machine = (machine != null && !machine.isEmpty()) ? machine : null;
         this.systemId = systemId == null && recipeKey != null ? recipeKey.systemId() : systemId;
         this.items = itemsFor(kind, subjectFor());
         useStyle(sizeOf(menuWidth, preferredHeight()), positionAbsolute(), UIStyles.zIndex(menuZ));
@@ -136,11 +139,11 @@ public class NodeContextMenuWidget extends Widget {
     }
 
     private String subjectFor() {
-        if (machineId != null) {
-            return machineId;
+        if (machine != null) {
+            return machine.contentKey().map(ComponentStackKey::displayId).orElse(machine.canonicalKey());
         }
         if (resource != null) {
-            return resource.shortString();
+            return resource.displayId();
         }
         if (recipeKey != null) {
             return recipeKey.shortString();
@@ -300,18 +303,18 @@ public class NodeContextMenuWidget extends Widget {
         }
         switch (action) {
             case declareOwned -> {
-                if (machineId == null) {
+                if (machine == null) {
                     return forward(action);
                 }
-                host.refine(new DeclareOwnedMachineFeedback(machineId, 1, persistToWorld), null);
+                host.refine(new DeclareOwnedMachineFeedback(machine, 1, persistToWorld), null);
                 close();
                 return true;
             }
             case declareOwnedMulti -> {
-                if (machineId == null) {
+                if (machine == null) {
                     return forward(action);
                 }
-                host.refine(new DeclareOwnedMachineFeedback(machineId, 2, persistToWorld), null);
+                host.refine(new DeclareOwnedMachineFeedback(machine, 2, persistToWorld), null);
                 close();
                 return true;
             }
@@ -382,13 +385,13 @@ public class NodeContextMenuWidget extends Widget {
             case banSystem -> systemId == null
                     ? null
                     : new SystemRule(scope, CoPilotDnd.scopeFor(persistToWorld), RuleStrength.hardBan, systemId, false);
-            case banMachine -> machineId == null
+            case banMachine -> machine == null
                     ? null
                     : new MachineRule(
                         scope,
                         CoPilotDnd.scopeFor(persistToWorld),
                         RuleStrength.hardBan,
-                        machineId,
+                        machine,
                         false
                     );
             case breakCycle -> resource == null || recipeKey == null
@@ -442,18 +445,21 @@ public class NodeContextMenuWidget extends Widget {
     }
 
     private @Nullable String namespaceOf() {
-        String id = resource != null
-                ? resource.resourceId()
-                : machineId != null
-                        ? machineId
-                        : systemId != null
-                                ? systemId
-                                : recipeKey != null ? recipeKey.explicitRecipeId().orElse(recipeKey.systemId()) : null;
-        if (id == null || id.isEmpty()) {
-            return null;
+        if (resource != null) {
+            return resource.namespace();
         }
-        int separator = id.indexOf(':');
-        return separator > 0 ? id.substring(0, separator) : id;
+        if (machine != null) {
+            return machine.contentKey().map(ComponentStackKey::namespace).orElse(null);
+        }
+        if (systemId != null) {
+            return systemId.namespace();
+        }
+        if (recipeKey != null) {
+            return recipeKey.explicitRecipeId()
+                    .map(ResourceLocation::getNamespace)
+                    .orElse(recipeKey.systemId().namespace());
+        }
+        return null;
     }
 
     public void showAt(Widget anchor) {

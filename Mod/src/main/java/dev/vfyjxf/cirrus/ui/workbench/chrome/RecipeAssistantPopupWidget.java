@@ -1,5 +1,6 @@
 package dev.vfyjxf.cirrus.ui.workbench.chrome;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.InputSlot;
@@ -17,11 +18,11 @@ import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.human.TagDefaultRule;
 import dev.vfyjxf.cirrus.api.planning.model.CompiledRecipeKey;
-import dev.vfyjxf.cirrus.api.planning.model.ResourceKey;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
 import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.CirrusUiSound;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchFormatters;
@@ -49,6 +50,7 @@ import dev.vfyjxf.cloudlib.api.math.Rect;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.canvas.SceneCanvas;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
@@ -123,14 +125,14 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
         String namespace
     ) {}
 
-    private record CatalogItemHit(Rect rect, ResourceKey resource) {}
+    private record CatalogItemHit(Rect rect, ComponentStackKey resource) {}
 
     private record GuidedOptionHit(Rect cardRect, Rect applyRect, int optionIndex) {}
 
     private final WorkbenchShellContext shellContext;
     private Mode mode = Mode.recipeCompare;
     private boolean open;
-    private @Nullable ResourceKey targetResource;
+    private @Nullable ComponentStackKey targetResource;
     private String searchQuery = "";
     private FilterMode filterMode = FilterMode.all;
     private SortMode sortMode = SortMode.balanced;
@@ -157,6 +159,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
     private @Nullable Rect guidedPrevRect;
     private @Nullable Rect guidedNextRect;
     private @Nullable Rect guidedSkipRect;
+    private @Nullable Rect searchFieldRect;
 
     public RecipeAssistantPopupWidget(WorkbenchShellContext shellContext) {
         this.shellContext = Objects.requireNonNull(shellContext, "shellContext");
@@ -267,10 +270,24 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
             return EventDispatch.consumed;
         });
         onMouseClick((input, clickCount, ctx) -> {
-            if (!open || !input.isLeftClick()) {
+            if (!open) {
                 return EventDispatch.pass;
             }
             var local = input.mouseRelative(this);
+            if (input.isRightClick()) {
+                if (searchFieldRect != null && searchFieldRect.contains(local.x(), local.y())) {
+                    if (!searchQuery.isEmpty()) {
+                        setSearchQuery("");
+                        CirrusUiSound.playClickSound();
+                    }
+                    ctx.consume();
+                    return EventDispatch.consumed;
+                }
+                return EventDispatch.pass;
+            }
+            if (!input.isLeftClick()) {
+                return EventDispatch.pass;
+            }
             if (handleClick(local.x(), local.y())) {
                 CirrusUiSound.playClickSound();
                 ctx.consume();
@@ -289,7 +306,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
         return mode;
     }
 
-    public void openFor(@Nullable ResourceKey resource) {
+    public void openFor(@Nullable ComponentStackKey resource) {
         if (resource == null) {
             return;
         }
@@ -324,7 +341,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
         this.catalogSelectedIndex = 0;
         this.scrollOffset = 0;
         this.pickerAmount = 1L;
-        List<ResourceKey> items = catalogItems();
+        List<ComponentStackKey> items = catalogItems();
         this.targetResource = items.isEmpty() ? null : items.get(0);
         this.open = true;
         this.openedAtMillis = System.currentTimeMillis();
@@ -365,7 +382,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
         return open;
     }
 
-    public @Nullable ResourceKey targetResource() {
+    public @Nullable ComponentStackKey targetResource() {
         return targetResource;
     }
 
@@ -377,11 +394,11 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
         this.pickerAmount = Math.max(1L, Math.min(999_999L, amount));
     }
 
-    public List<ResourceKey> catalogItems() {
+    public List<ComponentStackKey> catalogItems() {
         List<PaletteItem> items = CommandPaletteEngine.queryResources(searchQuery, shellContext.activeGraph(), 1000);
-        List<ResourceKey> out = new ArrayList<>(items.size());
+        List<ComponentStackKey> out = new ArrayList<>(items.size());
         for (PaletteItem item : items) {
-            ResourceKey res = switch (item.primaryAction()) {
+            ComponentStackKey res = switch (item.primaryAction()) {
                 case PaletteAction.SetTarget setTarget -> setTarget.resource();
                 case PaletteAction.AddToBasket add -> add.resource();
                 default -> item.iconResource();
@@ -408,9 +425,9 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
     }
 
     public boolean commitPickedTarget(boolean appendToBasket, @Nullable CompiledRecipeKey pinRecipeKey) {
-        ResourceKey chosen = targetResource;
+        ComponentStackKey chosen = targetResource;
         if (chosen == null) {
-            List<ResourceKey> items = catalogItems();
+            List<ComponentStackKey> items = catalogItems();
             if (items.isEmpty()) {
                 return false;
             }
@@ -468,7 +485,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
         if (followUp.isPresent()) {
             HumanFeedback rawFb = followUp.get();
             feedback = rawFb instanceof DeclareOwnedMachineFeedback owned
-                    ? new DeclareOwnedMachineFeedback(owned.machineId(), owned.ownedCount(), persistToWorld)
+                    ? new DeclareOwnedMachineFeedback(owned.machine(), owned.ownedCount(), persistToWorld)
                     : rawFb;
         } else {
             feedback = new AnswerPromptFeedback(prompt.raw().promptId(), option.raw().optionId(), persistToWorld);
@@ -496,7 +513,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
     }
 
     private void moveCatalogSelection(int delta) {
-        List<ResourceKey> items = catalogItems();
+        List<ComponentStackKey> items = catalogItems();
         if (items.isEmpty()) {
             catalogSelectedIndex = 0;
             targetResource = null;
@@ -533,7 +550,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
         if (mode == Mode.targetCatalogPicker) {
             this.catalogScroll = 0;
             this.catalogSelectedIndex = 0;
-            List<ResourceKey> items = catalogItems();
+            List<ComponentStackKey> items = catalogItems();
             this.targetResource = items.isEmpty() ? null : items.get(0);
         }
     }
@@ -578,17 +595,17 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
         WorkbenchUiSnapshot snapshot = shellContext.activeSnapshot();
         ProductionPlan plan = snapshot.selectedPlan().orElse(null);
         CompiledRecipeKey activeKey = activeRecipeFor(plan, graph, targetResource);
-        Set<String> provisionedMachines = provisionedMachinesOf(plan);
+        Set<MachineEntry> provisionedMachines = provisionedMachinesOf(plan);
         String needle = searchQuery.trim().toLowerCase(Locale.ROOT);
 
         List<RecipeEntryView> filtered = new ArrayList<>(raw.size());
         for (CompiledRecipe recipe : raw) {
-            boolean hand = recipe.machineRequirement().compatibleMachineIds().isEmpty();
-            String machineId = hand ? null : recipe.machineRequirement().compatibleMachineIds().get(0);
-            String machineName = hand ? "Hand / Crafting" : CoPilotPaint.machineName(null, machineId).getString();
-            String ns = recipe.key().explicitRecipeId().map(RecipeAssistantPopupWidget::namespaceOf)
-                    .orElse(namespaceOf(recipe.key().systemId()));
-            boolean needsMach = machineId != null && provisionedMachines.contains(machineId);
+            boolean hand = recipe.machineRequirement().compatibleMachines().isEmpty();
+            MachineEntry machine = hand ? null : recipe.machineRequirement().compatibleMachines().get(0);
+            String machineName = hand ? "Hand / Crafting" : CoPilotPaint.machineName(machine).getString();
+            String ns = recipe.key().explicitRecipeId().map(ResourceLocation::getNamespace)
+                    .orElse(recipe.key().systemId().namespace());
+            boolean needsMach = machine != null && provisionedMachines.contains(machine);
             boolean active = activeKey != null && activeKey.equals(recipe.key());
             long yield = recipe.outputs().isEmpty() ? 1L : Math.max(1L, recipe.outputs().get(0).amountPerBatch());
             int inCount = recipe.inputs().size();
@@ -834,7 +851,10 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
                         .badge(
                             view.active() ? "ACTIVE" : view.namespace().toUpperCase(Locale.ROOT),
                             view.active() ? OreUiRichTooltip.Tone.positive : OreUiRichTooltip.Tone.accent
-                        ).subtitle(view.recipe().key().explicitRecipeId().orElse(view.recipe().key().systemId()))
+                        ).subtitle(
+                            view.recipe().key().explicitRecipeId().map(ResourceLocation::toString)
+                                    .orElseGet(() -> view.recipe().key().systemId().toString())
+                        )
                         .itemFlow(Component.literal("Recipe Formula"), ins, outs)
                         .keyValue(
                             "Est. Work",
@@ -908,7 +928,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
             Math.max(60, w - 180),
             p.textPrimary()
         );
-        List<ResourceKey> items = catalogItems();
+        List<ComponentStackKey> items = catalogItems();
         ChromeText.drawFitted(
             canvas,
             Component.literal("Search any item (@mod supported) and pick its recipe directly in Planner"),
@@ -931,6 +951,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
 
         // Left pane: search field + scrollable full-catalog item list
         int searchH = 18;
+        searchFieldRect = new Rect(leftX, bodyTop, leftW, searchH);
         OreUiPaint.searchField(canvas, leftX, bodyTop, leftW, searchH, p, focused());
         String placeholder = "Search all items or @mod...";
         Component queryDisp = searchQuery.isEmpty() ? Component.literal(placeholder) : Component.literal(searchQuery);
@@ -966,7 +987,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
             );
         } else {
             for (int i = 0; i < visible && catalogScroll + i < items.size(); i++) {
-                ResourceKey res = items.get(catalogScroll + i);
+                ComponentStackKey res = items.get(catalogScroll + i);
                 int ry = listTop + 2 + i * rowH;
                 Rect r = new Rect(leftX + 2, ry, leftW - 4, rowH - 1);
                 catalogHits.add(new CatalogItemHit(r, res));
@@ -1155,6 +1176,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
         guidedSkipRect = null;
 
         List<ResolvedPrompt> prompts = guidedPrompts();
+        searchFieldRect = null;
         OreUiPaint.headerBand(canvas, 0, 0, w, headerHeight - 1, p, false);
         Rect close = closeRect();
         drawCloseButton(canvas, p, close, mouseX, mouseY);
@@ -1174,9 +1196,9 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
 
         int pIdx = Math.max(0, Math.min(prompts.size() - 1, guidedPromptIndex));
         ResolvedPrompt prompt = prompts.get(pIdx);
-        ResourceKey subjIcon = prompt.primaryResource() != null
+        ComponentStackKey subjIcon = prompt.primaryResource() != null
                 ? prompt.primaryResource()
-                : prompt.primaryMachineId() != null ? ResourceKey.item(prompt.primaryMachineId()) : null;
+                : prompt.primaryMachine() != null ? prompt.primaryMachine().contentKey().orElse(null) : null;
         CoPilotPaint
                 .renderSlotItem(canvas, subjIcon == null ? null : CoPilotPaint.stackOf(subjIcon, 1L), pad, 6, 20, p);
         Component title = Component.translatable(prompt.raw().titleKey());
@@ -1330,7 +1352,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
                             ? PromptCardWidget.PreviewKind.buildMachine
                             : PromptCardWidget.PreviewKind.ownMachine,
                     anchors,
-                    machineRule.machineId(),
+                    machineRule.machine(),
                     null,
                     null
                 );
@@ -1458,6 +1480,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
         sortRects.clear();
         int top = headerHeight + 4;
         int searchH = 18;
+        searchFieldRect = new Rect(pad, top, w - pad * 2, searchH);
         OreUiPaint.searchField(canvas, pad, top, w - pad * 2, searchH, p, focused());
         String placeholder = "Type to filter by ingredient, machine, or mod...";
         Component display = searchQuery.isEmpty() ? Component.literal(placeholder) : Component.literal(searchQuery);
@@ -1587,10 +1610,13 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
 
             int row1Y = card.y() + 5;
             int mx = card.x() + 7;
-            if (!view.handCraft() && !view.recipe().machineRequirement().compatibleMachineIds().isEmpty()) {
-                String mId = view.recipe().machineRequirement().compatibleMachineIds().get(0);
-                ChromeButtons.drawMiniItem(canvas, ResourceKey.item(mId), p, mx, row1Y, 12);
-                mx += 16;
+            if (!view.handCraft() && !view.recipe().machineRequirement().compatibleMachines().isEmpty()) {
+                ComponentStackKey machineKey = view.recipe().machineRequirement().compatibleMachines().get(0)
+                        .contentKey().orElse(null);
+                if (machineKey != null) {
+                    ChromeButtons.drawMiniItem(canvas, machineKey, p, mx, row1Y, 12);
+                    mx += 16;
+                }
             }
             Component machComp = Component.literal(view.machineName());
             ChromeText.drawFitted(canvas, machComp, mx, row1Y + 2, 130, p.textPrimary());
@@ -1781,8 +1807,8 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
             return true;
         }
         for (InputSlot in : recipe.inputs()) {
-            for (ResourceKey candidate : in.candidates()) {
-                if (candidate.resourceId().toLowerCase(Locale.ROOT).contains(needle)
+            for (ComponentStackKey candidate : in.candidates()) {
+                if (candidate.displayId().toLowerCase(Locale.ROOT).contains(needle)
                         || CoPilotPaint.resourceName(candidate).getString().toLowerCase(Locale.ROOT).contains(needle)) {
                     return true;
                 }
@@ -1799,7 +1825,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
         if (hand) {
             return 0.0;
         }
-        String sys = recipe.key().systemId().toLowerCase(Locale.ROOT);
+        String sys = recipe.key().systemId().toString().toLowerCase(Locale.ROOT);
         if (sys.contains("blast")) {
             return 5.0;
         }
@@ -1812,7 +1838,7 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
     private static @Nullable CompiledRecipeKey activeRecipeFor(
         @Nullable ProductionPlan plan,
         CompiledRecipeGraph graph,
-        ResourceKey target
+        ComponentStackKey target
     ) {
         if (plan == null) {
             return null;
@@ -1832,15 +1858,10 @@ public class RecipeAssistantPopupWidget extends Widget implements OreUiTooltipPr
         return null;
     }
 
-    private static Set<String> provisionedMachinesOf(@Nullable ProductionPlan plan) {
+    private static Set<MachineEntry> provisionedMachinesOf(@Nullable ProductionPlan plan) {
         if (plan == null) {
             return Set.of();
         }
         return Set.copyOf(plan.preparation().machinesToProvision().keySet());
-    }
-
-    private static String namespaceOf(String id) {
-        int colon = id.indexOf(':');
-        return colon > 0 ? id.substring(0, colon) : id;
     }
 }
