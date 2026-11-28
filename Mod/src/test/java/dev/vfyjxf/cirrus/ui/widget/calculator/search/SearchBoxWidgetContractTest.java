@@ -176,6 +176,32 @@ class SearchBoxWidgetContractTest {
     }
 
     @Test
+    void hitTestBeforeSuggestionPopupMountsDoesNotThrow() {
+        TestSearchBoxWidget widget = new TestSearchBoxWidget();
+        widget.suggestionSource(
+            (query, cursor, limit) -> List.of(new SearchSuggestion("apple", "apple", 0, query.length()))
+        );
+        WidgetGroup<Widget> root = new WidgetGroup<>();
+        root.useStyle(sizeOf(100, 100));
+        root.addWidget(widget);
+        Scene scene = new Scene(root);
+        scene.init();
+        scene.mount(SceneContext.create(testSceneHost()));
+        scene.stabilize();
+        widget.debugSetSize(80, 18);
+        scene.requestFocus(widget);
+        assertTrue(widget.focused());
+
+        widget.setText("a");
+        assertTrue(widget.debugSuggestionPopupOpen(), "the popup widget is created synchronously");
+        assertDoesNotThrow(() -> scene.hitTest(10, 10), "hover before the popup mounts must not throw");
+
+        scene.stabilize();
+        assertDoesNotThrow(() -> scene.hitTest(10, 10));
+        assertTrue(widget.debugSuggestionPopupOpen());
+    }
+
+    @Test
     void suggestionsUseFloatingLayerAbovePageControls() {
         assertEquals(2400, SearchBoxWidget.suggestionPopupZIndex());
         assertEquals(24, SearchBoxWidget.suggestionPopupHeightForCount(1));

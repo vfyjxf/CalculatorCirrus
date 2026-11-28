@@ -2,7 +2,6 @@ package dev.vfyjxf.cirrus.recipe;
 
 import com.google.common.collect.MapMaker;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
-import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
 import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolver;
 import dev.vfyjxf.cirrus.api.recipe.content.resolver.IngredientResolverType;
 import dev.vfyjxf.cirrus.api.recipe.filter.RecipeFilter;
@@ -16,6 +15,7 @@ import dev.vfyjxf.cirrus.api.recipe.system.ResolveError;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveResult;
 import dev.vfyjxf.cirrus.api.recipe.system.VanillaRecipeSystem;
 import dev.vfyjxf.cirrus.api.recipe.system.extension.RecipeResolverChain;
+import dev.vfyjxf.cirrus.recipe.lookup.RecipeLookupIndex;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.cloudlib.util.Checks;
 import mezz.jei.api.recipe.RecipeType;
@@ -65,7 +65,7 @@ public class RecipeApiImpl implements RecipeApi {
         Checks.checkNotNull(recipeApi, "recipeApi");
         instance = recipeApi;
         attachEpoch++;
-        dev.vfyjxf.cirrus.recipe.lookup.RecipeLookupIndex.invalidateAll();
+        RecipeLookupIndex.invalidateAll();
     }
 
     /**
@@ -93,7 +93,7 @@ public class RecipeApiImpl implements RecipeApi {
         if (canonicalInstance != null && canonicalInstance != current) {
             canonicalInstance.emptyContextResolutions.clear();
         }
-        dev.vfyjxf.cirrus.recipe.lookup.RecipeLookupIndex.invalidateAll();
+        RecipeLookupIndex.invalidateAll();
     }
 
     private final ImmutableMap<Namespace, RecipeSystem<?>> systems;
