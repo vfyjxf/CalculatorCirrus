@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * Discounted diagonal Laplace / online-Newton Bradley-Terry preference learner.
@@ -97,7 +98,7 @@ public final class OnlinePreferenceLearner {
         double sampleWeightA = 1.0 / numRej; // Total evidence per screen <= 1.0.
 
         // Collect touched feature dimensions and decay lazily to t.
-        Set<String> touched = new java.util.TreeSet<>(chosenFeatures.keySet());
+        Set<String> touched = new TreeSet<>(chosenFeatures.keySet());
         for (Map<String, Double> rej : rejectedFeaturesList) {
             touched.addAll(rej.keySet());
         }
@@ -137,11 +138,15 @@ public final class OnlinePreferenceLearner {
 
         // Diagonal online-Newton update with strict single-step |delta| <= d_h and |h| <= h_max.
         for (String feat : touched) {
-            DimState st = dims.get(feat);
-            double dNext = dPre.get(feat) + hessAcc.getOrDefault(feat, 0.0);
+            DimState st = Objects.requireNonNull(dims.get(feat), "dimension state");
+            double dNext = Objects.requireNonNull(dPre.get(feat), "prior precision")
+                    + hessAcc.getOrDefault(feat, 0.0);
             double rawStep = gradAcc.getOrDefault(feat, 0.0) / Math.max(defaultPriorPrecisionTau0, dNext);
             double clampedStep = Math.max(-defaultMaxSingleStepDh, Math.min(defaultMaxSingleStepDh, rawStep));
-            double hNext = Math.max(-defaultHMax, Math.min(defaultHMax, hPre.get(feat) + clampedStep));
+            double hNext = Math.max(
+                -defaultHMax,
+                Math.min(defaultHMax, Objects.requireNonNull(hPre.get(feat), "prior weight") + clampedStep)
+            );
             st.precisionD = dNext;
             st.weightH = hNext;
             st.naturalN = dNext * hNext;

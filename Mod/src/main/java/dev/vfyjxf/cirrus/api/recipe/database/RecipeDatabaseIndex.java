@@ -35,7 +35,6 @@ import dev.vfyjxf.cloudlib.api.util.Namespace;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import org.eclipse.collections.api.RichIterable;
-import org.eclipse.collections.api.factory.Lists;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

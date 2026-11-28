@@ -9,7 +9,6 @@ import dev.vfyjxf.cirrus.api.recipe.content.BatchableRecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContent;
-import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentRenderer;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentVisual;
 import dev.vfyjxf.cirrus.api.recipe.content.RecipeContentVisualCache;
 import dev.vfyjxf.cirrus.api.recipe.content.ValueContent;
@@ -2598,9 +2597,10 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             panel.addWidget(projectionView);
         }
 
-        boolean hasVisibleChanges = result != null && (showAll
-                ? !result.allChanges().isEmpty()
-                : (selected != null && selectedSummary != null && selectedSummary.hasChanges()));
+        boolean hasVisibleChanges = result != null
+                && (showAll
+                        ? !result.allChanges().isEmpty()
+                        : (selected != null && selectedSummary != null && selectedSummary.hasChanges()));
         if (!hasVisibleChanges || result == null) {
             panel.addWidget(
                 CirrusWrappedTextWidget.muted(CirrusLangs.Calculator.Database.effectsNone).padding(2).maxLines(2)
@@ -6534,12 +6534,13 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
                 this.hasChance = chance;
                 this.hasGuaranteed = proj != null && proj.hasTag(ProjectionKeys.Tags.guaranteedOutput);
                 this.hasPolicy = proj != null && !proj.localEffects().isEmpty();
-                this.hasDurability = proj != null && proj.inputs()
-                        .anySatisfy(
-                            s -> s.content() instanceof DurabilityContent
-                                    || s.attributes().has(ProjectionKeys.durabilityCost)
-                                    || s.tags().has(ProjectionKeys.Tags.durabilityTool)
-                        );
+                this.hasDurability = proj != null
+                        && proj.inputs()
+                                .anySatisfy(
+                                    s -> s.content() instanceof DurabilityContent
+                                            || s.attributes().has(ProjectionKeys.durabilityCost)
+                                            || s.tags().has(ProjectionKeys.Tags.durabilityTool)
+                                );
             }
 
             private int index() {
@@ -7119,7 +7120,8 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             Font font = canvas.font();
             List<String> titleLines = wrapLines(font, title, w);
             List<String> subLines = wrapLines(font, subtitle, w);
-            int needed = titleLines.size() * lineH + subLines.size() * lineH
+            int needed = titleLines.size() * lineH
+                    + subLines.size() * lineH
                     + (!titleLines.isEmpty() && !subLines.isEmpty() ? blockGap : 0);
             needed = Math.max(lineH, needed);
             if (laidOutWidth != w || needed != currentHeight) {
@@ -9809,7 +9811,8 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
     }
 
     private enum ViewMode {
-        grid(CirrusLangs.Calculator.Database.viewGrid, CirrusLangs.Calculator.Database.viewGridDesc), list(
+        grid(CirrusLangs.Calculator.Database.viewGrid, CirrusLangs.Calculator.Database.viewGridDesc),
+        list(
             CirrusLangs.Calculator.Database.viewList,
             CirrusLangs.Calculator.Database.viewListDesc
         );
@@ -9836,15 +9839,18 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
             CirrusLangs.Calculator.Database.sortRelevance,
             CirrusTextures.Icon.Calc.Sort.number,
             CirrusTextures.Icon.Calc.Sort.numberPressed
-        ), name(
+        ),
+        name(
             CirrusLangs.Calculator.Database.sortName,
             CirrusTextures.Icon.Calc.Sort.id,
             CirrusTextures.Icon.Calc.Sort.idPressed
-        ), database(
+        ),
+        database(
             CirrusLangs.Calculator.Database.sortDatabase,
             CirrusTextures.Icon.databaseUnselect,
             CirrusTextures.Icon.databaseSelect
-        ), system(
+        ),
+        system(
             CirrusLangs.Calculator.Database.sortSystem,
             CirrusTextures.Icon.contextUnselect,
             CirrusTextures.Icon.contextSelect
@@ -9874,7 +9880,8 @@ public final class DatabasePage extends CirrusScrollablePageWidget {
     }
 
     private enum SortDirection {
-        ascending(CirrusLangs.Calculator.Database.sortAscending), descending(
+        ascending(CirrusLangs.Calculator.Database.sortAscending),
+        descending(
             CirrusLangs.Calculator.Database.sortDescending
         );
 

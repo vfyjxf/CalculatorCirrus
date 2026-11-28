@@ -36,6 +36,7 @@ import dev.vfyjxf.cloudlib.api.ui.style.UIStyles;
 import net.minecraft.client.gui.Font;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -392,7 +393,7 @@ class DragPayloadDispatchTest {
 
     @Test
     void leftPlanDockCardsBoxIsScrollableWhenManyPlansOverflow() {
-        List<ProductionPlan> manyPlans = new java.util.ArrayList<>();
+        List<ProductionPlan> manyPlans = new ArrayList<>();
         for (int i = 0; i < 6; i++) {
             manyPlans.add(
                 plan("plan-" + i, "cirrus.strategy.balanced", List.of(), cost(10.0 + i * 5.0, 5.0 + i * 2.0, 1.0, 1.0, 1.0))

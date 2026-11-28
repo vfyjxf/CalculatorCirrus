@@ -30,6 +30,7 @@ public final class McBenchmarkBootstrap {
 
     private McBenchmarkBootstrap() {}
 
+    @SuppressWarnings("PMD.UnusedReturnValue")
     public static synchronized void ensureBootstrapped() {
         if (bootstrapped) return;
         installEmptyLoadingModList();

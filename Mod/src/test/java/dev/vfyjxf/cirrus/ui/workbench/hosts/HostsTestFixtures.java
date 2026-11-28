@@ -25,7 +25,6 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningSession;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;

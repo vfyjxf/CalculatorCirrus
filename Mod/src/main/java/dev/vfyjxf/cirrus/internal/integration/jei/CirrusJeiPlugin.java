@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.internal.integration.jei;
 
 import dev.vfyjxf.cirrus.CirrusConstants;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeLookup;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
 import dev.vfyjxf.cirrus.recipe.system.jei.JeiRecipeLayoutResolver;
 import dev.vfyjxf.cirrus.ui.execution.tooltip.JeiRecipeTooltipComponent;
@@ -96,11 +97,11 @@ public class CirrusJeiPlugin implements IModPlugin {
         recipeManager = runtime.getRecipeManager();
         ingredientManager = runtime.getIngredientManager();
         IJeiHelpers helpers = runtime.getJeiHelpers();
-        focusFactory = helpers == null ? null : helpers.getFocusFactory();
+        focusFactory = helpers.getFocusFactory();
         updateKnownRecipeTypes(recipeTypesOrEmpty(helpers));
         JeiRecipeTooltipComponent.clearLayoutCache();
         JeiRecipeLayoutResolver.clearIgnoredLayouts();
-        dev.vfyjxf.cirrus.api.recipe.system.RecipeLookup.invalidateCache();
+        RecipeLookup.invalidateCache();
         systemCatalog.rebuild(recipeManager);
         // the system catalog is final here; release anything that waited for the
         // full set (e.g. the client-lifecycle database index prewarm)
@@ -130,7 +131,7 @@ public class CirrusJeiPlugin implements IModPlugin {
             return List.of();
         }
         Stream<RecipeType<?>> recipeTypes = helpers.getAllRecipeTypes();
-        return recipeTypes == null ? List.of() : recipeTypes.toList();
+        return recipeTypes.toList();
     }
 
     private static void updateKnownRecipeTypes(List<RecipeType<?>> recipeTypes) {

@@ -1,5 +1,7 @@
 package dev.vfyjxf.cirrus.api.planning.tag;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * The 10 canonical, human-intuitive recipe tags used across tagging, JEI normalization,
  * batch filtering, analytics, and planning heuristics.
@@ -38,7 +40,7 @@ public enum CanonicalRecipeTag {
         return this == recycling;
     }
 
-    public static CanonicalRecipeTag fromIdOrNull(String id) {
+    public static @Nullable CanonicalRecipeTag fromIdOrNull(@Nullable String id) {
         if (id == null) {
             return null;
         }

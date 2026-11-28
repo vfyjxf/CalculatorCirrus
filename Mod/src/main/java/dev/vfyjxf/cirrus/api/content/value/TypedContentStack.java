@@ -2,10 +2,10 @@ package dev.vfyjxf.cirrus.api.content.value;
 
 import dev.vfyjxf.cirrus.api.CirrusTypes;
 import dev.vfyjxf.cirrus.api.content.ComponentCanonicalizer;
-import dev.vfyjxf.cirrus.api.content.ContentApi;
 import dev.vfyjxf.cirrus.api.content.type.ContentType;
 import dev.vfyjxf.cirrus.api.content.type.StackType;
 import dev.vfyjxf.cirrus.api.content.type.VariantType;
+import dev.vfyjxf.cirrus.content.ContentApiImpl;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -32,7 +32,7 @@ final class TypedContentStack<T, S> implements ContentStack<T, S> {
 
     TypedContentStack(StackType<T, S> type, long amount, S value) {
         this.type = type;
-        var api = dev.vfyjxf.cirrus.content.ContentApiImpl.instance();
+        var api = ContentApiImpl.instance();
         this.variantType = api != null
                 ? api.findVariantType(type, type.getContent(value))
                 : VariantType.fallback(type);

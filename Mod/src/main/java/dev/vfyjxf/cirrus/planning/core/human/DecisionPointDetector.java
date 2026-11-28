@@ -173,7 +173,8 @@ public final class DecisionPointDetector {
         }
         for (var entry : provisionedToSystem.entrySet()) {
             MachineEntry machine = entry.getKey();
-            @Nullable Namespace systemId = entry.getValue();
+            @Nullable
+            Namespace systemId = entry.getValue();
             if (isMachineAnswered(guidance, machine)) continue;
             MachineReadiness.Classification cls = readinessMap != null ? readinessMap.get(machine) : null;
             if (cls != null && cls.readiness() != MachineReadiness.heavyInvestment) {
@@ -193,8 +194,8 @@ public final class DecisionPointDetector {
             VoIEstimate voi = VoICounterfactualEngine.evaluateExact(
                 new double[]{0.5, 0.5},
                 new double[][]{
-                    {0.0, setupCost},
-                    {altCost, altCost}
+                        {0.0, setupCost},
+                        {altCost, altCost}
                 },
                 VoICounterfactualEngine.defaultAskCostSeconds,
                 queryScaleA
@@ -203,45 +204,55 @@ public final class DecisionPointDetector {
             CostVector delta = new CostVector(setupCost * 0.5, 0.0, 0.0, setupCost * 0.5, 0.0, 1.0);
 
             List<DecisionOption> options = new ArrayList<>(4);
-            options.add(new DecisionOption(
-                "already_owned",
-                "cirrus.prompt.machine_availability.option.already_owned",
-                delta,
-                List.of(),
-                Optional.of(new DeclareOwnedMachineFeedback(machine, 1, true))
-            ));
-            options.add(new DecisionOption(
-                "accept_build",
-                "cirrus.prompt.machine_availability.option.accept_build",
-                CostVector.zero,
-                List.of(new MachineRule("rule:build:" + machineKey, GuidanceScope.session, RuleStrength.softPrefer, machine, true))
-            ));
-            options.add(new DecisionOption(
-                "reject_machine",
-                "cirrus.prompt.machine_availability.option.reject_machine",
-                CostVector.zero,
-                List.of(new MachineRule("rule:nobuild:" + machineKey, GuidanceScope.worldSave, RuleStrength.hardBan, machine, false))
-            ));
-            if (systemId != null) {
-                options.add(new DecisionOption(
-                    "skip_system",
-                    "cirrus.prompt.machine_availability.option.skip_system",
+            options.add(
+                new DecisionOption(
+                    "already_owned",
+                    "cirrus.prompt.machine_availability.option.already_owned",
+                    delta,
+                    List.of(),
+                    Optional.of(new DeclareOwnedMachineFeedback(machine, 1, true))
+                )
+            );
+            options.add(
+                new DecisionOption(
+                    "accept_build",
+                    "cirrus.prompt.machine_availability.option.accept_build",
                     CostVector.zero,
-                    List.of(new SystemRule("rule:skip_sys:" + systemId, GuidanceScope.worldSave, RuleStrength.softPenalize, systemId, false))
-                ));
+                    List.of(new MachineRule("rule:build:" + machineKey, GuidanceScope.session, RuleStrength.softPrefer, machine, true))
+                )
+            );
+            options.add(
+                new DecisionOption(
+                    "reject_machine",
+                    "cirrus.prompt.machine_availability.option.reject_machine",
+                    CostVector.zero,
+                    List.of(new MachineRule("rule:nobuild:" + machineKey, GuidanceScope.worldSave, RuleStrength.hardBan, machine, false))
+                )
+            );
+            if (systemId != null) {
+                options.add(
+                    new DecisionOption(
+                        "skip_system",
+                        "cirrus.prompt.machine_availability.option.skip_system",
+                        CostVector.zero,
+                        List.of(new SystemRule("rule:skip_sys:" + systemId, GuidanceScope.worldSave, RuleStrength.softPenalize, systemId, false))
+                    )
+                );
             }
             QuestionKey qKey = new QuestionKey(DecisionPromptKind.machineAvailability, machineKey, GuidanceScope.worldSave, 0L);
-            mergeBest(out, new DecisionPrompt(
-                promptId,
-                qKey,
-                DecisionPromptKind.machineAvailability,
-                "cirrus.prompt.machine_availability.title",
-                "cirrus.prompt.machine_availability.explanation",
-                leverage,
-                voi,
-                GuidanceScope.worldSave,
-                List.copyOf(options)
-            ));
+            mergeBest(
+                out, new DecisionPrompt(
+                    promptId,
+                    qKey,
+                    DecisionPromptKind.machineAvailability,
+                    "cirrus.prompt.machine_availability.title",
+                    "cirrus.prompt.machine_availability.explanation",
+                    leverage,
+                    voi,
+                    GuidanceScope.worldSave,
+                    List.copyOf(options)
+                )
+            );
         }
     }
 
@@ -277,8 +288,8 @@ public final class DecisionPointDetector {
             VoIEstimate voi = VoICounterfactualEngine.evaluateExact(
                 new double[]{0.45, 0.55},
                 new double[][]{
-                    {1.0, stepSec},
-                    {stepSec * 0.7, stepSec * 0.7}
+                        {1.0, stepSec},
+                        {stepSec * 0.7, stepSec * 0.7}
                 },
                 VoICounterfactualEngine.defaultAskCostSeconds,
                 queryScaleA
@@ -304,17 +315,19 @@ public final class DecisionPointDetector {
                 )
             );
             QuestionKey qKey = new QuestionKey(DecisionPromptKind.baseOrSupplyBoundary, resKey, GuidanceScope.worldSave, 0L);
-            mergeBest(out, new DecisionPrompt(
-                promptId,
-                qKey,
-                DecisionPromptKind.baseOrSupplyBoundary,
-                "cirrus.prompt.supply_boundary.title",
-                "cirrus.prompt.supply_boundary.explanation",
-                SafeMath.clamp01(share),
-                voi,
-                GuidanceScope.worldSave,
-                options
-            ));
+            mergeBest(
+                out, new DecisionPrompt(
+                    promptId,
+                    qKey,
+                    DecisionPromptKind.baseOrSupplyBoundary,
+                    "cirrus.prompt.supply_boundary.title",
+                    "cirrus.prompt.supply_boundary.explanation",
+                    SafeMath.clamp01(share),
+                    voi,
+                    GuidanceScope.worldSave,
+                    options
+                )
+            );
         }
     }
 
@@ -339,8 +352,8 @@ public final class DecisionPointDetector {
                 VoIEstimate voi = VoICounterfactualEngine.evaluateExact(
                     new double[]{0.5, 0.5},
                     new double[][]{
-                        {0.0, 30.0},
-                        {18.0, 18.0}
+                            {0.0, 30.0},
+                            {18.0, 18.0}
                     },
                     VoICounterfactualEngine.defaultAskCostSeconds,
                     queryScaleA
@@ -360,17 +373,19 @@ public final class DecisionPointDetector {
                     )
                 );
                 QuestionKey qKey = new QuestionKey(DecisionPromptKind.reusableCatalystCheck, resKey, GuidanceScope.worldSave, 0L);
-                mergeBest(out, new DecisionPrompt(
-                    promptId,
-                    qKey,
-                    DecisionPromptKind.reusableCatalystCheck,
-                    "cirrus.prompt.reusable_catalyst.title",
-                    "cirrus.prompt.reusable_catalyst.explanation",
-                    0.60,
-                    voi,
-                    GuidanceScope.worldSave,
-                    options
-                ));
+                mergeBest(
+                    out, new DecisionPrompt(
+                        promptId,
+                        qKey,
+                        DecisionPromptKind.reusableCatalystCheck,
+                        "cirrus.prompt.reusable_catalyst.title",
+                        "cirrus.prompt.reusable_catalyst.explanation",
+                        0.60,
+                        voi,
+                        GuidanceScope.worldSave,
+                        options
+                    )
+                );
             }
         }
     }
@@ -417,8 +432,8 @@ public final class DecisionPointDetector {
                 VoIEstimate voi = VoICounterfactualEngine.evaluateExact(
                     new double[]{0.5, 0.5},
                     new double[][]{
-                        {0.0, 8.0},
-                        {8.0, 0.0}
+                            {0.0, 8.0},
+                            {8.0, 0.0}
                     },
                     VoICounterfactualEngine.defaultAskCostSeconds,
                     queryScaleA
@@ -426,25 +441,29 @@ public final class DecisionPointDetector {
                 List<DecisionOption> options = new ArrayList<>(picks.size());
                 int idx = 0;
                 for (ComponentStackKey member : picks) {
-                    options.add(new DecisionOption(
-                        "pick_" + idx++ + ":" + member.canonicalKey(),
-                        "cirrus.prompt.tag_default.option.anchor_world",
-                        CostVector.zero,
-                        List.of(new TagDefaultRule("rule:tag:" + tagStr, GuidanceScope.worldSave, RuleStrength.hardPin, tag, member))
-                    ));
+                    options.add(
+                        new DecisionOption(
+                            "pick_" + idx++ + ":" + member.canonicalKey(),
+                            "cirrus.prompt.tag_default.option.anchor_world",
+                            CostVector.zero,
+                            List.of(new TagDefaultRule("rule:tag:" + tagStr, GuidanceScope.worldSave, RuleStrength.hardPin, tag, member))
+                        )
+                    );
                 }
                 QuestionKey qKey = new QuestionKey(DecisionPromptKind.materialFamilyAnchor, tagStr, GuidanceScope.worldSave, 0L);
-                mergeBest(out, new DecisionPrompt(
-                    promptId,
-                    qKey,
-                    DecisionPromptKind.materialFamilyAnchor,
-                    "cirrus.prompt.tag_default.title",
-                    "cirrus.prompt.tag_default.explanation",
-                    leverage,
-                    voi,
-                    GuidanceScope.worldSave,
-                    options
-                ));
+                mergeBest(
+                    out, new DecisionPrompt(
+                        promptId,
+                        qKey,
+                        DecisionPromptKind.materialFamilyAnchor,
+                        "cirrus.prompt.tag_default.title",
+                        "cirrus.prompt.tag_default.explanation",
+                        leverage,
+                        voi,
+                        GuidanceScope.worldSave,
+                        options
+                    )
+                );
             }
         }
     }
@@ -470,8 +489,8 @@ public final class DecisionPointDetector {
             VoIEstimate voi = VoICounterfactualEngine.evaluateExact(
                 new double[]{0.4, 0.6},
                 new double[][]{
-                    {0.0, 40.0},
-                    {15.0, 15.0}
+                        {0.0, 40.0},
+                        {15.0, 15.0}
                 },
                 VoICounterfactualEngine.defaultAskCostSeconds,
                 queryScaleA
@@ -498,17 +517,19 @@ public final class DecisionPointDetector {
                 )
             );
             QuestionKey qKey = new QuestionKey(DecisionPromptKind.suspiciousJeiVerify, rec.key().shortString(), GuidanceScope.modpackDefault, 0L);
-            mergeBest(out, new DecisionPrompt(
-                promptId,
-                qKey,
-                DecisionPromptKind.suspiciousJeiVerify,
-                "cirrus.prompt.unverified_recipe.title",
-                "cirrus.prompt.unverified_recipe.explanation",
-                rec.isSuspiciousJei() ? 0.85 : 0.55,
-                voi,
-                GuidanceScope.modpackDefault,
-                options
-            ));
+            mergeBest(
+                out, new DecisionPrompt(
+                    promptId,
+                    qKey,
+                    DecisionPromptKind.suspiciousJeiVerify,
+                    "cirrus.prompt.unverified_recipe.title",
+                    "cirrus.prompt.unverified_recipe.explanation",
+                    rec.isSuspiciousJei() ? 0.85 : 0.55,
+                    voi,
+                    GuidanceScope.modpackDefault,
+                    options
+                )
+            );
         }
     }
 
@@ -536,8 +557,8 @@ public final class DecisionPointDetector {
             VoIEstimate voi = VoICounterfactualEngine.evaluateExact(
                 new double[]{0.5, 0.5},
                 new double[][]{
-                    {tripSec, tripSec * 3.0},
-                    {tripSec * 1.6, tripSec * 1.6}
+                        {tripSec, tripSec * 3.0},
+                        {tripSec * 1.6, tripSec * 1.6}
                 },
                 VoICounterfactualEngine.defaultAskCostSeconds,
                 queryScaleA
@@ -563,17 +584,19 @@ public final class DecisionPointDetector {
                 )
             );
             QuestionKey qKey = new QuestionKey(DecisionPromptKind.fieldTripConfirm, resKey, GuidanceScope.worldSave, 0L);
-            mergeBest(out, new DecisionPrompt(
-                promptId,
-                qKey,
-                DecisionPromptKind.fieldTripConfirm,
-                "cirrus.prompt.field_trip.title",
-                "cirrus.prompt.field_trip.explanation",
-                SafeMath.clamp01(tripSec / totalActive),
-                voi,
-                GuidanceScope.worldSave,
-                options
-            ));
+            mergeBest(
+                out, new DecisionPrompt(
+                    promptId,
+                    qKey,
+                    DecisionPromptKind.fieldTripConfirm,
+                    "cirrus.prompt.field_trip.title",
+                    "cirrus.prompt.field_trip.explanation",
+                    SafeMath.clamp01(tripSec / totalActive),
+                    voi,
+                    GuidanceScope.worldSave,
+                    options
+                )
+            );
         }
     }
 

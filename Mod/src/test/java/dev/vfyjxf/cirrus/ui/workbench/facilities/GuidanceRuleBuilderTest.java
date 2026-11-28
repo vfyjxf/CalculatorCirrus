@@ -241,35 +241,43 @@ class GuidanceRuleBuilderTest {
         List<GuidanceRule> rules = new ArrayList<>();
         rules.add(new RecipeRule("ui/recipe", scope, RuleStrength.hardBan, packIron));
         rules.add(new SystemRule("ui/system", scope, RuleStrength.softPrefer, ae2Charger, true));
-        rules.add(new MachineRule(
-            "ui/machine",
-            scope,
-            RuleStrength.softPenalize,
-            MachineEntry.fromItemStack(new ItemStack(Items.FURNACE)),
-            false
-        ));
+        rules.add(
+            new MachineRule(
+                "ui/machine",
+                scope,
+                RuleStrength.softPenalize,
+                MachineEntry.fromItemStack(new ItemStack(Items.FURNACE)),
+                false
+            )
+        );
         rules.add(new ResourceRule("ui/resource", scope, RuleStrength.hardPin, ComponentStackKey.ofItem(Items.IRON_INGOT), true));
-        rules.add(new TagDefaultRule(
-            "ui/tag",
-            scope,
-            RuleStrength.softPrefer,
-            logsTag,
-            ComponentStackKey.ofItem(Items.OAK_LOG)
-        ));
-        rules.add(new CycleBreakRule(
-            "ui/cycle",
-            scope,
-            RuleStrength.hardBan,
-            ComponentStackKey.ofItem(Items.IRON_INGOT),
-            smeltIron
-        ));
-        rules.add(new CostOverrideRule(
-            "ui/cost",
-            scope,
-            RuleStrength.softPenalize,
-            ComponentStackKey.ofItem(Items.IRON_INGOT),
-            unitCost
-        ));
+        rules.add(
+            new TagDefaultRule(
+                "ui/tag",
+                scope,
+                RuleStrength.softPrefer,
+                logsTag,
+                ComponentStackKey.ofItem(Items.OAK_LOG)
+            )
+        );
+        rules.add(
+            new CycleBreakRule(
+                "ui/cycle",
+                scope,
+                RuleStrength.hardBan,
+                ComponentStackKey.ofItem(Items.IRON_INGOT),
+                smeltIron
+            )
+        );
+        rules.add(
+            new CostOverrideRule(
+                "ui/cost",
+                scope,
+                RuleStrength.softPenalize,
+                ComponentStackKey.ofItem(Items.IRON_INGOT),
+                unitCost
+            )
+        );
         rules.add(new ModNamespaceRule("ui/mod", scope, RuleStrength.hardBan, "create"));
         return rules;
     }

@@ -2477,11 +2477,25 @@ public class SpatialDagCanvasWidget extends CompositeWidget<Widget> implements O
     }
 
     public enum CapsuleAction {
-        viewDag(true), viewLedger(true), viewChecklist(true), layoutLr(true), layoutTb(true), layoutRl(true), layoutBt(
+        viewDag(true),
+        viewLedger(true),
+        viewChecklist(true),
+        layoutLr(true),
+        layoutTb(true),
+        layoutRl(true),
+        layoutBt(
             true
-        ), layoutSwimlane(true), edgeOrthogonal(
+        ),
+        layoutSwimlane(true),
+        edgeOrthogonal(
             true
-        ), edgeStraight(true), edgeCurved(true), fit(true), zoomReadout(false), autoLayout(true), viewMenu(true);
+        ),
+        edgeStraight(true),
+        edgeCurved(true),
+        fit(true),
+        zoomReadout(false),
+        autoLayout(true),
+        viewMenu(true);
 
         private final boolean interactive;
 

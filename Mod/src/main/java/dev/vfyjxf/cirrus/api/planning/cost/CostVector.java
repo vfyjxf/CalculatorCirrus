@@ -49,12 +49,12 @@ public record CostVector(
 
     public double[] asArray() {
         return new double[]{
-            humanActiveSeconds,
-            tripActiveSeconds,
-            passiveWaitSeconds,
-            machineSetupCapital,
-            materialScarcity,
-            cognitiveFriction
+                humanActiveSeconds,
+                tripActiveSeconds,
+                passiveWaitSeconds,
+                machineSetupCapital,
+                materialScarcity,
+                cognitiveFriction
         };
     }
 

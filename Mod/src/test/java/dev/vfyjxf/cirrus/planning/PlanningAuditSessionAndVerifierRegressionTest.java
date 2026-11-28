@@ -461,10 +461,10 @@ class PlanningAuditSessionAndVerifierRegressionTest {
 
     private static CompiledRecipe recipeByPath(CompiledRecipeGraph graph, ComponentStackKey output, String recipePath) {
         return graph.producersOf(output)
-            .stream()
-            .filter(recipe -> recipe.key().explicitRecipeId().map(id -> id.getPath().equals(recipePath)).orElse(false))
-            .findFirst()
-            .orElseThrow();
+                .stream()
+                .filter(recipe -> recipe.key().explicitRecipeId().map(id -> id.getPath().equals(recipePath)).orElse(false))
+                .findFirst()
+                .orElseThrow();
     }
 
     private static CraftStep craftStep(

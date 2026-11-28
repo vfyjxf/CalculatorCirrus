@@ -9,7 +9,6 @@ import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipe;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
 import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeRecord;
 import dev.vfyjxf.cirrus.api.planning.graph.SystemAdmission;
-import dev.vfyjxf.cirrus.planning.core.graph.DefaultSystemAdmissionPolicy;
 import dev.vfyjxf.cirrus.api.planning.human.AnswerPromptFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.ApplyRulesFeedback;
 import dev.vfyjxf.cirrus.api.planning.human.CostOverrideRule;
@@ -39,6 +38,7 @@ import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningSession;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
 import dev.vfyjxf.cirrus.planning.core.cost.DefaultCostMetadataProvider;
+import dev.vfyjxf.cirrus.planning.core.graph.DefaultSystemAdmissionPolicy;
 import dev.vfyjxf.cirrus.planning.core.human.ConflictMinimalCutDiagnoser;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.planning.core.human.LayeredHumanGuidanceStore;
@@ -183,7 +183,8 @@ class HumanGuidanceAndSessionTest {
             PlanningResult r0 = session.currentResult();
             assertEquals(
                 Set.of(machine("mod:presser")),
-                r0.paretoPlans().get(0).preparation().machinesToProvision().keySet());
+                r0.paretoPlans().get(0).preparation().machinesToProvision().keySet()
+            );
 
             PlanningResult r1 = session.refine(new DeclareOwnedMachineFeedback(machine("mod:presser"), 1, true));
             assertTrue(r1.paretoPlans().get(0).preparation().machinesToProvision().isEmpty());
@@ -254,7 +255,8 @@ class HumanGuidanceAndSessionTest {
             List.of(
                 new RecipeRule("ban_only", GuidanceScope.session, RuleStrength.hardBan, only.key()),
                 new SystemRule(
-                    "irrel", GuidanceScope.session, RuleStrength.hardBan, Namespace.parse("mod:unused"), false)
+                    "irrel", GuidanceScope.session, RuleStrength.hardBan, Namespace.parse("mod:unused"), false
+                )
             )
         );
         assertEquals(PlanningStatus.infeasibleByHumanRules, single.status());
@@ -278,7 +280,8 @@ class HumanGuidanceAndSessionTest {
                 new RecipeRule("ban_1", GuidanceScope.session, RuleStrength.hardBan, r1.key()),
                 new RecipeRule("ban_2", GuidanceScope.session, RuleStrength.hardBan, r2.key()),
                 new SystemRule(
-                    "ban_unused", GuidanceScope.session, RuleStrength.hardBan, Namespace.parse("mod:s3"), false)
+                    "ban_unused", GuidanceScope.session, RuleStrength.hardBan, Namespace.parse("mod:s3"), false
+                )
             )
         );
         assertEquals(PlanningStatus.infeasibleByHumanRules, joint.status());
@@ -378,8 +381,11 @@ class HumanGuidanceAndSessionTest {
             1L,
             InventorySnapshot.empty,
             fac(ownedCraftingTable()),
-            List.of(new SystemRule(
-                    "h_sys", GuidanceScope.session, RuleStrength.hardBan, Namespace.parse("minecraft:crafting"), false))
+            List.of(
+                new SystemRule(
+                    "h_sys", GuidanceScope.session, RuleStrength.hardBan, Namespace.parse("minecraft:crafting"), false
+                )
+            )
         );
 
         // 3. MachineRule HARD_BAN

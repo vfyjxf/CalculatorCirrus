@@ -7,11 +7,13 @@ import java.util.List;
 import java.util.Set;
 
 public enum ProgressionPreset {
-    overworld("overworld", List.of(), List.of("minecraft:overworld")), nether(
+    overworld("overworld", List.of(), List.of("minecraft:overworld")),
+    nether(
         "nether",
         List.of("minecraft:nether"),
         List.of("minecraft:overworld", "minecraft:the_nether")
-    ), theEnd(
+    ),
+    theEnd(
         "the_end",
         List.of("minecraft:nether", "minecraft:the_end"),
         List.of("minecraft:overworld", "minecraft:the_nether", "minecraft:the_end")

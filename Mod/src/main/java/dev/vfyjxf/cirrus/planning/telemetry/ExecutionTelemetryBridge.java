@@ -2,10 +2,10 @@ package dev.vfyjxf.cirrus.planning.telemetry;
 
 import dev.vfyjxf.cirrus.api.planning.telemetry.ExecutionFailureCategory;
 import dev.vfyjxf.cirrus.api.planning.telemetry.PlanningTelemetryEvent;
-import dev.vfyjxf.cirrus.util.CirrusNamespaces;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionSession;
 import dev.vfyjxf.cirrus.api.recipe.execution.ExecutionTelemetrySnapshot;
 import dev.vfyjxf.cirrus.api.recipe.execution.PauseReason;
+import dev.vfyjxf.cirrus.util.CirrusNamespaces;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
 import org.jspecify.annotations.Nullable;
 
@@ -54,7 +54,7 @@ public final class ExecutionTelemetryBridge {
         );
     }
 
-    public static ExecutionFailureCategory classifyPauseReason(PauseReason reason) {
+    public static ExecutionFailureCategory classifyPauseReason(@Nullable PauseReason reason) {
         if (reason == null || reason.key() == null || reason.key().id() == null) {
             return ExecutionFailureCategory.other;
         }

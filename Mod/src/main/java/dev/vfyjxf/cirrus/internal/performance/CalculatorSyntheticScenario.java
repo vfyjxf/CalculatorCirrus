@@ -376,7 +376,7 @@ public final class CalculatorSyntheticScenario {
         RecipeEntry<SyntheticRecipe> target,
         ContentResource targetOutput
     ) {
-        private static final Namespace syntheticContentType = Namespace.of("custom", "synthetic");
+        private static final Namespace syntheticContentType = Namespace.of("custom", "synthetic"); // NOPMD
 
         public ComponentStackKey targetResourceKey() {
             if (targetOutput instanceof ContentValue<?> value) {

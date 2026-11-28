@@ -20,7 +20,7 @@ public record VanillaBrewingRecipe(
     int brewingTicks,
     boolean vanillaMix
 ) {
-    public static final int DEFAULT_BREWING_TICKS = 400;
+    public static final int defaultBrewingTicks = 400;
 
     public VanillaBrewingRecipe {
         Checks.checkNotNull(id, "id");

@@ -229,8 +229,9 @@ public record JeiRecipeTooltipComponent(
         return context.manager().createRecipeLookup(RecipeTypes.BREWING).get()
                 .filter(candidate -> ItemStack.isSameItemSameComponents(candidate.getPotionOutput(), expectedOutput))
                 .filter(
-                    candidate -> expectedInput.isEmpty() || candidate.getPotionInputs().stream()
-                            .anyMatch(in -> ItemStack.isSameItemSameComponents(in, expectedInput))
+                    candidate -> expectedInput.isEmpty()
+                            || candidate.getPotionInputs().stream()
+                                    .anyMatch(in -> ItemStack.isSameItemSameComponents(in, expectedInput))
                 )
                 .filter(
                     candidate -> candidate.getIngredients().isEmpty()

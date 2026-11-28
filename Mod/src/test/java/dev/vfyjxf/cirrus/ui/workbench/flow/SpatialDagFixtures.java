@@ -34,7 +34,6 @@ import dev.vfyjxf.cirrus.api.planning.plan.VerificationCertificate;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningDiagnostics;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningResult;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningStatus;
-import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.adapter.OfflineContentTypes;
 import dev.vfyjxf.cirrus.ui.CirrusPalette;
 import dev.vfyjxf.cirrus.ui.workbench.layout.CriticalPathCalculator;

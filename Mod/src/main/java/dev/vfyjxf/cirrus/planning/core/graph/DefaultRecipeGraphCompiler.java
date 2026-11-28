@@ -194,7 +194,8 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
             List<MachineEntry> orderedMachines = policy.orderMachinesForCapability(raw.systemId(), raw.machines());
             boolean hand = MachineCapabilityGroups
                     .isHandCraftable(raw.systemId(), raw.systemTags(), orderedMachines, parsedInputs.size());
-            @Nullable ResourceLocation explicitId = raw.explicitId().orElse(null);
+            @Nullable
+            ResourceLocation explicitId = raw.explicitId().orElse(null);
 
             // JEI cycling-output display slots (>= 4 distinct outputs) represent alternatives, not co-production.
             boolean isJeiSource = raw.systemTags().contains(RecipeSystemTags.jeiFallback)
@@ -359,7 +360,8 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         Set<CanonicalRecipeTag>[] canonicalTags = (Set<CanonicalRecipeTag>[]) new Set<?>[n];
         RecipeEvidenceTier[] evidenceTiers = new RecipeEvidenceTier[n];
         double[] structuralFidelities = new double[n];
-        @Nullable RecipeSemanticKey[] semanticKeys = new RecipeSemanticKey[n];
+        @Nullable
+        RecipeSemanticKey[] semanticKeys = new RecipeSemanticKey[n];
 
         int totalIn = 0, totalCat = 0, totalOut = 0;
         for (CanonicalRecord cr : finalRecords) {
@@ -373,7 +375,8 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         int[] inCandList = new int[totalIn];
         long[] inAmount = new long[totalIn];
         byte[] inMatchMode = new byte[totalIn];
-        @Nullable TagKey<?>[] inTag = new TagKey<?>[totalIn];
+        @Nullable
+        TagKey<?>[] inTag = new TagKey<?>[totalIn];
 
         int[] catStart = new int[n + 1];
         int[] catSlotIndex = new int[totalCat];
@@ -802,7 +805,8 @@ public final class DefaultRecipeGraphCompiler implements RecipeGraphCompiler {
         int[] inCandList;
         long[] inAmount;
         byte[] inMatchMode;
-        @Nullable TagKey<?>[] inTag;
+        @Nullable
+        TagKey<?>[] inTag;
         int inCount;
         if (rawInCount == 0) {
             inCount = 0;

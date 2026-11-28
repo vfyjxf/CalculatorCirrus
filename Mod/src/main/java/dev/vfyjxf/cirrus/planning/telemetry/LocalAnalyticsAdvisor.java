@@ -112,8 +112,10 @@ public final class LocalAnalyticsAdvisor implements PlanningTelemetrySink, Scori
     public List<ComponentStackKey> suggestFrequentBaseCandidates(long minQueryCount, int limit) {
         return targetCraftFrequency.entrySet().stream()
                 .filter(e -> e.getValue() >= minQueryCount)
-                .sorted(Comparator.<Map.Entry<ComponentStackKey, Long>>comparingLong(Map.Entry::getValue).reversed()
-                        .thenComparing(Map.Entry::getKey))
+                .sorted(
+                    Comparator.<Map.Entry<ComponentStackKey, Long>>comparingLong(Map.Entry::getValue).reversed()
+                            .thenComparing(Map.Entry::getKey)
+                )
                 .limit(Math.max(0, limit))
                 .map(Map.Entry::getKey)
                 .toList();

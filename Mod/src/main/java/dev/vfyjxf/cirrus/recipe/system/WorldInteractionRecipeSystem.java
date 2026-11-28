@@ -50,7 +50,8 @@ import java.util.Objects;
  * water bottle filling, and shovel path flattening.
  */
 public final class WorldInteractionRecipeSystem
-        extends BasicRecipeSystem<WorldInteractionRecipeSystem.VanillaWorldInteractionRecipe> {
+        extends
+            BasicRecipeSystem<WorldInteractionRecipeSystem.VanillaWorldInteractionRecipe> {
 
     public static final Namespace systemId = Namespace.ofMc("world_interaction");
 
@@ -180,7 +181,7 @@ public final class WorldInteractionRecipeSystem
                 recipes,
                 byId,
                 VanillaWorldAccess.vanillaId("world_interaction/strip", itemPath(fromItem)),
-                Kind.STRIPPING,
+                Kind.stripping,
                 nonEmptyInputs(InputContent.fromItemStack(new ItemStack(fromItem), 1), axeCatalyst),
                 List.of(OutputContent.fromItemStack(new ItemStack(toItem))),
                 RecipeScreeningHints.empty()
@@ -199,7 +200,7 @@ public final class WorldInteractionRecipeSystem
                 recipes,
                 byId,
                 VanillaWorldAccess.vanillaId("world_interaction/wax", itemPath(fromItem)),
-                Kind.WAXING,
+                Kind.waxing,
                 List.of(
                     InputContent.fromItemStack(new ItemStack(fromItem), 1),
                     InputContent.fromItemStack(new ItemStack(Items.HONEYCOMB), 1)
@@ -211,7 +212,7 @@ public final class WorldInteractionRecipeSystem
                 recipes,
                 byId,
                 VanillaWorldAccess.vanillaId("world_interaction/dewax", itemPath(toItem)),
-                Kind.DEWAXING,
+                Kind.dewaxing,
                 nonEmptyInputs(InputContent.fromItemStack(new ItemStack(toItem), 1), axeCatalyst),
                 List.of(OutputContent.fromItemStack(new ItemStack(fromItem))),
                 dewaxHints
@@ -230,7 +231,7 @@ public final class WorldInteractionRecipeSystem
                 recipes,
                 byId,
                 VanillaWorldAccess.vanillaId("world_interaction/oxidize", itemPath(fromItem)),
-                Kind.OXIDATION_AGING,
+                Kind.oxidationAging,
                 List.of(InputContent.fromItemStack(new ItemStack(fromItem), 1)),
                 List.of(OutputContent.fromItemStack(new ItemStack(toItem))),
                 oxidationHints
@@ -239,7 +240,7 @@ public final class WorldInteractionRecipeSystem
                 recipes,
                 byId,
                 VanillaWorldAccess.vanillaId("world_interaction/scrape", itemPath(toItem)),
-                Kind.SCRAPING_OXIDATION,
+                Kind.scrapingOxidation,
                 nonEmptyInputs(InputContent.fromItemStack(new ItemStack(toItem), 1), axeCatalyst),
                 List.of(OutputContent.fromItemStack(new ItemStack(fromItem))),
                 scrapeHints
@@ -259,7 +260,7 @@ public final class WorldInteractionRecipeSystem
                     recipes,
                     byId,
                     VanillaWorldAccess.vanillaId("world_interaction/harden", itemPath(powderItem)),
-                    Kind.CONCRETE_HARDENING,
+                    Kind.concreteHardening,
                     nonEmptyInputs(InputContent.fromItemStack(new ItemStack(powderItem), 1), waterBucketCatalyst),
                     List.of(OutputContent.fromItemStack(new ItemStack(concreteItem))),
                     RecipeScreeningHints.empty()
@@ -273,7 +274,7 @@ public final class WorldInteractionRecipeSystem
                 recipes,
                 byId,
                 VanillaWorldAccess.vanillaId("world_interaction", "fill_water_bottle"),
-                Kind.BOTTLE_WATER_FILL,
+                Kind.bottleWaterFill,
                 nonEmptyInputs(InputContent.fromItemStack(new ItemStack(Items.GLASS_BOTTLE), 1), waterBucketCatalyst),
                 List.of(OutputContent.fromStack(waterBottleCs, MatchStrategy.identityAndComponent)),
                 RecipeScreeningHints.empty()
@@ -287,7 +288,7 @@ public final class WorldInteractionRecipeSystem
                     recipes,
                     byId,
                     VanillaWorldAccess.vanillaId("world_interaction/mud", itemPath(dirt)),
-                    Kind.DIRT_TO_MUD,
+                    Kind.dirtToMud,
                     List.of(InputContent.fromItemStack(new ItemStack(dirt), 1), waterBottleInput),
                     List.of(
                         OutputContent.fromItemStack(new ItemStack(Items.MUD)),
@@ -311,7 +312,7 @@ public final class WorldInteractionRecipeSystem
                     recipes,
                     byId,
                     VanillaWorldAccess.vanillaId("world_interaction/flatten", itemPath(fromItem)),
-                    Kind.SHOVEL_FLATTENING,
+                    Kind.shovelFlattening,
                     nonEmptyInputs(InputContent.fromItemStack(new ItemStack(fromItem), 1), shovelCatalyst),
                     List.of(OutputContent.fromItemStack(new ItemStack(toItem))),
                     flattenHints
@@ -416,15 +417,15 @@ public final class WorldInteractionRecipeSystem
     }
 
     public enum Kind {
-        STRIPPING,
-        WAXING,
-        DEWAXING,
-        OXIDATION_AGING,
-        SCRAPING_OXIDATION,
-        CONCRETE_HARDENING,
-        BOTTLE_WATER_FILL,
-        DIRT_TO_MUD,
-        SHOVEL_FLATTENING
+        stripping,
+        waxing,
+        dewaxing,
+        oxidationAging,
+        scrapingOxidation,
+        concreteHardening,
+        bottleWaterFill,
+        dirtToMud,
+        shovelFlattening
     }
 
     public record VanillaWorldInteractionRecipe(

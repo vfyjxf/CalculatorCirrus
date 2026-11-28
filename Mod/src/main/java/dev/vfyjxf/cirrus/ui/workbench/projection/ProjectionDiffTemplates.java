@@ -557,7 +557,8 @@ public final class ProjectionDiffTemplates {
         public String formatBadge(DiffInput input) {
             RecipeContent before = input.before();
             RecipeContent after = input.after();
-            if (before instanceof ValueContent<?> vb && after instanceof ValueContent<?> va
+            if (before instanceof ValueContent<?> vb
+                    && after instanceof ValueContent<?> va
                     && vb.type().typeId().equals(va.type().typeId())) {
                 ValueTypeVisual vis = ValueTypeVisualRegistry.resolve(va.type());
                 String badge = formatScaledBadge(vb.amount(), va.amount(), vis.unit());

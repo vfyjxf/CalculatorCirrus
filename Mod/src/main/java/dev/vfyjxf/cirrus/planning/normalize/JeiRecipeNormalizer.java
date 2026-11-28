@@ -138,12 +138,14 @@ public final class JeiRecipeNormalizer {
                 producerCountByOut.merge(out.resource(), 1, Integer::sum);
                 double normalizedOut = normalizedQuantity(out.resource(), out.amount());
                 siblingSamplesByOut.computeIfAbsent(out.resource(), k -> new ArrayList<>())
-                        .add(new FidelityScorer.SiblingSample(
-                            semKey.lineageGroup(),
-                            cur.evidenceTier(),
-                            apparentUnitCost / Math.max(1e-6, normalizedOut),
-                            feasibleAnchor
-                        ));
+                        .add(
+                            new FidelityScorer.SiblingSample(
+                                semKey.lineageGroup(),
+                                cur.evidenceTier(),
+                                apparentUnitCost / Math.max(1e-6, normalizedOut),
+                                feasibleAnchor
+                            )
+                        );
             }
         }
 
@@ -176,7 +178,8 @@ public final class JeiRecipeNormalizer {
             };
             double inComplete = cur.inputs().isEmpty() ? 0.10 : 1.0;
             double outComplete = cur.outputs().isEmpty() ? 0.0 : (cur.outputs().size() >= 4 && isJei ? 0.35 : 1.0);
-            double gateDesc = cur.hasOpaqueConstraint() ? 0.25
+            double gateDesc = cur.hasOpaqueConstraint()
+                    ? 0.25
                     : (isJei && cur.machines().isEmpty() && !cur.systemTags().contains(RecipeSystemTags.handOperable) ? 0.55 : 0.95);
             double repro = cur.evidenceTier() == RecipeEvidenceTier.tierA ? 1.0 : 0.60;
 
@@ -222,9 +225,10 @@ public final class JeiRecipeNormalizer {
             } else {
                 finalPhi = minPhi;
             }
-            boolean suspectJei = isJei && (hasExplicitFidelityOverride[idx]
-                    ? finalPhi < FidelityScorer.defaultSuspectThreshold
-                    : (anySuspect || finalPhi < FidelityScorer.defaultSuspectThreshold));
+            boolean suspectJei = isJei
+                    && (hasExplicitFidelityOverride[idx]
+                            ? finalPhi < FidelityScorer.defaultSuspectThreshold
+                            : (anySuspect || finalPhi < FidelityScorer.defaultSuspectThreshold));
 
             boolean hasReversePacking = false;
             if (cur.inputs().size() == 1 && cur.outputs().size() == 1) {
@@ -255,22 +259,24 @@ public final class JeiRecipeNormalizer {
                 suspectCount++;
             }
 
-            outRecords.add(new RawRecipeRecord(
-                cur.systemId(),
-                cur.sourceKind(),
-                cur.explicitId(),
-                cur.machines(),
-                cur.inputs(),
-                cur.outputs(),
-                cur.recipeValues(),
-                cur.sourceRef(),
-                cur.systemTags(),
-                finalTags,
-                cur.evidenceTier(),
-                finalPhi,
-                cur.semanticKey(),
-                cur.hasOpaqueConstraint()
-            ));
+            outRecords.add(
+                new RawRecipeRecord(
+                    cur.systemId(),
+                    cur.sourceKind(),
+                    cur.explicitId(),
+                    cur.machines(),
+                    cur.inputs(),
+                    cur.outputs(),
+                    cur.recipeValues(),
+                    cur.sourceRef(),
+                    cur.systemTags(),
+                    finalTags,
+                    cur.evidenceTier(),
+                    finalPhi,
+                    cur.semanticKey(),
+                    cur.hasOpaqueConstraint()
+                )
+            );
         }
 
         return new NormalizationResult(

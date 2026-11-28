@@ -105,7 +105,7 @@ public final class AnvilRecipeSystem extends BasicRecipeSystem<AnvilRecipeSystem
 
     @Override
     public @Nullable RoutingRecipeView routingView(ResolveContext context, VanillaAnvilRecipe recipe) {
-        MatchStrategy strategy = recipe.kind() == Kind.ENCHANTED_BOOK_UPGRADE
+        MatchStrategy strategy = recipe.kind() == Kind.enchantedBookUpgrade
                 ? MatchStrategy.identityAndComponent
                 : MatchStrategy.identity;
         ContentStack<Item, ItemStack> leftCs = ContentStack.fromStack(recipe.leftInput());
@@ -123,7 +123,7 @@ public final class AnvilRecipeSystem extends BasicRecipeSystem<AnvilRecipeSystem
 
     @Override
     public RecipeScreeningHints routingHints(VanillaAnvilRecipe recipe) {
-        return recipe.kind() == Kind.MATERIAL_REPAIR ? repairHints : RecipeScreeningHints.empty();
+        return recipe.kind() == Kind.materialRepair ? repairHints : RecipeScreeningHints.empty();
     }
 
     @Override
@@ -185,7 +185,7 @@ public final class AnvilRecipeSystem extends BasicRecipeSystem<AnvilRecipeSystem
                     );
                     VanillaAnvilRecipe recipe = new VanillaAnvilRecipe(
                         id,
-                        Kind.ENCHANTED_BOOK_UPGRADE,
+                        Kind.enchantedBookUpgrade,
                         inputBook,
                         right,
                         outputBook
@@ -215,7 +215,7 @@ public final class AnvilRecipeSystem extends BasicRecipeSystem<AnvilRecipeSystem
                 "anvil/repair",
                 VanillaWorldAccess.sanitizePathSegment(holder.key().location())
             );
-            VanillaAnvilRecipe recipe = new VanillaAnvilRecipe(id, Kind.MATERIAL_REPAIR, gear, right, gear.copy());
+            VanillaAnvilRecipe recipe = new VanillaAnvilRecipe(id, Kind.materialRepair, gear, right, gear.copy());
             recipes.add(recipe);
             byId.put(id, recipe);
         });
@@ -245,8 +245,8 @@ public final class AnvilRecipeSystem extends BasicRecipeSystem<AnvilRecipeSystem
     }
 
     public enum Kind {
-        ENCHANTED_BOOK_UPGRADE,
-        MATERIAL_REPAIR
+        enchantedBookUpgrade,
+        materialRepair
     }
 
     public record VanillaAnvilRecipe(

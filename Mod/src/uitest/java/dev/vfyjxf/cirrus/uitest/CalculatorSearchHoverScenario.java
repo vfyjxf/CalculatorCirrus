@@ -61,15 +61,19 @@ public final class CalculatorSearchHoverScenario {
         SearchBoxWidget box = findSearchBox(scene);
         searchBox = box;
         scene.requestFocus(box);
-        box.suggestionViewport(() -> new Rect(
-            0,
-            0,
-            Minecraft.getInstance().getWindow().getGuiScaledWidth(),
-            Minecraft.getInstance().getWindow().getGuiScaledHeight()
-        ));
-        box.suggestionSource((query, cursor, limit) -> List.of(
-            new SearchSuggestion("minecraft:cobblestone", "minecraft:cobblestone", 0, query.length())
-        ));
+        box.suggestionViewport(
+            () -> new Rect(
+                0,
+                0,
+                Minecraft.getInstance().getWindow().getGuiScaledWidth(),
+                Minecraft.getInstance().getWindow().getGuiScaledHeight()
+            )
+        );
+        box.suggestionSource(
+            (query, cursor, limit) -> List.of(
+                new SearchSuggestion("minecraft:cobblestone", "minecraft:cobblestone", 0, query.length())
+            )
+        );
         box.setText("minecraft:co");
         if (!box.debugSuggestionPopupOpen()) {
             throw new IllegalStateException("the suggestion popup did not open synchronously");

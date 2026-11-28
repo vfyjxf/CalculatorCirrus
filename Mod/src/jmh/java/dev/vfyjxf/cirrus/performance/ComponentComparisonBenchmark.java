@@ -53,6 +53,7 @@ import java.util.concurrent.TimeUnit;
 @Measurement(iterations = 5, time = 1)
 @Fork(2)
 @State(Scope.Benchmark)
+@SuppressWarnings("PMD.PublicNonFinalInstanceField")
 public class ComponentComparisonBenchmark {
 
     /**

@@ -37,12 +37,13 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -115,13 +116,15 @@ class JeiLookupAndBridgeTest {
             ironOnly, ironOnly.id()
         );
 
-        IRecipeCategory<MockFluidRecipe> category = proxy(IRecipeCategory.class, (method, args) -> switch (method
-                .getName()) {
-            case "getRecipeType" -> type;
-            case "getRegistryName" -> args != null && args.length > 0 ? ids.get(args[0]) : null;
-            case "isHandled" -> true;
-            default -> null;
-        });
+        IRecipeCategory<MockFluidRecipe> category = proxy(
+            IRecipeCategory.class, (method, args) -> switch (method
+                    .getName()) {
+                case "getRecipeType" -> type;
+                case "getRegistryName" -> args != null && args.length > 0 ? ids.get(args[0]) : null;
+                case "isHandled" -> true;
+                default -> null;
+            }
+        );
 
         IFocusFactory focusFactory = proxy(IFocusFactory.class, (method, args) -> {
             if ("createFocus".equals(method.getName()) && args != null && args.length == 3) {
@@ -220,8 +223,8 @@ class JeiLookupAndBridgeTest {
             case "getRole" -> role;
             case "getTypedValue" -> typed;
             case "checkedCast" -> args != null && args.length == 1 && args[0] == NeoForgeTypes.FLUID_STACK
-                    ? java.util.Optional.of(typed)
-                    : java.util.Optional.empty();
+                    ? Optional.of(typed)
+                    : Optional.empty();
             default -> null;
         });
     }
@@ -249,6 +252,6 @@ class JeiLookupAndBridgeTest {
     @FunctionalInterface
     private interface ProxyHandler {
         @Nullable
-        Object invoke(java.lang.reflect.Method method, Object @Nullable [] args);
+        Object invoke(Method method, Object @Nullable [] args);
     }
 }

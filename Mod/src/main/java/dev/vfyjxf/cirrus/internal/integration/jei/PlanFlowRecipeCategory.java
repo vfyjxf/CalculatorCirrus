@@ -19,7 +19,6 @@ import dev.vfyjxf.cirrus.ui.workbench.flow.MacTrackpadPinchBridge;
 import dev.vfyjxf.cirrus.ui.workbench.flow.SpatialDagCanvasWidget;
 import dev.vfyjxf.cirrus.ui.workbench.paint.OreUiPaint;
 import dev.vfyjxf.cloudlib.api.ui.texture.ImageTexture;
-import dev.vfyjxf.cloudlib.api.ui.texture.SizedTexture;
 import dev.vfyjxf.cloudlib.api.ui.texture.VisualTexture;
 import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
 import mezz.jei.api.gui.builder.ITooltipBuilder;
@@ -2723,14 +2722,18 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                     }
                 }
             }
-            if (!right && activeTab == 0 && hit(mouseX, mouseY, dagAreaX, dagAreaY, dagAreaW, dagCanvasH)
+            if (!right
+                    && activeTab == 0
+                    && hit(mouseX, mouseY, dagAreaX, dagAreaY, dagAreaW, dagCanvasH)
                     && !isOverDagOverlayControls(mouseX, mouseY)) {
                 dagPointerDown = true;
                 dagDragging = false;
                 dagDragAccum = 0.0;
                 return true;
             }
-            if (right && activeTab == 0 && hit(mouseX, mouseY, dagAreaX, dagAreaY, dagAreaW, dagCanvasH)
+            if (right
+                    && activeTab == 0
+                    && hit(mouseX, mouseY, dagAreaX, dagAreaY, dagAreaW, dagCanvasH)
                     && !isOverDagOverlayControls(mouseX, mouseY)) {
                 for (int i = dagHits.size() - 1; i >= 0; i--) {
                     DagNodeHit hitNode = dagHits.get(i);
@@ -2912,7 +2915,8 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                     return;
                 }
             }
-            if (activeTab == 0 && hit(mouseX, mouseY, dagAreaX, dagAreaY, dagAreaW, dagCanvasH)
+            if (activeTab == 0
+                    && hit(mouseX, mouseY, dagAreaX, dagAreaY, dagAreaW, dagCanvasH)
                     && !isOverDagOverlayControls(mouseX, mouseY)) {
                 for (int i = dagHits.size() - 1; i >= 0; i--) {
                     DagNodeHit hitNode = dagHits.get(i);
@@ -2944,7 +2948,7 @@ public final class PlanFlowRecipeCategory implements IRecipeCategory<PlanFlowRec
                             (s.dependsOn().isEmpty()
                                     ? CirrusLangs.Calculator.Jei.PlanFlow.dagTooltipRoot.get()
                                     : CirrusLangs.Calculator.Jei.PlanFlow.dagTooltipDeps.get(s.dependsOn().size()))
-                                            .copy().withStyle(ChatFormatting.GRAY)
+                                    .copy().withStyle(ChatFormatting.GRAY)
                         );
                         return;
                     }

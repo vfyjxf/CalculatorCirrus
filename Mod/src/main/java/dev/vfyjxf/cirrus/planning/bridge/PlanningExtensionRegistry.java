@@ -86,8 +86,10 @@ public final class PlanningExtensionRegistry implements PlanningExtensionRegiste
 
     public List<AcquisitionEstimatorSpi> acquisitionEstimators() {
         return acquisitionEstimators.stream()
-                .sorted(Comparator.comparingInt(AcquisitionEstimatorSpi::priority).reversed()
-                        .thenComparing(AcquisitionEstimatorSpi::estimatorId))
+                .sorted(
+                    Comparator.comparingInt(AcquisitionEstimatorSpi::priority).reversed()
+                            .thenComparing(AcquisitionEstimatorSpi::estimatorId)
+                )
                 .toList();
     }
 

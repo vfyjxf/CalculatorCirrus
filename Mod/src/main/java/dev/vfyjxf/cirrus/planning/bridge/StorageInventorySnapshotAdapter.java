@@ -19,6 +19,7 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -137,7 +138,7 @@ public final class StorageInventorySnapshotAdapter {
             return InventoryTier.remote;
         }
         String typeId = source.type() != null && source.type().id() != null
-                ? source.type().id().toString().toLowerCase(java.util.Locale.ROOT)
+                ? source.type().id().toString().toLowerCase(Locale.ROOT)
                 : "";
         if (typeId.contains("player") || typeId.contains("inventory")) {
             return InventoryTier.hand;

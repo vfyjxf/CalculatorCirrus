@@ -372,20 +372,22 @@ class CorePlanningScenariosTest {
         CompiledRecipeGraph g = compile(
             List.of(rec(gtSys, "gt:bend", List.of("gregtech:bender"), List.of(slot(cobble, 1)), List.of(out(gtOut, 1)))),
             DefaultSystemAdmissionPolicy.defaults()
-                .withSystemOverride(Namespace.parse(gtSys), SystemAdmission.optInOnly)
+                    .withSystemOverride(Namespace.parse(gtSys), SystemAdmission.optInOnly)
         );
 
         PlanningResult blocked = plan(g, gtOut, 1L, InventorySnapshot.empty, FacilitySnapshot.empty, List.of());
         assertEquals(PlanningStatus.provenInfeasible, blocked.status());
 
         FacilitySnapshot unlockedFac = new FacilitySnapshot(
-            List.of(), List.of(), List.of(), Set.of(Namespace.parse(gtSys)));
+            List.of(), List.of(), List.of(), Set.of(Namespace.parse(gtSys))
+        );
         PlanningResult unlockedByFac = plan(g, gtOut, 1L, InventorySnapshot.empty, unlockedFac, List.of());
         assertEquals(PlanningStatus.feasible, unlockedByFac.status());
         assertTrue(unlockedByFac.paretoPlans().get(0).certificate().valid());
 
         SystemRule unlockRule = new SystemRule(
-            "optin_gt", GuidanceScope.session, RuleStrength.hardPin, Namespace.parse(gtSys), true);
+            "optin_gt", GuidanceScope.session, RuleStrength.hardPin, Namespace.parse(gtSys), true
+        );
         PlanningResult unlockedByRule = plan(
             g,
             gtOut,

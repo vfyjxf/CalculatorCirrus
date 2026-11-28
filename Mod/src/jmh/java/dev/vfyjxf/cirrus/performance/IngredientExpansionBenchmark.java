@@ -39,6 +39,7 @@ import java.util.concurrent.TimeUnit;
 @Warmup(iterations = 1, time = 1, timeUnit = TimeUnit.SECONDS)
 @Measurement(iterations = 3, time = 1, timeUnit = TimeUnit.SECONDS)
 @Fork(1)
+@SuppressWarnings("PMD.PublicNonFinalInstanceField")
 public class IngredientExpansionBenchmark {
 
     @State(Scope.Benchmark)

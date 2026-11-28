@@ -409,10 +409,10 @@ public class PromptCardWidget extends WidgetGroup<Widget> implements OreUiToolti
         int footerTop = preferredHeight() - 2 - footerHeight;
         if (localY >= footerTop) {
             return OreUiRichTooltip.builder(
-                        persistToWorld
-                                ? CirrusLangs.Workbench.Copilot.tooltipScopeWorldTitle.get()
-                                : CirrusLangs.Workbench.Copilot.tooltipScopeSessionTitle.get()
-                    )
+                persistToWorld
+                        ? CirrusLangs.Workbench.Copilot.tooltipScopeWorldTitle.get()
+                        : CirrusLangs.Workbench.Copilot.tooltipScopeSessionTitle.get()
+            )
                     .badge(
                         (persistToWorld
                                 ? CirrusLangs.Workbench.Copilot.tooltipScopeWorldBadge.get()

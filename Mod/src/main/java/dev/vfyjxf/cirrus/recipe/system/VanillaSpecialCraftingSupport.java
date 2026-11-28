@@ -189,7 +189,8 @@ final class VanillaSpecialCraftingSupport {
         }
         for (int i = 1; i < items.length; i++) {
             ItemStack nextRemainder = items[i].getCraftingRemainingItem();
-            if (nextRemainder.isEmpty() || !ItemStack.isSameItemSameComponents(firstRemainder, nextRemainder)
+            if (nextRemainder.isEmpty()
+                    || !ItemStack.isSameItemSameComponents(firstRemainder, nextRemainder)
                     || firstRemainder.getCount() != nextRemainder.getCount()) {
                 return ItemStack.EMPTY;
             }

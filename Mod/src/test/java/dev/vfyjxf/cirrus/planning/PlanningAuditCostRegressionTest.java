@@ -204,9 +204,9 @@ class PlanningAuditCostRegressionTest {
         assertEquals(tierSamples.size(), distinctCapitals.size(), "every audited system must land on a different capital tier");
         assertTrue(
             tierSamples.get(0).machineSetupCapital() < tierSamples.get(1).machineSetupCapital()
-                && tierSamples.get(1).machineSetupCapital() < tierSamples.get(2).machineSetupCapital()
-                && tierSamples.get(2).machineSetupCapital() < tierSamples.get(3).machineSetupCapital()
-                && tierSamples.get(3).machineSetupCapital() < tierSamples.get(4).machineSetupCapital()
+                    && tierSamples.get(1).machineSetupCapital() < tierSamples.get(2).machineSetupCapital()
+                    && tierSamples.get(2).machineSetupCapital() < tierSamples.get(3).machineSetupCapital()
+                    && tierSamples.get(3).machineSetupCapital() < tierSamples.get(4).machineSetupCapital()
         );
     }
 

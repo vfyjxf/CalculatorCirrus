@@ -108,10 +108,12 @@ class PlanFlowViewModelTest {
             ),
             List.of(s1, s2, s3, s4),
             Set.of("s2"),
-            List.of(new CirrusPlanBookmarkStore.MachineLine(
-                OfflineContentTypes.machine("minecraft:blast_furnace"),
-                1
-            )),
+            List.of(
+                new CirrusPlanBookmarkStore.MachineLine(
+                    OfflineContentTypes.machine("minecraft:blast_furnace"),
+                    1
+                )
+            ),
             List.of(mold),
             List.of(new CirrusPlanBookmarkStore.MaterialLine(slag, 3L)),
             List.of("line_ore_wash"),
@@ -138,12 +140,14 @@ class PlanFlowViewModelTest {
     void materialDockMergesFilteringSortingScalingAndStepProgress() {
         CirrusPlanBookmarkStore.PlanBookmarkEntry entry = richEntry();
         InventorySnapshot inv = new InventorySnapshot(
-            new StockLedger(Map.of(
-                OfflineContentTypes.item("minecraft:coal"),
-                10L,
-                OfflineContentTypes.item("minecraft:iron_ore"),
-                4L
-            )),
+            new StockLedger(
+                Map.of(
+                    OfflineContentTypes.item("minecraft:coal"),
+                    10L,
+                    OfflineContentTypes.item("minecraft:iron_ore"),
+                    4L
+                )
+            ),
             StockLedger.empty
         );
 

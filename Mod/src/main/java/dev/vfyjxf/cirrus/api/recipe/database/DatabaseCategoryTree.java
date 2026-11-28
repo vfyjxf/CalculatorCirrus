@@ -491,7 +491,8 @@ public final class DatabaseCategoryTree {
                     sysStrings.add(sysTag.toString());
                 }
                 for (String raw : record.searchDocument().rawText(CirrusSearchFields.tag)) {
-                    if (raw != null && !raw.isBlank()
+                    if (raw != null
+                            && !raw.isBlank()
                             && !sysStrings.contains(raw)
                             && !raw.contains(RecipeSystemTags.databaseFolderPrefix)) {
                         return true;

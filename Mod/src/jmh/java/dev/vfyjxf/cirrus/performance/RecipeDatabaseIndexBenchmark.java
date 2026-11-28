@@ -29,7 +29,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -64,6 +64,7 @@ import java.util.concurrent.TimeUnit;
 @Warmup(iterations = 1, time = 1, timeUnit = TimeUnit.SECONDS)
 @Measurement(iterations = 3, time = 1, timeUnit = TimeUnit.SECONDS)
 @Fork(1)
+@SuppressWarnings("PMD.PublicNonFinalInstanceField")
 public class RecipeDatabaseIndexBenchmark {
 
     @State(Scope.Benchmark)
@@ -173,7 +174,7 @@ public class RecipeDatabaseIndexBenchmark {
     }
 
     @Benchmark
-    public RecipeDatabaseIndex catalogCacheRebuild(RebuiltCatalog catalog) throws Exception {
+    public RecipeDatabaseIndex catalogCacheRebuild(RebuiltCatalog catalog) throws ReflectiveOperationException {
         CalculatorSyntheticScenario.SyntheticRecipeSystem system = syntheticSystemConstructor
                 .newInstance(catalog.recipeSnapshot);
         catalog.previousApi = CalculatorSyntheticScenario.attachRecipeApi(system);
@@ -268,7 +269,7 @@ public class RecipeDatabaseIndexBenchmark {
 
         @Override
         public Namespace systemId() {
-            return Namespace.of("bench", "item_stacks");
+            return Namespace.of("bench", "item_stacks"); // NOPMD
         }
 
         @Override
@@ -278,7 +279,7 @@ public class RecipeDatabaseIndexBenchmark {
 
         @Override
         public @Nullable ResourceLocation getId(StackRecipe recipe) {
-            return ResourceLocation.fromNamespaceAndPath("bench", recipe.id());
+            return ResourceLocation.fromNamespaceAndPath("bench", recipe.id()); // NOPMD
         }
 
         @Override

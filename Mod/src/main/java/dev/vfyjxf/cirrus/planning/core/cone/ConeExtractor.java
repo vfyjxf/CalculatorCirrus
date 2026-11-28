@@ -44,7 +44,6 @@ import dev.vfyjxf.cirrus.planning.core.cost.DefaultAcquisitionOracle;
 import dev.vfyjxf.cirrus.planning.core.cost.StepCosts;
 import dev.vfyjxf.cirrus.planning.core.cost.SystemCostTiers;
 import dev.vfyjxf.cirrus.planning.core.graph.CandidateTable;
-import dev.vfyjxf.cirrus.planning.core.graph.DefaultSystemAdmissionPolicy;
 import dev.vfyjxf.cirrus.planning.core.graph.IndexedRecipeGraph;
 import dev.vfyjxf.cirrus.planning.core.graph.ResourceDictionary;
 import dev.vfyjxf.cirrus.planning.core.lang.IntIntMap;
@@ -973,7 +972,8 @@ public final class ConeExtractor {
         int[] inStart = new int[recipeCount + 1];
         int[] inSlotIndex = new int[totalInSlots];
         long[] inAmount = new long[totalInSlots];
-        @Nullable TagKey<?>[] inTag = new TagKey<?>[totalInSlots];
+        @Nullable
+        TagKey<?>[] inTag = new TagKey<?>[totalInSlots];
         SlotMatchMode[] inMatchMode = new SlotMatchMode[totalInSlots];
         int[] inOrigCandCount = new int[totalInSlots];
         int[] inClassStart = new int[totalInSlots + 1];
@@ -2074,10 +2074,11 @@ public final class ConeExtractor {
             for (GuidanceRule r : guidance.hardBanRules()) {
                 if (r instanceof MachineRule mr && mr.machine().equals(machine)) {
                     map.computeIfAbsent(target, ignored -> new TreeSet<>()).add(mr.ruleId());
-                } else if (r instanceof ModNamespaceRule mnr
-                        && machine.contentKey().map(k -> Objects.equals(k.namespace(), mnr.modNamespace())).orElse(false)) {
-                    map.computeIfAbsent(target, ignored -> new TreeSet<>()).add(mnr.ruleId());
-                }
+                } else
+                    if (r instanceof ModNamespaceRule mnr
+                            && machine.contentKey().map(k -> Objects.equals(k.namespace(), mnr.modNamespace())).orElse(false)) {
+                                map.computeIfAbsent(target, ignored -> new TreeSet<>()).add(mnr.ruleId());
+                            }
             }
         }
     }

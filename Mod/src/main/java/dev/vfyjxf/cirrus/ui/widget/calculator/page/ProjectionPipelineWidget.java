@@ -7,7 +7,6 @@ import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionPlugin;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
 import dev.vfyjxf.cirrus.api.recipe.projection.SlotAddress;
 import dev.vfyjxf.cirrus.api.recipe.projection.SlotChannel;
-import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ChangeReason;
 import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.PipelineStepTrace;
 import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionChange;
 import dev.vfyjxf.cirrus.api.recipe.projection.pipeline.ProjectionGuard;

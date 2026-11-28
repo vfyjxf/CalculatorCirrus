@@ -1,6 +1,7 @@
 package dev.vfyjxf.cirrus.planning.core.verify;
 
 import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
+import dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOption;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
 import dev.vfyjxf.cirrus.api.planning.context.AutomatedLine;
@@ -185,7 +186,7 @@ public final class DefaultPlanVerifier implements PlanVerifier {
                         violations.add(ErrorCodes.errBannedResource + ":" + a.resource().displayId());
                         flags[1] = false;
                     }
-                    if (forbidTrips && a.acquisitionKind() == dev.vfyjxf.cirrus.api.planning.context.AcquisitionKind.manualGather) {
+                    if (forbidTrips && a.acquisitionKind() == AcquisitionKind.manualGather) {
                         violations.add(ErrorCodes.errUnacquirableResource + ":forbid_field_trips:" + a.resource().displayId());
                         flags[1] = false;
                     }

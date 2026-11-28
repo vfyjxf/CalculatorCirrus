@@ -117,7 +117,8 @@ public record ProjectionDisplayModel(
     }
 
     public boolean hasAnyDiffs() {
-        return inputSide.hasChanges() || outputSide.hasChanges()
+        return inputSide.hasChanges()
+                || outputSide.hasChanges()
                 || values.anySatisfy(v -> v.status().isChanged())
                 || !changeRows.isEmpty();
     }
@@ -204,7 +205,8 @@ public record ProjectionDisplayModel(
                 "",
                 Lists.immutable.empty()
             );
-            if (gridSpec != null && slot.address() instanceof SlotAddress.GridCell cell
+            if (gridSpec != null
+                    && slot.address() instanceof SlotAddress.GridCell cell
                     && gridSpec.contains(cell.col(), cell.row())) {
                 gridMap.put(cell, view);
             } else {
@@ -453,7 +455,8 @@ public record ProjectionDisplayModel(
             );
         }
         String metaSummary;
-        @Nullable SlotAddress target;
+        @Nullable
+        SlotAddress target;
         if (change instanceof ProjectionChange.AttributeChange ac) {
             target = ac.targetSlot();
             metaSummary = ac.key().id().path() + " = " + (ac.after() == null ? "removed" : ac.after());

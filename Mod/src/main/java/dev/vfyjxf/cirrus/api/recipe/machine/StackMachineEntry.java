@@ -4,6 +4,7 @@ import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.content.constraint.MachineConstraint;
 import dev.vfyjxf.cloudlib.util.Checks;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.Objects;
@@ -32,7 +33,7 @@ public record StackMachineEntry(ContentStack<?, ?> machineStack, MachineConstrai
 
     @Override
     public ItemStack toItemStack() {
-        ContentStack<net.minecraft.world.item.Item, ItemStack> cheats = machineStack.cheatsStack();
+        ContentStack<Item, ItemStack> cheats = machineStack.cheatsStack();
         return cheats.isEmpty() ? ItemStack.EMPTY : cheats.value();
     }
 

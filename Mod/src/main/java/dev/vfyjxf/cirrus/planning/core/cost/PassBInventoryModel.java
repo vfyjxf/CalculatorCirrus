@@ -345,14 +345,16 @@ public final class PassBInventoryModel {
             if (inventory.isProtectedFromGenericTag(resource)) {
                 tierAlpha = Math.max(tierAlpha, 0.85);
             }
-            out.add(new ChannelSpec(
-                tier,
-                usable,
-                tierAlpha * expectedUnitPriceVExp,
-                tier.defaultOpenFrictionSeconds(),
-                tier.defaultLinearSecondsPerUnit(),
-                inventory.alreadyOpenTiers().contains(tier)
-            ));
+            out.add(
+                new ChannelSpec(
+                    tier,
+                    usable,
+                    tierAlpha * expectedUnitPriceVExp,
+                    tier.defaultOpenFrictionSeconds(),
+                    tier.defaultLinearSecondsPerUnit(),
+                    inventory.alreadyOpenTiers().contains(tier)
+                )
+            );
         }
         out.sort(Comparator.comparingDouble(c -> c.alphaOpp() + c.linearExtractSeconds()));
         return out;

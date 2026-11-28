@@ -66,11 +66,15 @@ public class FacilitiesAndRulesWorkspace extends CompositeWidget<Widget> {
     public static final int toolbarHeight = 18;
 
     public enum Section {
-        machines(CirrusLangs.Workbench.Facilities.floorMachines), lines(
+        machines(CirrusLangs.Workbench.Facilities.floorMachines),
+        lines(
             CirrusLangs.Workbench.Facilities.lines
-        ), recipes(
+        ),
+        recipes(
             CirrusLangs.Workbench.Facilities.autoRecipes
-        ), optIn(CirrusLangs.Workbench.Facilities.optIn), rules(CirrusLangs.Workbench.Facilities.rules);
+        ),
+        optIn(CirrusLangs.Workbench.Facilities.optIn),
+        rules(CirrusLangs.Workbench.Facilities.rules);
 
         private final LangEntry label;
 

@@ -284,10 +284,11 @@ public final class OfflinePlanBench {
                     }
                     if (first.status() == PlanningStatus.feasible) {
                         refinedTargets++;
-                    } else if (first.status() == PlanningStatus.noPlanWithinBudget
-                            || first.status() == PlanningStatus.conditional) {
-                        budgetHitTargets++;
-                    }
+                    } else
+                        if (first.status() == PlanningStatus.noPlanWithinBudget
+                                || first.status() == PlanningStatus.conditional) {
+                                    budgetHitTargets++;
+                                }
 
                     JsonObject tr = new JsonObject();
                     tr.addProperty("target", td.resource().displayId());

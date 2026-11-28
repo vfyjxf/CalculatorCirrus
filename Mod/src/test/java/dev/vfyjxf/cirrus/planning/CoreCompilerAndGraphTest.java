@@ -201,9 +201,11 @@ class CoreCompilerAndGraphTest {
     void tc03_strictCatalystPromotionRespectsVariantHashAndNetDelta() {
         ComponentStackKey plainMold = item("mod:mold");
         ComponentStackKey hotMold = OfflineContentTypes.withComponents(
-            OfflineContentTypes.itemContentType, "mod:mold", JsonParser.parseString("{\"variant\":\"0123456789abcdef\"}"));
+            OfflineContentTypes.itemContentType, "mod:mold", JsonParser.parseString("{\"variant\":\"0123456789abcdef\"}")
+        );
         ComponentStackKey coldMold = OfflineContentTypes.withComponents(
-            OfflineContentTypes.itemContentType, "mod:mold", JsonParser.parseString("{\"variant\":\"fedcba9876543210\"}"));
+            OfflineContentTypes.itemContentType, "mod:mold", JsonParser.parseString("{\"variant\":\"fedcba9876543210\"}")
+        );
         ComponentStackKey ingot = item("minecraft:iron_ingot");
         ComponentStackKey plate = item("mod:plate");
         ComponentStackKey seed = item("mod:seed");
@@ -348,10 +350,12 @@ class CoreCompilerAndGraphTest {
                 .withSystemOverride(Namespace.parse("jei:category/gregtech/assembler"), SystemAdmission.optInOnly);
         assertEquals(
             SystemAdmission.excludedDisplay,
-            policy.classify(Namespace.parse("jei:category/minecraft/crafting"), "jei"));
+            policy.classify(Namespace.parse("jei:category/minecraft/crafting"), "jei")
+        );
         assertEquals(
             SystemAdmission.optInOnly,
-            policy.classify(Namespace.parse("jei:category/gregtech/assembler"), "jei"));
+            policy.classify(Namespace.parse("jei:category/gregtech/assembler"), "jei")
+        );
         assertEquals(SystemAdmission.enabled, policy.classify(Namespace.parse("minecraft:smelting"), "vanilla"));
 
         List<MachineEntry> stonecutters = MachineCapabilityGroups.orderMachines(

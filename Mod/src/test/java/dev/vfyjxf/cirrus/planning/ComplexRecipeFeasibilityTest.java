@@ -1,8 +1,8 @@
 package dev.vfyjxf.cirrus.planning;
 
 import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
-import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
 import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOption;
+import dev.vfyjxf.cirrus.api.planning.context.AcquisitionOracle;
 import dev.vfyjxf.cirrus.api.planning.context.BaseBoundarySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.ContextAttributeView;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
@@ -12,15 +12,16 @@ import dev.vfyjxf.cirrus.api.planning.context.PlanningContext;
 import dev.vfyjxf.cirrus.api.planning.context.ProgressionState;
 import dev.vfyjxf.cirrus.api.planning.cost.PlanningProfile;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
+import dev.vfyjxf.cirrus.api.planning.graph.RawIngredientSlot;
+import dev.vfyjxf.cirrus.api.planning.graph.RawOutputSlot;
 import dev.vfyjxf.cirrus.api.planning.graph.RawRecipeRecord;
+import dev.vfyjxf.cirrus.api.planning.human.GuidanceRule;
 import dev.vfyjxf.cirrus.api.planning.human.GuidanceScope;
 import dev.vfyjxf.cirrus.api.planning.human.ResourceRule;
 import dev.vfyjxf.cirrus.api.planning.human.RuleStrength;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.model.TargetDemand;
 import dev.vfyjxf.cirrus.api.planning.plan.AcquireStep;
-import dev.vfyjxf.cirrus.api.planning.plan.CraftStep;
-import dev.vfyjxf.cirrus.api.planning.plan.PlanStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;
 import dev.vfyjxf.cirrus.api.planning.plan.ProvisionMachineStep;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
@@ -36,9 +37,9 @@ import dev.vfyjxf.cirrus.planning.core.cost.DefaultAcquisitionOracle;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.planning.core.service.DefaultPlanningService;
 import dev.vfyjxf.cloudlib.api.util.Namespace;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -68,8 +69,8 @@ class ComplexRecipeFeasibilityTest {
         String systemId,
         String id,
         List<String> machines,
-        List<dev.vfyjxf.cirrus.api.planning.graph.RawIngredientSlot> ins,
-        List<dev.vfyjxf.cirrus.api.planning.graph.RawOutputSlot> outs,
+        List<RawIngredientSlot> ins,
+        List<RawOutputSlot> outs,
         Set<String> systemTags
     ) {
         return taggedRec(systemId, id, machines, ins, outs, systemTags, Set.of());
@@ -79,8 +80,8 @@ class ComplexRecipeFeasibilityTest {
         String systemId,
         String id,
         List<String> machines,
-        List<dev.vfyjxf.cirrus.api.planning.graph.RawIngredientSlot> ins,
-        List<dev.vfyjxf.cirrus.api.planning.graph.RawOutputSlot> outs,
+        List<RawIngredientSlot> ins,
+        List<RawOutputSlot> outs,
         Set<String> systemTags,
         Set<CanonicalRecipeTag> canonicalTags
     ) {
@@ -329,8 +330,10 @@ class ComplexRecipeFeasibilityTest {
         assertEquals(PlanningStatus.feasible, minecartRes.status());
         ProductionPlan minecartPlan = minecartRes.paretoPlans().get(0);
         boolean buildsFurnace = minecartPlan.steps().stream()
-                .anyMatch(s -> s instanceof ProvisionMachineStep pm
-                        && pm.machine().contentKey().orElseThrow().equals(item("minecraft:furnace")));
+                .anyMatch(
+                    s -> s instanceof ProvisionMachineStep pm
+                            && pm.machine().contentKey().orElseThrow().equals(item("minecraft:furnace"))
+                );
         assertTrue(buildsFurnace, "Expected hopper_minecart plan to provision minecraft:furnace");
 
         // Anvil & Netherite Block must NEVER shortcut-acquire packed blocks as raw leaves.
@@ -413,7 +416,7 @@ class ComplexRecipeFeasibilityTest {
         PlanningContextFactory factory = new PlanningContextFactory(graph);
         DefaultPlanningService service = new DefaultPlanningService(graph);
 
-        List<dev.vfyjxf.cirrus.api.planning.human.GuidanceRule> bans = List.of(
+        List<GuidanceRule> bans = List.of(
             new ResourceRule("ban0", GuidanceScope.session, RuleStrength.hardBan, item("mod:exotic_flower_0"), false),
             new ResourceRule("ban1", GuidanceScope.session, RuleStrength.hardBan, item("mod:exotic_flower_1"), false),
             new ResourceRule("ban2", GuidanceScope.session, RuleStrength.hardBan, item("mod:exotic_flower_2"), false),
@@ -424,8 +427,8 @@ class ComplexRecipeFeasibilityTest {
             new PlanningRequest(
                 List.of(new TargetDemand(item("mod:floral_crown"), 1L)),
                 ctx,
-                dev.vfyjxf.cirrus.api.planning.cost.PlanningProfile.defaultAutoSmart(),
-                dev.vfyjxf.cirrus.api.planning.context.PlanningBudget.defaultInteractive()
+                PlanningProfile.defaultAutoSmart(),
+                PlanningBudget.defaultInteractive()
             )
         );
         assertEquals(PlanningStatus.feasible, res.status());

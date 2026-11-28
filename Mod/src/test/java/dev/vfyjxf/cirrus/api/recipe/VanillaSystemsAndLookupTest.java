@@ -31,6 +31,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.EnchantedBookItem;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionContents;
@@ -168,7 +169,7 @@ class VanillaSystemsAndLookupTest {
         boolean hasBuckets = false;
         for (OutputContent output : cakeView.outputs()) {
             if (output instanceof StackContent<?, ?> stack && stack.isItem()) {
-                ItemStack itemStack = stack.<net.minecraft.world.item.Item, ItemStack>cast().content().value();
+                ItemStack itemStack = stack.<Item, ItemStack>cast().content().value();
                 if (itemStack.is(Items.BUCKET) && stack.amount() == 3L) {
                     hasBuckets = true;
                 }
@@ -251,7 +252,7 @@ class VanillaSystemsAndLookupTest {
             "Anvil should synthesize Sharpness I + Sharpness I -> Sharpness II"
         );
         AnvilRecipeSystem.VanillaAnvilRecipe repair = anvil.allRecipes()
-                .detect(r -> r.kind() == AnvilRecipeSystem.Kind.MATERIAL_REPAIR);
+                .detect(r -> r.kind() == AnvilRecipeSystem.Kind.materialRepair);
         assertNotNull(repair);
         assertEquals(RecipeUsePolicy.targetOnly, anvil.routingHints(repair).usePolicy());
 
@@ -321,7 +322,8 @@ class VanillaSystemsAndLookupTest {
         // withId + custom RecipeLookupCondition
         ResourceLocation chestId = ResourceLocation.withDefaultNamespace("chest");
         RecipeLookupCondition<RecipeHolder<CraftingRecipe>> hasAtLeastEightIngredients = holder -> holder.value()
-                .getIngredients().size() >= 8;
+                .getIngredients().size()
+                >= 8;
         RecipeHolder<CraftingRecipe> found = crafting.createLookup()
                 .withId(chestId)
                 .withCondition(hasAtLeastEightIngredients)

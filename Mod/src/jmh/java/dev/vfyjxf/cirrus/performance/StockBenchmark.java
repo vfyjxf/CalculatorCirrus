@@ -42,6 +42,7 @@ import java.util.concurrent.TimeUnit;
 @Measurement(iterations = 5, time = 1)
 @Fork(1)
 @State(Scope.Benchmark)
+@SuppressWarnings("PMD.PublicNonFinalInstanceField")
 public class StockBenchmark {
 
     @Param({"64", "1024", "4096"})

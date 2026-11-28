@@ -53,8 +53,6 @@ import dev.vfyjxf.cirrus.api.planning.plan.VerificationCertificate;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningRequest;
 import dev.vfyjxf.cirrus.api.planning.service.PlanningSession;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
-import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
-import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.StackContent;
@@ -64,11 +62,13 @@ import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionContext;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionGuideResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionPerformResult;
 import dev.vfyjxf.cirrus.api.recipe.execution.interaction.InteractionProbeResult;
+import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.api.recipe.screening.RecipeScreeningHints;
 import dev.vfyjxf.cirrus.api.recipe.screening.RecipeUsePolicy;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageSource;
 import dev.vfyjxf.cirrus.api.recipe.storage.StorageSourceType;
 import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystem;
+import dev.vfyjxf.cirrus.api.recipe.system.RecipeSystemTags;
 import dev.vfyjxf.cirrus.api.recipe.system.ResolveContext;
 import dev.vfyjxf.cirrus.api.recipe.system.RoutingRecipeView;
 import dev.vfyjxf.cirrus.config.CalculatorRuleSelection;
@@ -86,7 +86,6 @@ import dev.vfyjxf.cirrus.planning.core.cost.DefaultCostMetadataProvider;
 import dev.vfyjxf.cirrus.planning.core.cost.PlanCosts;
 import dev.vfyjxf.cirrus.planning.core.cost.StepCosts;
 import dev.vfyjxf.cirrus.planning.core.graph.DefaultSystemAdmissionPolicy;
-import dev.vfyjxf.cirrus.planning.core.graph.MachineCapabilityGroups;
 import dev.vfyjxf.cirrus.planning.core.human.DefaultHumanGuidanceView;
 import dev.vfyjxf.cirrus.planning.core.human.LayeredHumanGuidanceStore;
 import dev.vfyjxf.cirrus.planning.core.service.DefaultPlanningService;
@@ -137,7 +136,8 @@ class BridgeRuntimeAndPersistenceTest {
     void worldFacilityRegistryPersistsAllEightRuleTypesAndHandlesUnknownKindGracefully() {
         WorldFacilityRegistry reg = WorldFacilityRegistry.createDetached();
         CompiledRecipeKey rk = new CompiledRecipeKey(
-            Namespace.parse("minecraft:crafting"), Optional.of(ResourceLocation.parse("test:r1")), 12345L);
+            Namespace.parse("minecraft:crafting"), Optional.of(ResourceLocation.parse("test:r1")), 12345L
+        );
         ComponentStackKey iron = item("minecraft:iron_ingot");
         ComponentStackKey oak = item("minecraft:oak_planks");
         MachineEntry persistedFurnace = MachineEntry.fromItemStack(new ItemStack(Items.FURNACE));
@@ -150,12 +150,15 @@ class BridgeRuntimeAndPersistenceTest {
         List<GuidanceRule> allRules = List.of(
             new RecipeRule("r1", GuidanceScope.worldSave, RuleStrength.hardBan, rk),
             new SystemRule(
-                "r2", GuidanceScope.worldSave, RuleStrength.hardPin, Namespace.parse("jei:category/gregtech/bender"), true),
+                "r2", GuidanceScope.worldSave, RuleStrength.hardPin, Namespace.parse("jei:category/gregtech/bender"), true
+            ),
             new MachineRule(
-                "r3", GuidanceScope.worldSave, RuleStrength.softPrefer, machine("minecraft:furnace"), true),
+                "r3", GuidanceScope.worldSave, RuleStrength.softPrefer, machine("minecraft:furnace"), true
+            ),
             new ResourceRule("r4", GuidanceScope.worldSave, RuleStrength.hardPin, iron, true),
             new TagDefaultRule(
-                "r5", GuidanceScope.worldSave, RuleStrength.hardPin, itemTag("minecraft:planks"), oak),
+                "r5", GuidanceScope.worldSave, RuleStrength.hardPin, itemTag("minecraft:planks"), oak
+            ),
             new CycleBreakRule("r6", GuidanceScope.worldSave, RuleStrength.hardBan, iron, rk),
             new CostOverrideRule(
                 "r7",
@@ -175,8 +178,10 @@ class BridgeRuntimeAndPersistenceTest {
         assertEquals(2, reloaded.facilitySnapshot().ownedCountOf(persistedFurnace));
         assertEquals(1, reloaded.facilitySnapshot().automatedLines().size());
         assertEquals(1, reloaded.facilitySnapshot().automatedRecipes().size());
-        assertTrue(reloaded.facilitySnapshot().unlockedSystems()
-                .contains(Namespace.parse("jei:category/gregtech/bender")));
+        assertTrue(
+            reloaded.facilitySnapshot().unlockedSystems()
+                    .contains(Namespace.parse("jei:category/gregtech/bender"))
+        );
         assertEquals(8, reloaded.worldSaveRules().size());
 
         JsonElement bad = JsonParser.parseString(
@@ -271,9 +276,11 @@ class BridgeRuntimeAndPersistenceTest {
         List<PlanStep> steps = List.of(
             new AcquireStep("s001", List.of(), a, 2, AcquisitionKind.manualGather, StepCosts.freeBaseCost),
             new ProvisionMachineStep(
-                "s002", List.of(), machine("mod:m1"), Optional.empty(), 1, false, StepCosts.freeBaseCost),
+                "s002", List.of(), machine("mod:m1"), Optional.empty(), 1, false, StepCosts.freeBaseCost
+            ),
             new SetupLineStep(
-                "s003", List.of(), Namespace.parse("mod:sys"), machine("mod:m1"), b, StepCosts.freeBaseCost),
+                "s003", List.of(), Namespace.parse("mod:sys"), machine("mod:m1"), b, StepCosts.freeBaseCost
+            ),
             new LinePullStep("s004", List.of(), "line:a", a, 1, StepCosts.freeBaseCost),
             new CraftStep(
                 "s005",
@@ -595,7 +602,8 @@ class BridgeRuntimeAndPersistenceTest {
 
             RecipeEntry<String> entry = RecipeEntry.of(sys, "planks_to_sticks");
             CompiledRecipeKey rk = new CompiledRecipeKey(
-                Namespace.parse("test:bridge"), Optional.of(ResourceLocation.parse("test:planks_to_sticks")), 1L);
+                Namespace.parse("test:bridge"), Optional.of(ResourceLocation.parse("test:planks_to_sticks")), 1L
+            );
             ComponentStackKey birchKey = ComponentStackKey.fromItemStack(new ItemStack(Items.BIRCH_PLANKS))
                     .orElseThrow();
             ComponentStackKey stickKey = item("minecraft:stick");

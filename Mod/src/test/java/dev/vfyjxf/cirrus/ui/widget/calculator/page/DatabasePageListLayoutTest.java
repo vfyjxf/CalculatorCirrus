@@ -2,11 +2,13 @@ package dev.vfyjxf.cirrus.ui.widget.calculator.page;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.vfyjxf.cirrus.api.content.type.ValueType;
+import dev.vfyjxf.cirrus.api.content.value.ContentStack;
 import dev.vfyjxf.cirrus.api.recipe.RecipeApi;
 import dev.vfyjxf.cirrus.api.recipe.RecipeEntry;
 import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.database.CustomRecipeDatabase;
+import dev.vfyjxf.cirrus.api.recipe.database.DatabaseCategoryTree;
 import dev.vfyjxf.cirrus.api.recipe.database.DatabaseDefinition;
 import dev.vfyjxf.cirrus.api.recipe.database.DatabaseKind;
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseIndex;
@@ -43,6 +45,11 @@ import dev.vfyjxf.cirrus.ui.widget.common.CirrusRowWidget;
 import dev.vfyjxf.cirrus.ui.widget.common.CirrusSectionWidget;
 import dev.vfyjxf.cirrus.ui.widget.common.CirrusWrappedTextWidget;
 import dev.vfyjxf.cirrus.ui.widget.toggle.sw.Slide;
+import dev.vfyjxf.cirrus.ui.workbench.database.DatabaseExplorerWorkspace;
+import dev.vfyjxf.cirrus.ui.workbench.projection.ProjectionDiffTemplate;
+import dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltip;
+import dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltipRenderer;
+import dev.vfyjxf.cloudlib.api.math.Rect;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.Tooltip;
 import dev.vfyjxf.cloudlib.api.ui.tooltip.TooltipEntry;
@@ -50,7 +57,11 @@ import dev.vfyjxf.cloudlib.api.util.Namespace;
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexWrap;
 import dev.vfyjxf.taffy.style.TaffyDimension;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.client.settings.KeyModifier;
 import org.eclipse.collections.api.RichIterable;
 import org.eclipse.collections.api.factory.Lists;
@@ -66,6 +77,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -449,42 +461,42 @@ class DatabasePageListLayoutTest {
             assertEquals(
                 2,
                 showcasePipeline.entryCountByTemplate(
-                    dev.vfyjxf.cirrus.ui.workbench.projection.ProjectionDiffTemplate.Kind.valueMeter
+                    ProjectionDiffTemplate.Kind.valueMeter
                 )
             );
             assertEquals(
                 1,
                 showcasePipeline.entryCountByTemplate(
-                    dev.vfyjxf.cirrus.ui.workbench.projection.ProjectionDiffTemplate.Kind.durability
+                    ProjectionDiffTemplate.Kind.durability
                 )
             );
             assertTrue(
                 showcasePipeline.entryCountByTemplate(
-                    dev.vfyjxf.cirrus.ui.workbench.projection.ProjectionDiffTemplate.Kind.fluid
+                    ProjectionDiffTemplate.Kind.fluid
                 ) >= 2
             );
             assertTrue(
                 showcasePipeline.entryCountByTemplate(
-                    dev.vfyjxf.cirrus.ui.workbench.projection.ProjectionDiffTemplate.Kind.stackSlot
+                    ProjectionDiffTemplate.Kind.stackSlot
                 ) >= 2
             );
 
             // Verify sidebar system tooltip shows cycling active machine and Shift expands full machine list
-            dev.vfyjxf.cirrus.api.recipe.database.DatabaseCategoryTree.CategoryNode debugNode = new dev.vfyjxf.cirrus.api.recipe.database.DatabaseCategoryTree.CategoryNode(
+            DatabaseCategoryTree.CategoryNode debugNode = new DatabaseCategoryTree.CategoryNode(
                 "sys:" + DebugProjectionPlugin.systemId,
                 "Debug Projection",
                 10,
-                dev.vfyjxf.cirrus.api.recipe.database.DatabaseCategoryTree.NodeKind.system,
+                DatabaseCategoryTree.NodeKind.system,
                 false,
                 "calculator_cirrus",
                 List.of()
             );
-            List<dev.vfyjxf.cirrus.api.content.value.ContentStack<net.minecraft.world.item.Item, net.minecraft.world.item.ItemStack>> machines = List.of(
-                dev.vfyjxf.cirrus.api.content.value.ContentStack.fromStack(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.CRAFTING_TABLE)),
-                dev.vfyjxf.cirrus.api.content.value.ContentStack.fromStack(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.FURNACE)),
-                dev.vfyjxf.cirrus.api.content.value.ContentStack.fromStack(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.BREWING_STAND))
+            List<ContentStack<Item, ItemStack>> machines = List.of(
+                ContentStack.fromStack(new ItemStack(Items.CRAFTING_TABLE)),
+                ContentStack.fromStack(new ItemStack(Items.FURNACE)),
+                ContentStack.fromStack(new ItemStack(Items.BREWING_STAND))
             );
-            var singleTip = dev.vfyjxf.cirrus.ui.workbench.database.DatabaseExplorerWorkspace.buildSystemNodeTooltip(
+            var singleTip = DatabaseExplorerWorkspace.buildSystemNodeTooltip(
                 debugNode,
                 "Debug / Debug Projection",
                 List.of(machines.getFirst()),
@@ -495,14 +507,14 @@ class DatabasePageListLayoutTest {
             assertNotNull(singleTip.iconStack());
             assertFalse(singleTip.hasInteractiveGrid());
             var singleLists = singleTip.blocks().stream()
-                    .filter(dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltip.Block.ItemList.class::isInstance)
-                    .map(dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltip.Block.ItemList.class::cast)
+                    .filter(OreUiRichTooltip.Block.ItemList.class::isInstance)
+                    .map(OreUiRichTooltip.Block.ItemList.class::cast)
                     .toList();
             assertEquals(1, singleLists.size());
             assertEquals(1, singleLists.getFirst().entries().size());
 
-            var picked = new java.util.concurrent.atomic.AtomicReference<dev.vfyjxf.cirrus.api.content.value.ContentStack<net.minecraft.world.item.Item, net.minecraft.world.item.ItemStack>>();
-            var multiTip = dev.vfyjxf.cirrus.ui.workbench.database.DatabaseExplorerWorkspace.buildSystemNodeTooltip(
+            var picked = new AtomicReference<ContentStack<Item, ItemStack>>();
+            var multiTip = DatabaseExplorerWorkspace.buildSystemNodeTooltip(
                 debugNode,
                 "Debug / Debug Projection",
                 machines,
@@ -515,7 +527,7 @@ class DatabasePageListLayoutTest {
             assertTrue(multiTip.hasInteractiveGrid());
             assertTrue(
                 multiTip.blocks().stream()
-                        .anyMatch(dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltip.Block.FooterHint.class::isInstance)
+                        .anyMatch(OreUiRichTooltip.Block.FooterHint.class::isInstance)
             );
             var grid = multiTip.interactiveGrid();
             assertNotNull(grid);
@@ -530,17 +542,17 @@ class DatabasePageListLayoutTest {
             assertNotNull(slotTip);
             assertNotNull(slotTip.iconStack());
             assertEquals(
-                net.minecraft.network.chat.Component.literal("minecraft:furnace"),
+                Component.literal("minecraft:furnace"),
                 slotTip.subtitle()
             );
             interaction.onItemClick(2, machines.get(2));
             assertEquals(machines.get(2), picked.get());
 
             // Verify JEI-style GridGeometry hit-testing and scrolling on an overflowing 45-slot grid (10x4 visible, 5 total rows)
-            var overflowGeom = new dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltipRenderer.GridGeometry(
-                new dev.vfyjxf.cloudlib.api.math.Rect(10, 20, 196, 80),
-                new dev.vfyjxf.cloudlib.api.math.Rect(14, 24, 180, 72),
-                new dev.vfyjxf.cloudlib.api.math.Rect(196, 24, 6, 72),
+            var overflowGeom = new OreUiRichTooltipRenderer.GridGeometry(
+                new Rect(10, 20, 196, 80),
+                new Rect(14, 24, 180, 72),
+                new Rect(196, 24, 6, 72),
                 10,
                 4,
                 5,
@@ -556,8 +568,8 @@ class DatabasePageListLayoutTest {
             assertEquals(0, overflowGeom.scrollRowForPointerY(25));
             assertEquals(1, overflowGeom.scrollRowForPointerY(94));
 
-            var measured = dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltipRenderer.measure(multiTip, null);
-            assertTrue(measured.width() >= dev.vfyjxf.cirrus.ui.workbench.tooltip.OreUiRichTooltipRenderer.minWidth);
+            var measured = OreUiRichTooltipRenderer.measure(multiTip, null);
+            assertTrue(measured.width() >= OreUiRichTooltipRenderer.minWidth);
             assertTrue(measured.height() > 60);
         } finally {
             if (previous instanceof RecipeApiImpl impl) {

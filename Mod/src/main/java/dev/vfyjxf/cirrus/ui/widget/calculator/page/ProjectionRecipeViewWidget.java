@@ -627,8 +627,10 @@ final class ProjectionRecipeViewWidget extends Widget implements OreUiTooltipPro
 
             Side inputSide = buildSide(model.inputSide());
             Side outputSide = buildSide(model.outputSide());
-            boolean hasSlots = !inputSide.slots().isEmpty() || !outputSide.slots().isEmpty()
-                    || inputSide.usesGrid() || outputSide.usesGrid();
+            boolean hasSlots = !inputSide.slots().isEmpty()
+                    || !outputSide.slots().isEmpty()
+                    || inputSide.usesGrid()
+                    || outputSide.usesGrid();
             boolean arrow = (!inputSide.slots().isEmpty() || inputSide.usesGrid())
                     && (!outputSide.slots().isEmpty() || outputSide.usesGrid());
             int arrowWidth = arrow ? arrowRenderWidth : 0;

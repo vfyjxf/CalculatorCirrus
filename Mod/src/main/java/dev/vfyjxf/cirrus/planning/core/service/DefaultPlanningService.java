@@ -82,12 +82,12 @@ public final class DefaultPlanningService implements PlanningService {
     private static final int coneCacheCapacity = 16;
 
     private static final ObjectivePreset[] portfolioPresets = {
-        ObjectivePreset.autoSmart,
-        ObjectivePreset.stayAtBase,
-        ObjectivePreset.quickHandcraft,
-        ObjectivePreset.factoryScale,
-        ObjectivePreset.frugalMaterials,
-        ObjectivePreset.lowCognitive
+            ObjectivePreset.autoSmart,
+            ObjectivePreset.stayAtBase,
+            ObjectivePreset.quickHandcraft,
+            ObjectivePreset.factoryScale,
+            ObjectivePreset.frugalMaterials,
+            ObjectivePreset.lowCognitive
     };
 
     private final CompiledRecipeGraph graph;
@@ -228,7 +228,8 @@ public final class DefaultPlanningService implements PlanningService {
         Map<ComponentStackKey, String> unmetReasons = new TreeMap<>();
         boolean primarySeedFound = false;
         boolean refinedFully = true;
-        @Nullable Potentials primaryPot = null;
+        @Nullable
+        Potentials primaryPot = null;
 
         boolean targetsReachable = areAllTargetsReachable(cone, request);
         if (targetsReachable) {

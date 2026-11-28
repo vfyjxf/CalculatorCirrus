@@ -422,7 +422,8 @@ class DefaultPlanVerifierFaultInjectionTest {
 
         // 14. ERR_UNKNOWN_RECIPE
         CompiledRecipeKey ghostKey = new CompiledRecipeKey(
-            Namespace.parse("minecraft:crafting"), Optional.of(ResourceLocation.parse("ghost")), 42L);
+            Namespace.parse("minecraft:crafting"), Optional.of(ResourceLocation.parse("ghost")), 42L
+        );
         CraftStep ghostStep = new CraftStep(
             "s1",
             List.of(),

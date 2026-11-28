@@ -344,7 +344,8 @@ public final class CirrusContentBridge {
     private static <T, S> InputMapping mapTagInput(TagStackContent<T> tag, long amount, boolean catalyst) {
         TagKey<T> tagKey = tag.tagKey();
         ContentType<T> contentType = tag.contentType();
-        @Nullable StackType<T, S> stackType = null;
+        @Nullable
+        StackType<T, S> stackType = null;
         try {
             ContentApi api = ContentApi.instance();
             if (api.hasStackType(contentType)) {

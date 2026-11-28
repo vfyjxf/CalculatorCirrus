@@ -391,7 +391,7 @@ public final class OfflineContentTypes {
         return switch (norm) {
             case "identity", "identity_only", "identity_and_amount" -> Optional.of(SlotMatchMode.identity);
             case "component_subset", "subset", "partial_component",
-                 "identity_and_component", "exact_component", "all", "exact", "default" ->
+                    "identity_and_component", "exact_component", "all", "exact", "default" ->
                 Optional.of(SlotMatchMode.identityAndComponent);
             default -> {
                 if (norm.contains("identity")) {

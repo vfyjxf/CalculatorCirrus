@@ -75,13 +75,15 @@ public final class MachineReadinessClassifier {
 
         for (MachineEntry machine : candidateMachines) {
             if (ownedMachines.contains(machine) || facilities.ownsMachineFor(machine)) {
-                result.put(machine, new MachineReadiness.Classification(
-                    machine,
-                    MachineReadiness.owned,
-                    0,
-                    0.0,
-                    MachineReadiness.UncertaintyTag.certifiedOwned
-                ));
+                result.put(
+                    machine, new MachineReadiness.Classification(
+                        machine,
+                        MachineReadiness.owned,
+                        0,
+                        0.0,
+                        MachineReadiness.UncertaintyTag.certifiedOwned
+                    )
+                );
                 lightAvailableMachines.add(machine);
                 Set<MachineCapabilityId> caps = capabilitiesByMachine.get(machine);
                 if (caps != null) {
@@ -113,13 +115,15 @@ public final class MachineReadinessClassifier {
                     new HashSet<>()
                 );
                 if (est != null && est.steps <= defaultMaxTrivialSteps && est.costSeconds <= maxTrivialCost + 1e-9) {
-                    result.put(machine, new MachineReadiness.Classification(
-                        machine,
-                        MachineReadiness.trivialToBuild,
-                        est.steps,
-                        est.costSeconds,
-                        MachineReadiness.UncertaintyTag.knownBuild
-                    ));
+                    result.put(
+                        machine, new MachineReadiness.Classification(
+                            machine,
+                            MachineReadiness.trivialToBuild,
+                            est.steps,
+                            est.costSeconds,
+                            MachineReadiness.UncertaintyTag.knownBuild
+                        )
+                    );
                     lightAvailableMachines.add(machine);
                     Set<MachineCapabilityId> caps = capabilitiesByMachine.get(machine);
                     if (caps != null) {
@@ -141,13 +145,15 @@ public final class MachineReadinessClassifier {
             MachineReadiness.UncertaintyTag tag = (basePrice != null && Double.isFinite(basePrice))
                     ? MachineReadiness.UncertaintyTag.knownBuild
                     : (hasRecipe ? MachineReadiness.UncertaintyTag.unknownOwnership : MachineReadiness.UncertaintyTag.noBuildCert);
-            result.put(machine, new MachineReadiness.Classification(
-                machine,
-                MachineReadiness.heavyInvestment,
-                hasRecipe ? defaultMaxTrivialSteps + 1 : Integer.MAX_VALUE,
-                basePrice != null && Double.isFinite(basePrice) ? basePrice : Double.POSITIVE_INFINITY,
-                tag
-            ));
+            result.put(
+                machine, new MachineReadiness.Classification(
+                    machine,
+                    MachineReadiness.heavyInvestment,
+                    hasRecipe ? defaultMaxTrivialSteps + 1 : Integer.MAX_VALUE,
+                    basePrice != null && Double.isFinite(basePrice) ? basePrice : Double.POSITIVE_INFINITY,
+                    tag
+                )
+            );
         }
 
         return Collections.unmodifiableMap(result);

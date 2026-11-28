@@ -2,7 +2,6 @@ package dev.vfyjxf.cirrus.ui.workbench.flow;
 
 import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
-import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchBreakpoint;
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchFormatters;
 import dev.vfyjxf.cirrus.ui.workbench.layout.PreparationLedgerModel;

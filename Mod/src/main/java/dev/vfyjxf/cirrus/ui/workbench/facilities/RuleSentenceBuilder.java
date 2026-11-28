@@ -73,9 +73,16 @@ public final class RuleSentenceBuilder {
     }
 
     public enum RuleKind {
-        recipe("recipe"), system("system"), machine("machine"), resource("resource"), tagDefault("tag"), cycleBreak(
+        recipe("recipe"),
+        system("system"),
+        machine("machine"),
+        resource("resource"),
+        tagDefault("tag"),
+        cycleBreak(
             "cycle"
-        ), costOverride("cost"), modNamespace("mod");
+        ),
+        costOverride("cost"),
+        modNamespace("mod");
 
         private final String id;
 

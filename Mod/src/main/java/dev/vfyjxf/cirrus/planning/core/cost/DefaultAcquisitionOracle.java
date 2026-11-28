@@ -257,18 +257,20 @@ public final class DefaultAcquisitionOracle implements AcquisitionOracle {
                 double unitSec = c.baseUnitSeconds();
                 double fixedDeliv = c.fixedDeliverySeconds();
                 double scarcity = c.scarcityPremiumPerUnit();
-                return Optional.of(new AcquisitionOption(
-                    AcquisitionKind.baseSupply,
-                    unitSec,
-                    0.0,
-                    fixedDeliv,
-                    scarcity,
-                    unitSec,
-                    0.0,
-                    c.capacityLimit(),
-                    "",
-                    keyBase
-                ));
+                return Optional.of(
+                    new AcquisitionOption(
+                        AcquisitionKind.baseSupply,
+                        unitSec,
+                        0.0,
+                        fixedDeliv,
+                        scarcity,
+                        unitSec,
+                        0.0,
+                        c.capacityLimit(),
+                        "",
+                        keyBase
+                    )
+                );
             }
         }
 

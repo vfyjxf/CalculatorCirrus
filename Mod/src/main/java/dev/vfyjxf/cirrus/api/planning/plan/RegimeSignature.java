@@ -68,8 +68,8 @@ public record RegimeSignature(
 
     public String canonicalKey() {
         String machines = newHeavyMachines.stream()
-            .map(MachineEntry::canonicalKey)
-            .collect(Collectors.joining(","));
+                .map(MachineEntry::canonicalKey)
+                .collect(Collectors.joining(","));
         return "M=" + machines
                 + "|C=" + String.join(",", techClusters)
                 + "|T=" + (requiresFieldTrip ? "1" : "0")

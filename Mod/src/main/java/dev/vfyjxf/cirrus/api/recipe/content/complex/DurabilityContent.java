@@ -37,7 +37,7 @@ public final class DurabilityContent implements ComplexContent {
         if (ingredient == null || ingredient.isEmpty() || durabilityCost <= 0) {
             return empty;
         }
-        return from(ingredient, durabilityCost, Math.max(1L, ingredient.amount()), RecipeContent.MAX_CHANCE);
+        return from(ingredient, durabilityCost, Math.max(1L, ingredient.amount()), MAX_CHANCE);
     }
 
     public static InputContent from(InputContent ingredient, int durabilityCost, long amount, float chance) {
@@ -59,7 +59,7 @@ public final class DurabilityContent implements ComplexContent {
         if (tool == null || tool.isEmpty() || durabilityCost <= 0) {
             return empty;
         }
-        return from(InputContent.fromItemStack(tool, 1L, RecipeContent.MAX_CHANCE), durabilityCost, 1L, RecipeContent.MAX_CHANCE);
+        return from(InputContent.fromItemStack(tool, 1L, MAX_CHANCE), durabilityCost, 1L, MAX_CHANCE);
     }
 
     /**
@@ -139,11 +139,11 @@ public final class DurabilityContent implements ComplexContent {
             }
             return InputContent.fromStack(
                 ContentStack.fromStack(CirrusTypes.Contents.itemStack, clean, 1L),
-                RecipeContent.MAX_CHANCE,
+                MAX_CHANCE,
                 stackContent.matchStrategy()
             );
         }
-        return (InputContent) raw.copyWithAmountAndChance(1L, RecipeContent.MAX_CHANCE);
+        return (InputContent) raw.copyWithAmountAndChance(1L, MAX_CHANCE);
     }
 
     private final InputContent ingredient;

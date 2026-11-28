@@ -197,8 +197,8 @@ public final class OreUiRichTooltip {
         default Component pinnedFooterHint(boolean scrollable) {
             return Component.literal(
                 scrollable
-                    ? "Hover slot · Scroll · Click to filter"
-                    : "Hover slot to inspect · Click to filter"
+                        ? "Hover slot · Scroll · Click to filter"
+                        : "Hover slot to inspect · Click to filter"
             );
         }
     }

@@ -1,9 +1,9 @@
 package dev.vfyjxf.cirrus.planning;
 
+import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.context.FacilitySnapshot;
 import dev.vfyjxf.cirrus.api.planning.context.InventorySnapshot;
 import dev.vfyjxf.cirrus.api.planning.graph.CompiledRecipeGraph;
-import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
 import dev.vfyjxf.cirrus.api.planning.model.StockLedger;
 import dev.vfyjxf.cirrus.api.planning.plan.CycleLoopStep;
 import dev.vfyjxf.cirrus.api.planning.plan.ProductionPlan;

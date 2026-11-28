@@ -6,7 +6,10 @@ import org.jspecify.annotations.Nullable;
  * Declares which runtime side can execute a translated interaction step.
  */
 public enum ExecutionSideRequirement {
-    environmentAgnostic(true, true, true), client(true, false, true), server(false, true, true), player(
+    environmentAgnostic(true, true, true),
+    client(true, false, true),
+    server(false, true, true),
+    player(
         true,
         false,
         false

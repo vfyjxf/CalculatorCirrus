@@ -4,9 +4,15 @@ package dev.vfyjxf.cirrus.api.recipe.execution;
  * Describes the runtime capability a step depends on before it can advance.
  */
 public enum ExecutionCapability {
-    storageAccess(true), inventoryCapacity(true), inventoryTransfer(true), interactionAccess(true), interactionPerform(
+    storageAccess(true),
+    inventoryCapacity(true),
+    inventoryTransfer(true),
+    interactionAccess(true),
+    interactionPerform(
         true
-    ), outputStorage(true), manualCheckpoint(false);
+    ),
+    outputStorage(true),
+    manualCheckpoint(false);
 
     //region aliases
 

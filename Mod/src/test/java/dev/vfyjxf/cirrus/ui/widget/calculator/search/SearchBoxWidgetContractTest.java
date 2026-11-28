@@ -2,6 +2,7 @@ package dev.vfyjxf.cirrus.ui.widget.calculator.search;
 
 import dev.vfyjxf.cirrus.api.recipe.database.RecipeDatabaseIndex;
 import dev.vfyjxf.cirrus.ui.widget.calculator.page.DatabasePage;
+import dev.vfyjxf.cirrus.ui.widget.common.CirrusTextInputWidget;
 import dev.vfyjxf.cloudlib.api.event.EventDispatch;
 import dev.vfyjxf.cloudlib.api.math.Rect;
 import dev.vfyjxf.cloudlib.api.ui.base.Scene;
@@ -9,6 +10,7 @@ import dev.vfyjxf.cloudlib.api.ui.base.SceneContext;
 import dev.vfyjxf.cloudlib.api.ui.base.SceneHost;
 import dev.vfyjxf.cloudlib.api.ui.base.Widget;
 import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
+import dev.vfyjxf.cloudlib.api.ui.style.UIStyles;
 import net.minecraft.client.gui.Font;
 import org.junit.jupiter.api.Test;
 import org.lwjgl.glfw.GLFW;
@@ -219,15 +221,15 @@ class SearchBoxWidgetContractTest {
         TestSearchBoxWidget search = new TestSearchBoxWidget();
         search.onQueryChanged(searchObserved::set).setText("machine:Furnace");
         AtomicReference<String> textObserved = new AtomicReference<>();
-        dev.vfyjxf.cirrus.ui.widget.common.CirrusTextInputWidget textInput = new dev.vfyjxf.cirrus.ui.widget.common.CirrusTextInputWidget()
+        CirrusTextInputWidget textInput = new CirrusTextInputWidget()
                 .onTextChanged(textObserved::set)
                 .setText("iron");
 
         WidgetGroup<Widget> root = new WidgetGroup<>();
         root.useStyle(
             sizeOf(260, 80),
-            dev.vfyjxf.cloudlib.api.ui.style.UIStyles.flexRow(),
-            dev.vfyjxf.cloudlib.api.ui.style.UIStyles.gap(8)
+            UIStyles.flexRow(),
+            UIStyles.gap(8)
         );
         search.useStyle(sizeOf(120, 18));
         textInput.useStyle(sizeOf(120, 18));
@@ -244,14 +246,18 @@ class SearchBoxWidgetContractTest {
 
             Rect searchRect = search.absoluteBounds();
             Rect textRect = textInput.absoluteBounds();
-            assertTrue(scene.mouseClicked(searchRect.x() + 12, searchRect.y() + 8, 1)
-                    || scene.mouseReleased(searchRect.x() + 12, searchRect.y() + 8, 1));
+            assertTrue(
+                scene.mouseClicked(searchRect.x() + 12, searchRect.y() + 8, 1)
+                        || scene.mouseReleased(searchRect.x() + 12, searchRect.y() + 8, 1)
+            );
             scene.stabilize();
             assertEquals("", search.text());
             assertEquals("", searchObserved.get());
 
-            assertTrue(scene.mouseClicked(textRect.x() + 12, textRect.y() + 8, 1)
-                    || scene.mouseReleased(textRect.x() + 12, textRect.y() + 8, 1));
+            assertTrue(
+                scene.mouseClicked(textRect.x() + 12, textRect.y() + 8, 1)
+                        || scene.mouseReleased(textRect.x() + 12, textRect.y() + 8, 1)
+            );
             scene.stabilize();
             assertEquals("", textInput.text());
             assertEquals("", textObserved.get());

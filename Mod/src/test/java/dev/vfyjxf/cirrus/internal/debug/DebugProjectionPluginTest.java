@@ -127,8 +127,10 @@ class DebugProjectionPluginTest {
             ProjectionResult unpack = trace(api, system, "fluid_container_unpack", new ExecutionContext());
             assertTrue(
                 unpack.diff().slotDiffs(SlotChannel.input).stream()
-                        .anyMatch(d -> d.status() == SlotDiff.DiffStatus.transformed
-                                && d.touchedByEffects().contains(CirrusTypes.ProjectionEffects.fluidContainerUnpack.id()))
+                        .anyMatch(
+                            d -> d.status() == SlotDiff.DiffStatus.transformed
+                                    && d.touchedByEffects().contains(CirrusTypes.ProjectionEffects.fluidContainerUnpack.id())
+                        )
             );
             assertEquals(2, unpack.projectedRecipe().inputs().size());
 
@@ -156,8 +158,10 @@ class DebugProjectionPluginTest {
             ProjectionResult guaranteed = trace(api, system, "guaranteed_output", new ExecutionContext());
             assertTrue(
                 guaranteed.diff().slotDiffs(SlotChannel.output).stream()
-                        .anyMatch(d -> d.status() == SlotDiff.DiffStatus.removed
-                                && d.touchedByEffects().contains(CirrusTypes.ProjectionEffects.guaranteedOutput.id()))
+                        .anyMatch(
+                            d -> d.status() == SlotDiff.DiffStatus.removed
+                                    && d.touchedByEffects().contains(CirrusTypes.ProjectionEffects.guaranteedOutput.id())
+                        )
             );
             assertEquals(1, guaranteed.projectedRecipe().outputs().size());
 

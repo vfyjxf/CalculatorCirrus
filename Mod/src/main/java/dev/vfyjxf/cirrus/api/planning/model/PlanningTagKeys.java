@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import org.jspecify.annotations.Nullable;
@@ -83,8 +84,7 @@ public final class PlanningTagKeys {
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static TagKey<?> createUntyped(ResourceLocation registryLocation, ResourceLocation tagLocation) {
-        net.minecraft.resources.ResourceKey<Registry<Object>> regKey =
-                (net.minecraft.resources.ResourceKey) net.minecraft.resources.ResourceKey.createRegistryKey(registryLocation);
+        ResourceKey<Registry<Object>> regKey = (ResourceKey) ResourceKey.createRegistryKey(registryLocation);
         return TagKey.create(regKey, tagLocation);
     }
 }

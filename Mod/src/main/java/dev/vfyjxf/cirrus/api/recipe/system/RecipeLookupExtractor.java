@@ -5,6 +5,7 @@ import dev.vfyjxf.cirrus.api.recipe.content.InputContent;
 import dev.vfyjxf.cirrus.api.recipe.content.OutputContent;
 import dev.vfyjxf.cirrus.api.recipe.projection.ProjectionSlot;
 import dev.vfyjxf.cirrus.api.recipe.projection.RecipeProjection;
+import dev.vfyjxf.cirrus.recipe.RecipeApiImpl;
 import dev.vfyjxf.cloudlib.util.Checks;
 import org.jspecify.annotations.Nullable;
 
@@ -39,7 +40,7 @@ public interface RecipeLookupExtractor<R> {
 
             ResolveResult result;
             try {
-                RecipeApi api = dev.vfyjxf.cirrus.recipe.RecipeApiImpl.instance();
+                RecipeApi api = RecipeApiImpl.instance();
                 result = api != null
                         ? api.resolve(ResolveContext.empty(), system, recipe)
                         : system.resolveFallback(ResolveContext.empty(), recipe);

@@ -6,7 +6,9 @@ import org.jspecify.annotations.Nullable;
  * The four logical screen-width breakpoints and their pixel sizes (02 §3 is the only source of these numbers).
  */
 public enum WorkbenchBreakpoint {
-    wide(40f, 28f, 24f, 34f, 28f, 140f, 80f), standard(32f, 24f, 22f, 30f, 24f, 104f, 60f), compact(
+    wide(40f, 28f, 24f, 34f, 28f, 140f, 80f),
+    standard(32f, 24f, 22f, 30f, 24f, 104f, 60f),
+    compact(
         26f,
         20f,
         0f,

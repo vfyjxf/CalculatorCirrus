@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 @Mixin(ConcretePowderBlock.class)
 public interface ConcretePowderBlockAccessor {
 
+    @SuppressWarnings({"PMD.AvoidDollarSigns", "PMD.MethodNamingConventions"})
     @Accessor("concrete")
     Block cirrus$concrete();
 }

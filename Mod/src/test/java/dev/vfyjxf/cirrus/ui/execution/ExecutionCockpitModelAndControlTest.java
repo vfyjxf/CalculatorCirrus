@@ -44,6 +44,7 @@ import dev.vfyjxf.cirrus.ui.CirrusLangs;
 import dev.vfyjxf.cirrus.ui.WorkbenchThemeMode;
 import dev.vfyjxf.cirrus.ui.execution.cockpit.ExecutionCockpitTheme;
 import dev.vfyjxf.cirrus.ui.execution.cockpit.ExecutionControlDeckWidget;
+import dev.vfyjxf.cirrus.ui.execution.cockpit.ExecutionDiagnosticsDrawerWidget;
 import dev.vfyjxf.cirrus.ui.execution.cockpit.ExecutionMaterialsPanelWidget;
 import dev.vfyjxf.cirrus.ui.execution.cockpit.ExecutionStageModel;
 import dev.vfyjxf.cirrus.ui.execution.overlay.ExecutionOverlayOpenState;
@@ -699,7 +700,7 @@ class ExecutionCockpitModelAndControlTest {
             var drawer = panel.diagnosticsDrawer();
             int collapsedY = drawer.posY();
             int collapsedBottom = drawer.posY() + drawer.height();
-            assertEquals(dev.vfyjxf.cirrus.ui.execution.cockpit.ExecutionDiagnosticsDrawerWidget.collapsedHeight, drawer.height());
+            assertEquals(ExecutionDiagnosticsDrawerWidget.collapsedHeight, drawer.height());
             assertTrue(collapsedBottom <= panel.height(), "collapsed drawer must stay inside MainPanel bottom");
 
             drawer.setExpanded(true);
@@ -707,7 +708,7 @@ class ExecutionCockpitModelAndControlTest {
             scene.stabilize();
 
             int expandedBottom = drawer.posY() + drawer.height();
-            assertTrue(drawer.height() > dev.vfyjxf.cirrus.ui.execution.cockpit.ExecutionDiagnosticsDrawerWidget.collapsedHeight);
+            assertTrue(drawer.height() > ExecutionDiagnosticsDrawerWidget.collapsedHeight);
             assertTrue(
                 drawer.posY() < collapsedY,
                 "expanded drawer must rise upward (topY " + drawer.posY() + " < collapsedY " + collapsedY + ")"

@@ -12,9 +12,6 @@ plugins {
 //    id "scala"
 }
 
-// 质量门默认开启；-PcirrusQuality=off 可临时关闭。
-def cirrusQuality = providers.gradleProperty('cirrusQuality').orNull != 'off'
-
 version = mod_version
 group = mod_group_id
 
@@ -30,14 +27,15 @@ spotless {
     }
 }
 
+// Cirrus keeps its enums one constant per line; the shared profile defaults to compact.
+cloudStyle {
+    formatterSetting 'org.eclipse.jdt.core.formatter.alignment_for_enum_constants', '48'
+}
+
 // cloudstyle 在配置期把格式化配置写进 build/cloudstyle，clean 只清其余部分。
 tasks.named('clean', Delete) {
     setDelete(fileTree('build') { exclude 'cloudstyle/**' })
 }
-
-tasks.matching { it.name.startsWith('spotless') }.configureEach { enabled = cirrusQuality }
-tasks.matching { it.name.startsWith('pmd') }.configureEach { enabled = cirrusQuality }
-tasks.matching { it.name == 'verifyPackageInfo' }.configureEach { enabled = cirrusQuality }
 
 // 测试源集无条件走测试反模式规则集；pmdMain 仍用 cloudpmd 解包出来的规则集。
 def cirrusTestLintSourceSets = ['pmdTest': 'test', 'pmdUitest': 'uitest', 'pmdTestmod': 'testmod']
@@ -47,7 +45,6 @@ tasks.withType(Pmd).configureEach { task ->
         return
     }
     def sourceSet = sourceSets.getByName(sourceSetName)
-    task.enabled = cirrusQuality
     task.setRuleSets([])
     task.setRuleSetFiles(files('config/pmd/cloud-test-ruleset.xml'))
     task.setSource(sourceSet.allJava)
@@ -417,11 +414,9 @@ tasks.withType(JavaCompile).configureEach {
     options.compilerArgs.addAll(['-Xmaxwarns', '2000', '-Xmaxerrs', '2000'])
     options.errorprone {
         disableAllChecks = true
-        if (cirrusQuality) {
-            option("NullAway:OnlyNullMarked", "true")
-            option("NullAway:CastToNonNullMethod", "dev.vfyjxf.cloudlib.util.Checks.checkNotNull")
-            check("NullAway", CheckSeverity.ERROR)
-        }
+        option("NullAway:OnlyNullMarked", "true")
+        option("NullAway:CastToNonNullMethod", "dev.vfyjxf.cloudlib.util.Checks.checkNotNull")
+        check("NullAway", CheckSeverity.ERROR)
     }
 }
 

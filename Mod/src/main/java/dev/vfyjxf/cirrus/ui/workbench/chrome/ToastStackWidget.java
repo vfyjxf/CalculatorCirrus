@@ -111,15 +111,16 @@ public class ToastStackWidget extends Widget {
                     if (card.closeRect().contains(lx, ly)) {
                         removeToast(card.toast());
                         CirrusUiSound.playClickSound();
-                    } else if (card.undoRect() != null
-                            && card.undoRect().contains(lx, ly)
-                            && card.toast().undoAction() != null) {
-                        runUndo(card.toast());
-                        CirrusUiSound.playClickSound();
-                    } else {
-                        removeToast(card.toast());
-                        CirrusUiSound.playClickSound();
-                    }
+                    } else
+                        if (card.undoRect() != null
+                                && card.undoRect().contains(lx, ly)
+                                && card.toast().undoAction() != null) {
+                                    runUndo(card.toast());
+                                    CirrusUiSound.playClickSound();
+                                } else {
+                                    removeToast(card.toast());
+                                    CirrusUiSound.playClickSound();
+                                }
                     clickContext.consume();
                     return EventDispatch.consumed;
                 }

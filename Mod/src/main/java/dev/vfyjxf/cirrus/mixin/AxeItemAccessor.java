@@ -10,6 +10,7 @@ import java.util.Map;
 @Mixin(AxeItem.class)
 public interface AxeItemAccessor {
 
+    @SuppressWarnings({"PMD.AvoidDollarSigns", "PMD.MethodNamingConventions"})
     @Accessor("STRIPPABLES")
     static Map<Block, Block> cirrus$strippables() {
         throw new AssertionError();

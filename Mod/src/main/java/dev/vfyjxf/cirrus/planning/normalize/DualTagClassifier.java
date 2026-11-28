@@ -37,32 +37,39 @@ public final class DualTagClassifier {
         List<RecipeTagAssignment> out = new ArrayList<>(4);
         Set<Namespace> sysTags = record.systemTags();
 
-        if (mirrorDuplicate || sysTags.contains(RecipeSystemTags.displayOnly)
+        if (mirrorDuplicate
+                || sysTags.contains(RecipeSystemTags.displayOnly)
                 || sysTags.contains(RecipeSystemTags.mirrorDuplicate)) {
-            out.add(new RecipeTagAssignment(
-                CanonicalRecipeTag.junkOrDuplicate,
-                mirrorDuplicate ? TagProvenance.jeiAudit : TagProvenance.systemTag,
-                1.0,
-                mirrorDuplicate ? "cirrus.tag.reason.native_mirror" : "cirrus.tag.reason.display_system"
-            ));
+            out.add(
+                new RecipeTagAssignment(
+                    CanonicalRecipeTag.junkOrDuplicate,
+                    mirrorDuplicate ? TagProvenance.jeiAudit : TagProvenance.systemTag,
+                    1.0,
+                    mirrorDuplicate ? "cirrus.tag.reason.native_mirror" : "cirrus.tag.reason.display_system"
+                )
+            );
         }
 
         if (suspectJei) {
-            out.add(new RecipeTagAssignment(
-                CanonicalRecipeTag.suspiciousJei,
-                TagProvenance.jeiAudit,
-                0.85,
-                "cirrus.tag.reason.jei_low_fidelity"
-            ));
+            out.add(
+                new RecipeTagAssignment(
+                    CanonicalRecipeTag.suspiciousJei,
+                    TagProvenance.jeiAudit,
+                    0.85,
+                    "cirrus.tag.reason.jei_low_fidelity"
+                )
+            );
         }
 
         if (sysTags.contains(RecipeSystemTags.resourceGen)) {
-            out.add(new RecipeTagAssignment(
-                CanonicalRecipeTag.resourceGeneration,
-                TagProvenance.systemTag,
-                0.95,
-                "cirrus.tag.reason.resource_gen_system"
-            ));
+            out.add(
+                new RecipeTagAssignment(
+                    CanonicalRecipeTag.resourceGeneration,
+                    TagProvenance.systemTag,
+                    0.95,
+                    "cirrus.tag.reason.resource_gen_system"
+                )
+            );
         }
 
         // Structural catalytic/self-multiplying check: a consumed input also appears in outputs.
@@ -82,19 +89,23 @@ public final class DualTagClassifier {
             }
         }
         if (catalyticOverlap) {
-            out.add(new RecipeTagAssignment(
-                CanonicalRecipeTag.catalyticLoop,
-                TagProvenance.structural,
-                0.90,
-                "cirrus.tag.reason.catalytic_overlap"
-            ));
+            out.add(
+                new RecipeTagAssignment(
+                    CanonicalRecipeTag.catalyticLoop,
+                    TagProvenance.structural,
+                    0.90,
+                    "cirrus.tag.reason.catalytic_overlap"
+                )
+            );
         } else if (!hasConsumed && !record.outputs().isEmpty()) {
-            out.add(new RecipeTagAssignment(
-                CanonicalRecipeTag.resourceGeneration,
-                TagProvenance.structural,
-                0.80,
-                "cirrus.tag.reason.zero_consumed_input"
-            ));
+            out.add(
+                new RecipeTagAssignment(
+                    CanonicalRecipeTag.resourceGeneration,
+                    TagProvenance.structural,
+                    0.80,
+                    "cirrus.tag.reason.zero_consumed_input"
+                )
+            );
         }
 
         // Structural packing/unpacking: only when a true reverse recipe exists in the catalog
@@ -102,17 +113,20 @@ public final class DualTagClassifier {
         if (hasReversePackingPartner && record.inputs().size() == 1 && record.outputs().size() == 1) {
             RawIngredientSlot in = record.inputs().get(0);
             RawOutputSlot o = record.outputs().get(0);
-            if (!in.catalyst() && in.candidates().size() == 1
+            if (!in.catalyst()
+                    && in.candidates().size() == 1
                     && !in.candidates().get(0).equals(o.resource())) {
                 long a = in.amount();
                 long b = o.amount();
                 if ((a == 9L && b == 1L) || (a == 1L && b == 9L) || (a == 4L && b == 1L) || (a == 1L && b == 4L)) {
-                    out.add(new RecipeTagAssignment(
-                        CanonicalRecipeTag.packingUnpacking,
-                        TagProvenance.structural,
-                        0.75,
-                        "cirrus.tag.reason.scaling_ratio"
-                    ));
+                    out.add(
+                        new RecipeTagAssignment(
+                            CanonicalRecipeTag.packingUnpacking,
+                            TagProvenance.structural,
+                            0.75,
+                            "cirrus.tag.reason.scaling_ratio"
+                        )
+                    );
                 }
             }
         }
@@ -129,12 +143,14 @@ public final class DualTagClassifier {
         }
 
         if (seen.isEmpty() || (seen.size() == 1 && seen.contains(CanonicalRecipeTag.resourceGeneration))) {
-            out.add(new RecipeTagAssignment(
-                CanonicalRecipeTag.normalProduction,
-                TagProvenance.structural,
-                0.90,
-                "cirrus.tag.reason.default_production"
-            ));
+            out.add(
+                new RecipeTagAssignment(
+                    CanonicalRecipeTag.normalProduction,
+                    TagProvenance.structural,
+                    0.90,
+                    "cirrus.tag.reason.default_production"
+                )
+            );
         }
         return List.copyOf(out);
     }

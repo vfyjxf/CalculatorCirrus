@@ -319,8 +319,13 @@ class PlanningMathematicalPropertyTest {
                         long sum = q0 + q1 + q2 + q3;
                         if (sum > d || sum == 0) continue;
                         double lin = q0 * 0.1 + q1 * 0.2 + q2 * 0.4 + q3 * 0.8;
-                        double raw = q0 * 0.5 + q1 * 0.8 + q2 * 1.0 + q3 * 1.2
-                                + (q1 > 0 ? 0.5 : 0.0) + (q2 > 0 ? 1.5 : 0.0) + (q3 > 0 ? 3.0 : 0.0)
+                        double raw = q0 * 0.5
+                                + q1 * 0.8
+                                + q2 * 1.0
+                                + q3 * 1.2
+                                + (q1 > 0 ? 0.5 : 0.0)
+                                + (q2 > 0 ? 1.5 : 0.0)
+                                + (q3 > 0 ? 3.0 : 0.0)
                                 + gamma * PassBInventoryModel.smoothSplitRamp(sum, d, h);
                         double total = p * (d - sum) + lin + PassBInventoryModel.marginalCappedSoft(raw, s0, capB);
                         if (total < bruteMin) {

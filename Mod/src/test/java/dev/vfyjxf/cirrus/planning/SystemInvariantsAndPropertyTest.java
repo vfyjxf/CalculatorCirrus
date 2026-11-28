@@ -72,6 +72,7 @@ public class SystemInvariantsAndPropertyTest {
         "dev.vfyjxf.cloudlib.api.util.Namespace",
         "net.minecraft.tags.TagKey",
         "net.minecraft.resources.ResourceLocation",
+        "net.minecraft.resources.ResourceKey",
         "net.minecraft.core.Registry",
         "net.minecraft.core.registries.Registries",
         "com.mojang.serialization.Codec",

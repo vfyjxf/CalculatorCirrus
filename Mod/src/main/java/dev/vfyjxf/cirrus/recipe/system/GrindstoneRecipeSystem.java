@@ -118,7 +118,7 @@ public final class GrindstoneRecipeSystem extends BasicRecipeSystem<GrindstoneRe
 
     @Override
     public RecipeScreeningHints routingHints(VanillaGrindstoneRecipe recipe) {
-        return recipe.kind() == Kind.DISENCHANT_BOOK ? disenchantHints : repairCombineHints;
+        return recipe.kind() == Kind.disenchantBook ? disenchantHints : repairCombineHints;
     }
 
     @Override
@@ -155,7 +155,7 @@ public final class GrindstoneRecipeSystem extends BasicRecipeSystem<GrindstoneRe
         ResourceLocation disenchantId = VanillaWorldAccess.vanillaId("grindstone", "disenchant_enchanted_book");
         VanillaGrindstoneRecipe disenchant = new VanillaGrindstoneRecipe(
             disenchantId,
-            Kind.DISENCHANT_BOOK,
+            Kind.disenchantBook,
             new ItemStack(Items.ENCHANTED_BOOK),
             1,
             new ItemStack(Items.BOOK)
@@ -179,7 +179,7 @@ public final class GrindstoneRecipeSystem extends BasicRecipeSystem<GrindstoneRe
             );
             VanillaGrindstoneRecipe recipe = new VanillaGrindstoneRecipe(
                 id,
-                Kind.REPAIR_COMBINE,
+                Kind.repairCombine,
                 sample,
                 2,
                 sample.copy()
@@ -192,8 +192,8 @@ public final class GrindstoneRecipeSystem extends BasicRecipeSystem<GrindstoneRe
     }
 
     public enum Kind {
-        DISENCHANT_BOOK,
-        REPAIR_COMBINE
+        disenchantBook,
+        repairCombine
     }
 
     public record VanillaGrindstoneRecipe(

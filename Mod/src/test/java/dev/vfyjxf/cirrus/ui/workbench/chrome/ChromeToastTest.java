@@ -1,6 +1,14 @@
 package dev.vfyjxf.cirrus.ui.workbench.chrome;
 
 import dev.vfyjxf.cirrus.ui.workbench.WorkbenchShellLayout;
+import dev.vfyjxf.cloudlib.api.math.Rect;
+import dev.vfyjxf.cloudlib.api.ui.base.Scene;
+import dev.vfyjxf.cloudlib.api.ui.base.SceneContext;
+import dev.vfyjxf.cloudlib.api.ui.base.SceneHost;
+import dev.vfyjxf.cloudlib.api.ui.base.Widget;
+import dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup;
+import dev.vfyjxf.cloudlib.api.ui.style.UIStyles;
+import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.Test;
 
@@ -150,21 +158,21 @@ class ChromeToastTest {
         ToastStackWidget toast = new ToastStackWidget(ctx);
         toast.push(text("dismissable"));
 
-        dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup<dev.vfyjxf.cloudlib.api.ui.base.Widget> root = new dev.vfyjxf.cloudlib.api.ui.base.WidgetGroup<>();
-        root.useStyle(dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeOf(640, 360));
+        WidgetGroup<Widget> root = new WidgetGroup<>();
+        root.useStyle(UIStyles.sizeOf(640, 360));
         toast.useStyle(
-            dev.vfyjxf.cloudlib.api.ui.style.UIStyles.positionAbsolute(),
-            dev.vfyjxf.cloudlib.api.ui.style.UIStyles.insetLeft(380),
-            dev.vfyjxf.cloudlib.api.ui.style.UIStyles.insetTop(220),
-            dev.vfyjxf.cloudlib.api.ui.style.UIStyles.sizeOf(240, 120)
+            UIStyles.positionAbsolute(),
+            UIStyles.insetLeft(380),
+            UIStyles.insetTop(220),
+            UIStyles.sizeOf(240, 120)
         );
         root.addWidget(toast);
-        dev.vfyjxf.cloudlib.api.ui.base.Scene scene = new dev.vfyjxf.cloudlib.api.ui.base.Scene(root);
+        Scene scene = new Scene(root);
         scene.init();
-        scene.mount(dev.vfyjxf.cloudlib.api.ui.base.SceneContext.create(new dev.vfyjxf.cloudlib.api.ui.base.SceneHost() {
+        scene.mount(SceneContext.create(new SceneHost() {
             @Override
             @SuppressWarnings("NullAway")
-            public net.minecraft.client.gui.Font font() {
+            public Font font() {
                 return null;
             }
 
@@ -184,7 +192,7 @@ class ChromeToastTest {
             scene.layout();
             root.applyLayout();
 
-            dev.vfyjxf.cloudlib.api.math.Rect bounds = toast.absoluteBounds();
+            Rect bounds = toast.absoluteBounds();
             double clickX = bounds.right() - 12;
             double clickY = bounds.y() + 10;
             assertSame(toast, scene.hitTest(clickX, clickY), "toast must be hit-testable (not on SceneLayer.overlay)");

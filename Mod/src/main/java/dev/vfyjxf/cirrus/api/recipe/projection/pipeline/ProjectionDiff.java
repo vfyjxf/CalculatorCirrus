@@ -313,7 +313,8 @@ public final class ProjectionDiff {
             if (diff.channel() != channel) {
                 continue;
             }
-            if (grid != null && diff.address() instanceof SlotAddress.GridCell cell
+            if (grid != null
+                    && diff.address() instanceof SlotAddress.GridCell cell
                     && grid.spec().contains(cell.col(), cell.row())) {
                 continue;
             }

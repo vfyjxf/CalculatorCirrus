@@ -95,7 +95,8 @@ public record SlotDiff(
                     long diff = a - b;
                     yield (diff > 0L ? "+" : "") + diff;
                 }
-                if (before instanceof DurabilityContent bdc && after instanceof DurabilityContent adc
+                if (before instanceof DurabilityContent bdc
+                        && after instanceof DurabilityContent adc
                         && bdc.durabilityCost() != adc.durabilityCost()) {
                     yield "-" + adc.durabilityCost() + "d";
                 }

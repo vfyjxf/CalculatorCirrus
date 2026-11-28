@@ -26,7 +26,6 @@ import java.util.zip.ZipOutputStream;
 
 import static dev.vfyjxf.cirrus.planning.PlanningTestSupport.itemTag;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -61,8 +60,11 @@ class AdapterAndOfflinePipelineTest {
         assertNotEquals(iron, water);
         assertEquals("minecraft:iron_ingot", iron.displayId());
         assertEquals("minecraft:water", water.displayId());
-        assertEquals(itemTag("minecraft:logs"), OfflineContentTypes.tagFor(
-            OfflineContentTypes.itemContentType, "minecraft:logs"));
+        assertEquals(
+            itemTag("minecraft:logs"), OfflineContentTypes.tagFor(
+                OfflineContentTypes.itemContentType, "minecraft:logs"
+            )
+        );
 
         JsonElement componentsA = JsonParser.parseString("{\"b\":1,\"a\":[2.5,0]}");
         JsonElement componentsB = JsonParser.parseString("{\"a\":[2.5,0],\"b\":1}");
@@ -71,13 +73,20 @@ class AdapterAndOfflinePipelineTest {
             OfflineContentTypes.canonicalizeJson(componentsB)
         );
         ComponentStackKey withComponents = OfflineContentTypes.withComponents(
-            OfflineContentTypes.itemContentType, "minecraft:iron_ingot", componentsA);
+            OfflineContentTypes.itemContentType, "minecraft:iron_ingot", componentsA
+        );
         assertNotEquals(iron, withComponents);
-        assertEquals(withComponents, OfflineContentTypes.withComponents(
-            OfflineContentTypes.itemContentType, "minecraft:iron_ingot", componentsB));
+        assertEquals(
+            withComponents, OfflineContentTypes.withComponents(
+                OfflineContentTypes.itemContentType, "minecraft:iron_ingot", componentsB
+            )
+        );
         assertTrue(withComponents.canonicalKey().contains("minecraft:iron_ingot|{\"a\":[2.5,0],\"b\":1}"));
-        assertEquals(iron, OfflineContentTypes.withComponents(
-            OfflineContentTypes.itemContentType, "minecraft:iron_ingot", JsonParser.parseString("{}")));
+        assertEquals(
+            iron, OfflineContentTypes.withComponents(
+                OfflineContentTypes.itemContentType, "minecraft:iron_ingot", JsonParser.parseString("{}")
+            )
+        );
     }
 
     @Test

@@ -154,14 +154,16 @@ public final class DatabaseCategorySuggestionSource implements SearchSuggestionS
                     continue;
                 }
                 String mKey = machine.toLowerCase(Locale.ROOT);
-                machineAggregates.compute(mKey, (k, prev) -> prev == null
-                        ? new MachineAggregate(machine, node.label(), 1, node.count())
-                        : new MachineAggregate(
-                            prev.displayName(),
-                            prev.firstSystemLabel(),
-                            prev.systemCount() + 1,
-                            prev.recipeCount() + node.count()
-                        ));
+                machineAggregates.compute(
+                    mKey, (k, prev) -> prev == null
+                            ? new MachineAggregate(machine, node.label(), 1, node.count())
+                            : new MachineAggregate(
+                                prev.displayName(),
+                                prev.firstSystemLabel(),
+                                prev.systemCount() + 1,
+                                prev.recipeCount() + node.count()
+                            )
+                );
             }
 
             if (matchesActivePrefix(node, activePrefix)) {

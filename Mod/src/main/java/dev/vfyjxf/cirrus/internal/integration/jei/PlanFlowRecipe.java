@@ -4,7 +4,6 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.vfyjxf.cirrus.CirrusConstants;
 import dev.vfyjxf.cirrus.api.content.value.ComponentStackKey;
-import dev.vfyjxf.cirrus.api.recipe.machine.MachineEntry;
 import dev.vfyjxf.cirrus.planning.bridge.WorldFacilityRegistry;
 import net.minecraft.resources.ResourceLocation;
 
@@ -57,21 +56,20 @@ public record PlanFlowRecipe(String id, CirrusPlanBookmarkStore.PlanBookmarkEntr
                     .forGetter(CirrusPlanBookmarkStore.StepLine::inputAmounts)
         ).apply(
             instance,
-            (stepId, kind, output, amount, batches, machine, auto, workSec, waitSec, dependsOn, inputs, inAmts) ->
-                new CirrusPlanBookmarkStore.StepLine(
-                    stepId,
-                    kind,
-                    output.orElse(null),
-                    amount,
-                    batches.orElse(amount),
-                    machine.orElse(null),
-                    auto,
-                    workSec,
-                    waitSec,
-                    dependsOn,
-                    inputs,
-                    inAmts
-                )
+            (stepId, kind, output, amount, batches, machine, auto, workSec, waitSec, dependsOn, inputs, inAmts) -> new CirrusPlanBookmarkStore.StepLine(
+                stepId,
+                kind,
+                output.orElse(null),
+                amount,
+                batches.orElse(amount),
+                machine.orElse(null),
+                auto,
+                workSec,
+                waitSec,
+                dependsOn,
+                inputs,
+                inAmts
+            )
         )
     );
 

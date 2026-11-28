@@ -185,22 +185,30 @@ class PlanningTelemetryAndExtensionTest {
 
             ComponentStackKey gear = item("test:gear");
             for (int i = 0; i < 4; i++) {
-                bus.publish(new PlanningTelemetryEvent.PlanInteractionEvent(
-                    "pi-" + i, 1000L + i, "w1", "p1", gear, 8L, ObjectivePreset.autoSmart,
-                    "plan_a", List.of("plan_b"),
-                    Map.of("sys:mod:press", 1.0), List.of(Map.of("sys:mod:cast", 1.0)),
-                    1.0, List.of(1.0)
-                ));
+                bus.publish(
+                    new PlanningTelemetryEvent.PlanInteractionEvent(
+                        "pi-" + i, 1000L + i, "w1", "p1", gear, 8L, ObjectivePreset.autoSmart,
+                        "plan_a", List.of("plan_b"),
+                        Map.of("sys:mod:press", 1.0), List.of(Map.of("sys:mod:cast", 1.0)),
+                        1.0, List.of(1.0)
+                    )
+                );
             }
-            bus.publish(new PlanningTelemetryEvent.CraftingExecutionEvent(
-                "ce-1", 2000L, "w1", "p1", "sem:press", ns("mod:press"), "c1", "v1", 4L, 2.5, true, ExecutionFailureCategory.other
-            ));
-            bus.publish(new PlanningTelemetryEvent.CraftingExecutionEvent(
-                "ce-2", 2001L, "w1", "p1", "sem:press", ns("mod:press"), "c1", "v1", 4L, 4.5, true, ExecutionFailureCategory.other
-            ));
-            bus.publish(new PlanningTelemetryEvent.CraftingExecutionEvent(
-                "ce-cancel", 2002L, "w1", "p1", "sem:press", ns("mod:press"), "c1", "v1", 0L, 0.0, false, ExecutionFailureCategory.userCancel
-            ));
+            bus.publish(
+                new PlanningTelemetryEvent.CraftingExecutionEvent(
+                    "ce-1", 2000L, "w1", "p1", "sem:press", ns("mod:press"), "c1", "v1", 4L, 2.5, true, ExecutionFailureCategory.other
+                )
+            );
+            bus.publish(
+                new PlanningTelemetryEvent.CraftingExecutionEvent(
+                    "ce-2", 2001L, "w1", "p1", "sem:press", ns("mod:press"), "c1", "v1", 4L, 4.5, true, ExecutionFailureCategory.other
+                )
+            );
+            bus.publish(
+                new PlanningTelemetryEvent.CraftingExecutionEvent(
+                    "ce-cancel", 2002L, "w1", "p1", "sem:press", ns("mod:press"), "c1", "v1", 0L, 0.0, false, ExecutionFailureCategory.userCancel
+                )
+            );
 
             assertEquals(7, seen.size());
             assertEquals(List.of(gear), advisor.suggestFrequentBaseCandidates(3L, 5));

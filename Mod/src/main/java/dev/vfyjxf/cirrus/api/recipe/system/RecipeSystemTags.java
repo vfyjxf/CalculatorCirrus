@@ -98,7 +98,8 @@ public final class RecipeSystemTags {
     }
 
     public static boolean isFolderTag(@Nullable Namespace tag) {
-        return tag != null && tag.path().startsWith(databaseFolderPrefix)
+        return tag != null
+                && tag.path().startsWith(databaseFolderPrefix)
                 && tag.path().length() > databaseFolderPrefix.length();
     }
 
@@ -125,18 +126,35 @@ public final class RecipeSystemTags {
         if (isFolderTag(tag)) {
             return TagAxis.folder;
         }
-        if (tag.equals(vanilla) || tag.equals(modNative) || tag.equals(jeiFallback)
-                || tag.equals(displayOnly) || tag.equals(mirrorDuplicate) || tag.equals(debug)) {
+        if (tag.equals(vanilla)
+                || tag.equals(modNative)
+                || tag.equals(jeiFallback)
+                || tag.equals(displayOnly)
+                || tag.equals(mirrorDuplicate)
+                || tag.equals(debug)) {
             return TagAxis.provenance;
         }
-        if (tag.equals(handOperable) || tag.equals(automatable) || tag.equals(heavyMultiblock)
-                || tag.equals(worldInteraction) || tag.equals(optIn)) {
+        if (tag.equals(handOperable)
+                || tag.equals(automatable)
+                || tag.equals(heavyMultiblock)
+                || tag.equals(worldInteraction)
+                || tag.equals(optIn)) {
             return TagAxis.trait;
         }
-        if (tag.equals(crafting) || tag.equals(cooking) || tag.equals(cutting) || tag.equals(smithing)
-                || tag.equals(brewing) || tag.equals(composting) || tag.equals(fueling) || tag.equals(anvil)
-                || tag.equals(grindstone) || tag.equals(oreProcessing) || tag.equals(mechanical)
-                || tag.equals(chemical) || tag.equals(assembly) || tag.equals(magicRitual)
+        if (tag.equals(crafting)
+                || tag.equals(cooking)
+                || tag.equals(cutting)
+                || tag.equals(smithing)
+                || tag.equals(brewing)
+                || tag.equals(composting)
+                || tag.equals(fueling)
+                || tag.equals(anvil)
+                || tag.equals(grindstone)
+                || tag.equals(oreProcessing)
+                || tag.equals(mechanical)
+                || tag.equals(chemical)
+                || tag.equals(assembly)
+                || tag.equals(magicRitual)
                 || tag.equals(resourceGen)) {
             return TagAxis.process;
         }

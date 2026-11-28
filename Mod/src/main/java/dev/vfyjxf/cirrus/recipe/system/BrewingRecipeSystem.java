@@ -292,7 +292,7 @@ public final class BrewingRecipeSystem extends BasicRecipeSystem<VanillaBrewingR
                         List.of(inputStack),
                         reagent,
                         outputStack,
-                        VanillaBrewingRecipe.DEFAULT_BREWING_TICKS,
+                        VanillaBrewingRecipe.defaultBrewingTicks,
                         true
                     )
                 );
@@ -333,7 +333,7 @@ public final class BrewingRecipeSystem extends BasicRecipeSystem<VanillaBrewingR
                         List.of(inputStack),
                         reagent,
                         outputStack,
-                        VanillaBrewingRecipe.DEFAULT_BREWING_TICKS,
+                        VanillaBrewingRecipe.defaultBrewingTicks,
                         true
                     )
                 );
@@ -379,7 +379,7 @@ public final class BrewingRecipeSystem extends BasicRecipeSystem<VanillaBrewingR
                         inputStacks,
                         reagent,
                         output,
-                        VanillaBrewingRecipe.DEFAULT_BREWING_TICKS,
+                        VanillaBrewingRecipe.defaultBrewingTicks,
                         false
                     )
                 );

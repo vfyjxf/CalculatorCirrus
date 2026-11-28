@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 @Measurement(iterations = 5, time = 500, timeUnit = TimeUnit.MILLISECONDS)
 @Fork(3)
 @State(Scope.Thread)
+@SuppressWarnings("PMD.PublicNonFinalInstanceField")
 public class BenchmarkContentVariant {
 
     @Param({"25", "50", "100"})

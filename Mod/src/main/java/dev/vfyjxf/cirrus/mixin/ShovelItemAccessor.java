@@ -11,6 +11,7 @@ import java.util.Map;
 @Mixin(ShovelItem.class)
 public interface ShovelItemAccessor {
 
+    @SuppressWarnings({"PMD.AvoidDollarSigns", "PMD.MethodNamingConventions"})
     @Accessor("FLATTENABLES")
     static Map<Block, BlockState> cirrus$flattenables() {
         throw new AssertionError();

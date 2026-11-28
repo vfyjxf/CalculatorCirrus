@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * Strictly acyclic regime-conditioned Pareto frontier and weighted-Jaccard Top-K diversity selector.
@@ -197,7 +198,7 @@ public final class ConditionedFrontierSelector {
         double j0 = frontier.get(0).plan().scoreBreakdown().totalObjectiveJ();
         double maxBand = j0 + defaultQualityBandAbs + defaultQualityBandRel * Math.max(0.0, j0);
         List<Entry> eligible = new ArrayList<>(frontier.size());
-        Set<RegimeSignature> keptRegimes = new java.util.TreeSet<>();
+        Set<RegimeSignature> keptRegimes = new TreeSet<>();
         for (Entry e : frontier) {
             boolean inBand = e.plan().scoreBreakdown().totalObjectiveJ() <= maxBand + 1e-12;
             boolean uniqueRegime = !keptRegimes.contains(e.plan().regimeSignature());
